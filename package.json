@@ -1,0 +1,79 @@
+{
+  "name": "bun-ws-router",
+  "version": "0.0.1",
+  "description": "A simple and efficient WebSocket router for Bun with Zod-based message validation.",
+  "keywords": [
+    "bun",
+    "websocket",
+    "router",
+    "zod",
+    "typescript",
+    "ws",
+    "realtime",
+    "real-time",
+    "socket",
+    "message",
+    "messaging",
+    "web-socket",
+    "validation",
+    "schema",
+    "schema-validation",
+    "chat",
+    "web",
+    "server",
+    "connection",
+    "api",
+    "http",
+    "events",
+    "socketio",
+    "socket.io",
+    "pub-sub",
+    "pubsub",
+    "broadcast",
+    "channel",
+    "hono"
+  ],
+  "homepage": "https://github.com/kriasoft/bun-ws-router",
+  "bugs": "https://github.com/kriasoft/bun-ws-router/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/bun-ws-router.git"
+  },
+  "license": "MIT",
+  "author": "Kriasoft <hello@kriasoft.com>",
+  "contributors": [
+    {
+      "name": "Konstantin Tarkus",
+      "url": "https://github.com/koistya"
+    }
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "handlers.ts",
+    "index.ts",
+    "LICENSE",
+    "package.json",
+    "README.md",
+    "router.ts",
+    "schema.ts",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "dependencies": {
+    "uuid": "^11.1.0"
+  },
+  "peerDependencies": {
+    "zod": ">=3.0.0",
+    "@types/bun": ">=1.2.0"
+  },
+  "devDependencies": {
+    "hono": "^4.7.7",
+    "zod": "^3.24.3",
+    "@types/bun": "^1.2.10",
+    "typescript": "^5.8.3"
+  }
+}
