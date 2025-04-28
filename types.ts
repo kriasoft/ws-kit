@@ -2,7 +2,8 @@
 /* SPDX-License-Identifier: MIT */
 
 import type { HeadersInit, Server, ServerWebSocket } from "bun";
-import { z, ZodLiteral, type ZodRawShape } from "zod";
+import type { ZodObject, ZodType, ZodTypeAny } from "zod";
+import { z, ZodLiteral } from "zod";
 import { MessageMetadataSchema } from "./schema";
 
 export type WebSocketRouterOptions = {
@@ -22,7 +23,7 @@ export type UpgradeOptions<T> = {
 export type SendFunction = <Schema extends MessageSchemaType>(
   schema: Schema,
   data: Schema["shape"] extends { payload: infer P }
-    ? P extends z.ZodTypeAny
+    ? P extends ZodTypeAny
       ? z.infer<P>
       : unknown
     : unknown,
@@ -34,7 +35,7 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
   meta: z.infer<Schema["shape"]["meta"]>;
   send: SendFunction;
 } & (Schema["shape"] extends { payload: infer P }
-  ? P extends z.ZodTypeAny
+  ? P extends ZodTypeAny
     ? { payload: z.infer<P> }
     : {}
   : {});
@@ -43,12 +44,11 @@ export type MessageHandler<Schema extends MessageSchemaType, Data> = (
   context: MessageContext<Schema, Data>
 ) => void | Promise<void>;
 
-export type MessageSchemaType = z.ZodObject<
-  {
-    type: ZodLiteral<string>; // Must have a literal string type
-    meta: typeof MessageMetadataSchema; // Must have compatible meta
-  } & ZodRawShape // Allows for other fields like 'payload'
->;
+export type MessageSchemaType = ZodObject<{
+  type: ZodLiteral<string>; // Must have a literal string type
+  meta: ZodType<z.infer<typeof MessageMetadataSchema>>;
+  payload?: ZodTypeAny;
+}>;
 
 export type MessageHandlerEntry = {
   schema: MessageSchemaType;
