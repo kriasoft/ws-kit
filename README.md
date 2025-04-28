@@ -17,6 +17,7 @@ Perfect for real-time applications like chat systems, live dashboards, multiplay
 
 ```bash
 bun add bun-ws-router zod
+bun add @types/bun -D
 ```
 
 ## Getting Started
