@@ -1,15 +1,14 @@
 # Bun WebSocket Router
 
-A type-safe WebSocket router for Bun with Zod-based message validation. Route WebSocket messages to handlers based on message type with full TypeScript support.
+Tired of wrestling WebSocket connections like a tangled mess of holiday lights? `bun-ws-router` is here to bring order to the chaos! It's a type-safe WebSocket router for Bun, powered by Zod, making your real-time message handling smoother than a fresh jar of peanut butter. Route WebSocket messages to handlers based on message type with full TypeScript support.
 
 ### Key Features
 
-- **Type-safe messaging**: Built-in validation using Zod schemas
-- **Simple API**: Intuitive routing system for WebSocket messages
-- **Performance**: Leverages Bun's native WebSocket implementation
-- **Flexible**: Works with any Bun server setup, including Hono
-- **Room support**: Easily group clients and broadcast messages
-- **Lightweight**: Minimal dependencies for fast startup
+- 🔒 **Type-safe messaging**: Built-in validation using Zod schemas (catch errors before they bite!)
+- ✨ **Simple API**: Intuitive routing system for WebSocket messages (so easy, your cat could _almost_ use it)
+- 🚀 **Performance**: Leverages Bun's native WebSocket implementation (it's fast, like, _really_ fast)
+- 🧩 **Flexible**: Works with any Bun server setup, including Hono
+- 🪶 **Lightweight**: Minimal dependencies for fast startup
 
 Perfect for real-time applications like chat systems, live dashboards, multiplayer games, and notification services.
 
@@ -105,6 +104,8 @@ Bun.serve({
 
 The `verifyIdToken` function is a placeholder for your authentication logic which could use user ID token verification from `firebase-admin` or any other authentication library.
 
+By verifying the user _before_ the WebSocket connection is fully established and passing the `user` data, you ensure that only authenticated users can connect, and you have their info ready to use in your `onOpen`, `onMessage`, and `onClose` handlers without needing to ask again. Secure _and_ convenient!
+
 ## How to define message types
 
 You can define message types using the `messageSchema` function from `bun-ws-router`. This function takes a message type name such as `JOIN_ROOM`, `SEND_MESSAGE` etc. and a Zod schema for the message payload. The following example demonstrates how to define message types for a chat application.
@@ -180,7 +181,7 @@ ws.onClose((c) => {
 });
 ```
 
-**Note:** The `c.send(...)` function sends a message back to the _current_ client.
+**Important Note:** The `c.send(...)` function sends a message back _only_ to the client that sent the original message. For broadcasting to rooms or multiple clients, you'll need to implement your own logic (we handle the routing, you handle the party!).
 
 ## How to compose routes
 
@@ -201,7 +202,7 @@ Where `chatRoutes` and `notificationRoutes` are other router instances defined i
 
 ## Support
 
-Feel free to discuss any issues or suggestions on our [Discord](https://discord.com/invite/bSsv7XM) channel. We welcome contributions and feedback from the community.
+Got questions? Hit a snag? Or just want to share your awesome WebSocket creation? Find us on [Discord](https://discord.com/invite/bSsv7XM). We promise we don't bite (usually 😉).
 
 ## Backers
 
