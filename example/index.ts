@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { WebSocketRouter } from "../index";
-import { exampleRouter } from "./example";
+import { chatRouter } from "./chat";
 
 // HTTP router
 const app = new Hono();
@@ -8,7 +8,7 @@ app.get("/", (c) => c.text("Welcome to Hono!"));
 
 // WebSocket router
 const ws = new WebSocketRouter();
-ws.addRoutes(exampleRouter);
+ws.addRoutes(chatRouter);
 
 Bun.serve({
   port: 3000,

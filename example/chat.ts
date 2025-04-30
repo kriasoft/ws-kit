@@ -1,13 +1,13 @@
 import { WebSocketRouter } from "../router";
-import { JoinRoomSchema, UserJoinedSchema } from "./schema";
+import { JoinRoom, UserJoined } from "./schema";
 
 const ws = new WebSocketRouter();
 
-ws.onMessage(JoinRoomSchema, (c) => {
+ws.onMessage(JoinRoom, (c) => {
   const { roomId } = c.payload;
   console.log(`User joined room: ${roomId}`);
 
-  c.send(UserJoinedSchema, {
+  c.send(UserJoined, {
     roomId,
     userId: c.meta.clientId,
   });
@@ -17,4 +17,4 @@ ws.onClose((c) => {
   console.log(`Connection closed`);
 });
 
-export { ws as exampleRouter };
+export { ws as chatRouter };
