@@ -16,7 +16,7 @@ import type {
   WebSocketRouterOptions,
 } from "./types";
 
-export class WebSocketRouter<Metadata> {
+export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
   private readonly server: Server;
   private readonly handlers = new WebSocketHandlers();
 
