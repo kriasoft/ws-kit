@@ -20,9 +20,15 @@ const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 
 beforeEach(() => {
-  console.log = mock(() => {});
-  console.warn = mock(() => {});
-  console.error = mock(() => {});
+  console.log = mock(() => {
+    /* Mock implementation */
+  });
+  console.warn = mock(() => {
+    /* Mock implementation */
+  });
+  console.error = mock(() => {
+    /* Mock implementation */
+  });
 });
 
 afterEach(() => {
@@ -68,19 +74,21 @@ describe("WebSocketServer E2E", () => {
     });
 
     // Add an error message handler
-    ws.onMessage(Error, (ctx) => {
+    ws.onMessage(Error, () => {
       // Just for handling error messages in tests
     });
 
     // Set up open handler
-    const openHandlerMock = mock((ctx) => {
+    const openHandlerMock = mock(() => {
       // Optional: send a welcome message
       // ctx.send(...);
     });
     ws.onOpen(openHandlerMock);
 
     // Set up close handler
-    const closeHandlerMock = mock((ctx) => {});
+    const closeHandlerMock = mock(() => {
+      /* Mock implementation */
+    });
     ws.onClose(closeHandlerMock);
 
     // Start the server
@@ -112,6 +120,7 @@ describe("WebSocketServer E2E", () => {
     const socket = new WebSocket(`ws://localhost:${port}/ws`);
 
     // Keep track of messages received by the client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const receivedMessages: any[] = [];
 
     // Set up message handler
@@ -161,6 +170,7 @@ describe("WebSocketServer E2E", () => {
     const clients = await Promise.all(
       Array.from({ length: 3 }, async (_, i) => {
         const socket = new WebSocket(`ws://localhost:${port}/ws`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const messages: any[] = [];
 
         socket.addEventListener("message", (event) => {
@@ -173,7 +183,7 @@ describe("WebSocketServer E2E", () => {
         });
 
         return { socket, messages, id: `client-${i}` };
-      })
+      }),
     );
 
     // Each client sends a message
@@ -201,7 +211,7 @@ describe("WebSocketServer E2E", () => {
       expect(client.messages.length).toBe(1);
       expect(client.messages[0].type).toBe("PONG");
       expect(client.messages[0].payload.message).toBe(
-        `Hello from ${client.id}`
+        `Hello from ${client.id}`,
       );
     });
 
@@ -214,6 +224,7 @@ describe("WebSocketServer E2E", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     const socket = new WebSocket(`ws://localhost:${port}/ws`);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const receivedMessages: any[] = [];
     socket.addEventListener("message", (event) => {
       receivedMessages.push(JSON.parse(event.data as string));
@@ -245,7 +256,9 @@ describe("WebSocketServer E2E", () => {
 
   it("should handle client disconnection properly", async () => {
     // Create a mock for the close handler
-    const closeHandlerMock = mock(() => {});
+    const closeHandlerMock = mock(() => {
+      /* Mock implementation */
+    });
 
     // Register our mock as a close handler
     ws.onClose(closeHandlerMock);

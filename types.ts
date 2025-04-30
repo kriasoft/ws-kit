@@ -6,19 +6,19 @@ import type { ZodObject, ZodType, ZodTypeAny } from "zod";
 import { z, ZodLiteral } from "zod";
 import { MessageMetadataSchema } from "./schema";
 
-export type WebSocketRouterOptions = {
+export interface WebSocketRouterOptions {
   server?: Server;
-};
+}
 
 export type WebSocketData<T> = {
   clientId: string;
 } & T;
 
-export type UpgradeOptions<T> = {
+export interface UpgradeOptions<T> {
   server: Server;
   data?: T;
   headers?: HeadersInit;
-};
+}
 
 export type SendFunction = <Schema extends MessageSchemaType>(
   schema: Schema,
@@ -27,7 +27,7 @@ export type SendFunction = <Schema extends MessageSchemaType>(
       ? z.infer<P>
       : unknown
     : unknown,
-  meta?: z.infer<Schema["shape"]["meta"]>
+  meta?: z.infer<Schema["shape"]["meta"]>,
 ) => void;
 
 export type MessageContext<Schema extends MessageSchemaType, Data> = {
@@ -37,11 +37,11 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
 } & (Schema["shape"] extends { payload: infer P }
   ? P extends ZodTypeAny
     ? { payload: z.infer<P> }
-    : {}
-  : {});
+    : Record<string, never>
+  : Record<string, never>);
 
 export type MessageHandler<Schema extends MessageSchemaType, Data> = (
-  context: MessageContext<Schema, Data>
+  context: MessageContext<Schema, Data>,
 ) => void | Promise<void>;
 
 export type MessageSchemaType = ZodObject<{
@@ -50,27 +50,27 @@ export type MessageSchemaType = ZodObject<{
   payload?: ZodTypeAny;
 }>;
 
-export type MessageHandlerEntry = {
+export interface MessageHandlerEntry<Data = unknown> {
   schema: MessageSchemaType;
-  handler: MessageHandler<MessageSchemaType, any>;
-};
+  handler: MessageHandler<MessageSchemaType, Data>;
+}
 
-export type OpenHandlerContext<Data> = {
+export interface OpenHandlerContext<Data> {
   ws: ServerWebSocket<Data>;
   send: SendFunction;
-};
+}
 
-export type OpenHandler<Data = any> = (
-  context: OpenHandlerContext<Data>
+export type OpenHandler<Data = unknown> = (
+  context: OpenHandlerContext<Data>,
 ) => void | Promise<void>;
 
-export type CloseHandlerContext<Data> = {
+export interface CloseHandlerContext<Data> {
   ws: ServerWebSocket<Data>;
   code: number;
   reason?: string;
   send: SendFunction;
-};
+}
 
-export type CloseHandler<Data = any> = (
-  context: CloseHandlerContext<Data>
+export type CloseHandler<Data = unknown> = (
+  context: CloseHandlerContext<Data>,
 ) => void | Promise<void>;

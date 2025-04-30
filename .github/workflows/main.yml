@@ -47,8 +47,11 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run lint checks
-        run: bun run tsc --noEmit
+      - name: Check formatting with Prettier
+        run: bun run prettier --check .
+
+      - name: Run ESLint checks
+        run: bun run eslint .
 
   # publish:
   #   needs: [test, lint]

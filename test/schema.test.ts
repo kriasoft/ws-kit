@@ -148,7 +148,7 @@ describe("messageSchema", () => {
         action: z.string(),
         data: z.record(z.any()),
       },
-      customMeta
+      customMeta,
     );
 
     // Should validate a complete message

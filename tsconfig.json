@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "tsBuildInfoFile": "node_modules/.tsbuildinfo",
+
     // Environment setup & latest features
     "lib": ["ESNext"],
     "types": ["bun"],

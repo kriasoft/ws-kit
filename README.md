@@ -146,7 +146,7 @@ const ws = new WebSocketRouter<Meta>();
 // Handle new connections
 ws.onOpen((c) => {
   console.log(
-    `Client connected: ${c.ws.data.clientId}, User ID: ${c.ws.data.userId}`
+    `Client connected: ${c.ws.data.clientId}, User ID: ${c.ws.data.userId}`,
   );
   // You could send a welcome message here
 });

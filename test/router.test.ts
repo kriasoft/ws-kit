@@ -13,6 +13,7 @@ import {
 import { z } from "zod";
 import { WebSocketRouter } from "../router";
 import { messageSchema } from "../schema";
+import type { MessageContext } from "../types";
 
 // Mock the console methods to prevent noise during tests
 const originalConsoleLog = console.log;
@@ -20,9 +21,15 @@ const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 
 beforeEach(() => {
-  console.log = mock(() => {});
-  console.warn = mock(() => {});
-  console.error = mock(() => {});
+  console.log = mock(() => {
+    /* Mock implementation */
+  });
+  console.warn = mock(() => {
+    /* Mock implementation */
+  });
+  console.error = mock(() => {
+    /* Mock implementation */
+  });
 });
 
 afterEach(() => {
@@ -33,10 +40,10 @@ afterEach(() => {
 
 // Mock Bun's ServerWebSocket
 class MockServerWebSocket {
-  data: any;
-  sentMessages: any[] = [];
+  data: unknown;
+  sentMessages: unknown[] = [];
 
-  constructor(data: any) {
+  constructor(data: unknown) {
     this.data = data;
   }
 
@@ -44,7 +51,10 @@ class MockServerWebSocket {
     this.sentMessages.push(JSON.parse(message));
   }
 
-  close(_code?: number, _reason?: string) {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  close(_code?: number, _reason?: string) {
+    /* Mock implementation */
+  }
 }
 
 describe("WebSocketRouter", () => {
@@ -56,7 +66,10 @@ describe("WebSocketRouter", () => {
       });
 
       // Create a mock handler
-      const handlerMock = mock((_ctx: any) => {});
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const handlerMock = mock((_ctx: unknown) => {
+        /* Mock implementation */
+      });
 
       // Create the router and register the handler
       const router = new WebSocketRouter();
@@ -65,7 +78,7 @@ describe("WebSocketRouter", () => {
       // Create a mock WebSocket
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Call the handleMessage method directly with a valid message
       const validMessage = JSON.stringify({
@@ -74,7 +87,7 @@ describe("WebSocketRouter", () => {
         payload: { message: "Hello World" },
       });
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, validMessage);
 
       // Verify the handler was called
@@ -82,7 +95,11 @@ describe("WebSocketRouter", () => {
       expect(handlerMock.mock.calls.length).toBe(1);
 
       // Verify the context passed to the handler
-      const context = handlerMock.mock.calls[0]?.[0];
+      const context = handlerMock.mock.calls[0]?.[0] as MessageContext<
+        typeof TestMessage,
+        unknown
+      >;
+      // @ts-expect-error - MockServerWebSocket is not fully assignable to ServerWebSocket
       expect(context.ws).toBe(ws);
       expect(context.meta.clientId).toBe("test-client-123");
       expect(context.payload.message).toBe("Hello World");
@@ -95,7 +112,10 @@ describe("WebSocketRouter", () => {
       });
 
       // Create a mock handler
-      const handlerMock = mock((_ctx: any) => {});
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const handlerMock = mock((_ctx: unknown) => {
+        /* Mock implementation */
+      });
 
       // Create the router and register the handler
       const router = new WebSocketRouter();
@@ -104,7 +124,7 @@ describe("WebSocketRouter", () => {
       // Create a mock WebSocket
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Call the handleMessage method with an invalid message (missing required field)
       const invalidMessage = JSON.stringify({
@@ -113,7 +133,7 @@ describe("WebSocketRouter", () => {
         payload: {}, // Missing requiredField
       });
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, invalidMessage);
 
       // Verify the handler was NOT called
@@ -127,12 +147,12 @@ describe("WebSocketRouter", () => {
       const router = new WebSocketRouter();
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Malformed JSON
       const malformedJson = "{ this is not valid JSON }";
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, malformedJson);
 
       // Should log an error but not crash
@@ -143,7 +163,7 @@ describe("WebSocketRouter", () => {
       const router = new WebSocketRouter();
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Unknown message type
       const unknownTypeMessage = JSON.stringify({
@@ -151,7 +171,7 @@ describe("WebSocketRouter", () => {
         meta: { clientId: "test-client-123" },
       });
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, unknownTypeMessage);
 
       // Should log a warning but not crash
@@ -165,7 +185,10 @@ describe("WebSocketRouter", () => {
       });
 
       // Create a mock handler
-      const handlerMock = mock((_ctx: any) => {});
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const handlerMock = mock((_ctx: unknown) => {
+        /* Mock implementation */
+      });
 
       // Create the router and register the handler
       const router = new WebSocketRouter();
@@ -174,7 +197,7 @@ describe("WebSocketRouter", () => {
       // Create a mock WebSocket
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Create a valid message as Buffer
       const messageObj = {
@@ -184,7 +207,7 @@ describe("WebSocketRouter", () => {
       };
       const bufferMessage = Buffer.from(JSON.stringify(messageObj));
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, bufferMessage);
 
       // Verify the handler was called
@@ -192,7 +215,10 @@ describe("WebSocketRouter", () => {
       expect(handlerMock.mock.calls.length).toBe(1);
 
       // Verify the context passed to the handler
-      const context = handlerMock.mock.calls[0]?.[0];
+      const context = handlerMock.mock.calls[0]?.[0] as MessageContext<
+        typeof BufferMessage,
+        unknown
+      >;
       expect(context.payload.message).toBe("Hello from Buffer");
     });
 
@@ -204,7 +230,8 @@ describe("WebSocketRouter", () => {
 
       // Create a mock for async function
       let handlerResolved = false;
-      const asyncHandlerMock = mock(async (_ctx: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const asyncHandlerMock = mock(async (_ctx: unknown) => {
         // Simulate async work
         await new Promise((resolve) => setTimeout(resolve, 10));
         handlerResolved = true;
@@ -217,7 +244,7 @@ describe("WebSocketRouter", () => {
       // Create a mock WebSocket
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Send a valid message
       const validMessage = JSON.stringify({
@@ -226,7 +253,7 @@ describe("WebSocketRouter", () => {
         payload: { message: "Async Hello" },
       });
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, validMessage);
 
       // Verify the handler was called
@@ -255,7 +282,7 @@ describe("WebSocketRouter", () => {
       // Create a mock WebSocket
       const ws = new MockServerWebSocket({
         clientId: "test-client-123",
-      }) as any;
+      }) as unknown as MockServerWebSocket;
 
       // Create a spy on console.error to verify it's called
       const errorSpy = spyOn(console, "error");
@@ -266,7 +293,7 @@ describe("WebSocketRouter", () => {
         meta: { clientId: "test-client-123" },
       });
 
-      // @ts-ignore - Accessing private method for testing
+      // @ts-expect-error - Accessing private method for testing
       router.handleMessage(ws, validMessage);
 
       // Verify the handler was called and error was logged

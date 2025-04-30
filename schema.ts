@@ -40,7 +40,7 @@ export type BaseMessageSchema<T extends string> = ZodObject<{
  */
 export type PayloadMessageSchema<
   T extends string,
-  P extends ZodTypeAny
+  P extends ZodTypeAny,
 > = ZodObject<{
   type: ZodLiteral<T>;
   meta: typeof MessageMetadataSchema;
@@ -52,7 +52,7 @@ export type PayloadMessageSchema<
  */
 export type MessageSchemaWithCustomMeta<
   T extends string,
-  M extends ZodRawShape
+  M extends ZodRawShape,
 > = ZodObject<{
   type: ZodLiteral<T>;
   meta: ZodObject<typeof MessageMetadataSchema.shape & M>;
@@ -64,7 +64,7 @@ export type MessageSchemaWithCustomMeta<
 export type PayloadMessageSchemaWithCustomMeta<
   T extends string,
   P extends ZodTypeAny,
-  M extends ZodRawShape
+  M extends ZodRawShape,
 > = ZodObject<{
   type: ZodLiteral<T>;
   meta: ZodObject<typeof MessageMetadataSchema.shape & M>;
@@ -79,7 +79,7 @@ export type PayloadMessageSchemaWithCustomMeta<
  * Creates a message schema with a literal type but no payload or custom metadata
  */
 export function messageSchema<T extends string>(
-  messageType: T
+  messageType: T,
 ): BaseMessageSchema<T>;
 
 /**
@@ -87,7 +87,7 @@ export function messageSchema<T extends string>(
  */
 export function messageSchema<
   T extends string,
-  P extends Record<string, ZodTypeAny>
+  P extends Record<string, ZodTypeAny>,
 >(messageType: T, payload: P): PayloadMessageSchema<T, ZodObject<P>>;
 
 /**
@@ -95,7 +95,7 @@ export function messageSchema<
  */
 export function messageSchema<T extends string, P extends ZodTypeAny>(
   messageType: T,
-  payload: P
+  payload: P,
 ): PayloadMessageSchema<T, P>;
 
 /**
@@ -104,7 +104,7 @@ export function messageSchema<T extends string, P extends ZodTypeAny>(
 export function messageSchema<T extends string, M extends ZodRawShape>(
   messageType: T,
   payload: undefined,
-  meta: ZodObject<M>
+  meta: ZodObject<M>,
 ): MessageSchemaWithCustomMeta<T, M>;
 
 /**
@@ -113,11 +113,11 @@ export function messageSchema<T extends string, M extends ZodRawShape>(
 export function messageSchema<
   T extends string,
   P extends Record<string, ZodTypeAny>,
-  M extends ZodRawShape
+  M extends ZodRawShape,
 >(
   messageType: T,
   payload: P,
-  meta: ZodObject<M>
+  meta: ZodObject<M>,
 ): PayloadMessageSchemaWithCustomMeta<T, ZodObject<P>, M>;
 
 /**
@@ -126,11 +126,11 @@ export function messageSchema<
 export function messageSchema<
   T extends string,
   P extends ZodTypeAny,
-  M extends ZodRawShape
+  M extends ZodRawShape,
 >(
   messageType: T,
   payload: P,
-  meta: ZodObject<M>
+  meta: ZodObject<M>,
 ): PayloadMessageSchemaWithCustomMeta<T, P, M>;
 
 // -----------------------------------------------------------------------
@@ -147,40 +147,72 @@ export function messageSchema<
 export function messageSchema<
   T extends string,
   P extends Record<string, ZodTypeAny> | ZodTypeAny | undefined = undefined,
-  M extends ZodRawShape = {}
+  M extends ZodRawShape = Record<string, never>,
 >(
   messageType: T,
   payload?: P,
-  meta?: M extends {} ? undefined : ZodObject<M>
+  meta?: ZodObject<M>,
 ): P extends undefined
-  ? M extends {}
+  ? M extends Record<string, never>
     ? BaseMessageSchema<T>
     : MessageSchemaWithCustomMeta<T, M>
   : P extends Record<string, ZodTypeAny>
-  ? M extends {}
-    ? PayloadMessageSchema<T, ZodObject<P>>
-    : PayloadMessageSchemaWithCustomMeta<T, ZodObject<P>, M>
-  : M extends {}
-  ? PayloadMessageSchema<T, P & ZodTypeAny>
-  : PayloadMessageSchemaWithCustomMeta<T, P & ZodTypeAny, M> {
+    ? M extends Record<string, never>
+      ? PayloadMessageSchema<T, ZodObject<P>>
+      : PayloadMessageSchemaWithCustomMeta<T, ZodObject<P>, M>
+    : M extends Record<string, never>
+      ? PayloadMessageSchema<T, P & ZodTypeAny>
+      : PayloadMessageSchemaWithCustomMeta<T, P & ZodTypeAny, M> {
   // Create base schema with type and meta
-  const baseSchema = MessageSchema.extend({
+  const baseMetaSchema = meta
+    ? MessageMetadataSchema.extend(meta.shape)
+    : MessageMetadataSchema;
+
+  const baseSchema = z.object({
     type: z.literal(messageType),
-    meta: meta
-      ? MessageMetadataSchema.extend((meta as ZodObject<any>).shape)
-      : MessageMetadataSchema,
+    meta: baseMetaSchema,
   });
 
   // If no payload schema provided, return without payload
   if (payload === undefined) {
-    return baseSchema as any;
+    // The return type here depends on whether M is Record<string, never>
+    // We need to satisfy both BaseMessageSchema<T> and MessageSchemaWithCustomMeta<T, M>
+    if (meta === undefined) {
+      // @ts-expect-error - TS cannot verify this complex conditional return type
+      return baseSchema;
+    } else {
+      // @ts-expect-error - TS cannot verify this complex conditional return type
+      return baseSchema;
+    }
   }
 
-  // Add payload to schema based on input type
-  return baseSchema.extend({
-    payload:
-      payload instanceof z.ZodType
-        ? payload
-        : z.object(payload as Record<string, ZodTypeAny>),
-  }) as any;
+  const payloadSchema =
+    payload instanceof z.ZodType
+      ? payload
+      : z.object(payload as Record<string, ZodTypeAny>);
+
+  // Add payload to schema
+  const finalSchema = baseSchema.extend({
+    payload: payloadSchema,
+  });
+
+  // Similar to the no-payload case, the return type is complex.
+  // We need to satisfy the PayloadMessageSchema variants.
+  if (meta === undefined) {
+    if (payload instanceof z.ZodType) {
+      // @ts-expect-error - TS cannot verify this complex conditional return type
+      return finalSchema;
+    } else {
+      // @ts-expect-error - TS cannot verify this complex conditional return type
+      return finalSchema;
+    }
+  } else {
+    if (payload instanceof z.ZodType) {
+      // @ts-expect-error - TS cannot verify this complex conditional return type
+      return finalSchema;
+    } else {
+      // @ts-expect-error - TS cannot verify this complex conditional return type
+      return finalSchema;
+    }
+  }
 }

@@ -16,9 +16,11 @@ import type {
   WebSocketRouterOptions,
 } from "./types";
 
-export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
+export class WebSocketRouter<
+  Metadata extends Record<string, unknown> = Record<string, never>,
+> {
   private readonly server: Server;
-  private readonly handlers = new WebSocketHandlers();
+  private readonly handlers = new WebSocketHandlers<WebSocketData<Metadata>>();
 
   constructor(options?: WebSocketRouterOptions) {
     this.server = options?.server ?? (undefined as unknown as Server);
@@ -39,9 +41,9 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
   /**
    * Upgrades an HTTP request to a WebSocket connection.
    */
-  public upgrade<T extends Record<string, unknown>>(
+  public upgrade(
     req: Request,
-    options: UpgradeOptions<WebSocketData<Metadata>>
+    options: UpgradeOptions<WebSocketData<Metadata>>,
   ) {
     const { server, data, headers } = options;
     const clientId = randomUUIDv7();
@@ -61,7 +63,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
           headers: {
             "Content-Type": "text/plain",
           },
-        }
+        },
       );
     }
 
@@ -80,13 +82,13 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
 
   onMessage<Schema extends MessageSchemaType>(
     schema: Schema,
-    handler: MessageHandler<Schema, WebSocketData<Metadata>>
+    handler: MessageHandler<Schema, WebSocketData<Metadata>>,
   ): this {
     const messageType = schema.shape.type._def.value;
 
     if (this.handlers.message.has(messageType)) {
       console.warn(
-        `Handler for message type "${messageType}" is being overwritten.`
+        `Handler for message type "${messageType}" is being overwritten.`,
       );
     }
 
@@ -135,7 +137,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
           result.catch((error) => {
             console.error(
               `Unhandled promise rejection in open handler for ${clientId}:`,
-              error
+              error,
             );
           });
         }
@@ -149,13 +151,13 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
   private handleClose(
     ws: ServerWebSocket<WebSocketData<Metadata>>,
     code: number,
-    reason?: string
+    reason?: string,
   ) {
     const clientId = ws.data.clientId;
     console.log(
       `[ws] Connection closed: ${clientId} (Code: ${code}, Reason: ${
         reason || "N/A"
-      })`
+      })`,
     );
 
     const context = {
@@ -175,7 +177,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
           result.catch((error) => {
             console.error(
               `[ws] Unhandled promise rejection in close handler for ${clientId}:`,
-              error
+              error,
             );
           });
         }
@@ -188,10 +190,10 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
 
   private handleMessage(
     ws: ServerWebSocket<WebSocketData<Metadata>>,
-    message: string | Buffer
+    message: string | Buffer,
   ) {
     const clientId = ws.data.clientId;
-    let parsedMessage: any;
+    let parsedMessage: unknown;
 
     try {
       // Assuming messages are JSON strings
@@ -202,7 +204,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
         parsedMessage = JSON.parse(message.toString());
       } else {
         console.warn(
-          `[ws] Received non-string/buffer message from ${clientId}`
+          `[ws] Received non-string/buffer message from ${clientId}`,
         );
         return;
       }
@@ -211,11 +213,11 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
       if (
         typeof parsedMessage !== "object" ||
         parsedMessage === null ||
-        typeof parsedMessage.type !== "string"
+        typeof (parsedMessage as { type: unknown }).type !== "string"
       ) {
         console.warn(
           `[ws] Received invalid message format from ${clientId}:`,
-          parsedMessage
+          parsedMessage,
         );
         // Optionally send an error message back or close the connection
         // ws.send(JSON.stringify({ error: "Invalid message format" }));
@@ -230,12 +232,12 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
       return;
     }
 
-    const messageType = parsedMessage.type;
+    const messageType = (parsedMessage as { type: string }).type;
     const handlerEntry = this.handlers.message.get(messageType);
 
     if (!handlerEntry) {
       console.warn(
-        `[ws] No handler found for message type "${messageType}" from ${clientId}`
+        `[ws] No handler found for message type "${messageType}" from ${clientId}`,
       );
       // Optionally send a message indicating the type is unsupported
       // ws.send(JSON.stringify({ error: `Unsupported message type: ${messageType}` }));
@@ -251,7 +253,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
       if (!validationResult.success) {
         console.error(
           `[ws] Message validation failed for type "${messageType}" from ${clientId}:`,
-          validationResult.error.errors // Log Zod errors
+          validationResult.error.errors, // Log Zod errors
         );
         // Optionally send detailed validation errors back (be cautious with sensitive info)
         // ws.send(JSON.stringify({ error: "Validation failed", details: validationResult.error.flatten() }));
@@ -273,14 +275,15 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
       };
 
       // Execute the handler
-      const result = handler(context as any); // Cast needed due to complex conditional types
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = handler(context as any);
 
       // Handle async handlers
       if (result instanceof Promise) {
         result.catch((error) => {
           console.error(
             `[ws] Unhandled promise rejection in message handler for type "${messageType}" from ${clientId}:`,
-            error
+            error,
           );
         });
       }
@@ -288,7 +291,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
       // Catch synchronous errors in handlers
       console.error(
         `[ws] Error in message handler for type "${messageType}" from ${clientId}:`,
-        error
+        error,
       );
       // Optionally close the connection on handler error
       // ws.close(1011, "Internal server error during message handling");
@@ -300,7 +303,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
    * This function allows handlers to send typed messages with proper validation.
    */
   private createSendFunction<T extends WebSocketData<Metadata>>(
-    ws: ServerWebSocket<T>
+    ws: ServerWebSocket<T>,
   ): SendFunction {
     return <Schema extends MessageSchemaType>(
       schema: Schema,
@@ -309,7 +312,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
           ? z.infer<P>
           : unknown
         : unknown,
-      meta: Partial<z.infer<Schema["shape"]["meta"]>> = {}
+      meta: Partial<z.infer<Schema["shape"]["meta"]>> = {},
     ) => {
       try {
         // Extract the message type from the schema
@@ -332,7 +335,7 @@ export class WebSocketRouter<Metadata extends Record<string, unknown> = {}> {
         if (!validationResult.success) {
           console.error(
             `[ws] Failed to send message of type "${messageType}": Validation error`,
-            validationResult.error.errors
+            validationResult.error.errors,
           );
           return;
         }

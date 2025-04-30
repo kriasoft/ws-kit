@@ -3,8 +3,8 @@
 
 import type { CloseHandler, MessageHandlerEntry, OpenHandler } from "./types";
 
-export class WebSocketHandlers<T = any> {
-  public readonly open: OpenHandler<T>[] = [];
-  public readonly close: CloseHandler<T>[] = [];
-  public readonly message = new Map<string, MessageHandlerEntry>();
+export class WebSocketHandlers<Data = unknown> {
+  public readonly open: OpenHandler<Data>[] = [];
+  public readonly close: CloseHandler<Data>[] = [];
+  public readonly message = new Map<string, MessageHandlerEntry<Data>>();
 }

@@ -13,7 +13,7 @@ ws.onMessage(JoinRoom, (c) => {
   });
 });
 
-ws.onClose((c) => {
+ws.onClose(() => {
   console.log(`Connection closed`);
 });
 
