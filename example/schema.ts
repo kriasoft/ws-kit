@@ -1,17 +1,28 @@
 import { z } from "zod";
-import { MessageSchema } from "../schema";
+import { messageSchema } from "../";
 
-export const JoinRoom = MessageSchema.extend({
-  type: z.literal("JOIN_ROOM"),
-  payload: z.object({
-    roomId: z.string(),
-  }),
+export const JoinRoom = messageSchema("JOIN_ROOM", {
+  roomId: z.string(),
 });
 
-export const UserJoined = MessageSchema.extend({
-  type: z.literal("USER_JOINED"),
-  payload: z.object({
-    roomId: z.string(),
-    userId: z.string().optional(),
-  }),
+export const UserJoined = messageSchema("USER_JOINED", {
+  roomId: z.string(),
+  userId: z.string().optional(),
+});
+
+export const UserLeft = messageSchema("USER_LEFT", {
+  roomId: z.string(),
+  userId: z.string(),
+});
+
+export const SendMessage = messageSchema("SEND_MESSAGE", {
+  roomId: z.string(),
+  text: z.string(),
+});
+
+export const NewMessage = messageSchema("NEW_MESSAGE", {
+  roomId: z.string(),
+  userId: z.string(),
+  text: z.string(),
+  timestamp: z.number().optional(),
 });

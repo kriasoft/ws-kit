@@ -1,13 +1,13 @@
 import { Hono } from "hono";
-import { WebSocketRouter } from "../index";
+import { WebSocketRouter } from "../";
 import { chatRouter } from "./chat";
 
 // HTTP router
 const app = new Hono();
 app.get("/", (c) => c.text("Welcome to Hono!"));
 
-// WebSocket router
-const ws = new WebSocketRouter();
+// Create a WebSocket router with the same extended data type as chatRouter
+const ws = new WebSocketRouter<Record<string, unknown>>();
 ws.addRoutes(chatRouter);
 
 Bun.serve({

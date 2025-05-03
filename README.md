@@ -183,6 +183,221 @@ ws.onClose((c) => {
 
 **Important Note:** The `c.send(...)` function sends a message back _only_ to the client that sent the original message. For broadcasting to rooms or multiple clients, you'll need to implement your own logic (we handle the routing, you handle the party!).
 
+## How to broadcast messages
+
+Broadcasting messages to multiple clients is a common requirement for real-time applications. `bun-ws-router` complements Bun's built-in PubSub functionality with schema validation support.
+
+### Option 1: Using Bun's native WebSocket PubSub
+
+Bun's WebSocket implementation includes built-in support for the PubSub pattern through `subscribe`, `publish`, and `unsubscribe` methods:
+
+```ts
+ws.onMessage(JoinRoom, (c) => {
+  const { roomId } = c.payload;
+  const userId = c.ws.data.userId || c.ws.data.clientId;
+
+  // Store room ID in connection data
+  c.ws.data.roomId = roomId;
+
+  // Subscribe the client to the room's topic
+  c.ws.subscribe(roomId);
+
+  console.log(`User ${userId} joined room: ${roomId}`);
+
+  // Send confirmation back to the user who joined
+  c.send(UserJoined, { roomId, userId });
+
+  // Broadcast to all other subscribers that a new user joined
+  const message = JSON.stringify({
+    type: "USER_JOINED",
+    meta: { timestamp: Date.now() },
+    payload: { roomId, userId },
+  });
+  c.ws.publish(roomId, message);
+});
+
+ws.onClose((c) => {
+  const userId = c.ws.data.userId || c.ws.data.clientId;
+  const roomId = c.ws.data.roomId;
+
+  if (roomId) {
+    // Unsubscribe from room
+    c.ws.unsubscribe(roomId);
+
+    // Notify others the user has left
+    const message = JSON.stringify({
+      type: "USER_LEFT",
+      meta: { timestamp: Date.now() },
+      payload: { userId },
+    });
+    c.ws.publish(roomId, message);
+  }
+});
+```
+
+### Option 2: Using the publish helper function
+
+The library provides a helper function that combines schema validation with publishing:
+
+```ts
+import { WebSocketRouter, publish } from "bun-ws-router";
+import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
+
+ws.onMessage(JoinRoom, (c) => {
+  const { roomId } = c.payload;
+  const userId = c.ws.data.userId || c.ws.data.clientId;
+
+  // Store room ID and subscribe to topic
+  c.ws.data.roomId = roomId;
+  c.ws.subscribe(roomId);
+
+  // Send confirmation back to the user who joined
+  c.send(UserJoined, { roomId, userId });
+
+  // Broadcast to other subscribers with schema validation
+  publish(c.ws, roomId, UserJoined, {
+    roomId,
+    userId,
+  });
+});
+
+ws.onMessage(SendMessage, (c) => {
+  const { roomId, message } = c.payload;
+  const userId = c.ws.data.userId || c.ws.data.clientId;
+
+  console.log(`Message in room ${roomId} from ${userId}: ${message}`);
+
+  // Broadcast the message to all subscribers in the room
+  publish(c.ws, roomId, NewMessage, {
+    roomId,
+    userId,
+    message,
+    timestamp: Date.now(),
+  });
+});
+
+ws.onClose((c) => {
+  const userId = c.ws.data.userId || c.ws.data.clientId;
+  const roomId = c.ws.data.roomId;
+
+  if (roomId) {
+    c.ws.unsubscribe(roomId);
+
+    // Notify others using the publish helper
+    publish(c.ws, roomId, UserLeft, { userId });
+  }
+});
+```
+
+The `publish()` function ensures that all broadcast messages are validated against their schemas before being sent, providing the same type safety for broadcasts that you get with direct messaging.
+
+## Error handling and sending error messages
+
+Effective error handling is crucial for maintaining robust WebSocket connections. `bun-ws-router` provides built-in tools for standardized error messages that align with the library's schema validation pattern.
+
+### Using ErrorCode and ErrorMessage schema
+
+The library includes a standardized error schema and predefined error codes:
+
+```ts
+import { ErrorMessage, ErrorCode } from "bun-ws-router";
+
+ws.onMessage(JoinRoom, (c) => {
+  const { roomId } = c.payload;
+
+  // Check if room exists
+  const roomExists = await checkRoomExists(roomId);
+  if (!roomExists) {
+    // Send error with standardized code
+    c.send(ErrorMessage, {
+      code: ErrorCode.RESOURCE_NOT_FOUND,
+      message: `Room ${roomId} does not exist`,
+      context: { roomId }, // Optional context for debugging
+    });
+    return;
+  }
+
+  // Continue with normal flow...
+  c.ws.data.roomId = roomId;
+  c.ws.subscribe(roomId);
+  // ...
+});
+```
+
+### Custom error handling
+
+You can add your own error handling middleware by using the `onMessage` handler:
+
+```ts
+// Catch-all handler for message processing errors
+ws.onOpen((c) => {
+  try {
+    // Your connection setup logic
+  } catch (error) {
+    console.error("Error in connection setup:", error);
+    c.send(ErrorMessage, {
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      message: "Failed to set up connection",
+    });
+  }
+});
+
+// Global error handler for authentication
+ws.onMessage(AuthenticateUser, (c) => {
+  try {
+    // Validate token
+    const { token } = c.payload;
+    const user = validateToken(token);
+
+    if (!user) {
+      c.send(ErrorMessage, {
+        code: ErrorCode.AUTHENTICATION_FAILED,
+        message: "Invalid authentication token",
+      });
+      return;
+    }
+
+    // Store user data for future requests
+    c.ws.data.userId = user.id;
+    c.ws.data.userRole = user.role;
+
+    // Send success response
+    c.send(AuthSuccess, { userId: user.id });
+  } catch (error) {
+    c.send(ErrorMessage, {
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      message: "Authentication process failed",
+    });
+  }
+});
+```
+
+### Available Error Codes
+
+The built-in `ErrorCode` enum provides consistent error types:
+
+| Error Code                 | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| `INVALID_MESSAGE_FORMAT`   | Message isn't valid JSON or lacks required structure  |
+| `VALIDATION_FAILED`        | Message failed schema validation                      |
+| `UNSUPPORTED_MESSAGE_TYPE` | No handler registered for this message type           |
+| `AUTHENTICATION_FAILED`    | Client isn't authenticated or has invalid credentials |
+| `AUTHORIZATION_FAILED`     | Client lacks permission for the requested action      |
+| `RESOURCE_NOT_FOUND`       | Requested resource (user, room, etc.) doesn't exist   |
+| `RATE_LIMIT_EXCEEDED`      | Client is sending messages too frequently             |
+| `INTERNAL_SERVER_ERROR`    | Unexpected server error occurred                      |
+
+You can also broadcast error messages to multiple clients using the `publish` function:
+
+```ts
+// Notify all users in a room that it's being deleted
+publish(c.ws, roomId, ErrorMessage, {
+  code: ErrorCode.RESOURCE_NOT_FOUND,
+  message: "This room is being deleted and will no longer be available",
+  context: { roomId },
+});
+```
+
 ## How to compose routes
 
 You can compose routes from different files into a single router. This is useful for organizing your code and keeping related routes together.

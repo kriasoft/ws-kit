@@ -16,11 +16,18 @@ import type {
   WebSocketRouterOptions,
 } from "./types";
 
+/**
+ * WebSocket router for Bun that provides type-safe message routing with Zod validation.
+ * Routes incoming messages to handlers based on message type.
+ *
+ * @template T - Application-specific data to store with each WebSocket connection.
+ *               Always includes a clientId property generated automatically.
+ */
 export class WebSocketRouter<
-  Metadata extends Record<string, unknown> = Record<string, never>,
+  T extends Record<string, unknown> = Record<string, never>,
 > {
   private readonly server: Server;
-  private readonly handlers = new WebSocketHandlers<WebSocketData<Metadata>>();
+  private readonly handlers = new WebSocketHandlers<WebSocketData<T>>();
 
   constructor(options?: WebSocketRouterOptions) {
     this.server = options?.server ?? (undefined as unknown as Server);
@@ -29,7 +36,7 @@ export class WebSocketRouter<
   /**
    * Merges open, close, and message handlers from another WebSocketRouter instance.
    */
-  addRoutes(ws: WebSocketRouter<Metadata>): this {
+  addRoutes(ws: WebSocketRouter<T>): this {
     ws.handlers.message.forEach((handler, value) => {
       this.handlers.message.set(value, handler);
     });
@@ -41,10 +48,7 @@ export class WebSocketRouter<
   /**
    * Upgrades an HTTP request to a WebSocket connection.
    */
-  public upgrade(
-    req: Request,
-    options: UpgradeOptions<WebSocketData<Metadata>>,
-  ) {
+  public upgrade(req: Request, options: UpgradeOptions<WebSocketData<T>>) {
     const { server, data, headers } = options;
     const clientId = randomUUIDv7();
     const upgraded = server.upgrade(req, {
@@ -70,19 +74,19 @@ export class WebSocketRouter<
     return new Response(null, { status: 101 });
   }
 
-  onOpen(handler: OpenHandler<WebSocketData<Metadata>>): this {
+  onOpen(handler: OpenHandler<WebSocketData<T>>): this {
     this.handlers.open.push(handler);
     return this;
   }
 
-  onClose(handler: CloseHandler<WebSocketData<Metadata>>): this {
+  onClose(handler: CloseHandler<WebSocketData<T>>): this {
     this.handlers.close.push(handler);
     return this;
   }
 
   onMessage<Schema extends MessageSchemaType>(
     schema: Schema,
-    handler: MessageHandler<Schema, WebSocketData<Metadata>>,
+    handler: MessageHandler<Schema, WebSocketData<T>>,
   ): this {
     const messageType = schema.shape.type._def.value;
 
@@ -94,10 +98,7 @@ export class WebSocketRouter<
 
     this.handlers.message.set(messageType, {
       schema,
-      handler: handler as MessageHandler<
-        MessageSchemaType,
-        WebSocketData<Metadata>
-      >,
+      handler: handler as MessageHandler<MessageSchemaType, WebSocketData<T>>,
     });
 
     return this;
@@ -106,7 +107,7 @@ export class WebSocketRouter<
   /**
    * Returns a WebSocket handler that can be used with `Bun.serve`.
    */
-  get websocket(): WebSocketHandler<WebSocketData<Metadata>> {
+  get websocket(): WebSocketHandler<WebSocketData<T>> {
     return {
       open: this.handleOpen.bind(this),
       message: this.handleMessage.bind(this),
@@ -118,7 +119,7 @@ export class WebSocketRouter<
   // Private methods
   // ———————————————————————————————————————————————————————————————————————————
 
-  private handleOpen(ws: ServerWebSocket<WebSocketData<Metadata>>) {
+  private handleOpen(ws: ServerWebSocket<WebSocketData<T>>) {
     const clientId = ws.data.clientId;
     console.log(`[ws] Connection opened: ${clientId}`);
 
@@ -149,7 +150,7 @@ export class WebSocketRouter<
   }
 
   private handleClose(
-    ws: ServerWebSocket<WebSocketData<Metadata>>,
+    ws: ServerWebSocket<WebSocketData<T>>,
     code: number,
     reason?: string,
   ) {
@@ -189,7 +190,7 @@ export class WebSocketRouter<
   }
 
   private handleMessage(
-    ws: ServerWebSocket<WebSocketData<Metadata>>,
+    ws: ServerWebSocket<WebSocketData<T>>,
     message: string | Buffer,
   ) {
     const clientId = ws.data.clientId;
@@ -302,8 +303,8 @@ export class WebSocketRouter<
    * Creates a send function for a specific WebSocket connection.
    * This function allows handlers to send typed messages with proper validation.
    */
-  private createSendFunction<T extends WebSocketData<Metadata>>(
-    ws: ServerWebSocket<T>,
+  private createSendFunction(
+    ws: ServerWebSocket<WebSocketData<T>>,
   ): SendFunction {
     return <Schema extends MessageSchemaType>(
       schema: Schema,
