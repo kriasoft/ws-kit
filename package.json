@@ -1,6 +1,6 @@
 {
   "name": "bun-ws-router",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "A simple and efficient WebSocket router for Bun with Zod-based message validation.",
   "keywords": [
     "bun",
@@ -49,14 +49,19 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./index.ts",
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
     "./package.json": "./package.json"
   },
+  "types": "./index.ts",
   "files": [
     "handlers.ts",
     "index.ts",
     "LICENSE",
     "package.json",
+    "publish.ts",
     "README.md",
     "router.ts",
     "schema.ts",

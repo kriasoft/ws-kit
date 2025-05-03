@@ -5,7 +5,8 @@ import type { ZodLiteral, ZodObject, ZodRawShape, ZodTypeAny } from "zod";
 import { z } from "zod";
 
 /**
- * Defines the base structure for message metadata.
+ * Base schema for message metadata.
+ * Provides common fields that are available on all messages.
  * Can be extended for specific message types.
  */
 export const MessageMetadataSchema = z.object({
@@ -15,12 +16,38 @@ export const MessageMetadataSchema = z.object({
 });
 
 /**
- * Defines the absolute base structure for any message.
- * Specific message schemas should extend this, typically using `z.literal` for the type.
+ * Base message schema that all specific message types extend.
+ * Defines the minimum structure required for routing.
  */
 export const MessageSchema = z.object({
   type: z.string(),
   meta: MessageMetadataSchema,
+});
+
+/**
+ * Standard error codes for WebSocket communication.
+ * Used in ErrorMessage payloads for consistent error handling.
+ */
+export const ErrorCode = z.enum([
+  "INVALID_MESSAGE_FORMAT", // Message isn't valid JSON or lacks required structure
+  "VALIDATION_FAILED", // Message failed schema validation
+  "UNSUPPORTED_MESSAGE_TYPE", // No handler registered for this message type
+  "AUTHENTICATION_FAILED", // Client isn't authenticated or has invalid credentials
+  "AUTHORIZATION_FAILED", // Client lacks permission for the requested action
+  "RESOURCE_NOT_FOUND", // Requested resource (user, room, etc.) doesn't exist
+  "RATE_LIMIT_EXCEEDED", // Client is sending messages too frequently
+  "INTERNAL_SERVER_ERROR", // Unexpected server error occurred
+]);
+
+export type ErrorCode = z.infer<typeof ErrorCode>;
+
+/**
+ * Standard error message schema for consistent error responses.
+ */
+export const ErrorMessage = messageSchema("ERROR", {
+  code: ErrorCode,
+  message: z.string().optional(),
+  context: z.record(z.any()).optional(),
 });
 
 // -----------------------------------------------------------------------
@@ -28,7 +55,7 @@ export const MessageSchema = z.object({
 // -----------------------------------------------------------------------
 
 /**
- * Type for a message schema with no payload
+ * Schema type for messages without a payload
  */
 export type BaseMessageSchema<T extends string> = ZodObject<{
   type: ZodLiteral<T>;
@@ -36,7 +63,7 @@ export type BaseMessageSchema<T extends string> = ZodObject<{
 }>;
 
 /**
- * Type for a message schema with a payload
+ * Schema type for messages with a payload
  */
 export type PayloadMessageSchema<
   T extends string,
@@ -48,7 +75,7 @@ export type PayloadMessageSchema<
 }>;
 
 /**
- * Type for a message schema with a custom meta object
+ * Schema type for messages with custom metadata
  */
 export type MessageSchemaWithCustomMeta<
   T extends string,
@@ -59,7 +86,7 @@ export type MessageSchemaWithCustomMeta<
 }>;
 
 /**
- * Type for a message schema with a payload and custom meta object
+ * Schema type for messages with both payload and custom metadata
  */
 export type PayloadMessageSchemaWithCustomMeta<
   T extends string,
@@ -76,14 +103,14 @@ export type PayloadMessageSchemaWithCustomMeta<
 // -----------------------------------------------------------------------
 
 /**
- * Creates a message schema with a literal type but no payload or custom metadata
+ * Creates a basic message schema with just type and standard metadata
  */
 export function messageSchema<T extends string>(
   messageType: T,
 ): BaseMessageSchema<T>;
 
 /**
- * Creates a message schema with a literal type and a payload schema (object form)
+ * Creates a message schema with a payload defined as an object
  */
 export function messageSchema<
   T extends string,
@@ -91,7 +118,7 @@ export function messageSchema<
 >(messageType: T, payload: P): PayloadMessageSchema<T, ZodObject<P>>;
 
 /**
- * Creates a message schema with a literal type and a payload schema (ZodType form)
+ * Creates a message schema with a payload defined as a ZodType
  */
 export function messageSchema<T extends string, P extends ZodTypeAny>(
   messageType: T,
@@ -99,7 +126,7 @@ export function messageSchema<T extends string, P extends ZodTypeAny>(
 ): PayloadMessageSchema<T, P>;
 
 /**
- * Creates a message schema with a literal type and custom metadata
+ * Creates a message schema with custom metadata
  */
 export function messageSchema<T extends string, M extends ZodRawShape>(
   messageType: T,
@@ -108,7 +135,7 @@ export function messageSchema<T extends string, M extends ZodRawShape>(
 ): MessageSchemaWithCustomMeta<T, M>;
 
 /**
- * Creates a message schema with a literal type, payload (object form), and custom metadata
+ * Creates a message schema with an object payload and custom metadata
  */
 export function messageSchema<
   T extends string,
@@ -121,7 +148,7 @@ export function messageSchema<
 ): PayloadMessageSchemaWithCustomMeta<T, ZodObject<P>, M>;
 
 /**
- * Creates a message schema with a literal type, payload (ZodType form), and custom metadata
+ * Creates a message schema with a ZodType payload and custom metadata
  */
 export function messageSchema<
   T extends string,
@@ -138,11 +165,14 @@ export function messageSchema<
 // -----------------------------------------------------------------------
 
 /**
- * A helper function to create specific WebSocket message schemas.
- * It extends the base `MessageSchema`, setting a literal type, adding a payload schema,
- * and optionally extending the metadata schema.
+ * Creates a type-safe WebSocket message schema.
  *
- * Implementation for all overloads
+ * The schema includes:
+ * - A literal type field for routing messages
+ * - Metadata for tracking client info and message context
+ * - Optional payload for the message data
+ *
+ * Types are fully inferred for use with WebSocketRouter handlers.
  */
 export function messageSchema<
   T extends string,
@@ -175,15 +205,8 @@ export function messageSchema<
 
   // If no payload schema provided, return without payload
   if (payload === undefined) {
-    // The return type here depends on whether M is Record<string, never>
-    // We need to satisfy both BaseMessageSchema<T> and MessageSchemaWithCustomMeta<T, M>
-    if (meta === undefined) {
-      // @ts-expect-error - TS cannot verify this complex conditional return type
-      return baseSchema;
-    } else {
-      // @ts-expect-error - TS cannot verify this complex conditional return type
-      return baseSchema;
-    }
+    // @ts-expect-error - TypeScript can't verify complex conditional return types
+    return baseSchema;
   }
 
   const payloadSchema =
@@ -196,23 +219,6 @@ export function messageSchema<
     payload: payloadSchema,
   });
 
-  // Similar to the no-payload case, the return type is complex.
-  // We need to satisfy the PayloadMessageSchema variants.
-  if (meta === undefined) {
-    if (payload instanceof z.ZodType) {
-      // @ts-expect-error - TS cannot verify this complex conditional return type
-      return finalSchema;
-    } else {
-      // @ts-expect-error - TS cannot verify this complex conditional return type
-      return finalSchema;
-    }
-  } else {
-    if (payload instanceof z.ZodType) {
-      // @ts-expect-error - TS cannot verify this complex conditional return type
-      return finalSchema;
-    } else {
-      // @ts-expect-error - TS cannot verify this complex conditional return type
-      return finalSchema;
-    }
-  }
+  // @ts-expect-error - TypeScript can't verify complex conditional return types
+  return finalSchema;
 }
