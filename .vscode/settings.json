@@ -27,5 +27,8 @@
   "typescript.updateImportsOnFileMove.enabled": "always",
 
   // Bun
-  "bun.test.filePattern": "test/*.test.ts"
+  "bun.test.filePattern": "test/*.test.ts",
+
+  // Spell checking
+  "cSpell.ignoreWords": ["valibot"]
 }

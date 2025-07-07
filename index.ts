@@ -1,7 +1,8 @@
 /* SPDX-FileCopyrightText: 2025-present Kriasoft */
 /* SPDX-License-Identifier: MIT */
 
-export * from "./publish";
-export * from "./router";
-export * from "./schema";
-export * from "./types";
+// For backward compatibility, export Zod-based implementation as default
+export * from "./zod/index";
+
+// Also export shared types that are validator-agnostic
+export type { WebSocketData, UpgradeOptions } from "./shared/types";

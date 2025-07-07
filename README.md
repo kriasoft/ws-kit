@@ -1,10 +1,11 @@
 # Bun WebSocket Router
 
-Tired of wrestling WebSocket connections like a tangled mess of holiday lights? `bun-ws-router` is here to bring order to the chaos! It's a type-safe WebSocket router for Bun, powered by Zod, making your real-time message handling smoother than a fresh jar of peanut butter. Route WebSocket messages to handlers based on message type with full TypeScript support.
+Tired of wrestling WebSocket connections like a tangled mess of holiday lights? `bun-ws-router` is here to bring order to the chaos! It's a type-safe WebSocket router for Bun, powered by **Zod** or **Valibot** validation, making your real-time message handling smoother than a fresh jar of peanut butter. Route WebSocket messages to handlers based on message type with full TypeScript support.
 
 ### Key Features
 
-- 🔒 **Type-safe messaging**: Built-in validation using Zod schemas (catch errors before they bite!)
+- 🔒 **Type-safe messaging**: Built-in validation using Zod or Valibot schemas (catch errors before they bite!)
+- ⚡ **Choose your validator**: Use Zod for familiarity or Valibot for 90% smaller bundles
 - ✨ **Simple API**: Intuitive routing system for WebSocket messages (so easy, your cat could _almost_ use it)
 - 🚀 **Performance**: Leverages Bun's native WebSocket implementation (it's fast, like, _really_ fast)
 - 🧩 **Flexible**: Works with any Bun server setup, including Hono
@@ -14,8 +15,15 @@ Perfect for real-time applications like chat systems, live dashboards, multiplay
 
 ## Installation
 
+Choose your validation library:
+
 ```bash
+# With Zod (recommended for beginners)
 bun add bun-ws-router zod
+bun add @types/bun -D
+
+# With Valibot (90% smaller bundles)
+bun add bun-ws-router valibot
 bun add @types/bun -D
 ```
 
@@ -25,7 +33,7 @@ The following example demonstrates how to set up a Bun server with both (RESTful
 
 ```ts
 import { Hono } from "hono";
-import { WebSocketRouter } from "bun-ws-router";
+import { WebSocketRouter } from "bun-ws-router"; // Uses Zod by default
 import { exampleRouter } from "./example";
 
 // HTTP router
@@ -59,6 +67,32 @@ Bun.serve({
 
 console.log(`WebSocket server listening on ws://localhost:3000/ws`);
 ```
+
+## Validation Libraries
+
+You can choose between Zod and Valibot validators using different import paths:
+
+```ts
+// Zod (default) - mature ecosystem, method chaining
+import { WebSocketRouter, messageSchema } from "bun-ws-router/zod";
+
+// Valibot - 90% smaller bundles, functional pipelines
+import { WebSocketRouter, messageSchema } from "bun-ws-router/valibot";
+
+// Backward compatibility (uses Zod)
+import { WebSocketRouter, messageSchema } from "bun-ws-router";
+```
+
+### Quick Comparison
+
+| Feature     | Zod                      | Valibot                  |
+| ----------- | ------------------------ | ------------------------ |
+| Bundle Size | 13.5 kB                  | 1.37 kB                  |
+| Performance | Baseline                 | 2x faster                |
+| API Style   | Method chaining          | Functional               |
+| Best for    | Server-side, familiarity | Client-side, performance |
+
+See the [Valibot Integration Guide](./docs/valibot-integration.md) for detailed migration instructions and examples.
 
 ## How to handle authentication
 

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { messageSchema } from "../schema";
+import { messageSchema } from "../zod/schema";
 
 describe("messageSchema", () => {
   it("should create a basic message schema without payload", () => {

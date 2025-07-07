@@ -8,7 +8,7 @@ import tslint from "typescript-eslint";
 export default tslint.config(
   {
     // Global ignores
-    ignores: ["node_modules", ".bun/"],
+    ignores: ["node_modules", ".bun/", "dist/", "docs/"],
   },
   // Base ESLint recommended rules
   eslint.configs.recommended,

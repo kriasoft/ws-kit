@@ -1,37 +1,29 @@
 {
   "name": "bun-ws-router",
-  "version": "0.1.0",
-  "description": "A simple and efficient WebSocket router for Bun with Zod-based message validation.",
+  "version": "0.2.0",
+  "description": "A simple and efficient WebSocket router for Bun with Zod/Valibot message validation.",
   "keywords": [
-    "bun",
-    "websocket",
-    "router",
-    "zod",
-    "typescript",
-    "ws",
-    "realtime",
-    "real-time",
-    "socket",
-    "message",
-    "messaging",
-    "web-socket",
-    "validation",
-    "schema",
-    "schema-validation",
-    "chat",
-    "web",
-    "server",
-    "connection",
-    "api",
-    "http",
-    "events",
-    "socketio",
-    "socket.io",
-    "pub-sub",
-    "pubsub",
     "broadcast",
-    "channel",
-    "hono"
+    "bun",
+    "framework",
+    "handler",
+    "hono",
+    "messaging",
+    "middleware",
+    "pubsub",
+    "realtime",
+    "router",
+    "schema",
+    "socket",
+    "socketio",
+    "type-safe",
+    "typescript",
+    "valibot",
+    "validation",
+    "web-socket",
+    "websocket",
+    "ws",
+    "zod"
   ],
   "homepage": "https://github.com/kriasoft/bun-ws-router",
   "bugs": "https://github.com/kriasoft/bun-ws-router/issues",
@@ -50,42 +42,77 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./index.ts",
-      "default": "./index.ts"
+      "bun": "./index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./zod": {
+      "bun": "./zod/index.ts",
+      "types": "./dist/zod/index.d.ts",
+      "default": "./dist/zod/index.js"
+    },
+    "./valibot": {
+      "bun": "./valibot/index.ts",
+      "types": "./dist/valibot/index.d.ts",
+      "default": "./dist/valibot/index.js"
     },
     "./package.json": "./package.json"
   },
-  "types": "./index.ts",
+  "types": "./dist/index.d.ts",
   "files": [
-    "handlers.ts",
-    "index.ts",
-    "LICENSE",
-    "package.json",
-    "publish.ts",
-    "README.md",
-    "router.ts",
-    "schema.ts",
-    "tsconfig.json",
-    "types.ts"
+    "dist/",
+    "shared/",
+    "valibot/",
+    "zod/",
+    "index.ts"
   ],
   "dependencies": {
     "uuid": "^11.1.0"
   },
   "peerDependencies": {
-    "zod": ">=3.0.0",
-    "@types/bun": ">=1.2.0"
+    "@types/bun": ">=1.2.0",
+    "valibot": ">=1.1.0",
+    "zod": ">=3.25.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@eslint/js": "^9.25.1",
-    "@types/bun": "^1.2.10",
-    "eslint-config-prettier": "^10.1.2",
-    "eslint": "^9.25.1",
-    "globals": "^16.0.0",
-    "hono": "^4.7.7",
+    "@eslint/js": "^9.30.1",
+    "@types/bun": "^1.2.18",
+    "eslint": "^9.30.1",
+    "eslint-config-prettier": "^10.1.5",
+    "globals": "^16.3.0",
+    "hono": "^4.8.4",
     "jiti": "^2.4.2",
-    "prettier": "^3.5.3",
-    "typescript-eslint": "^8.31.1",
+    "prettier": "^3.6.2",
     "typescript": "^5.8.3",
-    "zod": "^3.24.3"
+    "typescript-eslint": "^8.36.0",
+    "valibot": "^1.1.0",
+    "vitepress": "^1.6.3",
+    "zod": "^3.25.75"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc --project tsconfig.build.json",
+    "lint": "eslint --report-unused-disable-directives .",
+    "lint:fix": "eslint --report-unused-disable-directives --fix .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "prettier": {
+    "singleQuote": false,
+    "semi": true,
+    "trailingComma": "all",
+    "tabWidth": 2,
+    "printWidth": 80
   }
 }
