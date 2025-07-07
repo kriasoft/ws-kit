@@ -1,0 +1,36 @@
+---
+# https://vitepress.dev/reference/default-theme-home-page
+layout: home
+
+hero:
+  name: "Schema-First WebSocket Routing"
+  # text: "Type-safe WebSocket routing for Bun"
+  tagline: Type-safe message routing for Bun's WebSocket server that complements native PubSub and connection handling
+  actions:
+    - theme: brand
+      text: Getting Started
+      link: /getting-started
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/kriasoft/bun-ws-router
+
+features:
+  - icon: 🛡️
+    title: Type-Safe Routing
+    details: Define message schemas with Zod or Valibot and get full TypeScript type inference from schema to handler
+  - icon: ⚡
+    title: Built for Bun
+    details: Designed specifically for Bun's high-performance WebSocket server with native PubSub support
+  - icon: 🎯
+    title: Message-Based Architecture
+    details: Consistent message structure with automatic routing based on message types
+  - icon: 🔧
+    title: Developer Experience
+    details: Simple API with powerful features like error boundaries, connection metadata, and async handlers
+  - icon: 📦
+    title: Lightweight
+    details: Choose Valibot for 90% smaller bundles or Zod for familiar syntax. Core logic shared between adapters
+  - icon: 🚀
+    title: Production Ready
+    details: Built-in error handling, authentication patterns, and room broadcasting for real-world applications
+---

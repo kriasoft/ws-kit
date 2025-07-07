@@ -1,24 +1,9 @@
 /* SPDX-FileCopyrightText: 2025-present Kriasoft */
 /* SPDX-License-Identifier: MIT */
 
-import type { HeadersInit, Server, ServerWebSocket } from "bun";
+import type { ServerWebSocket } from "bun";
 import type { ZodObject, ZodType, ZodTypeAny } from "zod";
 import { z, ZodLiteral } from "zod";
-import { MessageMetadataSchema } from "./schema";
-
-export interface WebSocketRouterOptions {
-  server?: Server;
-}
-
-export type WebSocketData<T> = {
-  clientId: string;
-} & T;
-
-export interface UpgradeOptions<T> {
-  server: Server;
-  data?: T;
-  headers?: HeadersInit;
-}
 
 export type SendFunction = <Schema extends MessageSchemaType>(
   schema: Schema,
@@ -45,8 +30,9 @@ export type MessageHandler<Schema extends MessageSchemaType, Data> = (
 ) => void | Promise<void>;
 
 export type MessageSchemaType = ZodObject<{
-  type: ZodLiteral<string>; // Must have a literal string type
-  meta: ZodType<z.infer<typeof MessageMetadataSchema>>;
+  type: ZodLiteral<string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta: ZodType<any>;
   payload?: ZodTypeAny;
 }>;
 
@@ -55,22 +41,13 @@ export interface MessageHandlerEntry<Data = unknown> {
   handler: MessageHandler<MessageSchemaType, Data>;
 }
 
-export interface OpenHandlerContext<Data> {
-  ws: ServerWebSocket<Data>;
-  send: SendFunction;
-}
-
-export type OpenHandler<Data = unknown> = (
-  context: OpenHandlerContext<Data>,
-) => void | Promise<void>;
-
-export interface CloseHandlerContext<Data> {
-  ws: ServerWebSocket<Data>;
-  code: number;
-  reason?: string;
-  send: SendFunction;
-}
-
-export type CloseHandler<Data = unknown> = (
-  context: CloseHandlerContext<Data>,
-) => void | Promise<void>;
+// Re-export shared types
+export type {
+  WebSocketRouterOptions,
+  WebSocketData,
+  UpgradeOptions,
+  OpenHandlerContext,
+  OpenHandler,
+  CloseHandlerContext,
+  CloseHandler,
+} from "../shared/types";

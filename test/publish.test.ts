@@ -4,8 +4,8 @@
 import type { ServerWebSocket } from "bun";
 import { describe, expect, it, mock, spyOn } from "bun:test";
 import { z } from "zod";
-import { publish } from "../publish";
-import { messageSchema } from "../schema";
+import { publish } from "../zod/publish";
+import { messageSchema } from "../zod/schema";
 
 // Type for our mock ServerWebSocket
 type MockWebSocketData = { clientId: string } & Record<string, unknown>;
@@ -108,7 +108,7 @@ describe("publish function", () => {
         content: "Hello with meta",
       },
       {
-        corelationId: "corr-456", // This is a recognized field in the MessageMetadataSchema
+        correlationId: "corr-456", // This is a recognized field in the MessageMetadataSchema
       },
     );
 
@@ -120,7 +120,7 @@ describe("publish function", () => {
     expect(message).toBeDefined();
     if (message) {
       const publishedData = JSON.parse(message.data) as PublishedMessage;
-      expect(publishedData.meta.corelationId).toBe("corr-456");
+      expect(publishedData.meta.correlationId).toBe("corr-456");
     }
   });
 

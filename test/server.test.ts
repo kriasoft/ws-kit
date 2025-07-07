@@ -11,8 +11,8 @@ import {
   spyOn,
 } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../router";
-import { messageSchema } from "../schema";
+import { WebSocketRouter } from "../zod/router";
+import { messageSchema } from "../zod/schema";
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;
