@@ -1,0 +1,31 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "always",
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.tabSize": 2,
+
+  // Consistent file handling
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  // Exclude generated/dependency folders
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.bun": true
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.bun": true
+  },
+
+  // Auto-update import paths on file move/rename
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "typescript.updateImportsOnFileMove.enabled": "always",
+
+  // Bun
+  "bun.test.filePattern": "test/*.test.ts"
+}
