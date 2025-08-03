@@ -106,7 +106,8 @@
     "format:check": "prettier --check .",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "docs:deploy": "bunx gh-pages -d docs/.vitepress/dist"
   },
   "prettier": {
     "singleQuote": false,
