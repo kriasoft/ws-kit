@@ -1,6 +1,6 @@
 {
   "name": "bun-ws-router",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A simple and efficient WebSocket router for Bun with Zod/Valibot message validation.",
   "keywords": [
     "broadcast",
@@ -25,7 +25,7 @@
     "ws",
     "zod"
   ],
-  "homepage": "https://github.com/kriasoft/bun-ws-router",
+  "homepage": "https://kriasoft.com/bun-ws-router/",
   "bugs": "https://github.com/kriasoft/bun-ws-router/issues",
   "repository": {
     "type": "git",
