@@ -2,9 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
 [![npm downloads](https://img.shields.io/npm/dm/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/bun-ws-router)](https://bundlephobia.com/package/bun-ws-router)
-[![license](https://img.shields.io/npm/l/bun-ws-router.svg)](https://github.com/kriasoft/bun-ws-router/blob/main/LICENSE)
 [![GitHub Actions](https://github.com/kriasoft/bun-ws-router/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/bun-ws-router/actions)
+[![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.com/invite/aW29wXyb7w)
 
 Tired of wrestling WebSocket connections like a tangled mess of holiday lights? `bun-ws-router` is here to bring order to the chaos! It's a type-safe WebSocket router for Bun, powered by **Zod** or **Valibot** validation, making your real-time message handling smoother than a fresh jar of peanut butter. Route WebSocket messages to handlers based on message type with full TypeScript support.
 

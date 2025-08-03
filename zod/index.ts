@@ -7,6 +7,7 @@ export {
   ErrorMessage,
   MessageSchema,
   MessageMetadataSchema,
+  ErrorCode,
 } from "./schema";
 export { publish } from "./publish";
 export type {
@@ -23,4 +24,3 @@ export type {
   CloseHandlerContext,
   CloseHandler,
 } from "./types";
-export type { ErrorCode } from "./schema";
