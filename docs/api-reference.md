@@ -330,6 +330,59 @@ ctx.setData({ userId: "123", roles: ["admin"] });
 const userData = ctx.getData<{ userId: string; roles: string[] }>();
 ```
 
+## createMessage() Helper
+
+Factory function for creating validated WebSocket messages on the client side.
+
+```typescript
+function createMessage<T extends MessageSchemaType>(
+  schema: T,
+  payload: T["shape"]["payload"] extends ZodTypeAny
+    ? z.infer<T["shape"]["payload"]>
+    : undefined,
+  meta?: Partial<z.infer<T["shape"]["meta"]>>,
+): SafeParseReturnType;
+```
+
+**Parameters:**
+
+- `schema` - Message schema created with `messageSchema()`
+- `payload` - Message payload (type inferred from schema)
+- `meta` - Optional metadata to include
+
+**Returns:**
+
+A Zod/Valibot `SafeParseReturnType` with either:
+
+- `{ success: true, data: Message }` - Valid message
+- `{ success: false, error: ZodError }` - Validation errors
+
+**Example:**
+
+```typescript
+import { createMessage, messageSchema } from "bun-ws-router";
+
+const JoinMessage = messageSchema("JOIN", {
+  roomId: z.string(),
+});
+
+// Client-side usage
+const message = createMessage(JoinMessage, { roomId: "general" });
+
+if (message.success) {
+  ws.send(JSON.stringify(message.data));
+} else {
+  console.error("Validation failed:", message.error);
+}
+
+// With metadata
+const tracked = createMessage(
+  RequestMessage,
+  { action: "fetch" },
+  { correlationId: "req-123" },
+);
+```
+
 ## publish() Helper
 
 Standalone function for publishing messages with validation.

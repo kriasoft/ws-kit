@@ -4,6 +4,7 @@
 export { WebSocketRouter } from "./router";
 export {
   messageSchema,
+  createMessage,
   ErrorMessage,
   MessageSchema,
   MessageMetadataSchema,

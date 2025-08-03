@@ -454,6 +454,54 @@ ws.addRoutes(notificationRoutes);
 
 Where `chatRoutes` and `notificationRoutes` are other router instances defined in separate files.
 
+## Client-side usage
+
+The library provides a `createMessage` helper function for creating type-safe WebSocket messages on the client side:
+
+```ts
+import { createMessage, messageSchema } from "bun-ws-router";
+import { z } from "zod";
+
+// Define your message schemas (same as server)
+const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+  roomId: z.string(),
+});
+
+const SendMessage = messageSchema("SEND_MESSAGE", {
+  roomId: z.string(),
+  text: z.string(),
+});
+
+// In your client code
+const ws = new WebSocket("ws://localhost:3000/ws");
+
+ws.onopen = () => {
+  // Create a message with type-safe validation
+  const joinMsg = createMessage(JoinRoomMessage, { roomId: "general" });
+
+  if (joinMsg.success) {
+    ws.send(JSON.stringify(joinMsg.data));
+  } else {
+    console.error("Invalid message:", joinMsg.error);
+  }
+};
+
+// Send a message with custom metadata
+function sendChatMessage(roomId: string, text: string) {
+  const msg = createMessage(
+    SendMessage,
+    { roomId, text },
+    { correlationId: crypto.randomUUID() }, // Optional metadata
+  );
+
+  if (msg.success) {
+    ws.send(JSON.stringify(msg.data));
+  }
+}
+```
+
+The `createMessage` function ensures your client messages match the exact structure expected by the server, with full TypeScript type inference and runtime validation.
+
 ## Support
 
 Got questions? Hit a snag? Or just want to share your awesome WebSocket creation? Find us on [Discord](https://discord.com/invite/bSsv7XM). We promise we don't bite (usually 😉).

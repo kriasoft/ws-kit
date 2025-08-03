@@ -630,6 +630,186 @@ const router = new WebSocketRouter()
   });
 ```
 
+## Client-Side Example
+
+Using `createMessage` for type-safe WebSocket communication on the client.
+
+```typescript
+import { createMessage, messageSchema } from "bun-ws-router";
+import { z } from "zod";
+
+// Share these schemas between client and server
+const ConnectionMessage = messageSchema(
+  "CONNECTION",
+  z.object({
+    token: z.string(),
+  }),
+);
+
+const ChatMessage = messageSchema(
+  "CHAT_MESSAGE",
+  z.object({
+    roomId: z.string(),
+    text: z.string().min(1).max(500),
+  }),
+);
+
+const TypingMessage = messageSchema(
+  "TYPING",
+  z.object({
+    roomId: z.string(),
+    isTyping: z.boolean(),
+  }),
+);
+
+// Client implementation
+class ChatClient {
+  private ws: WebSocket;
+  private reconnectTimer?: Timer;
+  private messageQueue: Array<{ schema: any; payload: any; meta?: any }> = [];
+
+  constructor(
+    private url: string,
+    private token: string,
+  ) {
+    this.connect();
+  }
+
+  private connect() {
+    this.ws = new WebSocket(this.url);
+
+    this.ws.onopen = () => {
+      console.log("Connected to chat server");
+
+      // Authenticate on connection
+      const authMsg = createMessage(ConnectionMessage, { token: this.token });
+      if (authMsg.success) {
+        this.ws.send(JSON.stringify(authMsg.data));
+      }
+
+      // Send any queued messages
+      this.flushMessageQueue();
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        this.handleMessage(message);
+      } catch (error) {
+        console.error("Failed to parse message:", error);
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log("Disconnected from server");
+      this.scheduleReconnect();
+    };
+
+    this.ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+  }
+
+  private handleMessage(message: any) {
+    switch (message.type) {
+      case "CHAT_MESSAGE":
+        this.onChatMessage?.(message.payload);
+        break;
+      case "TYPING":
+        this.onTypingUpdate?.(message.payload);
+        break;
+      case "ERROR":
+        this.onError?.(message.payload);
+        break;
+    }
+  }
+
+  sendMessage(roomId: string, text: string) {
+    const msg = createMessage(
+      ChatMessage,
+      { roomId, text },
+      { correlationId: crypto.randomUUID() },
+    );
+
+    if (!msg.success) {
+      console.error("Invalid message:", msg.error);
+      return false;
+    }
+
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg.data));
+      return true;
+    } else {
+      // Queue message for later
+      this.messageQueue.push({
+        schema: ChatMessage,
+        payload: { roomId, text },
+        meta: { correlationId: crypto.randomUUID() },
+      });
+      return false;
+    }
+  }
+
+  setTyping(roomId: string, isTyping: boolean) {
+    const msg = createMessage(TypingMessage, { roomId, isTyping });
+
+    if (msg.success && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg.data));
+    }
+  }
+
+  private flushMessageQueue() {
+    while (this.messageQueue.length > 0) {
+      const { schema, payload, meta } = this.messageQueue.shift()!;
+      const msg = createMessage(schema, payload, meta);
+
+      if (msg.success) {
+        this.ws.send(JSON.stringify(msg.data));
+      }
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      this.connect();
+    }, 5000);
+  }
+
+  disconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+    this.ws.close();
+  }
+
+  // Event handlers (to be set by consumer)
+  onChatMessage?: (payload: any) => void;
+  onTypingUpdate?: (payload: any) => void;
+  onError?: (error: any) => void;
+}
+
+// Usage
+const client = new ChatClient("ws://localhost:3000/ws", "auth-token");
+
+client.onChatMessage = (message) => {
+  console.log("New message:", message);
+};
+
+client.onError = (error) => {
+  console.error("Chat error:", error);
+};
+
+// Send a message
+client.sendMessage("general", "Hello everyone!");
+
+// Show typing indicator
+client.setTyping("general", true);
+```
+
 ## Next Steps
 
 - Learn [Advanced Usage](/advanced-usage) patterns

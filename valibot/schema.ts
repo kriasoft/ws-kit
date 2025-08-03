@@ -160,3 +160,47 @@ export const ErrorMessage = messageSchema(
     context: v.optional(v.record(v.string(), v.any())),
   }),
 );
+
+/**
+ * Creates a validated WebSocket message from a schema.
+ *
+ * @example
+ * ```typescript
+ * const EchoSchema = messageSchema("ECHO", v.object({ text: v.string() }));
+ * const message = createMessage(EchoSchema, { text: "Hello" });
+ *
+ * if (message.success) {
+ *   ws.send(JSON.stringify(message.output));
+ * }
+ * ```
+ */
+export function createMessage<T extends MessageSchemaType>(
+  schema: T,
+  payload: T["entries"]["payload"] extends v.BaseSchema<
+    unknown,
+    unknown,
+    v.BaseIssue<unknown>
+  >
+    ? InferOutput<T["entries"]["payload"]>
+    : undefined,
+  meta?: Partial<InferOutput<T["entries"]["meta"]>>,
+) {
+  const messageData = {
+    type: schema.entries.type.literal,
+    payload,
+    meta: meta || {},
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return v.safeParse(schema as any, messageData);
+}
+
+// Helper type for the schema type returned by messageSchema
+type MessageSchemaType = ObjectSchema<
+  {
+    type: v.LiteralSchema<string, string>;
+    meta: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+    payload?: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+  },
+  undefined
+>;
