@@ -174,6 +174,8 @@ mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
 
 ### Creating Messages
 
+#### Server-side (in handlers)
+
 ```typescript
 // Define schema with messageSchema factory
 const JoinRoomMessage = messageSchema(
@@ -192,6 +194,26 @@ router.onMessage(JoinRoomMessage, (ctx) => {
   // Send messages using schema validation:
   ctx.send(ResponseSchema, { data: "value" }, { correlationId: "123" });
 });
+```
+
+#### Client-side (creating messages)
+
+```typescript
+// Use createMessage helper for type-safe message creation
+const message = createMessage(JoinRoomMessage, { roomId: "general" });
+
+if (message.success) {
+  ws.send(JSON.stringify(message.data));
+} else {
+  console.error("Validation failed:", message.error);
+}
+
+// With custom metadata
+const msgWithMeta = createMessage(
+  RequestSchema,
+  { data: "test" },
+  { correlationId: "req-123" },
+);
 ```
 
 ## Validation Commands

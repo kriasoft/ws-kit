@@ -135,3 +135,39 @@ export const ErrorMessage = messageSchema("ERROR", {
   message: z.string().optional(),
   context: z.record(z.string(), z.any()).optional(),
 });
+
+/**
+ * Creates a validated WebSocket message from a schema.
+ *
+ * @example
+ * ```typescript
+ * const EchoSchema = messageSchema("ECHO", { text: z.string() });
+ * const message = createMessage(EchoSchema, { text: "Hello" });
+ *
+ * if (message.success) {
+ *   ws.send(JSON.stringify(message.data));
+ * }
+ * ```
+ */
+export function createMessage<T extends MessageSchemaType>(
+  schema: T,
+  payload: T["shape"]["payload"] extends ZodTypeAny
+    ? z.infer<T["shape"]["payload"]>
+    : undefined,
+  meta?: Partial<z.infer<T["shape"]["meta"]>>,
+) {
+  const messageData = {
+    type: schema.shape.type.value,
+    payload,
+    meta: meta || {},
+  };
+
+  return schema.safeParse(messageData);
+}
+
+// Helper type for the schema type returned by messageSchema
+type MessageSchemaType = ZodObject<{
+  type: z.ZodLiteral<string>;
+  meta: ZodTypeAny;
+  payload?: ZodTypeAny;
+}>;
