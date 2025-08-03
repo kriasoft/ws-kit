@@ -109,7 +109,7 @@ describe("createMessage - Valibot", () => {
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect((message.output as any).payload).toEqual({
+      expect((message.output as { payload: unknown }).payload).toEqual({
         user: {
           id: "123",
           email: "test@example.com",
@@ -159,7 +159,7 @@ describe("createMessage - Valibot", () => {
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect((message.output as any).meta).toEqual({
+      expect((message.output as { meta: unknown }).meta).toEqual({
         userId: "user123",
         sessionId: "550e8400-e29b-41d4-a716-446655440000",
         correlationId: "req123",

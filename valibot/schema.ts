@@ -191,6 +191,7 @@ export function createMessage<T extends MessageSchemaType>(
     meta: meta || {},
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return v.safeParse(schema as any, messageData);
 }
 
