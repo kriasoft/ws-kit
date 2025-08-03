@@ -30,7 +30,7 @@ export function publish<Schema extends MessageSchemaType>(
 ): boolean {
   try {
     // Extract the message type from the schema
-    const messageType = schema.shape.type._def.value;
+    const messageType = schema.shape.type.value;
 
     // Create the message object with the required structure
     const message = {
@@ -49,7 +49,7 @@ export function publish<Schema extends MessageSchemaType>(
     if (!validationResult.success) {
       console.error(
         `[ws] Failed to publish message of type "${messageType}" to topic "${topic}": Validation error`,
-        validationResult.error.errors,
+        validationResult.error.issues,
       );
       return false;
     }

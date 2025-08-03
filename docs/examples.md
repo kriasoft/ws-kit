@@ -18,7 +18,7 @@ import { z } from "zod";
 const JoinRoomMessage = messageSchema(
   "JOIN_ROOM",
   z.object({
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
     username: z.string().min(1).max(20),
   }),
 );
@@ -26,7 +26,7 @@ const JoinRoomMessage = messageSchema(
 const SendMessageMessage = messageSchema(
   "SEND_MESSAGE",
   z.object({
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
     text: z.string().min(1).max(500),
   }),
 );
@@ -34,7 +34,7 @@ const SendMessageMessage = messageSchema(
 const LeaveRoomMessage = messageSchema(
   "LEAVE_ROOM",
   z.object({
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
   }),
 );
 
@@ -406,7 +406,7 @@ const UnsubscribeMessage = messageSchema(
 const NotificationMessage = messageSchema(
   "NOTIFICATION",
   z.object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     type: z.nativeEnum(NotificationType),
     title: z.string(),
     message: z.string(),

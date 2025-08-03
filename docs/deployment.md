@@ -87,8 +87,8 @@ const MessageSchema = messageSchema(
     text: z.string().min(1).max(1000),
 
     // Validate formats
-    email: z.string().email(),
-    url: z.string().url().startsWith("https://"),
+    email: z.email(),
+    url: z.url().startsWith("https://"),
 
     // Sanitize HTML
     content: z.string().transform(sanitizeHtml),

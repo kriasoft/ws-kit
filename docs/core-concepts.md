@@ -98,7 +98,7 @@ const UpdateProfileMessage = messageSchema(
   "UPDATE_PROFILE",
   z.object({
     name: z.string(),
-    avatar: z.string().url().optional(),
+    avatar: z.url().optional(),
   }),
 );
 

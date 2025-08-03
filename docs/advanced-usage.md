@@ -435,7 +435,7 @@ const UserMessageV1 = messageSchema(
   "USER_UPDATE",
   z.object({
     name: z.string(),
-    email: z.string().email(),
+    email: z.email(),
   }),
 );
 
@@ -444,8 +444,8 @@ const UserMessageV2 = messageSchema(
   "USER_UPDATE",
   z.object({
     name: z.string(),
-    email: z.string().email(),
-    avatar: z.string().url().optional(),
+    email: z.email(),
+    avatar: z.url().optional(),
     version: z.literal(2).default(2),
   }),
 );

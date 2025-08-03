@@ -3,7 +3,6 @@
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../shared/router";
 import { ZodValidatorAdapter } from "./adapter";
-import type { WebSocketRouterOptions } from "./types";
 
 /**
  * WebSocket router for Bun that provides type-safe message routing with Zod validation.
@@ -15,7 +14,7 @@ import type { WebSocketRouterOptions } from "./types";
 export class WebSocketRouter<
   T extends Record<string, unknown> = Record<string, never>,
 > extends BaseWebSocketRouter<T> {
-  constructor(options?: WebSocketRouterOptions) {
-    super(new ZodValidatorAdapter(), options);
+  constructor() {
+    super(new ZodValidatorAdapter());
   }
 }

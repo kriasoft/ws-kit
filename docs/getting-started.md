@@ -101,7 +101,7 @@ const PingMessage = messageSchema("PING");
 const JoinRoomMessage = messageSchema(
   "JOIN_ROOM",
   z.object({
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
     username: z.string().min(1).max(20),
   }),
 );
