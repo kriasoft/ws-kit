@@ -3,7 +3,6 @@
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../shared/router";
 import { ValibotValidatorAdapter } from "./adapter";
-import type { WebSocketRouterOptions } from "./types";
 
 /**
  * WebSocket router for Bun that provides type-safe message routing with Valibot validation.
@@ -15,7 +14,7 @@ import type { WebSocketRouterOptions } from "./types";
 export class WebSocketRouter<
   T extends Record<string, unknown> = Record<string, never>,
 > extends BaseWebSocketRouter<T> {
-  constructor(options?: WebSocketRouterOptions) {
-    super(new ValibotValidatorAdapter(), options);
+  constructor() {
+    super(new ValibotValidatorAdapter());
   }
 }

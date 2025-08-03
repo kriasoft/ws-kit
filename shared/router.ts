@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2025-present Kriasoft */
 /* SPDX-License-Identifier: MIT */
 
-import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { v7 as randomUUIDv7 } from "uuid";
 import { ConnectionHandler } from "./connection";
 import { MessageRouter } from "./message";
@@ -13,7 +13,6 @@ import type {
   SendFunction,
   UpgradeOptions,
   WebSocketData,
-  WebSocketRouterOptions,
 } from "./types";
 
 export interface ValidatorAdapter {
@@ -37,29 +36,59 @@ export interface ValidatorAdapter {
 export class WebSocketRouter<
   T extends Record<string, unknown> = Record<string, never>,
 > {
-  private readonly server: Server;
   private readonly connectionHandler = new ConnectionHandler<
     WebSocketData<T>
   >();
   private readonly messageRouter: MessageRouter<WebSocketData<T>>;
   private readonly validator: ValidatorAdapter;
 
-  constructor(validator: ValidatorAdapter, options?: WebSocketRouterOptions) {
+  constructor(validator: ValidatorAdapter) {
     this.validator = validator;
     this.messageRouter = new MessageRouter<WebSocketData<T>>(validator);
-    this.server = options?.server ?? (undefined as unknown as Server);
   }
 
   /**
    * Merges open, close, and message handlers from another WebSocketRouter instance.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addRoutes(_ws: WebSocketRouter<T>): this {
-    // Note: This method needs to be updated to work with the new structure
-    // For now, we'll keep it simple and warn about the limitation
-    console.warn(
-      "addRoutes method needs to be updated for the new architecture",
-    );
+  addRoutes(router: WebSocketRouter<T>): this {
+    // Access private members through a type assertion
+    interface AccessibleConnectionHandler {
+      openHandlers: OpenHandler<WebSocketData<T>>[];
+      closeHandlers: CloseHandler<WebSocketData<T>>[];
+    }
+
+    interface AccessibleMessageRouter {
+      messageHandlers: Map<
+        string,
+        {
+          schema: MessageSchemaType;
+          handler: MessageHandler<MessageSchemaType, WebSocketData<T>>;
+        }
+      >;
+    }
+
+    // Merge open handlers
+    const otherConnectionHandler =
+      router.connectionHandler as unknown as AccessibleConnectionHandler;
+    otherConnectionHandler.openHandlers.forEach((handler) => {
+      this.connectionHandler.addOpenHandler(handler);
+    });
+
+    // Merge close handlers
+    otherConnectionHandler.closeHandlers.forEach((handler) => {
+      this.connectionHandler.addCloseHandler(handler);
+    });
+
+    // Merge message handlers
+    const thisMessageRouter = this
+      .messageRouter as unknown as AccessibleMessageRouter;
+    const otherMessageRouter =
+      router.messageRouter as unknown as AccessibleMessageRouter;
+
+    otherMessageRouter.messageHandlers.forEach((value, key) => {
+      thisMessageRouter.messageHandlers.set(key, value);
+    });
+
     return this;
   }
 

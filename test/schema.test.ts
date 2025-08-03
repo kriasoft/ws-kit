@@ -94,7 +94,7 @@ describe("messageSchema", () => {
 
   it("should create a message schema with custom metadata", () => {
     const customMeta = z.object({
-      userId: z.string().uuid(),
+      userId: z.string().uuid({ version: "v7" }),
       role: z.enum(["admin", "user", "guest"]),
     });
 
@@ -105,7 +105,7 @@ describe("messageSchema", () => {
       type: "CUSTOM_META",
       meta: {
         clientId: "test-123",
-        userId: "123e4567-e89b-12d3-a456-426614174000", // Valid UUID
+        userId: "0198716a-72b2-769f-9762-1ef5a3625dc2", // Valid UUID v7
         role: "admin",
       },
     });
@@ -146,7 +146,7 @@ describe("messageSchema", () => {
       "FULL_SCHEMA",
       {
         action: z.string(),
-        data: z.record(z.any()),
+        data: z.record(z.string(), z.any()),
       },
       customMeta,
     );

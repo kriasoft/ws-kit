@@ -30,5 +30,11 @@
   "bun.test.filePattern": "test/*.test.ts",
 
   // Spell checking
-  "cSpell.ignoreWords": ["valibot"]
+  "cSpell.ignoreWords": [
+    "konstantin",
+    "kriasoft",
+    "socketio",
+    "tarkus",
+    "valibot"
+  ]
 }

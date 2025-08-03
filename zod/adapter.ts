@@ -7,7 +7,7 @@ import type { MessageSchemaType } from "./types";
 
 export class ZodValidatorAdapter implements ValidatorAdapter {
   getMessageType(schema: MessageSchemaType): string {
-    return schema.shape.type._def.value;
+    return schema.shape.type.value;
   }
 
   safeParse(schema: MessageSchemaType, data: unknown) {
@@ -15,7 +15,12 @@ export class ZodValidatorAdapter implements ValidatorAdapter {
     return {
       success: result.success,
       data: result.success ? result.data : undefined,
-      error: result.success ? undefined : result.error.errors,
+      error: result.success
+        ? undefined
+        : {
+            issues: result.error.issues,
+            formatted: z.prettifyError(result.error),
+          },
     };
   }
 

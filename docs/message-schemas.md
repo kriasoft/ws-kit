@@ -38,7 +38,7 @@ const ChatMessage = messageSchema(
   "CHAT_MESSAGE",
   z.object({
     text: z.string().max(1000),
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
     mentions: z.array(z.string()).optional(),
   }),
 );
@@ -80,10 +80,10 @@ const UserMessage = messageSchema(
     username: z.string().min(3).max(20),
 
     // Email validation
-    email: z.string().email(),
+    email: z.email(),
 
     // URL validation
-    website: z.string().url().optional(),
+    website: z.url().optional(),
 
     // Regex patterns
     phoneNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/),
@@ -123,9 +123,9 @@ const OrderMessage = messageSchema(
   z.object({
     // Nested objects
     customer: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
       name: z.string(),
-      email: z.string().email(),
+      email: z.email(),
     }),
 
     // Arrays with validation
@@ -143,7 +143,7 @@ const OrderMessage = messageSchema(
     // Union types
     payment: z.union([
       z.object({ type: z.literal("card"), last4: z.string() }),
-      z.object({ type: z.literal("paypal"), email: z.string().email() }),
+      z.object({ type: z.literal("paypal"), email: z.email() }),
     ]),
 
     // Optional with default
@@ -163,7 +163,7 @@ const AuthenticatedMessage = messageSchema(
   {
     // Custom metadata schema
     meta: z.object({
-      correlationId: z.string().uuid(),
+      correlationId: z.uuid(),
       version: z.string(),
     }),
   },
@@ -202,7 +202,7 @@ Schemas provide full TypeScript type inference:
 const UserProfileMessage = messageSchema(
   "USER_PROFILE",
   z.object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     age: z.number().int().positive(),
     tags: z.array(z.string()),
@@ -254,7 +254,7 @@ Create reusable schema components:
 
 ```typescript
 // Common schemas
-const UserIdSchema = z.string().uuid();
+const UserIdSchema = z.uuid();
 const TimestampSchema = z.number().int().positive();
 const PaginationSchema = z.object({
   page: z.number().int().min(1).default(1),
