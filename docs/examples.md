@@ -11,32 +11,26 @@ Real-world examples demonstrating common WebSocket patterns with Bun WebSocket R
 A complete chat room implementation with authentication and message history.
 
 ```typescript
-import { WebSocketRouter, messageSchema, ErrorCode } from "bun-ws-router";
 import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+
+// Create factory
+const { messageSchema, ErrorMessage } = createMessageSchema(z);
 
 // Message schemas
-const JoinRoomMessage = messageSchema(
-  "JOIN_ROOM",
-  z.object({
-    roomId: z.uuid(),
-    username: z.string().min(1).max(20),
-  }),
-);
+const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+  roomId: z.uuid(),
+  username: z.string().min(1).max(20),
+});
 
-const SendMessageMessage = messageSchema(
-  "SEND_MESSAGE",
-  z.object({
-    roomId: z.uuid(),
-    text: z.string().min(1).max(500),
-  }),
-);
+const SendMessageMessage = messageSchema("SEND_MESSAGE", {
+  roomId: z.uuid(),
+  text: z.string().min(1).max(500),
+});
 
-const LeaveRoomMessage = messageSchema(
-  "LEAVE_ROOM",
-  z.object({
-    roomId: z.uuid(),
-  }),
-);
+const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
+  roomId: z.uuid(),
+});
 
 // Store active users per room
 const rooms = new Map<string, Set<string>>();
@@ -107,12 +101,9 @@ const router = new WebSocketRouter<{ username?: string }>()
 
     // Check if user is in room
     if (!rooms.get(roomId)?.has(ctx.clientId)) {
-      ctx.send({
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.FORBIDDEN,
-          message: "You must join the room first",
-        },
+      ctx.send(ErrorMessage, {
+        code: "AUTHORIZATION_FAILED",
+        message: "You must join the room first",
       });
       return;
     }
@@ -174,9 +165,9 @@ const router = new WebSocketRouter<{ username?: string }>()
 // Start server
 Bun.serve({
   port: 3000,
-  fetch(req) {
+  fetch(req, server) {
     if (req.headers.get("upgrade") === "websocket") {
-      return this.upgrade(req)
+      return server.upgrade(req)
         ? undefined
         : new Response("WebSocket upgrade failed", { status: 426 });
     }
@@ -191,9 +182,12 @@ Bun.serve({
 Implementing JWT authentication with role-based access control.
 
 ```typescript
-import { WebSocketRouter, messageSchema, ErrorCode } from "bun-ws-router";
 import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
 import jwt from "jsonwebtoken";
+
+// Create factory
+const { messageSchema, ErrorMessage, ErrorCode } = createMessageSchema(z);
 
 // User roles
 enum Role {
@@ -205,14 +199,14 @@ enum Role {
 // Message schemas
 const AuthMessage = messageSchema(
   "AUTH",
-  z.object({
+  {
     token: z.string(),
-  }),
+  },
 );
 
 const AdminActionMessage = messageSchema(
   "ADMIN_ACTION",
-  z.object({
+  {
     action: z.enum(["kick", "ban", "mute"]),
     targetUserId: z.string(),
     reason: z.string().optional(),
@@ -280,12 +274,9 @@ const router = new WebSocketRouter<UserData>()
         },
       });
     } catch (error) {
-      ctx.send({
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.UNAUTHORIZED,
-          message: "Invalid token",
-        },
+      ctx.send(ErrorMessage, {
+        code: "AUTHENTICATION_FAILED",
+        message: "Invalid token",
       });
 
       // Close connection
@@ -298,24 +289,18 @@ const router = new WebSocketRouter<UserData>()
 
     // Check authentication
     if (!userData.authenticated) {
-      ctx.send({
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.UNAUTHORIZED,
-          message: "Not authenticated",
-        },
+      ctx.send(ErrorMessage, {
+        code: "AUTHENTICATION_FAILED",
+        message: "Not authenticated",
       });
       return;
     }
 
     // Check authorization
     if (!userData.roles.includes(Role.ADMIN)) {
-      ctx.send({
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.FORBIDDEN,
-          message: "Admin access required",
-        },
+      ctx.send(ErrorMessage, {
+        code: "AUTHORIZATION_FAILED",
+        message: "Admin access required",
       });
       return;
     }
@@ -360,11 +345,12 @@ const router = new WebSocketRouter<UserData>()
 router.onError((ws, error) => {
   console.error(`Error for client ${ws.data.clientId}:`, error);
 
+  // Use raw send for error handler since we don't have ctx
   ws.send(
     JSON.stringify({
       type: "ERROR",
       payload: {
-        code: ErrorCode.INTERNAL_ERROR,
+        code: "INTERNAL_SERVER_ERROR",
         message: "An error occurred",
       },
     }),
@@ -377,8 +363,11 @@ router.onError((ws, error) => {
 Push notifications system with topic subscriptions.
 
 ```typescript
-import { WebSocketRouter, messageSchema, publish } from "bun-ws-router";
 import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { publish } from "bun-ws-router/zod/publish";
+
+const { messageSchema } = createMessageSchema(z);
 
 // Notification types
 enum NotificationType {
@@ -391,21 +380,21 @@ enum NotificationType {
 // Message schemas
 const SubscribeMessage = messageSchema(
   "SUBSCRIBE",
-  z.object({
+  {
     topics: z.array(z.string()).min(1),
-  }),
+  },
 );
 
 const UnsubscribeMessage = messageSchema(
   "UNSUBSCRIBE",
-  z.object({
+  {
     topics: z.array(z.string()).min(1),
-  }),
+  },
 );
 
 const NotificationMessage = messageSchema(
   "NOTIFICATION",
-  z.object({
+  {
     id: z.uuid(),
     type: z.nativeEnum(NotificationType),
     title: z.string(),
@@ -528,8 +517,10 @@ console.log("Notification server running on http://localhost:3000");
 Implementing rate limiting to prevent spam.
 
 ```typescript
-import { WebSocketRouter, messageSchema, ErrorCode } from "bun-ws-router";
 import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema, ErrorMessage } = createMessageSchema(z);
 
 // Rate limiter class
 class RateLimiter {
@@ -569,31 +560,22 @@ const messageLimiter = new RateLimiter(10, 60000); // 10 per minute
 const joinLimiter = new RateLimiter(5, 300000); // 5 per 5 minutes
 
 // Message schema
-const ChatMessage = messageSchema(
-  "CHAT_MESSAGE",
-  z.object({
-    text: z.string().min(1).max(200),
-  }),
-);
+const ChatMessage = messageSchema("CHAT_MESSAGE", {
+  text: z.string().min(1).max(200),
+});
 
-const JoinChannelMessage = messageSchema(
-  "JOIN_CHANNEL",
-  z.object({
-    channel: z.string(),
-  }),
-);
+const JoinChannelMessage = messageSchema("JOIN_CHANNEL", {
+  channel: z.string(),
+});
 
 // Router with rate limiting
 const router = new WebSocketRouter()
   .onMessage(ChatMessage, (ctx) => {
     // Check rate limit
     if (!messageLimiter.check(ctx.clientId)) {
-      ctx.send({
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.RATE_LIMIT,
-          message: "Too many messages. Please slow down.",
-        },
+      ctx.send(ErrorMessage, {
+        code: "RATE_LIMIT_EXCEEDED",
+        message: "Too many messages. Please slow down.",
       });
       return;
     }
@@ -605,12 +587,9 @@ const router = new WebSocketRouter()
   .onMessage(JoinChannelMessage, (ctx) => {
     // Check join rate limit
     if (!joinLimiter.check(ctx.clientId)) {
-      ctx.send({
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.RATE_LIMIT,
-          message: "Too many join requests.",
-        },
+      ctx.send(ErrorMessage, {
+        code: "RATE_LIMIT_EXCEEDED",
+        message: "Too many join requests.",
       });
       return;
     }
@@ -635,20 +614,22 @@ const router = new WebSocketRouter()
 Using `createMessage` for type-safe WebSocket communication on the client.
 
 ```typescript
-import { createMessage, messageSchema } from "bun-ws-router";
 import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema, createMessage } = createMessageSchema(z);
 
 // Share these schemas between client and server
 const ConnectionMessage = messageSchema(
   "CONNECTION",
-  z.object({
+  {
     token: z.string(),
-  }),
+  },
 );
 
 const ChatMessage = messageSchema(
   "CHAT_MESSAGE",
-  z.object({
+  {
     roomId: z.string(),
     text: z.string().min(1).max(500),
   }),
@@ -656,7 +637,7 @@ const ChatMessage = messageSchema(
 
 const TypingMessage = messageSchema(
   "TYPING",
-  z.object({
+  {
     roomId: z.string(),
     isTyping: z.boolean(),
   }),

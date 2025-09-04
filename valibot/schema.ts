@@ -1,206 +1,311 @@
 /* SPDX-FileCopyrightText: 2025-present Kriasoft */
 /* SPDX-License-Identifier: MIT */
 
-import * as v from "valibot";
-import type { InferOutput, ObjectSchema } from "valibot";
+import type {
+  GenericSchema,
+  LiteralSchema,
+  NumberSchema,
+  ObjectSchema,
+  OptionalSchema,
+  StringSchema,
+} from "valibot";
 
 /**
- * Base schema for message metadata.
- * Provides common fields that are available on all messages.
- * Can be extended for specific message types.
+ * Minimal interface for Valibot instance to avoid circular type references.
+ * WARNING: Using `typeof v` directly causes TypeScript declaration generation to fail
+ * with stack overflow errors. This interface captures only the methods we actually use.
  */
-export const MessageMetadataSchema = v.object({
-  clientId: v.optional(v.string()),
-  timestamp: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
-  correlationId: v.optional(v.string()),
-});
-
-/**
- * Base message schema that all specific message types extend.
- * Defines the minimum structure required for routing.
- */
-export const MessageSchema = v.object({
-  type: v.string(),
-  meta: MessageMetadataSchema,
-});
-
-/**
- * Standard error codes for WebSocket communication.
- * Used in ErrorMessage payloads for consistent error handling.
- */
-export const ErrorCode = v.picklist([
-  "INVALID_MESSAGE_FORMAT",
-  "VALIDATION_FAILED",
-  "UNSUPPORTED_MESSAGE_TYPE",
-  "AUTHENTICATION_FAILED",
-  "AUTHORIZATION_FAILED",
-  "RESOURCE_NOT_FOUND",
-  "RATE_LIMIT_EXCEEDED",
-  "INTERNAL_SERVER_ERROR",
-]);
-
-export type ErrorCode = InferOutput<typeof ErrorCode>;
-
-/**
- * Creates a type-safe WebSocket message schema with Valibot.
- *
- * The schema includes:
- * - A literal type field for routing messages
- * - Metadata for tracking client info and message context
- * - Optional payload for the message data
- *
- * Types are fully inferred for use with WebSocketRouter handlers.
- */
-export function messageSchema<T extends string>(
-  messageType: T,
-): ObjectSchema<
-  {
-    type: v.LiteralSchema<T, T>;
-    meta: typeof MessageMetadataSchema;
-  },
-  undefined
->;
-
-export function messageSchema<
-  T extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  P extends v.BaseSchema<any, any, any>,
->(
-  messageType: T,
-  payload: P,
-): ObjectSchema<
-  {
-    type: v.LiteralSchema<T, T>;
-    meta: typeof MessageMetadataSchema;
-    payload: P;
-  },
-  undefined
->;
-
-export function messageSchema<
-  T extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  M extends ObjectSchema<any, any>,
->(
-  messageType: T,
-  payload: undefined,
-  meta: M,
-): ObjectSchema<
-  {
-    type: v.LiteralSchema<T, T>;
-    meta: ObjectSchema<
-      typeof MessageMetadataSchema.entries & M["entries"],
-      undefined
-    >;
-  },
-  undefined
->;
-
-export function messageSchema<
-  T extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  P extends v.BaseSchema<any, any, any>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  M extends ObjectSchema<any, any>,
->(
-  messageType: T,
-  payload: P,
-  meta: M,
-): ObjectSchema<
-  {
-    type: v.LiteralSchema<T, T>;
-    meta: ObjectSchema<
-      typeof MessageMetadataSchema.entries & M["entries"],
-      undefined
-    >;
-    payload: P;
-  },
-  undefined
->;
-
-export function messageSchema<
-  T extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  P extends v.BaseSchema<any, any, any> | undefined = undefined,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  M extends ObjectSchema<any, any> | undefined = undefined,
->(
-  messageType: T,
-  payload?: P,
-  meta?: M,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): ObjectSchema<any, any> {
-  const metaSchema = meta
-    ? v.object({ ...MessageMetadataSchema.entries, ...meta.entries })
-    : MessageMetadataSchema;
-
-  const baseSchema = {
-    type: v.literal(messageType),
-    meta: metaSchema,
-  };
-
-  if (payload === undefined) {
-    return v.object(baseSchema);
-  }
-
-  return v.object({
-    ...baseSchema,
-    payload,
-  });
+/* eslint-disable @typescript-eslint/no-explicit-any */
+interface ValibotLike {
+  object: (...args: any[]) => any;
+  string: (...args: any[]) => any;
+  number: (...args: any[]) => any;
+  literal: (...args: any[]) => any;
+  union: (...args: any[]) => any;
+  optional: (...args: any[]) => any;
+  record: (...args: any[]) => any;
+  any: (...args: any[]) => any;
+  picklist: (...args: any[]) => any;
+  pipe: (...args: any[]) => any;
+  integer: (...args: any[]) => any;
+  minValue: (...args: any[]) => any;
+  safeParse: (...args: any[]) => any;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
- * Standard error message schema for consistent error responses.
+ * Shape helper types for better cross-package type inference
+ * These mirror the Zod implementation patterns exactly
  */
-export const ErrorMessage = messageSchema(
-  "ERROR",
-  v.object({
-    code: ErrorCode,
-    message: v.optional(v.string()),
-    context: v.optional(v.record(v.string(), v.any())),
-  }),
-);
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+type BaseMessageEntries<T extends string> = {
+  type: LiteralSchema<T, undefined>;
+  meta: ObjectSchema<
+    {
+      clientId: OptionalSchema<StringSchema<undefined>, undefined>;
+      timestamp: OptionalSchema<NumberSchema<undefined>, undefined>;
+      correlationId: OptionalSchema<StringSchema<undefined>, undefined>;
+    },
+    undefined
+  >;
+};
+
+type MessageWithPayloadEntries<
+  T extends string,
+  P extends Record<string, GenericSchema>,
+> = BaseMessageEntries<T> & {
+  payload: ObjectSchema<P, undefined>;
+};
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+type MessageWithExtendedMetaEntries<
+  T extends string,
+  M extends Record<string, GenericSchema>,
+> = {
+  type: LiteralSchema<T, undefined>;
+  meta: ObjectSchema<
+    {
+      clientId: OptionalSchema<StringSchema<undefined>, undefined>;
+      timestamp: OptionalSchema<NumberSchema<undefined>, undefined>;
+      correlationId: OptionalSchema<StringSchema<undefined>, undefined>;
+    } & M,
+    undefined
+  >;
+};
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+type MessageWithPayloadAndMetaEntries<
+  T extends string,
+  P extends Record<string, GenericSchema>,
+  M extends Record<string, GenericSchema>,
+> = {
+  type: LiteralSchema<T, undefined>;
+  meta: ObjectSchema<
+    {
+      clientId: OptionalSchema<StringSchema<undefined>, undefined>;
+      timestamp: OptionalSchema<NumberSchema<undefined>, undefined>;
+      correlationId: OptionalSchema<StringSchema<undefined>, undefined>;
+    } & M,
+    undefined
+  >;
+  payload: ObjectSchema<P, undefined>;
+};
 
 /**
- * Creates a validated WebSocket message from a schema.
+ * Factory function to create messageSchema using the consumer's Valibot instance.
  *
- * @example
+ * CRITICAL: This factory pattern is required to fix discriminated union support.
+ * Without it, the library and consumer use different Valibot instances, causing
+ * instanceof checks to fail and discriminatedUnion to throw runtime errors.
+ *
+ * The factory pattern ensures:
+ * - Both library and app use the same Valibot instance (no dual package hazard)
+ * - Validation works correctly with proper instanceof checks
+ * - Type inference flows through without manual type assertions
+ * - Schemas are composable and can be used in unions
+ *
+ * @param valibot - The Valibot instance from the consuming application
+ * @returns Object with messageSchema function and related utilities
+ *
+ * @example Basic usage:
  * ```typescript
- * const EchoSchema = messageSchema("ECHO", v.object({ text: v.string() }));
- * const message = createMessage(EchoSchema, { text: "Hello" });
+ * import * as v from "valibot";
+ * import { createMessageSchema } from "bun-ws-router/valibot";
  *
- * if (message.success) {
- *   ws.send(JSON.stringify(message.output));
- * }
+ * const { messageSchema } = createMessageSchema(v);
+ * const PingSchema = messageSchema("PING");
+ * ```
+ *
+ * @example Singleton pattern (recommended for apps):
+ * ```typescript
+ * // schemas/factory.ts
+ * export const { messageSchema, createMessage } = createMessageSchema(v);
+ *
+ * // schemas/messages.ts
+ * import { messageSchema } from "./factory";
+ * const LoginSchema = messageSchema("LOGIN", { username: v.string() });
+ * ```
+ *
+ * @example With discriminated unions:
+ * ```typescript
+ * const PingSchema = messageSchema("PING");
+ * const PongSchema = messageSchema("PONG");
+ *
+ * // This now works correctly!
+ * const MessageUnion = v.union([PingSchema, PongSchema]);
  * ```
  */
-export function createMessage<T extends MessageSchemaType>(
-  schema: T,
-  payload: T["entries"]["payload"] extends v.BaseSchema<
-    unknown,
-    unknown,
-    v.BaseIssue<unknown>
-  >
-    ? InferOutput<T["entries"]["payload"]>
-    : undefined,
-  meta?: Partial<InferOutput<T["entries"]["meta"]>>,
-) {
-  const messageData = {
-    type: schema.entries.type.literal,
-    payload,
-    meta: meta || {},
-  };
+export function createMessageSchema(valibot: ValibotLike) {
+  // Create base schemas using the provided Valibot instance
+  const MessageMetadataSchema = valibot.object({
+    clientId: valibot.optional(valibot.string()),
+    timestamp: valibot.optional(
+      valibot.pipe(valibot.number(), valibot.integer(), valibot.minValue(1)),
+    ),
+    correlationId: valibot.optional(valibot.string()),
+  });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return v.safeParse(schema as any, messageData);
+  const ErrorCode = valibot.picklist([
+    "INVALID_MESSAGE_FORMAT",
+    "VALIDATION_FAILED",
+    "UNSUPPORTED_MESSAGE_TYPE",
+    "AUTHENTICATION_FAILED",
+    "AUTHORIZATION_FAILED",
+    "RESOURCE_NOT_FOUND",
+    "RATE_LIMIT_EXCEEDED",
+    "INTERNAL_SERVER_ERROR",
+  ]);
+
+  /**
+   * Creates a type-safe WebSocket message schema with simplified overloads
+   * for better cross-package type compatibility.
+   */
+  function messageSchema<T extends string>(
+    messageType: T,
+  ): ObjectSchema<BaseMessageEntries<T>, undefined>;
+
+  function messageSchema<
+    T extends string,
+    P extends ObjectSchema<Record<string, GenericSchema>, undefined>,
+  >(
+    messageType: T,
+    payload: P,
+  ): ObjectSchema<MessageWithPayloadEntries<T, P["entries"]>, undefined>;
+
+  function messageSchema<
+    T extends string,
+    P extends Record<string, GenericSchema>,
+  >(
+    messageType: T,
+    payload: P,
+  ): ObjectSchema<MessageWithPayloadEntries<T, P>, undefined>;
+
+  function messageSchema<
+    T extends string,
+    M extends Record<string, GenericSchema>,
+  >(
+    messageType: T,
+    payload: undefined,
+    meta: M,
+  ): ObjectSchema<MessageWithExtendedMetaEntries<T, M>, undefined>;
+
+  function messageSchema<
+    T extends string,
+    P extends ObjectSchema<Record<string, GenericSchema>, undefined>,
+    M extends Record<string, GenericSchema>,
+  >(
+    messageType: T,
+    payload: P,
+    meta: M,
+  ): ObjectSchema<
+    MessageWithPayloadAndMetaEntries<T, P["entries"], M>,
+    undefined
+  >;
+
+  function messageSchema<
+    T extends string,
+    P extends Record<string, GenericSchema>,
+    M extends Record<string, GenericSchema>,
+  >(
+    messageType: T,
+    payload: P,
+    meta: M,
+  ): ObjectSchema<MessageWithPayloadAndMetaEntries<T, P, M>, undefined>;
+
+  function messageSchema<
+    T extends string,
+    P extends
+      | Record<string, GenericSchema>
+      | ObjectSchema<Record<string, GenericSchema>, undefined>
+      | undefined = undefined,
+    M extends Record<string, GenericSchema> = Record<string, never>,
+  >(messageType: T, payload?: P, meta?: M) {
+    const metaSchema = meta
+      ? valibot.object({ ...MessageMetadataSchema.entries, ...meta })
+      : MessageMetadataSchema;
+
+    const baseSchema = {
+      type: valibot.literal(messageType),
+      meta: metaSchema,
+    };
+
+    if (payload === undefined) {
+      return valibot.object(baseSchema);
+    }
+
+    // Payloads can be a Valibot object or a raw shape
+    const payloadSchema =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payload as any).kind === "object"
+        ? (payload as ObjectSchema<Record<string, GenericSchema>, undefined>)
+        : valibot.object(payload as Record<string, GenericSchema>);
+
+    return valibot.object({
+      ...baseSchema,
+      payload: payloadSchema,
+    });
+  }
+
+  // Standard schemas used across most WebSocket applications
+  const ErrorMessage = messageSchema("ERROR", {
+    code: ErrorCode,
+    message: valibot.optional(valibot.string()),
+    context: valibot.optional(valibot.record(valibot.string(), valibot.any())),
+  });
+
+  // Client-side helper: validates and creates messages for sending
+  function createMessage(
+    schema: MessageSchemaType,
+    payload?: unknown,
+    meta?: Record<string, unknown>,
+  ) {
+    const messageData = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type: (schema.entries.type as any).literal,
+      payload,
+      meta: meta || {},
+    };
+
+    return valibot.safeParse(schema, messageData);
+  }
+
+  return {
+    messageSchema,
+    MessageMetadataSchema,
+    ErrorCode,
+    ErrorMessage,
+    createMessage,
+  };
 }
 
-// Helper type for the schema type returned by messageSchema
+// Type constraint for schemas created by messageSchema
 type MessageSchemaType = ObjectSchema<
   {
-    type: v.LiteralSchema<string, string>;
-    meta: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
-    payload?: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+    type: LiteralSchema<string, undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    meta: ObjectSchema<any, undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload?: ObjectSchema<any, undefined>;
+  },
+  undefined
+>;
+
+// Enhanced type helper for better cross-package inference (mirrors Zod version)
+export type MessageSchema<
+  T extends string,
+  P extends Record<string, GenericSchema> = never,
+> = [P] extends [never]
+  ? ObjectSchema<BaseMessageEntries<T>, undefined>
+  : ObjectSchema<MessageWithPayloadEntries<T, P>, undefined>;
+
+// Type helper for discriminated unions
+export type AnyMessageSchema = ObjectSchema<
+  {
+    type: LiteralSchema<string, undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    meta: ObjectSchema<any, undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload?: ObjectSchema<any, undefined>;
   },
   undefined
 >;

@@ -3,7 +3,9 @@
 
 import { describe, it, expect } from "bun:test";
 import { z } from "zod";
-import { messageSchema, createMessage } from "../zod";
+import { createMessageSchema } from "../zod";
+
+const { messageSchema, createMessage } = createMessageSchema(z);
 
 describe("createMessage - Zod", () => {
   it("should create a message without payload", () => {
@@ -115,15 +117,19 @@ describe("createMessage - Zod", () => {
   });
 
   it("should handle array payload schemas", () => {
-    const ArraySchema = messageSchema("ARRAY", z.array(z.string()));
-    const message = createMessage(ArraySchema, ["item1", "item2", "item3"]);
+    const ArraySchema = messageSchema("ARRAY", {
+      items: z.array(z.string()),
+    });
+    const message = createMessage(ArraySchema, {
+      items: ["item1", "item2", "item3"],
+    });
 
     expect(message.success).toBe(true);
     if (message.success) {
       expect(message.data).toEqual({
         type: "ARRAY",
         meta: {},
-        payload: ["item1", "item2", "item3"],
+        payload: { items: ["item1", "item2", "item3"] },
       });
     }
   });
@@ -132,10 +138,10 @@ describe("createMessage - Zod", () => {
     const CustomMetaSchema = messageSchema(
       "CUSTOM_META",
       { text: z.string() },
-      z.object({
+      {
         userId: z.string(),
         sessionId: z.string().uuid(),
-      }),
+      },
     );
 
     const message = createMessage(
@@ -180,23 +186,26 @@ describe("createMessage - Zod", () => {
   });
 
   it("should work with union types", () => {
-    const UnionSchema = messageSchema(
-      "UNION",
-      z.union([
+    const UnionSchema = messageSchema("UNION", {
+      data: z.union([
         z.object({ type: z.literal("text"), content: z.string() }),
         z.object({ type: z.literal("number"), value: z.number() }),
       ]),
-    );
+    });
 
     const textMessage = createMessage(UnionSchema, {
-      type: "text",
-      content: "Hello",
+      data: {
+        type: "text",
+        content: "Hello",
+      },
     });
     expect(textMessage.success).toBe(true);
 
     const numberMessage = createMessage(UnionSchema, {
-      type: "number",
-      value: 42,
+      data: {
+        type: "number",
+        value: 42,
+      },
     });
     expect(numberMessage.success).toBe(true);
 

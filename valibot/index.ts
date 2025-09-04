@@ -2,14 +2,9 @@
 /* SPDX-License-Identifier: MIT */
 
 export { WebSocketRouter } from "./router";
-export {
-  messageSchema,
-  createMessage,
-  ErrorMessage,
-  MessageSchema,
-  MessageMetadataSchema,
-} from "./schema";
+export { createMessageSchema } from "./schema";
 export { publish } from "./publish";
+export { formatValidationError, getErrorContext } from "./utils";
 export type {
   MessageSchemaType,
   MessageHandler,
@@ -24,4 +19,3 @@ export type {
   CloseHandlerContext,
   CloseHandler,
 } from "./types";
-export type { ErrorCode } from "./schema";

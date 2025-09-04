@@ -3,7 +3,9 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { messageSchema } from "../zod/schema";
+import { createMessageSchema } from "../zod/schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 describe("Zod v4 Compatibility", () => {
   it("should accept concrete Zod types in payload", () => {

@@ -3,8 +3,10 @@
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { messageSchema, WebSocketRouter } from "../valibot";
+import { createMessageSchema, WebSocketRouter } from "../valibot";
 import type { SendFunction } from "../shared/types";
+
+const { messageSchema } = createMessageSchema(v);
 
 describe("Valibot messageSchema", () => {
   it("should create a basic message schema without payload", () => {
@@ -26,13 +28,10 @@ describe("Valibot messageSchema", () => {
   });
 
   it("should create a message schema with payload", () => {
-    const schema = messageSchema(
-      "JOIN_ROOM",
-      v.object({
-        roomId: v.string(),
-        userId: v.string(),
-      }),
-    );
+    const schema = messageSchema("JOIN_ROOM", {
+      roomId: v.string(),
+      userId: v.string(),
+    });
 
     const result = v.safeParse(schema, {
       type: "JOIN_ROOM",
@@ -55,13 +54,10 @@ describe("Valibot messageSchema", () => {
   });
 
   it("should validate and reject invalid payloads", () => {
-    const schema = messageSchema(
-      "JOIN_ROOM",
-      v.object({
-        roomId: v.string(),
-        userId: v.string(),
-      }),
-    );
+    const schema = messageSchema("JOIN_ROOM", {
+      roomId: v.string(),
+      userId: v.string(),
+    });
 
     const result = v.safeParse(schema, {
       type: "JOIN_ROOM",

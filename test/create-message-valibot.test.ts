@@ -3,7 +3,9 @@
 
 import { describe, it, expect } from "bun:test";
 import * as v from "valibot";
-import { messageSchema, createMessage } from "../valibot";
+import { createMessageSchema } from "../valibot";
+
+const { messageSchema, createMessage } = createMessageSchema(v);
 
 describe("createMessage - Valibot", () => {
   it("should create a message without payload", () => {
@@ -20,7 +22,7 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should create a message with payload", () => {
-    const EchoSchema = messageSchema("ECHO", v.object({ text: v.string() }));
+    const EchoSchema = messageSchema("ECHO", { text: v.string() });
     const message = createMessage(EchoSchema, { text: "Hello World" });
 
     expect(message.success).toBe(true);
@@ -34,10 +36,7 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should create a message with custom metadata", () => {
-    const RequestSchema = messageSchema(
-      "REQUEST",
-      v.object({ data: v.string() }),
-    );
+    const RequestSchema = messageSchema("REQUEST", { data: v.string() });
     const message = createMessage(
       RequestSchema,
       { data: "test" },
@@ -58,13 +57,10 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should validate payload types", () => {
-    const TypedSchema = messageSchema(
-      "TYPED",
-      v.object({
-        count: v.number(),
-        name: v.string(),
-      }),
-    );
+    const TypedSchema = messageSchema("TYPED", {
+      count: v.number(),
+      name: v.string(),
+    });
 
     // Valid payload
     const validMessage = createMessage(TypedSchema, {
@@ -75,25 +71,22 @@ describe("createMessage - Valibot", () => {
 
     // Invalid payload - wrong types
     const invalidMessage = createMessage(TypedSchema, {
-      // @ts-expect-error Testing invalid type
-      count: "not a number",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      count: "not a number" as any, // Intentionally wrong type
       name: "test",
     });
     expect(invalidMessage.success).toBe(false);
   });
 
   it("should handle complex payload schemas", () => {
-    const ComplexSchema = messageSchema(
-      "COMPLEX",
-      v.object({
-        user: v.object({
-          id: v.string(),
-          email: v.pipe(v.string(), v.email()),
-          roles: v.array(v.string()),
-        }),
-        settings: v.optional(v.record(v.string(), v.any())),
+    const ComplexSchema = messageSchema("COMPLEX", {
+      user: v.object({
+        id: v.string(),
+        email: v.pipe(v.string(), v.email()),
+        roles: v.array(v.string()),
       }),
-    );
+      settings: v.optional(v.record(v.string(), v.any())),
+    });
 
     const message = createMessage(ComplexSchema, {
       user: {
@@ -124,15 +117,19 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should handle array payload schemas", () => {
-    const ArraySchema = messageSchema("ARRAY", v.array(v.string()));
-    const message = createMessage(ArraySchema, ["item1", "item2", "item3"]);
+    const ArraySchema = messageSchema("ARRAY", {
+      items: v.array(v.string()),
+    });
+    const message = createMessage(ArraySchema, {
+      items: ["item1", "item2", "item3"],
+    });
 
     expect(message.success).toBe(true);
     if (message.success) {
       expect(message.output).toEqual({
         type: "ARRAY",
         meta: {},
-        payload: ["item1", "item2", "item3"],
+        payload: { items: ["item1", "item2", "item3"] },
       });
     }
   });
@@ -140,11 +137,11 @@ describe("createMessage - Valibot", () => {
   it("should handle custom metadata schemas", () => {
     const CustomMetaSchema = messageSchema(
       "CUSTOM_META",
-      v.object({ text: v.string() }),
-      v.object({
+      { text: v.string() },
+      {
         userId: v.string(),
         sessionId: v.pipe(v.string(), v.uuid()),
-      }),
+      },
     );
 
     const message = createMessage(
@@ -168,54 +165,54 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should fail validation for invalid messages", () => {
-    const StrictSchema = messageSchema(
-      "STRICT",
-      v.object({
-        required: v.string(),
-        optional: v.optional(v.number()),
-      }),
-    );
+    const StrictSchema = messageSchema("STRICT", {
+      required: v.string(),
+      optional: v.optional(v.number()),
+    });
 
     // Missing required field
     const missingRequired = createMessage(StrictSchema, {
       optional: 123,
-    } as Parameters<typeof createMessage<typeof StrictSchema>>[1]);
+    });
     expect(missingRequired.success).toBe(false);
 
     // Wrong type for required field
     const wrongType = createMessage(StrictSchema, {
-      // @ts-expect-error Testing wrong type
-      required: 123,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      required: 123 as any, // Intentionally wrong type
       optional: 456,
     });
     expect(wrongType.success).toBe(false);
   });
 
   it("should work with union types", () => {
-    const UnionSchema = messageSchema(
-      "UNION",
-      v.union([
+    const UnionSchema = messageSchema("UNION", {
+      data: v.union([
         v.object({ type: v.literal("text"), content: v.string() }),
         v.object({ type: v.literal("number"), value: v.number() }),
       ]),
-    );
+    });
 
     const textMessage = createMessage(UnionSchema, {
-      type: "text",
-      content: "Hello",
+      data: {
+        type: "text",
+        content: "Hello",
+      },
     });
     expect(textMessage.success).toBe(true);
 
     const numberMessage = createMessage(UnionSchema, {
-      type: "number",
-      value: 42,
+      data: {
+        type: "number",
+        value: 42,
+      },
     });
     expect(numberMessage.success).toBe(true);
 
     const invalidMessage = createMessage(UnionSchema, {
-      type: "invalid",
-      data: "test",
-    } as unknown as Parameters<typeof createMessage<typeof UnionSchema>>[1]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: "invalid" as any, // Intentionally invalid union type
+    });
     expect(invalidMessage.success).toBe(false);
   });
 });

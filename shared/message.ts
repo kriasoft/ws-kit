@@ -12,6 +12,9 @@ import type { ValidatorAdapter } from "./router";
 
 /**
  * Handles WebSocket message parsing, validation, and routing.
+ *
+ * ARCHITECTURE: Maps message types (strings) to their handlers.
+ * Only one handler per message type - last registration wins.
  */
 export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
   private readonly messageHandlers = new Map<
@@ -27,6 +30,8 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
   ): void {
     const messageType = this.validator.getMessageType(schema);
 
+    // WARNING: Overwriting handlers is allowed but logged.
+    // Common in development with hot reload.
     if (this.messageHandlers.has(messageType)) {
       console.warn(
         `Handler for message type "${messageType}" is being overwritten.`,
@@ -48,11 +53,12 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
     let parsedMessage: unknown;
 
     try {
-      // Assuming messages are JSON strings
+      // Parse incoming messages as JSON
+      // NOTE: Both string and Buffer are supported for flexibility.
+      // Binary protocols would need different handling here.
       if (typeof message === "string") {
         parsedMessage = JSON.parse(message);
       } else if (message instanceof Buffer) {
-        // Or handle Buffer messages if needed, e.g., parse as JSON
         parsedMessage = JSON.parse(message.toString());
       } else {
         console.warn(
@@ -62,6 +68,8 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
       }
 
       // Basic validation for message structure (must have a 'type' property)
+      // CRITICAL: This prevents routing errors before schema validation.
+      // Messages without string 'type' field are silently dropped.
       if (
         typeof parsedMessage !== "object" ||
         parsedMessage === null ||
@@ -103,6 +111,8 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
       }
 
       // Prepare the context for the handler
+      // NOTE: Payload is conditionally included via spread operator.
+      // This allows handlers to check for payload existence vs undefined value.
       const validatedData = validationResult.data;
       const context = {
         ws,
@@ -115,10 +125,13 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
       };
 
       // Execute the handler
+      // NOTE: Type cast needed due to generic type erasure at runtime
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = handler(context as any);
 
       // Handle async handlers
+      // BEHAVIOR: Async errors are logged but don't affect other messages.
+      // Each message is processed independently.
       if (result instanceof Promise) {
         result.catch((error) => {
           console.error(

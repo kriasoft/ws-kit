@@ -94,13 +94,10 @@ router.onClose((ws, code, reason) => {
 The router provides full type inference from schema definition to handler:
 
 ```typescript
-const UpdateProfileMessage = messageSchema(
-  "UPDATE_PROFILE",
-  z.object({
-    name: z.string(),
-    avatar: z.url().optional(),
-  }),
-);
+const UpdateProfileMessage = messageSchema("UPDATE_PROFILE", {
+  name: z.string(),
+  avatar: z.url().optional(),
+});
 
 router.onMessage(UpdateProfileMessage, (ctx) => {
   // TypeScript knows:

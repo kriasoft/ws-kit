@@ -2,15 +2,10 @@
 /* SPDX-License-Identifier: MIT */
 
 export { WebSocketRouter } from "./router";
-export {
-  messageSchema,
-  createMessage,
-  ErrorMessage,
-  MessageSchema,
-  MessageMetadataSchema,
-  ErrorCode,
-} from "./schema";
+export { createMessageSchema } from "./schema";
 export { publish } from "./publish";
+export { formatValidationError, getErrorContext } from "./utils";
+export type { MessageSchema, AnyMessageSchema } from "./schema";
 export type {
   MessageSchemaType,
   MessageHandler,

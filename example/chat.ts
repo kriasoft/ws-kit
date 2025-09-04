@@ -1,4 +1,5 @@
-import { WebSocketRouter, publish } from "../";
+import { WebSocketRouter } from "../zod";
+import { publish } from "../zod/publish";
 import {
   JoinRoom,
   NewMessage,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { z } from "zod";
 import { WebSocketRouter } from "../zod/router";
-import { messageSchema } from "../zod/schema";
+import { createMessageSchema } from "../zod/schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 /* eslint-disable @typescript-eslint/no-empty-function */
 /* eslint-disable @typescript-eslint/no-explicit-any */

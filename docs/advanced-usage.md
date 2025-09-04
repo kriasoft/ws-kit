@@ -2,12 +2,91 @@
 
 This guide covers advanced patterns and techniques for building sophisticated WebSocket applications with Bun WebSocket Router.
 
+## Discriminated Unions
+
+With the factory pattern (v0.4.0+), you can now use Zod's discriminated unions to create type-safe message handlers:
+
+```typescript
+import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema } = createMessageSchema(z);
+
+// Define individual message schemas
+const TextMessage = messageSchema("TEXT", {
+  content: z.string(),
+  channelId: z.string(),
+});
+
+const ImageMessage = messageSchema("IMAGE", {
+  url: z.url(),
+  channelId: z.string(),
+  width: z.number(),
+  height: z.number(),
+});
+
+const VideoMessage = messageSchema("VIDEO", {
+  url: z.url(),
+  channelId: z.string(),
+  duration: z.number(),
+});
+
+// Create a discriminated union
+const MediaMessage = z.discriminatedUnion("type", [
+  TextMessage,
+  ImageMessage,
+  VideoMessage,
+]);
+
+// Type-safe message handling
+function handleMediaMessage(message: z.infer<typeof MediaMessage>) {
+  switch (message.type) {
+    case "TEXT":
+      // TypeScript knows payload has { content, channelId }
+      console.log("Text:", message.payload.content);
+      break;
+
+    case "IMAGE":
+      // TypeScript knows payload has { url, channelId, width, height }
+      console.log("Image:", message.payload.url, message.payload.width);
+      break;
+
+    case "VIDEO":
+      // TypeScript knows payload has { url, channelId, duration }
+      console.log("Video:", message.payload.url, message.payload.duration);
+      break;
+  }
+}
+
+// Use in router - register individual handlers
+router
+  .onMessage(TextMessage, (ctx) => {
+    // Handle text specifically
+  })
+  .onMessage(ImageMessage, (ctx) => {
+    // Handle images specifically
+  })
+  .onMessage(VideoMessage, (ctx) => {
+    // Handle videos specifically
+  });
+```
+
+This pattern is especially useful for:
+
+- Protocol versioning
+- Command/query separation
+- Event sourcing patterns
+- Complex state machines
+
 ## Router Composition
 
 Compose multiple routers to organize your application into modules:
 
 ```typescript
-import { WebSocketRouter } from "bun-ws-router";
+import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema } = createMessageSchema(z);
 
 // Authentication router
 const authRouter = new WebSocketRouter()
@@ -52,12 +131,9 @@ const requireAuth: Middleware = async (ctx, next) => {
   const userData = ctx.getData<{ authenticated?: boolean }>();
 
   if (!userData.authenticated) {
-    ctx.send({
-      type: "ERROR",
-      payload: {
-        code: ErrorCode.UNAUTHORIZED,
-        message: "Authentication required",
-      },
+    ctx.send(ErrorMessage, {
+      code: "AUTHENTICATION_FAILED",
+      message: "Authentication required",
     });
     return;
   }
@@ -121,10 +197,11 @@ class ExtendedContext<T, TData = unknown> {
   }
 
   // Send error with standard format
-  sendError(code: ErrorCode, message: string, details?: any) {
-    this.ctx.send({
-      type: "ERROR",
-      payload: { code, message, details },
+  sendError(code: string, message: string, context?: any) {
+    this.ctx.send(ErrorMessage, {
+      code,
+      message,
+      context,
     });
   }
 
@@ -160,7 +237,7 @@ router.onMessage(
   AdminMessage,
   extendedHandler((ctx) => {
     if (!ctx.hasRole("admin")) {
-      ctx.sendError(ErrorCode.FORBIDDEN, "Admin access required");
+      ctx.sendError("AUTHORIZATION_FAILED", "Admin access required");
       return;
     }
 
@@ -431,24 +508,18 @@ Handle message schema evolution:
 
 ```typescript
 // Version 1 schema
-const UserMessageV1 = messageSchema(
-  "USER_UPDATE",
-  z.object({
-    name: z.string(),
-    email: z.email(),
-  }),
-);
+const UserMessageV1 = messageSchema("USER_UPDATE", {
+  name: z.string(),
+  email: z.email(),
+});
 
 // Version 2 schema with additional field
-const UserMessageV2 = messageSchema(
-  "USER_UPDATE",
-  z.object({
-    name: z.string(),
-    email: z.email(),
-    avatar: z.url().optional(),
-    version: z.literal(2).default(2),
-  }),
-);
+const UserMessageV2 = messageSchema("USER_UPDATE", {
+  name: z.string(),
+  email: z.email(),
+  avatar: z.url().optional(),
+  version: z.literal(2).default(2),
+});
 
 // Migration function
 function migrateUserMessage(data: any): z.infer<typeof UserMessageV2.schema> {
@@ -502,13 +573,10 @@ class BatchProcessor {
 // 2. Message compression (for large payloads)
 import { gzipSync, gunzipSync } from "zlib";
 
-const CompressedMessage = messageSchema(
-  "COMPRESSED",
-  z.object({
-    encoding: z.literal("gzip"),
-    data: z.string(), // Base64 encoded
-  }),
-);
+const CompressedMessage = messageSchema("COMPRESSED", {
+  encoding: z.literal("gzip"),
+  data: z.string(), // Base64 encoded
+});
 
 function compressMessage(message: Message): Message {
   const json = JSON.stringify(message);

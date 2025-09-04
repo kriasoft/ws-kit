@@ -8,7 +8,11 @@ import type { MessageSchemaType } from "./types";
 
 /**
  * Validates a message against its schema and publishes it to a WebSocket topic.
- * Complements Bun's native WebSocket PubSub functionality with schema validation.
+ *
+ * PURPOSE: Ensures all published messages conform to their schemas, preventing
+ * runtime errors for subscribers expecting specific message formats.
+ *
+ * FLOW: Extract type → Construct message → Validate → Publish (or log error)
  *
  * @param ws - The ServerWebSocket instance to publish from
  * @param topic - The topic to publish to (subscribers will receive the message)
@@ -45,6 +49,8 @@ export function publish<Schema extends MessageSchemaType>(
 ): boolean {
   try {
     // Extract the message type from the schema
+    // DIFFERENCE: Valibot requires runtime checks vs Zod's direct access
+    // SAFETY: Returns early if schema structure is invalid
     const typeSchema = schema.entries.type;
     if (!typeSchema || typeSchema.type !== "literal") {
       console.error(`[ws] Schema must have a literal type field`);
@@ -53,6 +59,7 @@ export function publish<Schema extends MessageSchemaType>(
     const messageType = typeSchema.literal;
 
     // Create the message object with the required structure
+    // NOTE: clientId and timestamp are auto-populated, user meta can override
     const message = {
       type: messageType,
       meta: {
@@ -60,10 +67,12 @@ export function publish<Schema extends MessageSchemaType>(
         timestamp: Date.now(),
         ...meta,
       },
-      ...(payload !== undefined && { payload }),
+      ...(payload !== undefined && { payload }), // Omit payload key if undefined
     };
 
     // Validate the constructed message against the schema
+    // CRITICAL: Prevents malformed messages from reaching subscribers
+    // NOTE: Valibot's safeParse has different arg order than Zod
     const validationResult = v.safeParse(schema, message);
 
     if (!validationResult.success) {
@@ -75,9 +84,11 @@ export function publish<Schema extends MessageSchemaType>(
     }
 
     // Publish the validated message to the topic
+    // NOTE: Valibot uses 'output' instead of Zod's 'data'
     ws.publish(topic, JSON.stringify(validationResult.output));
     return true;
   } catch (error) {
+    // Catches schema extraction errors or publish failures
     console.error(`[ws] Error publishing message to topic "${topic}":`, error);
     return false;
   }

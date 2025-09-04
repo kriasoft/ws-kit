@@ -11,6 +11,9 @@ import type {
 
 /**
  * Handles WebSocket connection lifecycle events (open/close).
+ *
+ * DESIGN: Multiple handlers can be registered for the same event,
+ * executing in registration order. Errors in one handler don't affect others.
  */
 export class ConnectionHandler<
   T extends WebSocketData<Record<string, unknown>>,
@@ -33,10 +36,12 @@ export class ConnectionHandler<
     const context = { ws, send };
 
     // Execute all registered open handlers
+    // BEHAVIOR: Handlers run sequentially but don't await promises.
+    // Errors are logged but don't prevent other handlers from running.
     this.openHandlers.forEach((handler) => {
       try {
         const result = handler(context);
-        // Handle async handlers if they return a promise
+        // Fire-and-forget async handlers - errors logged but not propagated
         if (result instanceof Promise) {
           result.catch((error) => {
             console.error(
@@ -67,10 +72,12 @@ export class ConnectionHandler<
     const context = { ws, code, reason, send };
 
     // Execute all registered close handlers
+    // NOTE: Close handlers still execute even if connection is already closed.
+    // This ensures cleanup code always runs.
     this.closeHandlers.forEach((handler) => {
       try {
         const result = handler(context);
-        // Handle async handlers if they return a promise
+        // Fire-and-forget async handlers - errors logged but not propagated
         if (result instanceof Promise) {
           result.catch((error) => {
             console.error(

@@ -6,7 +6,9 @@
  */
 
 import { z } from "zod";
-import { messageSchema, createMessage } from "../zod";
+import { createMessageSchema } from "../zod";
+
+const { messageSchema, createMessage } = createMessageSchema(z);
 
 // Define message schemas
 const JoinRoomMessage = messageSchema("JOIN_ROOM", {
@@ -109,17 +111,16 @@ export function exampleAuthentication(ws: WebSocket) {
 
 // Example: Union types for different message variants
 export function exampleActionMessages(ws: WebSocket) {
-  const ActionMessage = messageSchema(
-    "ACTION",
-    z.union([
-      z.object({ action: z.literal("start"), gameId: z.string() }),
-      z.object({ action: z.literal("stop"), reason: z.string().optional() }),
-      z.object({
-        action: z.literal("move"),
-        position: z.object({ x: z.number(), y: z.number() }),
-      }),
+  const ActionMessage = messageSchema("ACTION", {
+    action: z.union([
+      z.literal("start"),
+      z.literal("stop"),
+      z.literal("pause"),
     ]),
-  );
+    gameId: z.string().optional(),
+    reason: z.string().optional(),
+    position: z.object({ x: z.number(), y: z.number() }).optional(),
+  });
 
   // Start action
   const startMsg = createMessage(ActionMessage, {
@@ -127,9 +128,9 @@ export function exampleActionMessages(ws: WebSocket) {
     gameId: "game123",
   });
 
-  // Move action
-  const moveMsg = createMessage(ActionMessage, {
-    action: "move",
+  // Pause action
+  const pauseMsg = createMessage(ActionMessage, {
+    action: "pause",
     position: { x: 10, y: 20 },
   });
 
@@ -140,7 +141,7 @@ export function exampleActionMessages(ws: WebSocket) {
   });
 
   // Send all messages
-  [startMsg, moveMsg, stopMsg].forEach((msg) => {
+  [startMsg, pauseMsg, stopMsg].forEach((msg) => {
     if (msg.success) {
       ws.send(JSON.stringify(msg.data));
     }

@@ -15,6 +15,10 @@ import type {
   WebSocketData,
 } from "./types";
 
+/**
+ * Adapter interface for pluggable validation libraries.
+ * Implementations bridge Zod/Valibot specifics with generic router logic.
+ */
 export interface ValidatorAdapter {
   getMessageType(schema: MessageSchemaType): string;
   safeParse(
@@ -23,7 +27,7 @@ export interface ValidatorAdapter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): { success: boolean; data?: any; error?: any };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  infer<T extends MessageSchemaType>(schema: T): any;
+  infer<T extends MessageSchemaType>(schema: T): any; // For TypeScript only
 }
 
 /**
@@ -49,9 +53,13 @@ export class WebSocketRouter<
 
   /**
    * Merges open, close, and message handlers from another WebSocketRouter instance.
+   *
+   * USE CASE: Compose routers from different modules/features.
+   * WARNING: Message type conflicts are resolved by last-write-wins.
    */
   addRoutes(router: WebSocketRouter<T>): this {
-    // Access private members through a type assertion
+    // HACK: Access private members through type assertions.
+    // Safer than exposing internal state publicly.
     interface AccessibleConnectionHandler {
       openHandlers: OpenHandler<WebSocketData<T>>[];
       closeHandlers: CloseHandler<WebSocketData<T>>[];
@@ -94,10 +102,13 @@ export class WebSocketRouter<
 
   /**
    * Upgrades an HTTP request to a WebSocket connection.
+   *
+   * FLOW: Generate clientId → Attempt upgrade → Return appropriate HTTP response
+   * NOTE: clientId (UUID v7) is both stored in data and sent as header.
    */
   public upgrade(req: Request, options: UpgradeOptions<WebSocketData<T>>) {
     const { server, data, headers } = options;
-    const clientId = randomUUIDv7();
+    const clientId = randomUUIDv7(); // UUID v7 for time-ordered IDs
     const upgraded = server.upgrade(req, {
       data: { clientId, ...data },
       headers: {
@@ -106,6 +117,7 @@ export class WebSocketRouter<
       },
     });
 
+    // Bun's upgrade() returns false if upgrade fails (e.g., not a WS request)
     if (!upgraded) {
       return new Response(
         "Failed to upgrade the request to a WebSocket connection",
@@ -118,6 +130,7 @@ export class WebSocketRouter<
       );
     }
 
+    // 101 Switching Protocols - standard WebSocket upgrade response
     return new Response(null, { status: 101 });
   }
 
@@ -141,6 +154,9 @@ export class WebSocketRouter<
 
   /**
    * Returns a WebSocket handler that can be used with `Bun.serve`.
+   *
+   * USAGE: Pass to Bun.serve({ websocket: router.websocket })
+   * NOTE: Methods are bound to preserve 'this' context.
    */
   get websocket(): WebSocketHandler<WebSocketData<T>> {
     return {
@@ -151,7 +167,7 @@ export class WebSocketRouter<
   }
 
   // ———————————————————————————————————————————————————————————————————————————
-  // Private methods
+  // Private methods - Internal event handlers
   // ———————————————————————————————————————————————————————————————————————————
 
   private handleOpen(ws: ServerWebSocket<WebSocketData<T>>) {
@@ -178,7 +194,9 @@ export class WebSocketRouter<
 
   /**
    * Creates a send function for a specific WebSocket connection.
-   * This function allows handlers to send typed messages with proper validation.
+   *
+   * PURPOSE: Provides handlers with a validated way to send messages.
+   * Each connection gets its own send function with clientId pre-bound.
    */
   private createSendFunction(
     ws: ServerWebSocket<WebSocketData<T>>,
@@ -195,6 +213,7 @@ export class WebSocketRouter<
         const messageType = this.validator.getMessageType(schema);
 
         // Create the message object with the required structure
+        // NOTE: clientId from the connection, timestamp auto-generated
         const message = {
           type: messageType,
           meta: {
@@ -202,7 +221,7 @@ export class WebSocketRouter<
             timestamp: Date.now(),
             ...meta,
           },
-          ...(payload !== undefined && { payload }),
+          ...(payload !== undefined && { payload }), // Omit if undefined
         };
 
         // Validate the constructed message against the schema
@@ -217,6 +236,7 @@ export class WebSocketRouter<
         }
 
         // Send the validated message
+        // NOTE: ws.send() goes to this specific connection only (not broadcast)
         ws.send(JSON.stringify(validationResult.data));
       } catch (error) {
         console.error(`[ws] Error sending message:`, error);
