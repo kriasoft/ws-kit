@@ -3,12 +3,10 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import {
-  createMessage,
-  ErrorCode,
-  ErrorMessage,
-  messageSchema,
-} from "./schema";
+import { createMessageSchema } from "./schema";
+
+const { messageSchema, createMessage, ErrorCode, ErrorMessage } =
+  createMessageSchema(z);
 
 describe("messageSchema", () => {
   describe("discriminated union support", () => {
@@ -157,16 +155,6 @@ describe("messageSchema", () => {
       expect(result.success).toBe(true);
     });
 
-    it("should create a message schema with primitive payload", () => {
-      const schema = messageSchema("TEST", z.string());
-      const result = schema.safeParse({
-        type: "TEST",
-        meta: {},
-        payload: "hello",
-      });
-      expect(result.success).toBe(true);
-    });
-
     it("should validate metadata fields", () => {
       const schema = messageSchema("TEST");
       const result = schema.safeParse({
@@ -181,14 +169,10 @@ describe("messageSchema", () => {
     });
 
     it("should extend metadata", () => {
-      const schema = messageSchema(
-        "TEST",
-        undefined,
-        z.object({
-          userId: z.string(),
-          sessionId: z.string(),
-        }),
-      );
+      const schema = messageSchema("TEST", undefined, {
+        userId: z.string(),
+        sessionId: z.string(),
+      });
       const result = schema.safeParse({
         type: "TEST",
         meta: {
@@ -215,7 +199,7 @@ describe("messageSchema", () => {
     });
 
     it("should validate all error codes", () => {
-      const codes: ErrorCode[] = [
+      const codes: z.infer<typeof ErrorCode>[] = [
         "INVALID_MESSAGE_FORMAT",
         "VALIDATION_FAILED",
         "UNSUPPORTED_MESSAGE_TYPE",

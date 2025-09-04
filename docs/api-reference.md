@@ -154,9 +154,45 @@ Bun.serve({
 });
 ```
 
+## createMessageSchema
+
+Factory function that creates message schema utilities using your validator instance. **Required since v0.4.0** to fix discriminated union support.
+
+```typescript
+function createMessageSchema(validator: ZodLike | ValibotLike): {
+  messageSchema: MessageSchemaFunction;
+  createMessage: CreateMessageFunction;
+  ErrorMessage: MessageSchema;
+  ErrorCode: Enum;
+  MessageMetadataSchema: Schema;
+};
+```
+
+**Parameters:**
+
+- `validator` - Your Zod (`z`) or Valibot (`v`) instance
+
+**Returns:**
+
+- `messageSchema` - Function to create message schemas
+- `createMessage` - Helper for client-side message creation
+- `ErrorMessage` - Pre-defined error message schema
+- `ErrorCode` - Error code enum/picklist
+- `MessageMetadataSchema` - Base metadata schema
+
+**Example:**
+
+```typescript
+import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema, createMessage, ErrorMessage, ErrorCode } =
+  createMessageSchema(z);
+```
+
 ## messageSchema
 
-Factory function for creating message schemas.
+Function for creating message schemas (obtained from `createMessageSchema`).
 
 ### Overloads
 
@@ -191,21 +227,28 @@ function messageSchema<TType extends string, TPayload, TMeta>(
 **Examples:**
 
 ```typescript
+// First create the factory
+const { messageSchema } = createMessageSchema(z);
+
 // Simple message
 const PingMessage = messageSchema("PING");
 
 // With payload
-const ChatMessage = messageSchema(
-  "CHAT_MESSAGE",
-  z.object({ text: z.string() }),
-);
+const ChatMessage = messageSchema("CHAT_MESSAGE", { text: z.string() });
 
 // With custom metadata
 const TrackedMessage = messageSchema(
   "TRACKED_ACTION",
-  z.object({ action: z.string() }),
-  { meta: z.object({ correlationId: z.string() }) },
+  { action: z.string() },
+  { correlationId: z.string() },
 );
+
+// Works with discriminated unions!
+const MessageUnion = z.discriminatedUnion("type", [
+  PingMessage,
+  ChatMessage,
+  TrackedMessage,
+]);
 ```
 
 ## MessageContext
@@ -332,12 +375,12 @@ const userData = ctx.getData<{ userId: string; roles: string[] }>();
 
 ## createMessage() Helper
 
-Factory function for creating validated WebSocket messages on the client side.
+Helper function for creating validated WebSocket messages on the client side (obtained from `createMessageSchema`).
 
 ```typescript
 function createMessage<T extends MessageSchemaType>(
   schema: T,
-  payload: T["shape"]["payload"] extends ZodTypeAny
+  payload: T["shape"]["payload"] extends ZodType
     ? z.infer<T["shape"]["payload"]>
     : undefined,
   meta?: Partial<z.infer<T["shape"]["meta"]>>,
@@ -360,7 +403,10 @@ A Zod/Valibot `SafeParseReturnType` with either:
 **Example:**
 
 ```typescript
-import { createMessage, messageSchema } from "bun-ws-router";
+import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema, createMessage } = createMessageSchema(z);
 
 const JoinMessage = messageSchema("JOIN", {
   roomId: z.string(),
@@ -406,7 +452,9 @@ function publish<T>(
 **Example:**
 
 ```typescript
-import { publish } from "bun-ws-router";
+import { publish } from "bun-ws-router/zod/publish";
+// or
+import { publish } from "bun-ws-router/valibot/publish";
 
 // In an HTTP endpoint
 app.post("/broadcast", (req) => {
@@ -421,19 +469,60 @@ app.post("/broadcast", (req) => {
 });
 ```
 
-## ErrorCode Enum
+## ErrorCode and ErrorMessage
 
-Standard error codes for consistent error handling.
+Standard error handling utilities (obtained from `createMessageSchema`).
+
+### ErrorCode
 
 ```typescript
-enum ErrorCode {
-  VALIDATION_ERROR = "VALIDATION_ERROR",
-  UNAUTHORIZED = "UNAUTHORIZED",
-  FORBIDDEN = "FORBIDDEN",
-  NOT_FOUND = "NOT_FOUND",
-  RATE_LIMIT = "RATE_LIMIT",
-  INTERNAL_ERROR = "INTERNAL_ERROR",
-}
+// Zod version
+const ErrorCode = z.enum([
+  "INVALID_MESSAGE_FORMAT",
+  "VALIDATION_FAILED",
+  "UNSUPPORTED_MESSAGE_TYPE",
+  "AUTHENTICATION_FAILED",
+  "AUTHORIZATION_FAILED",
+  "RESOURCE_NOT_FOUND",
+  "RATE_LIMIT_EXCEEDED",
+  "INTERNAL_SERVER_ERROR",
+]);
+
+// Valibot version
+const ErrorCode = v.picklist([
+  "INVALID_MESSAGE_FORMAT",
+  "VALIDATION_FAILED",
+  "UNSUPPORTED_MESSAGE_TYPE",
+  "AUTHENTICATION_FAILED",
+  "AUTHORIZATION_FAILED",
+  "RESOURCE_NOT_FOUND",
+  "RATE_LIMIT_EXCEEDED",
+  "INTERNAL_SERVER_ERROR",
+]);
+```
+
+### ErrorMessage
+
+Pre-defined error message schema:
+
+```typescript
+const ErrorMessage = messageSchema("ERROR", {
+  code: ErrorCode,
+  message: z.string().optional(), // or v.optional(v.string())
+  context: z.record(z.string(), z.any()).optional(),
+});
+```
+
+**Usage:**
+
+```typescript
+const { ErrorMessage, ErrorCode } = createMessageSchema(z);
+
+ctx.send(ErrorMessage, {
+  code: "VALIDATION_FAILED",
+  message: "Invalid input",
+  context: { field: "email" },
+});
 ```
 
 ## TypeScript Types

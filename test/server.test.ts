@@ -12,7 +12,9 @@ import {
 } from "bun:test";
 import { z } from "zod";
 import { WebSocketRouter } from "../zod/router";
-import { messageSchema } from "../zod/schema";
+import { createMessageSchema } from "../zod/schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;

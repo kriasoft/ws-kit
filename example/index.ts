@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { WebSocketRouter } from "../";
+import { WebSocketRouter } from "../zod";
 import { chatRouter } from "./chat";
 
 // HTTP router

@@ -38,7 +38,7 @@ The following example demonstrates how to set up a Bun server with both (RESTful
 
 ```ts
 import { Hono } from "hono";
-import { WebSocketRouter } from "bun-ws-router"; // Uses Zod by default
+import { WebSocketRouter } from "bun-ws-router/zod"; // Explicit Zod import
 import { exampleRouter } from "./example";
 
 // HTTP router
@@ -78,21 +78,22 @@ console.log(`WebSocket server listening on ws://localhost:3000/ws`);
 You can choose between Zod and Valibot validators using different import paths:
 
 ```ts
-// Zod (default) - mature ecosystem, method chaining
-import { WebSocketRouter, messageSchema } from "bun-ws-router/zod";
+// Zod - mature ecosystem, method chaining
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { z } from "zod";
+const { messageSchema } = createMessageSchema(z);
 
 // Valibot - 90% smaller bundles, functional pipelines
-import { WebSocketRouter, messageSchema } from "bun-ws-router/valibot";
-
-// Backward compatibility (uses Zod)
-import { WebSocketRouter, messageSchema } from "bun-ws-router";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
+import * as v from "valibot";
+const { messageSchema } = createMessageSchema(v);
 ```
 
 ### Quick Comparison
 
 | Feature     | Zod                      | Valibot                  |
 | ----------- | ------------------------ | ------------------------ |
-| Bundle Size | 13.5 kB                  | 1.37 kB                  |
+| Bundle Size | 5.36 kB (Zod v4)         | 1.37 kB                  |
 | Performance | Baseline                 | 2x faster                |
 | API Style   | Method chaining          | Functional               |
 | Best for    | Server-side, familiarity | Client-side, performance |
@@ -104,8 +105,11 @@ See the [Valibot Integration Guide](./docs/valibot-integration.md) for detailed 
 You can handle authentication by checking the `Authorization` header for a JWT token or any other authentication method you prefer. The following example demonstrates how to verify a JWT token and pass the user information to the WebSocket router.
 
 ```ts
-import { WebSocketRouter } from "bun-ws-router";
+import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
 import { DecodedIdToken } from "firebase-admin/auth";
+
+const { messageSchema } = createMessageSchema(z);
 import { verifyIdToken } from "./auth"; // Your authentication logic
 
 type Meta = {
@@ -147,12 +151,18 @@ By verifying the user _before_ the WebSocket connection is fully established and
 
 ## How to define message types
 
-You can define message types using the `messageSchema` function from `bun-ws-router`. This function takes a message type name such as `JOIN_ROOM`, `SEND_MESSAGE` etc. and a Zod schema for the message payload. The following example demonstrates how to define message types for a chat application.
+To define message types, first create a message schema factory using your validation library, then use it to define your message schemas. This approach ensures proper TypeScript support and avoids dual package hazard issues.
+
+### With Zod
 
 ```ts
-import { messageSchema } from "bun-ws-router";
 import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
 
+// Create the message schema factory with your Zod instance
+const { messageSchema } = createMessageSchema(z);
+
+// Now define your message types
 export const JoinRoom = messageSchema("JOIN_ROOM", {
   roomId: z.string(),
 });
@@ -172,13 +182,38 @@ export const SendMessage = messageSchema("SEND_MESSAGE", {
 });
 ```
 
+### With Valibot
+
+```ts
+import * as v from "valibot";
+import { createMessageSchema } from "bun-ws-router/valibot";
+
+// Create the message schema factory with your Valibot instance
+const { messageSchema } = createMessageSchema(v);
+
+// Now define your message types
+export const JoinRoom = messageSchema("JOIN_ROOM", {
+  roomId: v.string(),
+});
+
+export const UserJoined = messageSchema("USER_JOINED", {
+  roomId: v.string(),
+  userId: v.string(),
+});
+```
+
+> **Note**: The factory pattern (`createMessageSchema`) ensures that your schemas use the same validation library instance as your application, enabling features like discriminated unions and preventing type conflicts.
+
 ## How to define routes
 
 You can define routes using the `WebSocketRouter` instance methods: `onOpen`, `onMessage`, and `onClose`.
 
 ```ts
-import { WebSocketRouter } from "bun-ws-router";
+import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
 import { Meta, JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 const ws = new WebSocketRouter<Meta>();
 
@@ -279,8 +314,12 @@ ws.onClose((c) => {
 The library provides a helper function that combines schema validation with publishing:
 
 ```ts
-import { WebSocketRouter, publish } from "bun-ws-router";
+import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { publish } from "bun-ws-router/zod/publish";
 import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 ws.onMessage(JoinRoom, (c) => {
   const { roomId } = c.payload;
@@ -339,7 +378,10 @@ Effective error handling is crucial for maintaining robust WebSocket connections
 The library includes a standardized error schema and predefined error codes:
 
 ```ts
-import { ErrorMessage, ErrorCode } from "bun-ws-router";
+import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { ErrorMessage, ErrorCode } = createMessageSchema(z);
 
 ws.onMessage(JoinRoom, (c) => {
   const { roomId } = c.payload;
@@ -442,8 +484,11 @@ publish(c.ws, roomId, ErrorMessage, {
 You can compose routes from different files into a single router. This is useful for organizing your code and keeping related routes together.
 
 ```ts
-import { WebSocketRouter } from "bun-ws-router";
+import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
 import { Meta } from "./schemas";
+
+const { messageSchema } = createMessageSchema(z);
 import { chatRoutes } from "./chat";
 import { notificationRoutes } from "./notification";
 
@@ -459,8 +504,10 @@ Where `chatRoutes` and `notificationRoutes` are other router instances defined i
 The library provides a `createMessage` helper function for creating type-safe WebSocket messages on the client side:
 
 ```ts
-import { createMessage, messageSchema } from "bun-ws-router";
 import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { createMessage, messageSchema } = createMessageSchema(z);
 
 // Define your message schemas (same as server)
 const JoinRoomMessage = messageSchema("JOIN_ROOM", {

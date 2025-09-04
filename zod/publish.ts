@@ -8,7 +8,11 @@ import type { MessageSchemaType } from "./types";
 
 /**
  * Validates a message against its schema and publishes it to a WebSocket topic.
- * Complements Bun's native WebSocket PubSub functionality with schema validation.
+ *
+ * PURPOSE: Ensures all published messages conform to their schemas, preventing
+ * runtime errors for subscribers expecting specific message formats.
+ *
+ * FLOW: Extract type → Construct message → Validate → Publish (or log error)
  *
  * @param ws - The ServerWebSocket instance to publish from
  * @param topic - The topic to publish to (subscribers will receive the message)
@@ -30,9 +34,11 @@ export function publish<Schema extends MessageSchemaType>(
 ): boolean {
   try {
     // Extract the message type from the schema
+    // ASSUMES: Schema was created by messageSchema() which guarantees type.value exists
     const messageType = schema.shape.type.value;
 
     // Create the message object with the required structure
+    // NOTE: clientId and timestamp are auto-populated, user meta can override
     const message = {
       type: messageType,
       meta: {
@@ -40,10 +46,11 @@ export function publish<Schema extends MessageSchemaType>(
         timestamp: Date.now(),
         ...meta,
       },
-      ...(payload !== undefined && { payload }),
+      ...(payload !== undefined && { payload }), // Omit payload key if undefined
     };
 
     // Validate the constructed message against the schema
+    // CRITICAL: Prevents malformed messages from reaching subscribers
     const validationResult = schema.safeParse(message);
 
     if (!validationResult.success) {
@@ -55,9 +62,11 @@ export function publish<Schema extends MessageSchemaType>(
     }
 
     // Publish the validated message to the topic
+    // NOTE: Uses Bun's native PubSub - message is sent to all topic subscribers
     ws.publish(topic, JSON.stringify(validationResult.data));
     return true;
   } catch (error) {
+    // Catches schema extraction errors or publish failures
     console.error(`[ws] Error publishing message to topic "${topic}":`, error);
     return false;
   }

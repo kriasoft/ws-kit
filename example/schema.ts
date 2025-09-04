@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { messageSchema } from "../";
+import { createMessageSchema } from "../zod";
+
+const { messageSchema } = createMessageSchema(z);
 
 export const JoinRoom = messageSchema("JOIN_ROOM", {
   roomId: z.string(),

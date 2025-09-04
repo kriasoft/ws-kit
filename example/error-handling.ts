@@ -1,4 +1,4 @@
-import { WebSocketRouter } from "../zod/router";
+import { WebSocketRouter } from "../zod";
 import { AuthenticateMessage } from "./auth-schema";
 
 const router = new WebSocketRouter();
@@ -8,8 +8,8 @@ const router = new WebSocketRouter();
  */
 router.onMessage(AuthenticateMessage, (context) => {
   // This handler only receives messages with:
-  // - Valid JWT tokens (validated by z.string().jwt())
-  // - Valid semver strings (validated by z.string().semver())
+  // - Valid JWT tokens (validated by z.jwt())
+  // - Valid semver pattern (validated by regex)
   console.log("Valid JWT received:", context.payload.token);
   console.log("API Version:", context.payload.apiVersion);
 

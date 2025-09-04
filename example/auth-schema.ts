@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { messageSchema } from "../";
+import { createMessageSchema } from "../zod";
+
+const { messageSchema } = createMessageSchema(z);
 
 /**
  * Authentication message with JWT token

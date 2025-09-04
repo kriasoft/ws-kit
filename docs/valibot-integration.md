@@ -6,7 +6,7 @@ This library now supports both **Zod** and **Valibot** validators through separa
 
 | Feature             | Zod                     | Valibot               |
 | ------------------- | ----------------------- | --------------------- |
-| Bundle Size         | 13.5 kB                 | 1.37 kB (90% smaller) |
+| Bundle Size         | 5.36 kB (Zod v4)        | 1.37 kB (74% smaller) |
 | Runtime Performance | Baseline                | ~2x faster            |
 | API Style           | Method chaining         | Functional pipelines  |
 | Ecosystem           | Mature, large community | Growing, newer        |
@@ -32,8 +32,11 @@ bun add zod valibot
 ### Zod Implementation
 
 ```typescript
-import { WebSocketRouter, messageSchema } from "bun-ws-router/zod";
 import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+
+// Create factory with your Zod instance
+const { messageSchema } = createMessageSchema(z);
 
 // Create message schemas
 const JoinRoomMessage = messageSchema("JOIN_ROOM", {
@@ -49,11 +52,11 @@ const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
 const router = new WebSocketRouter<{ userId?: string }>();
 
 // Register handlers
-router.onMessage(JoinRoomMessage, ({ ws, payload, meta, send }) => {
-  console.log(`User ${payload.userId} joining room ${payload.roomId}`);
+router.onMessage(JoinRoomMessage, (ctx) => {
+  console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
 
   // Type-safe response
-  send(messageSchema("ROOM_JOINED", { success: true }), {
+  ctx.send(messageSchema("ROOM_JOINED", { success: v.boolean() }), {
     success: true,
   });
 });
@@ -62,34 +65,31 @@ router.onMessage(JoinRoomMessage, ({ ws, payload, meta, send }) => {
 ### Valibot Implementation
 
 ```typescript
-import { WebSocketRouter, messageSchema } from "bun-ws-router/valibot";
 import * as v from "valibot";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
+
+// Create factory with your Valibot instance
+const { messageSchema } = createMessageSchema(v);
 
 // Create message schemas
-const JoinRoomMessage = messageSchema(
-  "JOIN_ROOM",
-  v.object({
-    roomId: v.string(),
-    userId: v.string(),
-  }),
-);
+const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+  roomId: v.string(),
+  userId: v.string(),
+});
 
-const LeaveRoomMessage = messageSchema(
-  "LEAVE_ROOM",
-  v.object({
-    roomId: v.string(),
-  }),
-);
+const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
+  roomId: v.string(),
+});
 
 // Create router
 const router = new WebSocketRouter<{ userId?: string }>();
 
 // Register handlers
-router.onMessage(JoinRoomMessage, ({ ws, payload, meta, send }) => {
-  console.log(`User ${payload.userId} joining room ${payload.roomId}`);
+router.onMessage(JoinRoomMessage, (ctx) => {
+  console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
 
   // Type-safe response
-  send(messageSchema("ROOM_JOINED", v.object({ success: v.boolean() })), {
+  ctx.send(messageSchema("ROOM_JOINED", { success: v.boolean() }), {
     success: true,
   });
 });
@@ -127,11 +127,16 @@ const userSchema = v.object({
 
 ### Message Schema Factory
 
-Both validators use the same `messageSchema()` function signature, but with their respective validation objects:
+Both validators require creating a factory first, then use the same `messageSchema()` function signature:
 
 **Zod:**
 
 ```typescript
+import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+
+const { messageSchema } = createMessageSchema(z);
+
 // Basic message
 const PingMessage = messageSchema("PING");
 
@@ -145,30 +150,32 @@ const ChatMessage = messageSchema("CHAT", {
 const PrivateMessage = messageSchema(
   "PRIVATE",
   { content: z.string(), recipientId: z.string() },
-  z.object({ senderId: z.string() }),
+  { senderId: z.string() },
 );
 ```
 
 **Valibot:**
 
 ```typescript
+import * as v from "valibot";
+import { createMessageSchema } from "bun-ws-router/valibot";
+
+const { messageSchema } = createMessageSchema(v);
+
 // Basic message
 const PingMessage = messageSchema("PING");
 
 // With payload
-const ChatMessage = messageSchema(
-  "CHAT",
-  v.object({
-    content: v.string(),
-    roomId: v.string(),
-  }),
-);
+const ChatMessage = messageSchema("CHAT", {
+  content: v.string(),
+  roomId: v.string(),
+});
 
 // With custom metadata
 const PrivateMessage = messageSchema(
   "PRIVATE",
-  v.object({ content: v.string(), recipientId: v.string() }),
-  v.object({ senderId: v.string() }),
+  { content: v.string(), recipientId: v.string() },
+  { senderId: v.string() },
 );
 ```
 
@@ -203,11 +210,15 @@ Valibot's functional design and tree-shakeable architecture provides:
 1. **Update imports:**
 
    ```typescript
-   // Before
-   import { WebSocketRouter, messageSchema } from "bun-ws-router";
+   // Before (Zod)
+   import { z } from "zod";
+   import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+   const { messageSchema } = createMessageSchema(z);
 
-   // After
-   import { WebSocketRouter, messageSchema } from "bun-ws-router/valibot";
+   // After (Valibot)
+   import * as v from "valibot";
+   import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
+   const { messageSchema } = createMessageSchema(v);
    ```
 
 2. **Convert schema definitions:**

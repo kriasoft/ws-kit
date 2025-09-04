@@ -5,7 +5,9 @@ import type { ServerWebSocket } from "bun";
 import { describe, expect, it, mock, spyOn } from "bun:test";
 import { z } from "zod";
 import { publish } from "../zod/publish";
-import { messageSchema } from "../zod/schema";
+import { createMessageSchema } from "../zod/schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 // Type for our mock ServerWebSocket
 type MockWebSocketData = { clientId: string } & Record<string, unknown>;
@@ -57,9 +59,9 @@ describe("publish function", () => {
   const TestMetaMessage = messageSchema(
     "TEST_META_MESSAGE",
     { content: z.string() },
-    z.object({
+    {
       roomId: z.string(),
-    }),
+    },
   );
 
   // Helper to cast our mock to the type expected by the publish function

@@ -3,7 +3,9 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { messageSchema } from "../zod/schema";
+import { createMessageSchema } from "../zod/schema";
+
+const { messageSchema } = createMessageSchema(z);
 
 describe("messageSchema", () => {
   it("should create a basic message schema without payload", () => {
@@ -69,15 +71,47 @@ describe("messageSchema", () => {
     expect(missingPropertyResult.success).toBe(false);
   });
 
+  it("should create a message schema with plain object payload (improved DX)", () => {
+    const schema = messageSchema("WITH_PAYLOAD", {
+      name: z.string(),
+      count: z.number(),
+    });
+
+    // Should validate a message with correct payload
+    const validResult = schema.safeParse({
+      type: "WITH_PAYLOAD",
+      meta: { clientId: "test-123" },
+      payload: {
+        name: "Test Name",
+        count: 42,
+      },
+    });
+
+    expect(validResult.success).toBe(true);
+
+    // Should reject messages with invalid payload properties
+    const invalidPayloadResult = schema.safeParse({
+      type: "WITH_PAYLOAD",
+      meta: { clientId: "test-123" },
+      payload: {
+        name: "Test Name",
+        count: "not a number", // Invalid type for count
+      },
+    });
+
+    expect(invalidPayloadResult.success).toBe(false);
+  });
+
   it("should create a message schema with ZodType payload", () => {
-    const customType = z.array(z.string());
-    const schema = messageSchema("ARRAY_PAYLOAD", customType);
+    const schema = messageSchema("ARRAY_PAYLOAD", {
+      items: z.array(z.string()),
+    });
 
     // Should validate a message with correct payload
     const validResult = schema.safeParse({
       type: "ARRAY_PAYLOAD",
       meta: { clientId: "test-123" },
-      payload: ["item1", "item2", "item3"],
+      payload: { items: ["item1", "item2", "item3"] },
     });
 
     expect(validResult.success).toBe(true);
@@ -86,17 +120,17 @@ describe("messageSchema", () => {
     const invalidPayloadResult = schema.safeParse({
       type: "ARRAY_PAYLOAD",
       meta: { clientId: "test-123" },
-      payload: [1, 2, 3], // Numbers instead of strings
+      payload: { items: [1, 2, 3] }, // Numbers instead of strings
     });
 
     expect(invalidPayloadResult.success).toBe(false);
   });
 
   it("should create a message schema with custom metadata", () => {
-    const customMeta = z.object({
+    const customMeta = {
       userId: z.string().uuid({ version: "v7" }),
       role: z.enum(["admin", "user", "guest"]),
-    });
+    };
 
     const schema = messageSchema("CUSTOM_META", undefined, customMeta);
 
@@ -138,17 +172,15 @@ describe("messageSchema", () => {
   });
 
   it("should create a message schema with both payload and custom metadata", () => {
-    const customMeta = z.object({
-      sessionId: z.string(),
-    });
-
     const schema = messageSchema(
       "FULL_SCHEMA",
       {
         action: z.string(),
         data: z.record(z.string(), z.any()),
       },
-      customMeta,
+      {
+        sessionId: z.string(),
+      },
     );
 
     // Should validate a complete message

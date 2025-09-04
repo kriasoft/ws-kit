@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { messageSchema } from "../zod/schema";
+import { createMessageSchema } from "../zod/schema";
 import { formatValidationError } from "../zod/utils";
+
+const { messageSchema } = createMessageSchema(z);
 
 describe("Zod v4 Features", () => {
   describe("Enhanced String Validators", () => {
@@ -98,7 +100,7 @@ describe("Zod v4 Features", () => {
 
     it("should validate datetime strings", () => {
       const DateTimeMessage = messageSchema("DATETIME", {
-        timestamp: z.string().datetime(),
+        timestamp: z.iso.datetime(),
       });
 
       const validDateTimes = [

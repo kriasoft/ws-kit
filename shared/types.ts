@@ -7,10 +7,14 @@ export interface WebSocketRouterOptions {
   server?: Server;
 }
 
+// WebSocket connection data that always includes clientId (UUID v7).
+// INVARIANT: clientId is generated on connection and never changes.
 export type WebSocketData<T> = {
   clientId: string;
 } & T;
 
+// Options for upgrading HTTP request to WebSocket connection.
+// NOTE: data is merged with auto-generated clientId to form WebSocketData<T>.
 export interface UpgradeOptions<T> {
   server: Server;
   data?: T;
@@ -37,10 +41,14 @@ export type CloseHandler<Data = unknown> = (
   context: CloseHandlerContext<Data>,
 ) => void | Promise<void>;
 
-// Generic types that will be specialized by each validator
+// [GENERIC VALIDATOR TYPES]
+// These use any to allow Zod and Valibot adapters to specialize them.
+// Each adapter provides its own strongly-typed version.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type SendFunction = (schema: any, data: any, meta?: any) => void;
 
+// Base message context before validator-specific typing.
+// NOTE: Record<string, any> allows payload to be added via intersection.
 export type MessageContext<Data> = {
   ws: ServerWebSocket<Data>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,11 +57,14 @@ export type MessageContext<Data> = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } & Record<string, any>;
 
+// Generic message handler signature.
+// NOTE: _Schema parameter exists for type consistency but isn't used in base type.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export type MessageHandler<_Schema, Data> = (
   context: MessageContext<Data>,
 ) => void | Promise<void>;
 
+// Placeholder for validator-specific schema types
 export type MessageSchemaType = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export interface MessageHandlerEntry<Data = unknown> {

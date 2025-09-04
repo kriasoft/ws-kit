@@ -80,26 +80,23 @@ const router = new WebSocketRouter()
 
 ```typescript
 // Strict schema validation
-const MessageSchema = messageSchema(
-  "MESSAGE",
-  z.object({
-    // Limit string lengths
-    text: z.string().min(1).max(1000),
+const MessageSchema = messageSchema("MESSAGE", {
+  // Limit string lengths
+  text: z.string().min(1).max(1000),
 
-    // Validate formats
-    email: z.email(),
-    url: z.url().startsWith("https://"),
+  // Validate formats
+  email: z.email(),
+  url: z.url().startsWith("https://"),
 
-    // Sanitize HTML
-    content: z.string().transform(sanitizeHtml),
+  // Sanitize HTML
+  content: z.string().transform(sanitizeHtml),
 
-    // Validate enums
-    type: z.enum(["text", "image", "video"]),
+  // Validate enums
+  type: z.enum(["text", "image", "video"]),
 
-    // Limit array sizes
-    tags: z.array(z.string()).max(10),
-  }),
-);
+  // Limit array sizes
+  tags: z.array(z.string()).max(10),
+});
 ```
 
 ### 3. Rate Limiting
@@ -190,6 +187,8 @@ router.onOpen((ws) => {
 ```typescript
 // Enable per-message deflate
 const server = Bun.serve({
+  port: process.env.PORT || 3000,
+  fetch: app.fetch, // Your HTTP handler
   websocket: {
     ...router.handlers(),
 
@@ -457,13 +456,17 @@ async function gracefulShutdown() {
   // Stop accepting new connections
   server.stop();
 
-  // Close existing connections
-  for (const [clientId, ws] of connections) {
-    ws.close(1001, "Server shutting down");
-  }
+  // Close existing connections gracefully
+  server.publish(
+    "shutdown",
+    JSON.stringify({
+      type: "SERVER_SHUTDOWN",
+      message: "Server is shutting down",
+    }),
+  );
 
-  // Wait for connections to close
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  // Give clients time to handle shutdown message
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   // Clean up resources
   await redis.quit();
