@@ -3,19 +3,29 @@
 
 import eslint from "@eslint/js";
 import prettier from "eslint-config-prettier";
+import { defineConfig } from "eslint/config";
 import tslint from "typescript-eslint";
 
-export default tslint.config(
+export default defineConfig([
   {
-    // Global ignores
+    name: "global-ignores",
     ignores: ["node_modules", ".bun/", "dist/", "docs/"],
   },
-  // Base ESLint recommended rules
-  eslint.configs.recommended,
-  // Base TypeScript recommended rules,
-  ...tslint.configs.recommended,
-  ...tslint.configs.strict,
-  ...tslint.configs.stylistic,
-  // Prettier config must be last to override other formatting rules
-  prettier,
-);
+  {
+    name: "eslint-recommended",
+    extends: [eslint.configs.recommended],
+  },
+  {
+    name: "typescript-configs",
+    files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+    extends: [
+      ...tslint.configs.recommended,
+      ...tslint.configs.strict,
+      ...tslint.configs.stylistic,
+    ],
+  },
+  {
+    name: "prettier-overrides",
+    extends: [prettier],
+  },
+]);
