@@ -97,12 +97,7 @@ export function messageSchema<
   T extends string,
   P extends Record<string, ZodTypeAny> | ZodTypeAny | undefined = undefined,
   M extends ZodRawShape = Record<string, never>,
->(
-  messageType: T,
-  payload?: P,
-  meta?: ZodObject<M>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): ZodObject<any> {
+>(messageType: T, payload?: P, meta?: ZodObject<M>) {
   const metaSchema = meta
     ? MessageMetadataSchema.extend(meta.shape)
     : MessageMetadataSchema;
