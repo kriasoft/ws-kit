@@ -5,8 +5,10 @@ import type { ServerWebSocket } from "bun";
 import type { ZodObject, ZodType } from "zod";
 import { z, ZodLiteral } from "zod";
 
-// Type-safe function for sending validated messages through WebSocket.
-// Extracts payload and meta types from the schema for compile-time validation.
+/**
+ * Type-safe function for sending validated messages through WebSocket.
+ * Extracts payload/meta types from ZodObject shape for compile-time validation.
+ */
 export type SendFunction = <Schema extends MessageSchemaType>(
   schema: Schema,
   data: Schema["shape"] extends { payload: infer P }
@@ -17,16 +19,25 @@ export type SendFunction = <Schema extends MessageSchemaType>(
   meta?: z.infer<Schema["shape"]["meta"]>,
 ) => void;
 
-// Handler context that conditionally includes payload based on schema definition.
-// DESIGN: Uses intersection types to add payload only when schema defines it,
-// avoiding optional payload field that would require runtime checks.
+/**
+ * Handler context with type-safe payload/meta access from schema definition.
+ * Uses intersection types to add payload only when schema defines it, avoiding
+ * optional payload field that would require runtime checks.
+ *
+ * @see specs/adrs.md#ADR-001 - keyof check for discriminated unions
+ */
 export type MessageContext<Schema extends MessageSchemaType, Data> = {
+  /** WebSocket connection with custom data */
   ws: ServerWebSocket<Data>;
+  /** Message type literal from schema */
+  type: Schema["shape"]["type"]["value"];
+  /** Message metadata inferred from schema */
   meta: z.infer<Schema["shape"]["meta"]>;
+  /** Type-safe send function for validated messages */
   send: SendFunction;
-} & (Schema["shape"] extends { payload: infer P }
-  ? P extends ZodType
-    ? { payload: z.infer<P> }
+} & ("payload" extends keyof Schema["shape"]
+  ? Schema["shape"]["payload"] extends ZodType
+    ? { payload: z.infer<Schema["shape"]["payload"]> }
     : Record<string, never>
   : Record<string, never>);
 
@@ -34,9 +45,11 @@ export type MessageHandler<Schema extends MessageSchemaType, Data> = (
   context: MessageContext<Schema, Data>,
 ) => void | Promise<void>;
 
-// Base constraint for all message schemas created by messageSchema().
-// NOTE: type is ZodLiteral for exact string matching during routing.
-// meta uses ZodType to be flexible with MessageMetadataSchema and its extensions
+/**
+ * Base constraint for all message schemas created by messageSchema().
+ * type is ZodLiteral for exact string matching during routing.
+ * meta uses ZodType to allow MessageMetadataSchema extensions.
+ */
 export type MessageSchemaType = ZodObject<{
   type: ZodLiteral<string>;
   meta: ZodType;
@@ -48,13 +61,13 @@ export interface MessageHandlerEntry<Data = unknown> {
   handler: MessageHandler<MessageSchemaType, Data>;
 }
 
-// Re-export shared types that are validator-agnostic
+/** Re-export shared types that are validator-agnostic. See: shared/types.ts */
 export type {
-  WebSocketRouterOptions,
-  WebSocketData,
-  UpgradeOptions,
-  OpenHandlerContext,
-  OpenHandler,
-  CloseHandlerContext,
   CloseHandler,
+  CloseHandlerContext,
+  OpenHandler,
+  OpenHandlerContext,
+  UpgradeOptions,
+  WebSocketData,
+  WebSocketRouterOptions,
 } from "../shared/types";
