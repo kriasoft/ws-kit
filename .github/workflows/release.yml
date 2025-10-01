@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: "release"
+    env:
+      DIST_TAG: ${{ contains(github.ref_name, '-') && 'next' || 'latest' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Ensure tag commit is on main
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          git merge-base --is-ancestor origin/main "$GITHUB_SHA" || {
+            echo "Tag must point to a commit reachable from main"; exit 1;
+          }
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun publish --access public --ignore-scripts --tag "$DIST_TAG"
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

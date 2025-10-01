@@ -3,6 +3,11 @@
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../shared/router";
 import { ZodValidatorAdapter } from "./adapter";
+import type {
+  MessageSchemaType as ZodMessageSchemaType,
+  MessageHandler as ZodMessageHandler,
+  WebSocketData,
+} from "./types";
 
 /**
  * WebSocket router for Bun that provides type-safe message routing with Zod validation.
@@ -23,5 +28,24 @@ export class WebSocketRouter<
     // NOTE: ZodValidatorAdapter handles schema validation and error formatting
     // specific to Zod. The base router handles all routing and connection logic.
     super(new ZodValidatorAdapter());
+  }
+
+  /**
+   * Registers a message handler with Zod-specific type inference.
+   *
+   * This override provides validator-specific types for better IDE experience,
+   * but creates a Liskov Substitution Principle variance issue. The more specific
+   * handler signature means this class can't be used everywhere the base class is expected.
+   * This is an intentional trade-off for better developer experience.
+   *
+   * @see specs/adrs.md#ADR-001 - Type override solution for IDE inference
+   */
+  // @ts-expect-error - Intentional override with more specific types for better DX
+  onMessage<Schema extends ZodMessageSchemaType>(
+    schema: Schema,
+    handler: ZodMessageHandler<Schema, WebSocketData<T>>,
+  ): this {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return super.onMessage(schema as any, handler as any);
   }
 }
