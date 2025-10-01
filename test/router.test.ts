@@ -6,6 +6,7 @@ import {
   beforeEach,
   describe,
   expect,
+  expectTypeOf,
   it,
   mock,
   spyOn,
@@ -301,6 +302,88 @@ describe("WebSocketRouter", () => {
       // Verify the handler was called and error was logged
       expect(errorHandlerMock).toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("type inference", () => {
+    it("should infer payload types in inline handlers", () => {
+      const router = new WebSocketRouter<{ sessionId: string }>();
+
+      // Message with payload
+      const JoinRoom = messageSchema("JOIN_ROOM", {
+        roomId: z.string(),
+        userId: z.number(),
+      });
+
+      // Message without payload
+      const PingMessage = messageSchema("PING");
+
+      // Test inline handler with payload - should have proper type inference
+      router.onMessage(JoinRoom, (ctx) => {
+        // These type assertions would fail if ctx.payload were 'any'
+        expectTypeOf(ctx.payload.roomId).toBeString();
+        expectTypeOf(ctx.payload.userId).toBeNumber();
+        expectTypeOf(ctx.type).toEqualTypeOf<"JOIN_ROOM">();
+        expectTypeOf(ctx.meta.clientId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.ws.data.sessionId).toBeString();
+        expectTypeOf(ctx.send).toBeFunction();
+
+        // Should error on non-existent properties
+        // @ts-expect-error - Property does not exist
+        expectTypeOf(ctx.payload.nonExistent).toBeAny();
+      });
+
+      // Test inline handler without payload
+      router.onMessage(PingMessage, (ctx) => {
+        expectTypeOf(ctx.type).toEqualTypeOf<"PING">();
+        expectTypeOf(ctx.meta).toHaveProperty("clientId");
+
+        // Should error when accessing payload on message without payload
+        // @ts-expect-error - Payload should not exist
+        expectTypeOf(ctx.payload).toBeAny();
+      });
+    });
+
+    it("should infer complex payload types", () => {
+      const router = new WebSocketRouter();
+
+      const ComplexMessage = messageSchema("COMPLEX", {
+        nested: z.object({
+          array: z.array(z.string()),
+          optional: z.number().optional(),
+          union: z.union([z.string(), z.number()]),
+        }),
+        literal: z.literal("test"),
+      });
+
+      router.onMessage(ComplexMessage, (ctx) => {
+        expectTypeOf(ctx.payload.nested.array).toEqualTypeOf<string[]>();
+        expectTypeOf(ctx.payload.nested.optional).toEqualTypeOf<
+          number | undefined
+        >();
+        expectTypeOf(ctx.payload.nested.union).toEqualTypeOf<string | number>();
+        expectTypeOf(ctx.payload.literal).toEqualTypeOf<"test">();
+      });
+    });
+
+    it("should infer extended meta properties", () => {
+      const router = new WebSocketRouter();
+
+      const CustomMessage = messageSchema(
+        "CUSTOM",
+        { data: z.string() },
+        { roomId: z.string(), priority: z.number() },
+      );
+
+      router.onMessage(CustomMessage, (ctx) => {
+        // Base meta properties
+        expectTypeOf(ctx.meta.clientId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
+
+        // Extended meta properties
+        expectTypeOf(ctx.meta.roomId).toBeString();
+        expectTypeOf(ctx.meta.priority).toBeNumber();
+      });
     });
   });
 });

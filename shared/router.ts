@@ -56,8 +56,17 @@ export class WebSocketRouter<
    *
    * USE CASE: Compose routers from different modules/features.
    * WARNING: Message type conflicts are resolved by last-write-wins.
+   *
+   * NOTE: Accepts `| any` to support Zod/Valibot router instances. The type override
+   * in derived classes creates an LSP variance issue, making them technically incompatible
+   * with the base type. This is an intentional trade-off for better developer experience.
+   *
+   * @param router - Router instance to merge routes from (including Zod/Valibot routers)
+   * @returns This router instance for method chaining
+   * @see specs/adrs.md#ADR-001 - Explains the type override variance issue
    */
-  addRoutes(router: WebSocketRouter<T>): this {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  addRoutes(router: WebSocketRouter<T> | any): this {
     // HACK: Access private members through type assertions.
     // Safer than exposing internal state publicly.
     interface AccessibleConnectionHandler {
