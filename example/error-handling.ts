@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import { WebSocketRouter } from "../zod";
 import { AuthenticateMessage } from "./auth-schema";
 
@@ -18,7 +21,6 @@ router.onMessage(AuthenticateMessage, (context) => {
     JSON.stringify({
       type: "AUTH_SUCCESS",
       meta: {
-        clientId: context.meta.clientId,
         timestamp: Date.now(),
       },
       payload: {

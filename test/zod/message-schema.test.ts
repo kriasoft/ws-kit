@@ -1,9 +1,9 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { createMessageSchema } from "../zod/schema";
+import { createMessageSchema } from "../../zod/schema";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -14,7 +14,7 @@ describe("messageSchema", () => {
     // Should validate a message with just type and meta
     const validResult = schema.safeParse({
       type: "BASIC",
-      meta: { clientId: "test-123" },
+      meta: {},
     });
 
     expect(validResult.success).toBe(true);
@@ -22,7 +22,7 @@ describe("messageSchema", () => {
     // Should reject messages with wrong type
     const wrongTypeResult = schema.safeParse({
       type: "WRONG_TYPE",
-      meta: { clientId: "test-123" },
+      meta: {},
     });
 
     expect(wrongTypeResult.success).toBe(false);
@@ -37,7 +37,7 @@ describe("messageSchema", () => {
     // Should validate a message with correct payload
     const validResult = schema.safeParse({
       type: "WITH_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         name: "Test Name",
         count: 42,
@@ -49,7 +49,7 @@ describe("messageSchema", () => {
     // Should reject messages with invalid payload properties
     const invalidPayloadResult = schema.safeParse({
       type: "WITH_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         name: "Test Name",
         count: "not a number", // Invalid type for count
@@ -61,7 +61,7 @@ describe("messageSchema", () => {
     // Should reject messages with missing required payload properties
     const missingPropertyResult = schema.safeParse({
       type: "WITH_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         name: "Test Name",
         // Missing count property
@@ -80,7 +80,7 @@ describe("messageSchema", () => {
     // Should validate a message with correct payload
     const validResult = schema.safeParse({
       type: "WITH_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         name: "Test Name",
         count: 42,
@@ -92,7 +92,7 @@ describe("messageSchema", () => {
     // Should reject messages with invalid payload properties
     const invalidPayloadResult = schema.safeParse({
       type: "WITH_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         name: "Test Name",
         count: "not a number", // Invalid type for count
@@ -110,7 +110,7 @@ describe("messageSchema", () => {
     // Should validate a message with correct payload
     const validResult = schema.safeParse({
       type: "ARRAY_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: { items: ["item1", "item2", "item3"] },
     });
 
@@ -119,7 +119,7 @@ describe("messageSchema", () => {
     // Should reject messages with invalid payload
     const invalidPayloadResult = schema.safeParse({
       type: "ARRAY_PAYLOAD",
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: { items: [1, 2, 3] }, // Numbers instead of strings
     });
 
@@ -138,7 +138,6 @@ describe("messageSchema", () => {
     const validResult = schema.safeParse({
       type: "CUSTOM_META",
       meta: {
-        clientId: "test-123",
         userId: "0198716a-72b2-769f-9762-1ef5a3625dc2", // Valid UUID v7
         role: "admin",
       },
@@ -150,7 +149,6 @@ describe("messageSchema", () => {
     const invalidMetaResult = schema.safeParse({
       type: "CUSTOM_META",
       meta: {
-        clientId: "test-123",
         userId: "not-a-uuid",
         role: "admin",
       },
@@ -162,7 +160,6 @@ describe("messageSchema", () => {
     const invalidRoleResult = schema.safeParse({
       type: "CUSTOM_META",
       meta: {
-        clientId: "test-123",
         userId: "123e4567-e89b-12d3-a456-426614174000",
         role: "superadmin", // Not in the enum
       },
@@ -187,7 +184,6 @@ describe("messageSchema", () => {
     const validResult = schema.safeParse({
       type: "FULL_SCHEMA",
       meta: {
-        clientId: "test-123",
         sessionId: "session-456",
       },
       payload: {
@@ -202,7 +198,6 @@ describe("messageSchema", () => {
     const missingMetaResult = schema.safeParse({
       type: "FULL_SCHEMA",
       meta: {
-        clientId: "test-123",
         // Missing sessionId
       },
       payload: {
@@ -217,7 +212,6 @@ describe("messageSchema", () => {
     const incompletePayloadResult = schema.safeParse({
       type: "FULL_SCHEMA",
       meta: {
-        clientId: "test-123",
         sessionId: "session-456",
       },
       payload: {

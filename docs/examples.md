@@ -173,7 +173,7 @@ Bun.serve({
     }
     return new Response("WebSocket server");
   },
-  websocket: router.handlers(),
+  websocket: router.websocket,
 });
 ```
 
@@ -506,7 +506,7 @@ const server = Bun.serve({
     return new Response("Notification Server");
   },
 
-  websocket: router.handlers(),
+  websocket: router.websocket,
 });
 
 console.log("Notification server running on http://localhost:3000");
@@ -790,9 +790,3 @@ client.sendMessage("general", "Hello everyone!");
 // Show typing indicator
 client.setTyping("general", true);
 ```
-
-## Next Steps
-
-- Learn [Advanced Usage](/advanced-usage) patterns
-- Read [Deployment](/deployment) best practices
-- Explore the [API Reference](/api-reference)

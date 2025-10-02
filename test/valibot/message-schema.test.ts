@@ -1,10 +1,10 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { createMessageSchema, WebSocketRouter } from "../valibot";
-import type { SendFunction } from "../shared/types";
+import type { SendFunction } from "../../shared/types";
+import { createMessageSchema, WebSocketRouter } from "../../valibot";
 
 const { messageSchema } = createMessageSchema(v);
 
@@ -15,7 +15,6 @@ describe("Valibot messageSchema", () => {
     const result = v.safeParse(schema, {
       type: "PING",
       meta: {
-        clientId: "client-123",
         timestamp: Date.now(),
       },
     });
@@ -23,7 +22,7 @@ describe("Valibot messageSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.output.type).toBe("PING");
-      expect(result.output.meta.clientId).toBe("client-123");
+      expect(result.output.meta.timestamp).toBeDefined();
     }
   });
 
@@ -36,7 +35,6 @@ describe("Valibot messageSchema", () => {
     const result = v.safeParse(schema, {
       type: "JOIN_ROOM",
       meta: {
-        clientId: "client-123",
         timestamp: Date.now(),
       },
       payload: {
@@ -62,7 +60,6 @@ describe("Valibot messageSchema", () => {
     const result = v.safeParse(schema, {
       type: "JOIN_ROOM",
       meta: {
-        clientId: "client-123",
         timestamp: Date.now(),
       },
       payload: {

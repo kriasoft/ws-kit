@@ -1,12 +1,12 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../zod/router";
-import { createMessageSchema } from "../zod/schema";
+import { WebSocketRouter } from "../../zod/router";
+import { createMessageSchema } from "../../zod/schema";
 
 const { messageSchema } = createMessageSchema(z);
-
-/* eslint-disable @typescript-eslint/no-empty-function */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 describe("addRoutes", () => {
   it("should merge routes from another router", () => {

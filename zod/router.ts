@@ -1,12 +1,12 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../shared/router";
 import { ZodValidatorAdapter } from "./adapter";
 import type {
-  MessageSchemaType as ZodMessageSchemaType,
-  MessageHandler as ZodMessageHandler,
   WebSocketData,
+  MessageHandler as ZodMessageHandler,
+  MessageSchemaType as ZodMessageSchemaType,
 } from "./types";
 
 /**

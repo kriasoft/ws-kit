@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import { WebSocketRouter } from "../zod";
 import { publish } from "../zod/publish";
 import {
@@ -15,7 +18,7 @@ const ws = new WebSocketRouter<WebSocketData>();
 
 ws.onMessage(JoinRoom, (c) => {
   const { roomId } = c.payload;
-  const userId = c.meta.clientId;
+  const clientId = c.ws.data.clientId; // Connection identity (not in meta)
 
   // Store roomId in connection data for use in onClose handler
   c.ws.data.roomId = roomId;
@@ -23,39 +26,33 @@ ws.onMessage(JoinRoom, (c) => {
   // Subscribe the client to the room
   c.ws.subscribe(roomId);
 
-  console.log(`User ${userId} joined room: ${roomId}`);
+  console.log(`Client ${clientId} joined room: ${roomId}`);
 
   // Send confirmation back to the user who joined
   c.send(UserJoined, {
     roomId,
-    userId,
+    userId: clientId,
   });
 
-  // Broadcast to other users in the room that someone joined.
-  // Only publish if userId is available.
-  if (userId) {
-    publish(c.ws, roomId, UserJoined, {
-      roomId,
-      userId,
-    });
-  }
+  // Broadcast to other users in the room that someone joined
+  publish(c.ws, roomId, UserJoined, {
+    roomId,
+    userId: clientId,
+  });
 });
 
 ws.onMessage(SendMessage, (c) => {
   const { roomId, text } = c.payload;
-  const userId = c.meta.clientId;
-  console.log(`Message from ${userId} in room ${roomId}: ${text}`);
+  const clientId = c.ws.data.clientId; // Connection identity (not in meta)
+  console.log(`Message from ${clientId} in room ${roomId}: ${text}`);
 
   // Broadcast message to all subscribers, validating with schema
-  // Only publish if userId is available
-  if (userId) {
-    publish(c.ws, roomId, NewMessage, {
-      roomId,
-      userId,
-      text,
-      timestamp: Date.now(),
-    });
-  }
+  publish(c.ws, roomId, NewMessage, {
+    roomId,
+    userId: clientId,
+    text,
+    timestamp: Date.now(),
+  });
 });
 
 ws.onClose((c) => {

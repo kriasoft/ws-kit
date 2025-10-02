@@ -126,7 +126,7 @@ Bun.serve({
     const url = new URL(req.url);
 
     // Check if the user is authenticated
-    const user = await verifyToken(req);
+    const user = await verifyIdToken(req);
 
     // Handle WebSocket upgrade requests
     if (url.pathname === "/ws") {
@@ -499,55 +499,47 @@ ws.addRoutes(notificationRoutes);
 
 Where `chatRoutes` and `notificationRoutes` are other router instances defined in separate files.
 
-## Client-side usage
+## Browser client
 
-The library provides a `createMessage` helper function for creating type-safe WebSocket messages on the client side:
+The library provides a type-safe browser client with automatic reconnection, authentication, and request/response patterns:
 
 ```ts
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createClient } from "bun-ws-router/client";
+import { Hello, HelloOk } from "./shared/schemas"; // Shared with server
 
-const { createMessage, messageSchema } = createMessageSchema(z);
-
-// Define your message schemas (same as server)
-const JoinRoomMessage = messageSchema("JOIN_ROOM", {
-  roomId: z.string(),
+const client = createClient({
+  url: "wss://api.example.com/ws",
+  reconnect: { enabled: true },
+  auth: {
+    getToken: () => localStorage.getItem("access_token"),
+    attach: "query", // or "protocol"
+  },
 });
 
-const SendMessage = messageSchema("SEND_MESSAGE", {
-  roomId: z.string(),
-  text: z.string(),
+await client.connect();
+
+// Send fire-and-forget message
+client.send(Hello, { name: "Anna" });
+
+// Receive messages with type safety
+client.on(HelloOk, (msg) => {
+  console.log("Server says:", msg.payload.text);
 });
 
-// In your client code
-const ws = new WebSocket("ws://localhost:3000/ws");
-
-ws.onopen = () => {
-  // Create a message with type-safe validation
-  const joinMsg = createMessage(JoinRoomMessage, { roomId: "general" });
-
-  if (joinMsg.success) {
-    ws.send(JSON.stringify(joinMsg.data));
-  } else {
-    console.error("Invalid message:", joinMsg.error);
-  }
-};
-
-// Send a message with custom metadata
-function sendChatMessage(roomId: string, text: string) {
-  const msg = createMessage(
-    SendMessage,
-    { roomId, text },
-    { correlationId: crypto.randomUUID() }, // Optional metadata
-  );
-
-  if (msg.success) {
-    ws.send(JSON.stringify(msg.data));
-  }
+// Request/response pattern
+try {
+  const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
+    timeoutMs: 5000,
+  });
+  console.log("Reply:", reply.payload.text);
+} catch (err) {
+  console.error("Request failed:", err);
 }
 ```
 
-The `createMessage` function ensures your client messages match the exact structure expected by the server, with full TypeScript type inference and runtime validation.
+Features: automatic reconnection with exponential backoff, message queueing when offline, token refresh on reconnect, request/response with correlation IDs, and full TypeScript type inference.
+
+See the [Client Documentation](https://kriasoft.github.io/bun-ws-router/client-setup) for complete API reference and advanced usage.
 
 ## Support
 

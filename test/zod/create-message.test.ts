@@ -1,20 +1,20 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
-import { describe, it, expect } from "bun:test";
-import * as v from "valibot";
-import { createMessageSchema } from "../valibot";
+import { describe, expect, it } from "bun:test";
+import { z } from "zod";
+import { createMessageSchema } from "../../zod";
 
-const { messageSchema, createMessage } = createMessageSchema(v);
+const { messageSchema, createMessage } = createMessageSchema(z);
 
-describe("createMessage - Valibot", () => {
+describe("createMessage - Zod", () => {
   it("should create a message without payload", () => {
     const PingSchema = messageSchema("PING");
     const message = createMessage(PingSchema, undefined);
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect(message.output).toEqual({
+      expect(message.data).toEqual({
         type: "PING",
         meta: {},
       });
@@ -22,12 +22,12 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should create a message with payload", () => {
-    const EchoSchema = messageSchema("ECHO", { text: v.string() });
+    const EchoSchema = messageSchema("ECHO", { text: z.string() });
     const message = createMessage(EchoSchema, { text: "Hello World" });
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect(message.output).toEqual({
+      expect(message.data).toEqual({
         type: "ECHO",
         meta: {},
         payload: { text: "Hello World" },
@@ -36,7 +36,7 @@ describe("createMessage - Valibot", () => {
   });
 
   it("should create a message with custom metadata", () => {
-    const RequestSchema = messageSchema("REQUEST", { data: v.string() });
+    const RequestSchema = messageSchema("REQUEST", { data: z.string() });
     const message = createMessage(
       RequestSchema,
       { data: "test" },
@@ -45,7 +45,7 @@ describe("createMessage - Valibot", () => {
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect(message.output).toEqual({
+      expect(message.data).toEqual({
         type: "REQUEST",
         meta: {
           correlationId: "123",
@@ -58,8 +58,8 @@ describe("createMessage - Valibot", () => {
 
   it("should validate payload types", () => {
     const TypedSchema = messageSchema("TYPED", {
-      count: v.number(),
-      name: v.string(),
+      count: z.number(),
+      name: z.string(),
     });
 
     // Valid payload
@@ -71,8 +71,8 @@ describe("createMessage - Valibot", () => {
 
     // Invalid payload - wrong types
     const invalidMessage = createMessage(TypedSchema, {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      count: "not a number" as any, // Intentionally wrong type
+      // @ts-expect-error Testing invalid type
+      count: "not a number",
       name: "test",
     });
     expect(invalidMessage.success).toBe(false);
@@ -80,12 +80,12 @@ describe("createMessage - Valibot", () => {
 
   it("should handle complex payload schemas", () => {
     const ComplexSchema = messageSchema("COMPLEX", {
-      user: v.object({
-        id: v.string(),
-        email: v.pipe(v.string(), v.email()),
-        roles: v.array(v.string()),
+      user: z.object({
+        id: z.string(),
+        email: z.string().email(),
+        roles: z.array(z.string()),
       }),
-      settings: v.optional(v.record(v.string(), v.any())),
+      settings: z.record(z.string(), z.any()).optional(),
     });
 
     const message = createMessage(ComplexSchema, {
@@ -102,7 +102,7 @@ describe("createMessage - Valibot", () => {
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect((message.output as { payload: unknown }).payload).toEqual({
+      expect(message.data.payload).toEqual({
         user: {
           id: "123",
           email: "test@example.com",
@@ -118,7 +118,7 @@ describe("createMessage - Valibot", () => {
 
   it("should handle array payload schemas", () => {
     const ArraySchema = messageSchema("ARRAY", {
-      items: v.array(v.string()),
+      items: z.array(z.string()),
     });
     const message = createMessage(ArraySchema, {
       items: ["item1", "item2", "item3"],
@@ -126,7 +126,7 @@ describe("createMessage - Valibot", () => {
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect(message.output).toEqual({
+      expect(message.data).toEqual({
         type: "ARRAY",
         meta: {},
         payload: { items: ["item1", "item2", "item3"] },
@@ -137,10 +137,10 @@ describe("createMessage - Valibot", () => {
   it("should handle custom metadata schemas", () => {
     const CustomMetaSchema = messageSchema(
       "CUSTOM_META",
-      { text: v.string() },
+      { text: z.string() },
       {
-        userId: v.string(),
-        sessionId: v.pipe(v.string(), v.uuid()),
+        userId: z.string(),
+        sessionId: z.string().uuid(),
       },
     );
 
@@ -156,7 +156,7 @@ describe("createMessage - Valibot", () => {
 
     expect(message.success).toBe(true);
     if (message.success) {
-      expect((message.output as { meta: unknown }).meta).toEqual({
+      expect(message.data.meta).toEqual({
         userId: "user123",
         sessionId: "550e8400-e29b-41d4-a716-446655440000",
         correlationId: "req123",
@@ -166,20 +166,20 @@ describe("createMessage - Valibot", () => {
 
   it("should fail validation for invalid messages", () => {
     const StrictSchema = messageSchema("STRICT", {
-      required: v.string(),
-      optional: v.optional(v.number()),
+      required: z.string(),
+      optional: z.number().optional(),
     });
 
     // Missing required field
     const missingRequired = createMessage(StrictSchema, {
       optional: 123,
-    });
+    } as Parameters<typeof createMessage<typeof StrictSchema>>[1]);
     expect(missingRequired.success).toBe(false);
 
     // Wrong type for required field
     const wrongType = createMessage(StrictSchema, {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      required: 123 as any, // Intentionally wrong type
+      // @ts-expect-error Testing wrong type
+      required: 123,
       optional: 456,
     });
     expect(wrongType.success).toBe(false);
@@ -187,9 +187,9 @@ describe("createMessage - Valibot", () => {
 
   it("should work with union types", () => {
     const UnionSchema = messageSchema("UNION", {
-      data: v.union([
-        v.object({ type: v.literal("text"), content: v.string() }),
-        v.object({ type: v.literal("number"), value: v.number() }),
+      data: z.union([
+        z.object({ type: z.literal("text"), content: z.string() }),
+        z.object({ type: z.literal("number"), value: z.number() }),
       ]),
     });
 
@@ -210,9 +210,9 @@ describe("createMessage - Valibot", () => {
     expect(numberMessage.success).toBe(true);
 
     const invalidMessage = createMessage(UnionSchema, {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: "invalid" as any, // Intentionally invalid union type
-    });
+      type: "invalid",
+      data: "test",
+    } as unknown as Parameters<typeof createMessage<typeof UnionSchema>>[1]);
     expect(invalidMessage.success).toBe(false);
   });
 });

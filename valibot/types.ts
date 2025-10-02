@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "bun";
 import type { InferOutput, ObjectSchema } from "valibot";
@@ -60,6 +60,8 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
         : unknown
       : unknown
     : unknown;
+  /** Server receive timestamp (milliseconds since epoch) - authoritative for server logic */
+  receivedAt: number;
   /** Type-safe send function for validated messages */
   send: SendFunction;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

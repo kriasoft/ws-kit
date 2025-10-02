@@ -1,9 +1,9 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "bun";
-import * as v from "valibot";
 import type { InferOutput } from "valibot";
+import * as v from "valibot";
 import type { MessageSchemaType } from "./types";
 
 /**
@@ -18,7 +18,7 @@ import type { MessageSchemaType } from "./types";
  * @param topic - The topic to publish to (subscribers will receive the message)
  * @param schema - The Valibot schema to validate the message against
  * @param payload - The payload to include in the message (type inferred from schema)
- * @param meta - Optional additional metadata to include (type inferred from schema)
+ * @param metaOrOpts - Optional metadata or options object with origin tracking
  * @returns True if message was validated and published successfully
  */
 export function publish<Schema extends MessageSchemaType>(
@@ -35,17 +35,22 @@ export function publish<Schema extends MessageSchemaType>(
       : unknown
     : unknown,
 
-  meta: Partial<
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Schema extends v.ObjectSchema<infer TEntries, any>
-      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        TEntries extends Record<string, any>
-        ? "meta" extends keyof TEntries
-          ? InferOutput<TEntries["meta"]>
+  metaOrOpts?:
+    | Partial<
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Schema extends v.ObjectSchema<infer TEntries, any>
+          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            TEntries extends Record<string, any>
+            ? "meta" extends keyof TEntries
+              ? InferOutput<TEntries["meta"]>
+              : unknown
+            : unknown
           : unknown
-        : unknown
-      : unknown
-  > = {},
+      >
+    | {
+        origin?: string; // Field name in ws.data (e.g., "userId")
+        key?: string; // Meta field name, defaults to "senderId"
+      },
 ): boolean {
   try {
     // Extract the message type from the schema
@@ -58,15 +63,28 @@ export function publish<Schema extends MessageSchemaType>(
     }
     const messageType = typeSchema.literal;
 
+    // Build meta with timestamp (producer time for UI display)
+    const baseMeta: Record<string, unknown> = { timestamp: Date.now() };
+
+    // Handle origin option for sender tracking
+    let meta: Record<string, unknown>;
+    if (metaOrOpts && "origin" in metaOrOpts) {
+      const { origin, key = "senderId", ...rest } = metaOrOpts;
+      // Only inject if ws.data[origin] is defined and not null (no-op otherwise)
+      if (origin && ws.data[origin] !== undefined && ws.data[origin] !== null) {
+        meta = { ...baseMeta, ...rest, [key]: ws.data[origin] };
+      } else {
+        meta = { ...baseMeta, ...rest };
+      }
+    } else {
+      meta = { ...baseMeta, ...metaOrOpts };
+    }
+
     // Create the message object with the required structure
-    // NOTE: clientId and timestamp are auto-populated, user meta can override
+    // NOTE: timestamp is auto-populated (producer time); clientId is NEVER injected
     const message = {
       type: messageType,
-      meta: {
-        clientId: ws.data.clientId,
-        timestamp: Date.now(),
-        ...meta,
-      },
+      meta,
       ...(payload !== undefined && { payload }), // Omit payload key if undefined
     };
 

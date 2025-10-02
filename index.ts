@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 /**
  * bun-ws-router v0.4.0 - Breaking Change
@@ -17,7 +17,7 @@
  */
 
 // Only export shared types that are validator-agnostic
-export type { WebSocketData, UpgradeOptions } from "./shared/types";
+export type { UpgradeOptions, WebSocketData } from "./shared/types";
 
 // Throw helpful error if someone tries to import non-existent exports
 const errorMessage = `
@@ -33,7 +33,7 @@ Migration steps:
    ────────────────────────────────────────────────────────
    // Before (broken)
    import { WebSocketRouter, messageSchema } from "bun-ws-router";
-   
+
    // After (works)
    import { z } from "zod";
    import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
@@ -42,9 +42,9 @@ Migration steps:
 
    For existing Valibot users:
    ────────────────────────────────────────────────────────
-   // Before (broken)  
+   // Before (broken)
    import { WebSocketRouter, messageSchema } from "bun-ws-router";
-   
+
    // After (works)
    import * as v from "valibot";
    import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";

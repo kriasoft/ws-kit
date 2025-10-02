@@ -1,7 +1,10 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { createMessageSchema } from "../zod/schema";
-import { formatValidationError } from "../zod/utils";
+import { createMessageSchema } from "../../zod/schema";
+import { formatValidationError } from "../../zod/utils";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -32,26 +35,6 @@ describe("Zod v4 Features", () => {
 
       const invalidResult = JWTMessage.safeParse(invalidJWT);
       expect(invalidResult.success).toBe(false);
-    });
-
-    it("should accept any string for clientId", () => {
-      const uuidResult = messageSchema("TEST").safeParse({
-        type: "TEST",
-        meta: {
-          clientId: "0191e3a5-8b20-7000-8000-000000000000", // Valid UUID (v7 format)
-        },
-      });
-
-      expect(uuidResult.success).toBe(true);
-
-      const stringResult = messageSchema("TEST").safeParse({
-        type: "TEST",
-        meta: {
-          clientId: "test-client-123", // Regular string also accepted
-        },
-      });
-
-      expect(stringResult.success).toBe(true);
     });
 
     it("should validate email addresses", () => {

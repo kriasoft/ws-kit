@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import { Hono } from "hono";
 import { WebSocketRouter } from "../zod";
 import { chatRouter } from "./chat";

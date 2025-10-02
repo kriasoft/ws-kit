@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import {
   afterEach,
@@ -12,9 +12,9 @@ import {
   spyOn,
 } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../zod/router";
-import { createMessageSchema } from "../zod/schema";
-import type { MessageContext } from "../zod/types";
+import { WebSocketRouter } from "../../zod/router";
+import { createMessageSchema } from "../../zod/schema";
+import type { MessageContext } from "../../zod/types";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -54,7 +54,6 @@ class MockServerWebSocket {
     this.sentMessages.push(JSON.parse(message));
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   close(_code?: number, _reason?: string) {
     /* Mock implementation */
   }
@@ -69,7 +68,6 @@ describe("WebSocketRouter", () => {
       });
 
       // Create a mock handler
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const handlerMock = mock((_ctx: unknown) => {
         /* Mock implementation */
       });
@@ -86,7 +84,7 @@ describe("WebSocketRouter", () => {
       // Call the handleMessage method directly with a valid message
       const validMessage = JSON.stringify({
         type: "TEST_MESSAGE",
-        meta: { clientId: "test-client-123" },
+        meta: {},
         payload: { message: "Hello World" },
       });
 
@@ -100,11 +98,11 @@ describe("WebSocketRouter", () => {
       // Verify the context passed to the handler
       const context = handlerMock.mock.calls[0]?.[0] as MessageContext<
         typeof TestMessage,
-        unknown
+        { clientId: string }
       >;
       // @ts-expect-error - MockServerWebSocket is not fully assignable to ServerWebSocket
       expect(context.ws).toBe(ws);
-      expect(context.meta.clientId).toBe("test-client-123");
+      expect(context.ws.data.clientId).toBe("test-client-123");
       expect(context.payload.message).toBe("Hello World");
     });
 
@@ -115,7 +113,6 @@ describe("WebSocketRouter", () => {
       });
 
       // Create a mock handler
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const handlerMock = mock((_ctx: unknown) => {
         /* Mock implementation */
       });
@@ -132,7 +129,7 @@ describe("WebSocketRouter", () => {
       // Call the handleMessage method with an invalid message (missing required field)
       const invalidMessage = JSON.stringify({
         type: "REQUIRED_FIELD",
-        meta: { clientId: "test-client-123" },
+        meta: {},
         payload: {}, // Missing requiredField
       });
 
@@ -171,7 +168,7 @@ describe("WebSocketRouter", () => {
       // Unknown message type
       const unknownTypeMessage = JSON.stringify({
         type: "UNKNOWN_TYPE",
-        meta: { clientId: "test-client-123" },
+        meta: {},
       });
 
       // @ts-expect-error - Accessing private method for testing
@@ -188,7 +185,6 @@ describe("WebSocketRouter", () => {
       });
 
       // Create a mock handler
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const handlerMock = mock((_ctx: unknown) => {
         /* Mock implementation */
       });
@@ -205,7 +201,7 @@ describe("WebSocketRouter", () => {
       // Create a valid message as Buffer
       const messageObj = {
         type: "BUFFER_MESSAGE",
-        meta: { clientId: "test-client-123" },
+        meta: {},
         payload: { message: "Hello from Buffer" },
       };
       const bufferMessage = Buffer.from(JSON.stringify(messageObj));
@@ -233,7 +229,6 @@ describe("WebSocketRouter", () => {
 
       // Create a mock for async function
       let handlerResolved = false;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const asyncHandlerMock = mock(async (_ctx: unknown) => {
         // Simulate async work
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -252,7 +247,7 @@ describe("WebSocketRouter", () => {
       // Send a valid message
       const validMessage = JSON.stringify({
         type: "ASYNC_MESSAGE",
-        meta: { clientId: "test-client-123" },
+        meta: {},
         payload: { message: "Async Hello" },
       });
 
@@ -293,7 +288,7 @@ describe("WebSocketRouter", () => {
       // Send a valid message that will cause an error in the handler
       const validMessage = JSON.stringify({
         type: "ERROR_MESSAGE",
-        meta: { clientId: "test-client-123" },
+        meta: {},
       });
 
       // @ts-expect-error - Accessing private method for testing
@@ -324,8 +319,8 @@ describe("WebSocketRouter", () => {
         expectTypeOf(ctx.payload.roomId).toBeString();
         expectTypeOf(ctx.payload.userId).toBeNumber();
         expectTypeOf(ctx.type).toEqualTypeOf<"JOIN_ROOM">();
-        expectTypeOf(ctx.meta.clientId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.ws.data.sessionId).toBeString();
+        expectTypeOf(ctx.ws.data.clientId).toBeString();
         expectTypeOf(ctx.send).toBeFunction();
 
         // Should error on non-existent properties
@@ -336,7 +331,7 @@ describe("WebSocketRouter", () => {
       // Test inline handler without payload
       router.onMessage(PingMessage, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"PING">();
-        expectTypeOf(ctx.meta).toHaveProperty("clientId");
+        expectTypeOf(ctx.meta).toHaveProperty("timestamp");
 
         // Should error when accessing payload on message without payload
         // @ts-expect-error - Payload should not exist
@@ -377,7 +372,6 @@ describe("WebSocketRouter", () => {
 
       router.onMessage(CustomMessage, (ctx) => {
         // Base meta properties
-        expectTypeOf(ctx.meta.clientId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
 
         // Extended meta properties

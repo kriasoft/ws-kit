@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
@@ -71,7 +71,7 @@ describe("messageSchema", () => {
         },
         {
           type: "LOGOUT",
-          meta: { clientId: "123" },
+          meta: {},
         },
         {
           type: "SEND_MESSAGE",
@@ -160,7 +160,6 @@ describe("messageSchema", () => {
       const result = schema.safeParse({
         type: "TEST",
         meta: {
-          clientId: "123",
           timestamp: Date.now(),
           correlationId: "abc",
         },
@@ -178,7 +177,6 @@ describe("messageSchema", () => {
         meta: {
           userId: "user123",
           sessionId: "session456",
-          clientId: "client789",
         },
       });
       expect(result.success).toBe(true);

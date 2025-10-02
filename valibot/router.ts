@@ -1,11 +1,11 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../shared/router";
 import { ValibotValidatorAdapter } from "./adapter";
 import type {
-  MessageSchemaType as ValibotMessageSchemaType,
   MessageHandler as ValibotMessageHandler,
+  MessageSchemaType as ValibotMessageSchemaType,
   WebSocketData,
 } from "./types";
 
