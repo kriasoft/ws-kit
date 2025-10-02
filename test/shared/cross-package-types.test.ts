@@ -1,9 +1,9 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createMessageSchema } from "../zod/schema";
+import { createMessageSchema } from "../../zod/schema";
 
 describe("Cross-package type safety", () => {
   const { messageSchema } = createMessageSchema(z);
@@ -28,18 +28,18 @@ describe("Cross-package type safety", () => {
     // Test runtime functionality
     const pingMessage = {
       type: "PING" as const,
-      meta: { clientId: "test-123", timestamp: Date.now() },
+      meta: { timestamp: Date.now() },
     };
 
     const pongMessage = {
       type: "PONG" as const,
-      meta: { clientId: "test-456", timestamp: Date.now() },
+      meta: { timestamp: Date.now() },
       payload: { reply: "Hello back!" },
     };
 
     const echoMessage = {
       type: "ECHO" as const,
-      meta: { clientId: "test-789", timestamp: Date.now() },
+      meta: { timestamp: Date.now() },
       payload: { text: "Echo this" },
     };
 
@@ -87,7 +87,7 @@ describe("Cross-package type safety", () => {
 
     const message = {
       type: "COMPLEX" as const,
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         user: {
           id: "user-456",
@@ -115,7 +115,7 @@ describe("Cross-package type safety", () => {
     // This should compile without issues and provide full type safety
     const validMessage = {
       type: "CHAT" as const,
-      meta: { clientId: "test-123" },
+      meta: {},
       payload: {
         roomId: "general",
         content: "Hello everyone!",

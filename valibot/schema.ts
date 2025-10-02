@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type {
   GenericSchema,
@@ -9,6 +9,7 @@ import type {
   OptionalSchema,
   StringSchema,
 } from "valibot";
+import { validateMetaSchema } from "../shared/normalize.js";
 
 /**
  * Minimal interface for Valibot instance to avoid circular type references.
@@ -18,6 +19,7 @@ import type {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface ValibotLike {
   object: (...args: any[]) => any;
+  strictObject: (...args: any[]) => any;
   string: (...args: any[]) => any;
   number: (...args: any[]) => any;
   literal: (...args: any[]) => any;
@@ -42,7 +44,6 @@ type BaseMessageEntries<T extends string> = {
   type: LiteralSchema<T, undefined>;
   meta: ObjectSchema<
     {
-      clientId: OptionalSchema<StringSchema<undefined>, undefined>;
       timestamp: OptionalSchema<NumberSchema<undefined>, undefined>;
       correlationId: OptionalSchema<StringSchema<undefined>, undefined>;
     },
@@ -65,7 +66,6 @@ type MessageWithExtendedMetaEntries<
   type: LiteralSchema<T, undefined>;
   meta: ObjectSchema<
     {
-      clientId: OptionalSchema<StringSchema<undefined>, undefined>;
       timestamp: OptionalSchema<NumberSchema<undefined>, undefined>;
       correlationId: OptionalSchema<StringSchema<undefined>, undefined>;
     } & M,
@@ -82,7 +82,6 @@ type MessageWithPayloadAndMetaEntries<
   type: LiteralSchema<T, undefined>;
   meta: ObjectSchema<
     {
-      clientId: OptionalSchema<StringSchema<undefined>, undefined>;
       timestamp: OptionalSchema<NumberSchema<undefined>, undefined>;
       correlationId: OptionalSchema<StringSchema<undefined>, undefined>;
     } & M,
@@ -137,8 +136,7 @@ type MessageWithPayloadAndMetaEntries<
  */
 export function createMessageSchema(valibot: ValibotLike) {
   // Create base schemas using the provided Valibot instance
-  const MessageMetadataSchema = valibot.object({
-    clientId: valibot.optional(valibot.string()),
+  const MessageMetadataSchema = valibot.strictObject({
     timestamp: valibot.optional(
       valibot.pipe(valibot.number(), valibot.integer(), valibot.minValue(1)),
     ),
@@ -220,8 +218,11 @@ export function createMessageSchema(valibot: ValibotLike) {
       | undefined = undefined,
     M extends Record<string, GenericSchema> = Record<string, never>,
   >(messageType: T, payload?: P, meta?: M) {
+    // Validate that extended meta doesn't use reserved keys (fail-fast at schema creation)
+    validateMetaSchema(meta);
+
     const metaSchema = meta
-      ? valibot.object({ ...MessageMetadataSchema.entries, ...meta })
+      ? valibot.strictObject({ ...MessageMetadataSchema.entries, ...meta })
       : MessageMetadataSchema;
 
     const baseSchema = {
@@ -230,7 +231,7 @@ export function createMessageSchema(valibot: ValibotLike) {
     };
 
     if (payload === undefined) {
-      return valibot.object(baseSchema);
+      return valibot.strictObject(baseSchema);
     }
 
     // Payloads can be a Valibot object or a raw shape
@@ -238,9 +239,9 @@ export function createMessageSchema(valibot: ValibotLike) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (payload as any).kind === "object"
         ? (payload as ObjectSchema<Record<string, GenericSchema>, undefined>)
-        : valibot.object(payload as Record<string, GenericSchema>);
+        : valibot.strictObject(payload as Record<string, GenericSchema>);
 
-    return valibot.object({
+    return valibot.strictObject({
       ...baseSchema,
       payload: payloadSchema,
     });
@@ -262,7 +263,7 @@ export function createMessageSchema(valibot: ValibotLike) {
     const messageData = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       type: (schema.entries.type as any).literal,
-      payload,
+      ...(payload !== undefined && { payload }),
       meta: meta || {},
     };
 

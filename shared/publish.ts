@@ -1,9 +1,9 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { Server, ServerWebSocket } from "bun";
-import type { MessageSchemaType, WebSocketData } from "./types";
 import type { ValidatorAdapter } from "./router";
+import type { MessageSchemaType, WebSocketData } from "./types";
 
 /**
  * Generic publish function that works with any validator adapter.

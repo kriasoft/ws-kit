@@ -2,6 +2,18 @@
 
 Type-safe WebSocket router for Bun with Zod or Valibot validation.
 
+## Specifications and ADRs
+
+- `specs/adrs.md`
+- `specs/client.md`
+- `specs/constraints.md`
+- `specs/error-handling.md`
+- `specs/pubsub.md`
+- `specs/router.md`
+- `specs/schema.md`
+- `specs/testing.md`
+- `specs/validation.md`
+
 ## Architecture
 
 - **Adapter Pattern**: Core router logic with pluggable validators (Zod/Valibot)

@@ -1,14 +1,15 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "bun";
+import { normalizeInboundMessage } from "./normalize.js";
+import type { ValidatorAdapter } from "./router";
 import type {
   MessageHandler,
   MessageSchemaType,
   SendFunction,
   WebSocketData,
 } from "./types";
-import type { ValidatorAdapter } from "./router";
 
 /**
  * Handles WebSocket message parsing, validation, and routing.
@@ -49,6 +50,8 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
     message: string | Buffer,
     send: SendFunction,
   ): void {
+    // Capture ingress timestamp FIRST for accuracy in time-sensitive operations
+    const receivedAt = Date.now();
     const clientId = ws.data.clientId;
     let parsedMessage: unknown;
 
@@ -99,8 +102,11 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
     const { schema, handler } = handlerEntry;
 
     try {
+      // Normalize message (security: strip reserved keys, ensure meta exists)
+      const normalized = normalizeInboundMessage(parsedMessage);
+
       // Validate the message against the registered schema
-      const validationResult = this.validator.safeParse(schema, parsedMessage);
+      const validationResult = this.validator.safeParse(schema, normalized);
 
       if (!validationResult.success) {
         console.error(
@@ -121,6 +127,7 @@ export class MessageRouter<T extends WebSocketData<Record<string, unknown>>> {
         ...(validatedData.payload !== undefined && {
           payload: validatedData.payload,
         }),
+        receivedAt, // Server receive timestamp (captured at ingress, authoritative)
         send,
       };
 

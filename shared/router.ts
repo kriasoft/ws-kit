@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { v7 as randomUUIDv7 } from "uuid";
@@ -205,7 +205,7 @@ export class WebSocketRouter<
    * Creates a send function for a specific WebSocket connection.
    *
    * PURPOSE: Provides handlers with a validated way to send messages.
-   * Each connection gets its own send function with clientId pre-bound.
+   * Each connection gets its own send function with timestamp auto-injection.
    */
   private createSendFunction(
     ws: ServerWebSocket<WebSocketData<T>>,
@@ -222,11 +222,10 @@ export class WebSocketRouter<
         const messageType = this.validator.getMessageType(schema);
 
         // Create the message object with the required structure
-        // NOTE: clientId from the connection, timestamp auto-generated
+        // NOTE: timestamp auto-generated (producer time); clientId is NEVER injected
         const message = {
           type: messageType,
           meta: {
-            clientId: ws.data.clientId,
             timestamp: Date.now(),
             ...meta,
           },

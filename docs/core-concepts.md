@@ -125,25 +125,24 @@ router.onMessage(SomeMessage, (ctx) => {
 Use the built-in `ErrorCode` enum for consistent error handling:
 
 ```typescript
-import { ErrorCode } from "bun-ws-router";
+const { ErrorCode, ErrorMessage } = createMessageSchema(z);
 
-ctx.send({
-  type: "ERROR",
-  payload: {
-    code: ErrorCode.VALIDATION_ERROR,
-    message: "Invalid room ID",
-  },
+ctx.send(ErrorMessage, {
+  code: ErrorCode.VALIDATION_FAILED,
+  message: "Invalid room ID",
 });
 ```
 
 Available error codes:
 
-- `VALIDATION_ERROR`: Invalid message or payload
-- `UNAUTHORIZED`: Authentication required
-- `FORBIDDEN`: Insufficient permissions
-- `NOT_FOUND`: Resource not found
-- `RATE_LIMIT`: Too many requests
-- `INTERNAL_ERROR`: Server error
+- `INVALID_MESSAGE_FORMAT`: Message isn't valid JSON or lacks required structure
+- `VALIDATION_FAILED`: Message failed schema validation
+- `UNSUPPORTED_MESSAGE_TYPE`: No handler registered for message type
+- `AUTHENTICATION_FAILED`: Authentication required or token invalid
+- `AUTHORIZATION_FAILED`: Insufficient permissions
+- `RESOURCE_NOT_FOUND`: Resource not found
+- `RATE_LIMIT_EXCEEDED`: Too many requests
+- `INTERNAL_SERVER_ERROR`: Server error
 
 ## WebSocket Data
 
@@ -221,9 +220,3 @@ ctx.unsubscribe(`room:${roomId}`);
 - **Validation**: Schema validation happens before handler execution
 - **Error Boundaries**: Handlers are wrapped but with minimal overhead
 - **PubSub**: Uses Bun's native implementation for maximum performance
-
-## Next Steps
-
-- Learn about [Message Schemas](/message-schemas) for complex validation
-- See [Examples](/examples) for real-world patterns
-- Explore [Advanced Usage](/advanced-usage) for authentication and composition

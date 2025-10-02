@@ -1,95 +1,148 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 /**
- * Example of using createMessage helper for client-side WebSocket communication
+ * Example of using the type-safe browser client
+ * NOTE: This example demonstrates the client API. For actual browser usage,
+ * import from "bun-ws-router/client" (not available in this server-side example).
  */
 
 import { z } from "zod";
 import { createMessageSchema } from "../zod";
 
-const { messageSchema, createMessage } = createMessageSchema(z);
+const { messageSchema } = createMessageSchema(z);
 
-// Define message schemas
-const JoinRoomMessage = messageSchema("JOIN_ROOM", {
-  roomId: z.string(),
-});
+/**
+ * Browser client usage example
+ * In a real browser environment, you would:
+ *
+ * import { createClient } from "bun-ws-router/client";
+ * import { JoinRoomMessage, SendChatMessage, ... } from "./shared/schemas";
+ */
+export function exampleBrowserClient() {
+  // Note: This is pseudocode since we can't actually run browser code here
+  // Schemas would be defined and shared between client and server in real app
+  /*
+  // Define schemas (would be shared with server in real app)
+  const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+    roomId: z.string(),
+  });
 
-const SendChatMessage = messageSchema("SEND_MESSAGE", {
-  roomId: z.string(),
-  text: z.string(),
-});
+  const UserJoinedMessage = messageSchema("USER_JOINED", {
+    roomId: z.string(),
+    userId: z.string(),
+  });
 
-const PingMessage = messageSchema("PING");
+  const SendChatMessage = messageSchema("SEND_MESSAGE", {
+    roomId: z.string(),
+    text: z.string(),
+  });
 
-// Client-side usage example
-class WebSocketClient {
-  private ws: WebSocket;
+  const NewMessageReceived = messageSchema("NEW_MESSAGE", {
+    roomId: z.string(),
+    userId: z.string(),
+    text: z.string(),
+    timestamp: z.number(),
+  });
 
-  constructor(url: string) {
-    this.ws = new WebSocket(url);
-    this.setupHandlers();
-  }
+  const PingMessage = messageSchema("PING");
+  const PongMessage = messageSchema("PONG", {
+    timestamp: z.number(),
+  });
 
-  private setupHandlers() {
-    this.ws.onopen = () => {
-      console.log("Connected to server");
+  // Client setup and usage
+  const client = createClient({
+    url: "wss://api.example.com/ws",
+    reconnect: { enabled: true },
+    auth: {
+      getToken: () => localStorage.getItem("access_token"),
+      attach: "query",
+    },
+  });
 
-      // Send a ping message without payload
-      const ping = createMessage(PingMessage, undefined);
-      if (ping.success) {
-        this.ws.send(JSON.stringify(ping.data));
-      }
+  // Wait for connection
+  await client.connect();
 
-      // Join a room
-      this.joinRoom("general");
-    };
+  // Send fire-and-forget message
+  client.send(JoinRoomMessage, { roomId: "general" });
 
-    this.ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      console.log("Received:", message);
-    };
-  }
+  // Receive messages with type safety
+  client.on(UserJoinedMessage, (msg) => {
+    console.log(`User ${msg.payload.userId} joined ${msg.payload.roomId}`);
+  });
 
-  joinRoom(roomId: string) {
-    // Create a JOIN_ROOM message with payload
-    const message = createMessage(JoinRoomMessage, { roomId });
+  client.on(NewMessageReceived, (msg) => {
+    console.log(`[${msg.payload.roomId}] ${msg.payload.userId}: ${msg.payload.text}`);
+  });
 
-    if (message.success) {
-      this.ws.send(JSON.stringify(message.data));
-      console.log("Joining room:", roomId);
-    } else {
-      console.error("Failed to create JOIN_ROOM message:", message.error);
-    }
-  }
+  // Request/response pattern
+  const reply = await client.request(
+    PingMessage,
+    undefined,
+    PongMessage,
+    { timeoutMs: 5000 }
+  );
+  console.log("Pong received at:", reply.payload.timestamp);
 
-  sendMessage(roomId: string, text: string) {
-    // Create a SEND_MESSAGE with payload and custom metadata
-    const message = createMessage(
-      SendChatMessage,
-      { roomId, text },
-      { correlationId: crypto.randomUUID() }, // Add correlation ID for tracking
-    );
+  // Send chat message with correlation ID
+  client.send(SendChatMessage, {
+    roomId: "general",
+    text: "Hello, everyone!",
+  }, {
+    correlationId: crypto.randomUUID(),
+  });
 
-    if (message.success) {
-      this.ws.send(JSON.stringify(message.data));
-      console.log("Sent message to room:", roomId);
-    } else {
-      console.error("Failed to create message:", message.error);
-    }
-  }
+  // Cleanup
+  await client.close({ code: 1000, reason: "Done" });
+  */
 }
 
-// Usage
-const client = new WebSocketClient("ws://localhost:3000");
+/**
+ * Legacy example: Manual WebSocket with createMessage helper
+ * This approach is still supported but the createClient API is recommended for browsers.
+ */
+export function exampleManualWebSocket() {
+  const { createMessage } = createMessageSchema(z);
 
-// Send messages after connection is established
-setTimeout(() => {
-  client.sendMessage("general", "Hello, everyone!");
-}, 1000);
+  const PingMessage = messageSchema("PING");
+  const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+    roomId: z.string(),
+  });
 
-// Example: Authentication with complex schemas
+  const ws = new WebSocket("ws://localhost:3000/ws");
+
+  ws.onopen = () => {
+    console.log("Connected to server");
+
+    // Send a ping message without payload
+    const ping = createMessage(PingMessage, undefined);
+    if (ping.success) {
+      ws.send(JSON.stringify(ping.data));
+    }
+
+    // Join a room
+    const joinMsg = createMessage(JoinRoomMessage, { roomId: "general" });
+    if (joinMsg.success) {
+      ws.send(JSON.stringify(joinMsg.data));
+    }
+  };
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    console.log("Received:", message);
+  };
+
+  ws.onclose = () => {
+    console.log("Disconnected");
+  };
+}
+
+/**
+ * Legacy example: Authentication with complex schemas using createMessage
+ */
 export function exampleAuthentication(ws: WebSocket) {
+  const { createMessage } = createMessageSchema(z);
+
   const AuthMessage = messageSchema("AUTH", {
     username: z.string(),
     password: z.string(),
@@ -109,8 +162,12 @@ export function exampleAuthentication(ws: WebSocket) {
   }
 }
 
-// Example: Union types for different message variants
+/**
+ * Legacy example: Union types for different message variants
+ */
 export function exampleActionMessages(ws: WebSocket) {
+  const { createMessage } = createMessageSchema(z);
+
   const ActionMessage = messageSchema("ACTION", {
     action: z.union([
       z.literal("start"),

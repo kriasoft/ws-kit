@@ -1,5 +1,7 @@
 # WebSocket Router Specification
 
+**Status**: ✅ Implemented
+
 ## Overview
 
 Type-safe message routing for Bun WebSocket servers with automatic validation.
@@ -13,11 +15,12 @@ import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
 const { messageSchema } = createMessageSchema(z);
 const router = new WebSocketRouter();
 
-const PingMessage = messageSchema("PING", { timestamp: z.number() });
+const PingMessage = messageSchema("PING", { value: z.number() });
 
 router.onMessage(PingMessage, (ctx) => {
-  console.log("Ping at:", ctx.payload.timestamp);
-  ctx.send(PongMessage, { reply: Date.now() });
+  console.log("Ping from:", ctx.ws.data.clientId);
+  console.log("Received at:", ctx.receivedAt);
+  ctx.send(PongMessage, { reply: ctx.payload.value * 2 });
 });
 
 Bun.serve({
@@ -43,13 +46,19 @@ router.onMessage<Schema extends MessageSchemaType>(
 
 ```typescript
 type MessageContext<Schema, Data> = {
-  ws: ServerWebSocket<Data>;
+  ws: ServerWebSocket<Data>; // Connection (ws.data.clientId always present)
   type: Schema["shape"]["type"]["value"]; // Message type literal
-  meta: z.infer<Schema["shape"]["meta"]>; // Metadata
+  meta: z.infer<Schema["shape"]["meta"]>; // Validated client metadata
   payload: z.infer<Schema["shape"]["payload"]>; // Only if schema defines it
+  receivedAt: number; // Server receive timestamp (Date.now())
   send: SendFunction; // Type-safe send function
 };
 ```
+
+**Server-provided context fields**:
+
+- `ctx.ws.data.clientId`: Connection identity (UUID v7, generated during upgrade)
+- `ctx.receivedAt`: Server receive timestamp (milliseconds since epoch)
 
 **Type Safety**: `ctx.payload` exists only when schema defines it:
 
@@ -71,10 +80,12 @@ router.onMessage(WithoutPayload, (ctx) => {
 ```typescript
 router.onOpen((ctx) => {
   // ctx: { ws, send }
+  console.log("Client connected:", ctx.ws.data.clientId);
 });
 
 router.onClose((ctx) => {
   // ctx: { ws, code, reason?, send }
+  console.log("Client disconnected:", ctx.ws.data.clientId);
 });
 ```
 
@@ -93,6 +104,12 @@ type WebSocketData<T> = {
 } & T;
 ```
 
+**Connection identity**:
+
+- `clientId` is generated during upgrade (UUID v7, time-ordered)
+- Accessible via `ctx.ws.data.clientId` in all handlers
+- NOT included in message `meta` (connection state, not message state)
+
 ### Route Composition
 
 ```typescript
@@ -106,6 +123,8 @@ const mainRouter = new WebSocketRouter()
   .addRoutes(authRouter)
   .addRoutes(chatRouter);
 ```
+
+**Type System Note**: `addRoutes()` accepts `WebSocketRouter<T> | any` to support derived router types with stricter handler signatures (see @adrs.md#ADR-001). This is an intentional LSP violation to enable better IDE inference for inline handlers.
 
 ## Message Routing
 
@@ -121,13 +140,16 @@ router.onMessage(TestMessage, handler2); // ⚠️ Overwrites handler1
 
 ### Validation Flow
 
+```text
+Client Message → JSON Parse → Type Check → Handler Lookup → Normalize → Validation → Handler
 ```
-Client Message → JSON Parse → Type Check → Handler Lookup → Validation → Handler
-```
+
+**CRITICAL**: Normalization is a **security boundary**. Handlers MUST NEVER receive un-normalized input. Reserved keys (`clientId`, `receivedAt`) are stripped before validation to prevent spoofing.
 
 - Parse error → Logged, ignored
 - Missing type → Logged, ignored
 - No handler → Logged, ignored
+- Normalization → Strip reserved keys (security boundary)
 - Validation error → Logged, handler not called
 - Handler error → Logged, connection stays open
 
@@ -142,6 +164,10 @@ router.onMessage(SomeMessage, (ctx) => {
 });
 ```
 
+**Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
+
+**Status**: ⚠️ Needs verification — See @implementation-status.md#GAP-003 to confirm auto-timestamp injection is implemented.
+
 ## Broadcasting
 
 ```typescript
@@ -149,12 +175,17 @@ import { publish } from "bun-ws-router/zod/publish";
 
 router.onMessage(ChatMessage, (ctx) => {
   const roomTopic = `room:${ctx.meta.roomId}`;
-  publish(ctx.ws, roomTopic, ChatMessage, {
-    text: ctx.payload.text,
-    sender: ctx.ws.data.userId,
-  });
+  publish(
+    ctx.ws,
+    roomTopic,
+    ChatMessage,
+    { text: ctx.payload.text },
+    { origin: "userId" }, // ✅ Canonical pattern: DX sugar for origin
+  );
 });
 ```
+
+**Broadcast metadata**: `publish()` adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
 
 ## Custom Connection Data
 
@@ -167,8 +198,9 @@ type UserData = WebSocketData<{
 const router = new WebSocketRouter<UserData>();
 
 router.onMessage(SecureMessage, (ctx) => {
-  const userId = ctx.ws.data.userId; // ✅ Typed
-  const clientId = ctx.ws.data.clientId; // ✅ Always present
+  const userId = ctx.ws.data.userId; // ✅ Typed (custom)
+  const clientId = ctx.ws.data.clientId; // ✅ Typed (always present)
+  const receivedAt = ctx.receivedAt; // ✅ Typed (server timestamp)
 });
 
 router.upgrade(req, {
@@ -185,10 +217,11 @@ router.upgrade(req, {
 All errors are logged. Connections stay open unless handler explicitly closes.
 
 ```typescript
-router.onMessage(ErrorMessage, async (ctx) => {
+router.onMessage(RiskyMessage, async (ctx) => {
   try {
     await riskyOperation();
   } catch (error) {
+    console.error(`[${ctx.ws.data.clientId}] Operation failed:`, error);
     ctx.send(ErrorMessage, {
       code: "INTERNAL_SERVER_ERROR",
       message: error.message,
@@ -197,13 +230,12 @@ router.onMessage(ErrorMessage, async (ctx) => {
 });
 ```
 
-## AI Code Generation Constraints
+## Key Constraints
 
-1. **NEVER** access `ctx.payload` without checking schema defines payload
-2. **ALWAYS** wrap async operations in try/catch
-3. **ALWAYS** use `ctx.send()` for type-safe message sending
-4. Use `addRoutes()` for composition from feature modules
-5. Pass authentication/session data during `upgrade()`
-6. Use `publish()` for validated broadcasting
-7. Trust schema validation—don't re-validate in handlers
-8. Always handle promise rejections in async handlers
+> See @constraints.md for complete rules. Critical for routing:
+
+1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see @constraints.md#state-layering)
+2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)
+3. **Payload typing** — `ctx.payload` exists only when schema defines it (see @adrs.md#ADR-001)
+4. **Error handling** — Connections stay open on errors; handlers MUST explicitly close (see @constraints.md#error-handling)
+5. **Validation flow** — Trust schema validation; never re-validate in handlers (see @constraints.md#validation-flow)

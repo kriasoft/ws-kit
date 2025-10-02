@@ -135,12 +135,12 @@ const mainRouter = new WebSocketRouter()
   .addRoutes(chatRouter);
 ```
 
-#### `handlers()`
+#### `websocket` (Property)
 
 Get Bun WebSocket handlers.
 
 ```typescript
-handlers(): WebSocketHandler<WebSocketData<TData>>
+get websocket(): WebSocketHandler<WebSocketData<TData>>
 ```
 
 **Returns:** Object with WebSocket event handlers for Bun.serve()
@@ -150,7 +150,7 @@ handlers(): WebSocketHandler<WebSocketData<TData>>
 ```typescript
 Bun.serve({
   port: 3000,
-  websocket: router.handlers(),
+  websocket: router.websocket,
 });
 ```
 
@@ -285,7 +285,7 @@ send(message: Message): void
 ```typescript
 // Using schema
 ctx.send(ErrorMessage, {
-  code: ErrorCode.NOT_FOUND,
+  code: ErrorCode.RESOURCE_NOT_FOUND,
   message: "User not found",
 });
 
@@ -475,6 +475,8 @@ Standard error handling utilities (obtained from `createMessageSchema`).
 
 ### ErrorCode
 
+Standard error codes for consistent error handling across your application.
+
 ```typescript
 // Zod version
 const ErrorCode = z.enum([
@@ -500,6 +502,19 @@ const ErrorCode = v.picklist([
   "INTERNAL_SERVER_ERROR",
 ]);
 ```
+
+**Error Code Reference:**
+
+| Code                       | Description                                          | Common Use Cases                   |
+| -------------------------- | ---------------------------------------------------- | ---------------------------------- |
+| `INVALID_MESSAGE_FORMAT`   | Message isn't valid JSON or lacks required structure | Malformed messages, parsing errors |
+| `VALIDATION_FAILED`        | Message failed schema validation                     | Invalid payload data               |
+| `UNSUPPORTED_MESSAGE_TYPE` | No handler registered for message type               | Unknown message types              |
+| `AUTHENTICATION_FAILED`    | Authentication required or token invalid             | Login failures, expired tokens     |
+| `AUTHORIZATION_FAILED`     | Insufficient permissions                             | Access control violations          |
+| `RESOURCE_NOT_FOUND`       | Resource not found                                   | Missing users, rooms, items        |
+| `RATE_LIMIT_EXCEEDED`      | Too many requests                                    | Rate limiting, spam prevention     |
+| `INTERNAL_SERVER_ERROR`    | Server error                                         | Unexpected errors, bugs            |
 
 ### ErrorMessage
 
@@ -558,9 +573,3 @@ interface MessageSchema<TPayload> {
   schema?: Schema<TPayload>;
 }
 ```
-
-## Next Steps
-
-- Explore [Examples](/examples) for usage patterns
-- Learn [Advanced Usage](/advanced-usage) techniques
-- Read [Deployment](/deployment) guidelines

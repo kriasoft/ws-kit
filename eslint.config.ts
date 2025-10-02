@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import eslint from "@eslint/js";
 import prettier from "eslint-config-prettier";
@@ -23,6 +23,16 @@ export default defineConfig([
       ...tslint.configs.strict,
       ...tslint.configs.stylistic,
     ],
+  },
+  {
+    name: "test-files-relaxed",
+    files: ["test/**/*.ts", "test/**/*.test.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-empty-function": "off",
+    },
   },
   {
     name: "prettier-overrides",

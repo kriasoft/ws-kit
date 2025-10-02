@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import {
   afterEach,
@@ -11,8 +11,8 @@ import {
   spyOn,
 } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../zod/router";
-import { createMessageSchema } from "../zod/schema";
+import { WebSocketRouter } from "../../zod/router";
+import { createMessageSchema } from "../../zod/schema";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -122,7 +122,6 @@ describe("WebSocketServer E2E", () => {
     const socket = new WebSocket(`ws://localhost:${port}/ws`);
 
     // Keep track of messages received by the client
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const receivedMessages: any[] = [];
 
     // Set up message handler
@@ -172,7 +171,6 @@ describe("WebSocketServer E2E", () => {
     const clients = await Promise.all(
       Array.from({ length: 3 }, async (_, i) => {
         const socket = new WebSocket(`ws://localhost:${port}/ws`);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const messages: any[] = [];
 
         socket.addEventListener("message", (event) => {
@@ -226,7 +224,6 @@ describe("WebSocketServer E2E", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     const socket = new WebSocket(`ws://localhost:${port}/ws`);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const receivedMessages: any[] = [];
     socket.addEventListener("message", (event) => {
       receivedMessages.push(JSON.parse(event.data as string));

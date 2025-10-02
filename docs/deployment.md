@@ -133,7 +133,7 @@ const server = Bun.serve({
   },
 
   websocket: {
-    ...router.handlers(),
+    ...router.websocket,
 
     async message(ws, message) {
       try {
@@ -141,7 +141,7 @@ const server = Bun.serve({
         await messageLimiter.consume(ws.data.clientId);
 
         // Process message
-        router.handlers().message(ws, message);
+        router.websocket.message(ws, message);
       } catch {
         ws.send(
           JSON.stringify({
@@ -190,7 +190,7 @@ const server = Bun.serve({
   port: process.env.PORT || 3000,
   fetch: app.fetch, // Your HTTP handler
   websocket: {
-    ...router.handlers(),
+    ...router.websocket,
 
     // Enable compression
     perMessageDeflate: {
@@ -478,9 +478,3 @@ async function gracefulShutdown() {
 process.on("SIGTERM", gracefulShutdown);
 process.on("SIGINT", gracefulShutdown);
 ```
-
-## Next Steps
-
-- Review [Security Best Practices](https://cheatsheetseries.owasp.org/cheatsheets/WebSocket_Security_Cheat_Sheet.html)
-- Set up monitoring with [Grafana](https://grafana.com/)
-- Configure [GitHub Actions](https://github.com/features/actions) for CI/CD

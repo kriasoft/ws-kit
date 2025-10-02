@@ -1,6 +1,6 @@
 {
   "name": "bun-ws-router",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "A simple and efficient WebSocket router for Bun with Zod/Valibot message validation.",
   "keywords": [
     "broadcast",
@@ -56,10 +56,15 @@
       "types": "./dist/valibot/index.d.ts",
       "default": "./dist/valibot/index.js"
     },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.ts",
   "files": [
+    "client/",
     "dist/",
     "shared/",
     "valibot/",

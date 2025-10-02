@@ -70,7 +70,7 @@ Bun.serve({
     }
     return new Response("Please use a WebSocket client");
   },
-  websocket: router.handlers(),
+  websocket: router.websocket,
 });
 
 console.log("WebSocket server running on ws://localhost:3000");
@@ -174,13 +174,6 @@ app.get("/ws", (c) => {
 Bun.serve({
   port: 3000,
   fetch: app.fetch,
-  websocket: router.handlers(),
+  websocket: router.websocket,
 });
 ```
-
-## Next Steps
-
-- Learn about [Core Concepts](/core-concepts) like connection lifecycle and error handling
-- Explore [Message Schemas](/message-schemas) for advanced validation
-- Check out [Examples](/examples) for real-world patterns
-- Switch to [Valibot](/valibot-integration) for smaller bundle sizes

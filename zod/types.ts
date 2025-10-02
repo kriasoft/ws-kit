@@ -1,5 +1,5 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "bun";
 import type { ZodObject, ZodType } from "zod";
@@ -33,6 +33,8 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
   type: Schema["shape"]["type"]["value"];
   /** Message metadata inferred from schema */
   meta: z.infer<Schema["shape"]["meta"]>;
+  /** Server receive timestamp (milliseconds since epoch) - authoritative for server logic */
+  receivedAt: number;
   /** Type-safe send function for validated messages */
   send: SendFunction;
 } & ("payload" extends keyof Schema["shape"]

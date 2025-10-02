@@ -1,7 +1,8 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ZodObject, ZodRawShape, ZodType, z as zType } from "zod";
+import { validateMetaSchema } from "../shared/normalize.js";
 
 /**
  * Minimal interface for Zod instance to avoid circular type references.
@@ -32,7 +33,6 @@ interface ZodLike {
 type BaseMessageShape<T extends string> = {
   type: zType.ZodLiteral<T>;
   meta: ZodObject<{
-    clientId: zType.ZodOptional<zType.ZodString>;
     timestamp: zType.ZodOptional<zType.ZodNumber>;
     correlationId: zType.ZodOptional<zType.ZodString>;
   }>;
@@ -50,7 +50,6 @@ type MessageWithExtendedMetaShape<T extends string, M extends ZodRawShape> = {
   type: zType.ZodLiteral<T>;
   meta: ZodObject<
     {
-      clientId: zType.ZodOptional<zType.ZodString>;
       timestamp: zType.ZodOptional<zType.ZodNumber>;
       correlationId: zType.ZodOptional<zType.ZodString>;
     } & M
@@ -66,7 +65,6 @@ type MessageWithPayloadAndMetaShape<
   type: zType.ZodLiteral<T>;
   meta: ZodObject<
     {
-      clientId: zType.ZodOptional<zType.ZodString>;
       timestamp: zType.ZodOptional<zType.ZodNumber>;
       correlationId: zType.ZodOptional<zType.ZodString>;
     } & M
@@ -121,7 +119,6 @@ type MessageWithPayloadAndMetaShape<
 export function createMessageSchema(zod: ZodLike) {
   // Create base schemas using the provided Zod instance
   const MessageMetadataSchema = zod.object({
-    clientId: zod.string().optional(),
     timestamp: zod.number().int().positive().optional(),
     correlationId: zod.string().optional(),
   });
@@ -186,9 +183,13 @@ export function createMessageSchema(zod: ZodLike) {
     P extends ZodRawShape | ZodObject<ZodRawShape> | undefined = undefined,
     M extends ZodRawShape = Record<string, never>,
   >(messageType: T, payload?: P, meta?: M) {
-    const metaSchema = meta
-      ? MessageMetadataSchema.extend(meta)
-      : MessageMetadataSchema;
+    // Validate that extended meta doesn't use reserved keys (fail-fast at schema creation)
+    validateMetaSchema(meta);
+
+    // Meta schema must be strict (reject unknown keys)
+    const metaSchema = (
+      meta ? MessageMetadataSchema.extend(meta) : MessageMetadataSchema
+    ).strict();
 
     const baseSchema = {
       type: zod.literal(messageType),
@@ -196,19 +197,22 @@ export function createMessageSchema(zod: ZodLike) {
     };
 
     if (payload === undefined) {
-      return zod.object(baseSchema);
+      return zod.object(baseSchema).strict();
     }
 
     // Payloads can be a Zod object or a raw shape
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const payloadSchema = (payload as any)._def
-      ? (payload as ZodObject<ZodRawShape>)
-      : zod.object(payload as ZodRawShape);
+    const payloadSchema = (
+      (payload as { _def?: unknown })._def
+        ? (payload as ZodObject<ZodRawShape>)
+        : zod.object(payload as ZodRawShape)
+    ).strict(); // Payload must also be strict
 
-    return zod.object({
-      ...baseSchema,
-      payload: payloadSchema,
-    });
+    return zod
+      .object({
+        ...baseSchema,
+        payload: payloadSchema,
+      })
+      .strict();
   }
 
   // Standard schemas used across most WebSocket applications
@@ -228,7 +232,7 @@ export function createMessageSchema(zod: ZodLike) {
   ) {
     const messageData = {
       type: schema.shape.type.value,
-      payload,
+      ...(payload !== undefined && { payload }),
       meta: meta || {},
     };
 

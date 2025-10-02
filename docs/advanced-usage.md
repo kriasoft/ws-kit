@@ -611,9 +611,3 @@ async function broadcastInChunks(
   }
 }
 ```
-
-## Next Steps
-
-- Review [Examples](/examples) for practical implementations
-- Read [Deployment](/deployment) for production guidelines
-- Check the [API Reference](/api-reference) for detailed documentation

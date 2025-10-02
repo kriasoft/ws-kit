@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import { defineConfig } from "vitepress";
 
 // https://vitepress.dev/reference/site-config
@@ -24,6 +27,16 @@ export default defineConfig({
           { text: "Examples", link: "/examples" },
           { text: "Advanced Usage", link: "/advanced-usage" },
           { text: "Deployment", link: "/deployment" },
+        ],
+      },
+      {
+        text: "Client",
+        items: [
+          { text: "Setup", link: "/client-setup" },
+          { text: "API Reference", link: "/client-api" },
+          { text: "Authentication", link: "/client-auth" },
+          { text: "Error Handling", link: "/client-errors" },
+          { text: "Advanced", link: "/client-advanced" },
         ],
       },
     ],

@@ -330,9 +330,3 @@ export const LoginMessage = messageSchema("LOGIN", {
 3. **Avoid Complex Transforms**: Keep transforms simple for better performance
 4. **Use Valibot**: For 90% smaller bundles in production
 5. **Validate Early**: Let the router validate before your handler runs
-
-## Next Steps
-
-- See [API Reference](/api-reference) for complete schema options
-- Check [Examples](/examples) for real-world usage patterns
-- Learn about [Advanced Usage](/advanced-usage) for schema composition

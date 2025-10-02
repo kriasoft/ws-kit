@@ -1,11 +1,11 @@
-/* SPDX-FileCopyrightText: 2025-present Kriasoft */
-/* SPDX-License-Identifier: MIT */
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "bun";
 import { describe, expect, it, mock, spyOn } from "bun:test";
 import { z } from "zod";
-import { publish } from "../zod/publish";
-import { createMessageSchema } from "../zod/schema";
+import { publish } from "../../zod/publish";
+import { createMessageSchema } from "../../zod/schema";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -26,12 +26,10 @@ class MockServerWebSocket {
     return true;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   subscribe(topic: string) {
     // Mock implementation
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   unsubscribe(topic: string) {
     // Mock implementation
   }
@@ -41,9 +39,8 @@ class MockServerWebSocket {
 interface PublishedMessage {
   type: string;
   meta: {
-    clientId: string;
-    timestamp: number;
-    corelationId?: string;
+    timestamp?: number;
+    correlationId?: string;
     [key: string]: unknown;
   };
   payload?: Record<string, unknown>;
@@ -91,7 +88,6 @@ describe("publish function", () => {
     if (message) {
       const publishedData = JSON.parse(message.data) as PublishedMessage;
       expect(publishedData.type).toBe("TEST_MESSAGE");
-      expect(publishedData.meta.clientId).toBe("client-123");
       expect(publishedData.meta.timestamp).toBeGreaterThan(0);
       expect(publishedData.payload?.content).toBe("Hello World");
       expect(publishedData.payload?.count).toBe(42);
@@ -256,7 +252,7 @@ describe("publish function", () => {
     if (message) {
       const publishedData = JSON.parse(message.data) as PublishedMessage;
       expect(publishedData.type).toBe("NO_PAYLOAD");
-      expect(publishedData.meta.clientId).toBe("client-123");
+      expect(publishedData.meta.timestamp).toBeGreaterThan(0);
       expect(publishedData).not.toHaveProperty("payload");
     }
   });
