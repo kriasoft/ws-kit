@@ -13,6 +13,7 @@ A complete chat room implementation with authentication and message history.
 ```typescript
 import { z } from "zod";
 import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { publish } from "bun-ws-router/zod/publish";
 
 // Create factory
 const { messageSchema, ErrorMessage } = createMessageSchema(z);
@@ -32,34 +33,47 @@ const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
   roomId: z.uuid(),
 });
 
+const WelcomeMessage = messageSchema("WELCOME", {
+  message: z.string(),
+});
+
+const UserJoinedMessage = messageSchema("USER_JOINED", {
+  username: z.string(),
+  userCount: z.number(),
+});
+
+const MessageSchema = messageSchema("MESSAGE", {
+  username: z.string(),
+  text: z.string(),
+});
+
+const UserLeftMessage = messageSchema("USER_LEFT", {
+  username: z.string(),
+  userCount: z.number(),
+});
+
+const UserDisconnectedMessage = messageSchema("USER_DISCONNECTED", {
+  userCount: z.number(),
+});
+
 // Store active users per room
 const rooms = new Map<string, Set<string>>();
 
 // Create router
 const router = new WebSocketRouter<{ username?: string }>()
-  .onOpen((ws) => {
-    console.log(`Client ${ws.data.clientId} connected`);
+  .onOpen((ctx) => {
+    console.log(`Client ${ctx.ws.data.clientId} connected`);
 
-    // Send welcome message
-    ws.send(
-      JSON.stringify({
-        type: "WELCOME",
-        meta: {
-          clientId: ws.data.clientId,
-          timestamp: Date.now(),
-        },
-        payload: {
-          message: "Connected to chat server",
-        },
-      }),
-    );
+    ctx.send(WelcomeMessage, {
+      message: "Connected to chat server",
+    });
   })
 
   .onMessage(JoinRoomMessage, (ctx) => {
     const { roomId, username } = ctx.payload;
 
-    // Store username
-    ctx.setData({ username });
+    // Store username in custom data
+    ctx.ws.data.username = username;
 
     // Create room if doesn't exist
     if (!rooms.has(roomId)) {
@@ -67,40 +81,23 @@ const router = new WebSocketRouter<{ username?: string }>()
     }
 
     // Add user to room
-    rooms.get(roomId)!.add(ctx.clientId);
+    rooms.get(roomId)!.add(ctx.ws.data.clientId);
 
     // Subscribe to room updates
-    ctx.subscribe(`room:${roomId}`);
+    ctx.ws.subscribe(`room:${roomId}`);
 
     // Notify room members
-    ctx.publish(`room:${roomId}`, {
-      type: "USER_JOINED",
-      meta: {
-        clientId: ctx.clientId,
-        timestamp: Date.now(),
-      },
-      payload: {
-        username,
-        userCount: rooms.get(roomId)!.size,
-      },
-    });
-
-    // Confirm join
-    ctx.send({
-      type: "JOIN_SUCCESS",
-      payload: {
-        roomId,
-        userCount: rooms.get(roomId)!.size,
-      },
+    publish(ctx.ws, `room:${roomId}`, UserJoinedMessage, {
+      username,
+      userCount: rooms.get(roomId)!.size,
     });
   })
 
   .onMessage(SendMessageMessage, (ctx) => {
     const { roomId, text } = ctx.payload;
-    const userData = ctx.getData<{ username?: string }>();
 
     // Check if user is in room
-    if (!rooms.get(roomId)?.has(ctx.clientId)) {
+    if (!rooms.get(roomId)?.has(ctx.ws.data.clientId)) {
       ctx.send(ErrorMessage, {
         code: "AUTHORIZATION_FAILED",
         message: "You must join the room first",
@@ -109,55 +106,37 @@ const router = new WebSocketRouter<{ username?: string }>()
     }
 
     // Broadcast message to room
-    ctx.publish(`room:${roomId}`, {
-      type: "MESSAGE",
-      meta: {
-        clientId: ctx.clientId,
-        timestamp: Date.now(),
-      },
-      payload: {
-        username: userData.username || "Anonymous",
-        text,
-      },
+    publish(ctx.ws, `room:${roomId}`, MessageSchema, {
+      username: ctx.ws.data.username || "Anonymous",
+      text,
     });
   })
 
   .onMessage(LeaveRoomMessage, (ctx) => {
     const { roomId } = ctx.payload;
-    const userData = ctx.getData<{ username?: string }>();
 
     // Remove from room
-    rooms.get(roomId)?.delete(ctx.clientId);
+    rooms.get(roomId)?.delete(ctx.ws.data.clientId);
 
     // Unsubscribe
-    ctx.unsubscribe(`room:${roomId}`);
+    ctx.ws.unsubscribe(`room:${roomId}`);
 
     // Notify others
-    ctx.publish(`room:${roomId}`, {
-      type: "USER_LEFT",
-      payload: {
-        username: userData.username || "Anonymous",
-        userCount: rooms.get(roomId)?.size || 0,
-      },
+    publish(ctx.ws, `room:${roomId}`, UserLeftMessage, {
+      username: ctx.ws.data.username || "Anonymous",
+      userCount: rooms.get(roomId)?.size || 0,
     });
   })
 
-  .onClose((ws) => {
+  .onClose((ctx) => {
     // Clean up user from all rooms
     for (const [roomId, users] of rooms) {
-      if (users.has(ws.data.clientId)) {
-        users.delete(ws.data.clientId);
+      if (users.has(ctx.ws.data.clientId)) {
+        users.delete(ctx.ws.data.clientId);
 
-        // Notify room if user was in it
-        ws.publish(
-          `room:${roomId}`,
-          JSON.stringify({
-            type: "USER_DISCONNECTED",
-            payload: {
-              userCount: users.size,
-            },
-          }),
-        );
+        publish(ctx.ws, `room:${roomId}`, UserDisconnectedMessage, {
+          userCount: users.size,
+        });
       }
     }
   });
@@ -167,9 +146,7 @@ Bun.serve({
   port: 3000,
   fetch(req, server) {
     if (req.headers.get("upgrade") === "websocket") {
-      return server.upgrade(req)
-        ? undefined
-        : new Response("WebSocket upgrade failed", { status: 426 });
+      return router.upgrade(req, { server });
     }
     return new Response("WebSocket server");
   },
@@ -197,21 +174,18 @@ enum Role {
 }
 
 // Message schemas
-const AuthMessage = messageSchema(
-  "AUTH",
-  {
-    token: z.string(),
-  },
-);
+const AuthMessage = messageSchema("AUTH", {
+  token: z.string(),
+});
 
-const AdminActionMessage = messageSchema(
-  "ADMIN_ACTION",
-  {
-    action: z.enum(["kick", "ban", "mute"]),
-    targetUserId: z.string(),
-    reason: z.string().optional(),
-  }),
-);
+const AdminActionMessage = messageSchema("ADMIN_ACTION", {
+  action: z.enum(["kick", "ban", "mute"]),
+  targetUserId: z.string(),
+  reason: z.string().optional(),
+});
+
+const KickedMessage = messageSchema("KICKED", { reason: z.string() });
+const MutedMessage = messageSchema("MUTED", { reason: z.string() });
 
 // User data interface
 interface UserData {
@@ -223,19 +197,17 @@ interface UserData {
 
 // Create router
 const router = new WebSocketRouter<UserData>()
-  .onOpen((ws) => {
+  .onOpen((ctx) => {
     // Initialize as unauthenticated
-    ws.data.user = {
-      userId: "",
-      username: "",
-      roles: [],
-      authenticated: false,
-    };
+    ctx.ws.data.userId = "";
+    ctx.ws.data.username = "";
+    ctx.ws.data.roles = [];
+    ctx.ws.data.authenticated = false;
 
     // Give client time to authenticate
     setTimeout(() => {
-      if (!ws.data.user?.authenticated) {
-        ws.close(1008, "Authentication required");
+      if (!ctx.ws.data.authenticated) {
+        ctx.ws.close(1008, "Authentication required");
       }
     }, 5000);
   })
@@ -248,20 +220,18 @@ const router = new WebSocketRouter<UserData>()
         process.env.JWT_SECRET!,
       ) as any;
 
-      // Update user data
-      ctx.setData({
-        userId: decoded.userId,
-        username: decoded.username,
-        roles: decoded.roles || [Role.USER],
-        authenticated: true,
-      });
+      // Store user data in connection
+      ctx.ws.data.userId = decoded.userId;
+      ctx.ws.data.username = decoded.username;
+      ctx.ws.data.roles = decoded.roles || [Role.USER];
+      ctx.ws.data.authenticated = true;
 
       // Subscribe to user-specific channel
-      ctx.subscribe(`user:${decoded.userId}`);
+      ctx.ws.subscribe(`user:${decoded.userId}`);
 
       // Subscribe to role channels
       for (const role of decoded.roles) {
-        ctx.subscribe(`role:${role}`);
+        ctx.ws.subscribe(`role:${role}`);
       }
 
       // Send success
@@ -285,10 +255,8 @@ const router = new WebSocketRouter<UserData>()
   })
 
   .onMessage(AdminActionMessage, (ctx) => {
-    const userData = ctx.getData<UserData>();
-
     // Check authentication
-    if (!userData.authenticated) {
+    if (!ctx.ws.data.authenticated) {
       ctx.send(ErrorMessage, {
         code: "AUTHENTICATION_FAILED",
         message: "Not authenticated",
@@ -297,7 +265,7 @@ const router = new WebSocketRouter<UserData>()
     }
 
     // Check authorization
-    if (!userData.roles.includes(Role.ADMIN)) {
+    if (!ctx.ws.data.roles?.includes(Role.ADMIN)) {
       ctx.send(ErrorMessage, {
         code: "AUTHORIZATION_FAILED",
         message: "Admin access required",
@@ -311,9 +279,8 @@ const router = new WebSocketRouter<UserData>()
     switch (action) {
       case "kick":
         // Send kick message to target user
-        ctx.publish(`user:${targetUserId}`, {
-          type: "KICKED",
-          payload: { reason },
+        publish(ctx.ws, `user:${targetUserId}`, KickedMessage, {
+          reason: reason || "No reason provided",
         });
         break;
 
@@ -324,38 +291,12 @@ const router = new WebSocketRouter<UserData>()
 
       case "mute":
         // Send mute notification
-        ctx.publish(`user:${targetUserId}`, {
-          type: "MUTED",
-          payload: { reason },
+        publish(ctx.ws, `user:${targetUserId}`, MutedMessage, {
+          reason: reason || "No reason provided",
         });
         break;
     }
-
-    // Confirm action
-    ctx.send({
-      type: "ADMIN_ACTION_SUCCESS",
-      payload: {
-        action,
-        targetUserId,
-      },
-    });
   });
-
-// Middleware to check auth on all messages
-router.onError((ws, error) => {
-  console.error(`Error for client ${ws.data.clientId}:`, error);
-
-  // Use raw send for error handler since we don't have ctx
-  ws.send(
-    JSON.stringify({
-      type: "ERROR",
-      payload: {
-        code: "INTERNAL_SERVER_ERROR",
-        message: "An error occurred",
-      },
-    }),
-  );
-});
 ```
 
 ## Real-time Notifications
@@ -378,79 +319,60 @@ enum NotificationType {
 }
 
 // Message schemas
-const SubscribeMessage = messageSchema(
-  "SUBSCRIBE",
-  {
-    topics: z.array(z.string()).min(1),
-  },
-);
+const SubscribeMessage = messageSchema("SUBSCRIBE", {
+  topics: z.array(z.string()).min(1),
+});
 
-const UnsubscribeMessage = messageSchema(
-  "UNSUBSCRIBE",
-  {
-    topics: z.array(z.string()).min(1),
-  },
-);
+const UnsubscribeMessage = messageSchema("UNSUBSCRIBE", {
+  topics: z.array(z.string()).min(1),
+});
 
-const NotificationMessage = messageSchema(
-  "NOTIFICATION",
-  {
-    id: z.uuid(),
-    type: z.nativeEnum(NotificationType),
-    title: z.string(),
-    message: z.string(),
-    data: z.record(z.unknown()).optional(),
-    timestamp: z.number(),
-  }),
-);
+const NotificationMessage = messageSchema("NOTIFICATION", {
+  id: z.uuid(),
+  type: z.nativeEnum(NotificationType),
+  title: z.string(),
+  message: z.string(),
+  data: z.record(z.unknown()).optional(),
+  timestamp: z.number(),
+});
 
 // Track subscriptions
 const userSubscriptions = new Map<string, Set<string>>();
 
 const router = new WebSocketRouter()
-  .onOpen((ws) => {
+  .onOpen((ctx) => {
     // Initialize user subscriptions
-    userSubscriptions.set(ws.data.clientId, new Set());
+    userSubscriptions.set(ctx.ws.data.clientId, new Set());
 
     // Subscribe to personal notifications
-    ws.subscribe(`user:${ws.data.clientId}`);
+    ctx.ws.subscribe(`user:${ctx.ws.data.clientId}`);
   })
 
   .onMessage(SubscribeMessage, (ctx) => {
     const { topics } = ctx.payload;
-    const subs = userSubscriptions.get(ctx.clientId)!;
+    const subs = userSubscriptions.get(ctx.ws.data.clientId)!;
 
     // Subscribe to topics
     for (const topic of topics) {
-      ctx.subscribe(`topic:${topic}`);
+      ctx.ws.subscribe(`topic:${topic}`);
       subs.add(topic);
     }
-
-    ctx.send({
-      type: "SUBSCRIBE_SUCCESS",
-      payload: { topics },
-    });
   })
 
   .onMessage(UnsubscribeMessage, (ctx) => {
     const { topics } = ctx.payload;
-    const subs = userSubscriptions.get(ctx.clientId)!;
+    const subs = userSubscriptions.get(ctx.ws.data.clientId)!;
 
     // Unsubscribe from topics
     for (const topic of topics) {
-      ctx.unsubscribe(`topic:${topic}`);
+      ctx.ws.unsubscribe(`topic:${topic}`);
       subs.delete(topic);
     }
-
-    ctx.send({
-      type: "UNSUBSCRIBE_SUCCESS",
-      payload: { topics },
-    });
   })
 
-  .onClose((ws) => {
+  .onClose((ctx) => {
     // Clean up subscriptions
-    userSubscriptions.delete(ws.data.clientId);
+    userSubscriptions.delete(ctx.ws.data.clientId);
   });
 
 // HTTP endpoint to send notifications
@@ -473,23 +395,29 @@ const server = Bun.serve({
         timestamp: Date.now(),
       };
 
-      // Broadcast to topic
+      // Broadcast to topic using server.publish
+      // Note: publish() is for use within handlers with ctx.ws
+      // For server-level broadcasting, use server.publish() directly
       if (body.topic) {
-        publish(
-          server,
+        server.publish(
           `topic:${body.topic}`,
-          NotificationMessage,
-          notification,
+          JSON.stringify({
+            type: "NOTIFICATION",
+            payload: notification,
+            meta: { timestamp: Date.now() },
+          }),
         );
       }
 
       // Send to specific user
       if (body.userId) {
-        publish(
-          server,
+        server.publish(
           `user:${body.userId}`,
-          NotificationMessage,
-          notification,
+          JSON.stringify({
+            type: "NOTIFICATION",
+            payload: notification,
+            meta: { timestamp: Date.now() },
+          }),
         );
       }
 
@@ -498,9 +426,7 @@ const server = Bun.serve({
 
     // WebSocket upgrade
     if (req.headers.get("upgrade") === "websocket") {
-      return server.upgrade(req)
-        ? undefined
-        : new Response("WebSocket upgrade failed", { status: 426 });
+      return router.upgrade(req, { server });
     }
 
     return new Response("Notification Server");
@@ -519,6 +445,7 @@ Implementing rate limiting to prevent spam.
 ```typescript
 import { z } from "zod";
 import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { publish } from "bun-ws-router/zod/publish";
 
 const { messageSchema, ErrorMessage } = createMessageSchema(z);
 
@@ -572,7 +499,7 @@ const JoinChannelMessage = messageSchema("JOIN_CHANNEL", {
 const router = new WebSocketRouter()
   .onMessage(ChatMessage, (ctx) => {
     // Check rate limit
-    if (!messageLimiter.check(ctx.clientId)) {
+    if (!messageLimiter.check(ctx.ws.data.clientId)) {
       ctx.send(ErrorMessage, {
         code: "RATE_LIMIT_EXCEEDED",
         message: "Too many messages. Please slow down.",
@@ -581,12 +508,12 @@ const router = new WebSocketRouter()
     }
 
     // Process message
-    ctx.publish("global", ChatMessage, ctx.payload);
+    publish(ctx.ws, "global", ChatMessage, ctx.payload);
   })
 
   .onMessage(JoinChannelMessage, (ctx) => {
     // Check join rate limit
-    if (!joinLimiter.check(ctx.clientId)) {
+    if (!joinLimiter.check(ctx.ws.data.clientId)) {
       ctx.send(ErrorMessage, {
         code: "RATE_LIMIT_EXCEEDED",
         message: "Too many join requests.",
@@ -595,198 +522,12 @@ const router = new WebSocketRouter()
     }
 
     // Join channel
-    ctx.subscribe(ctx.payload.channel);
-    ctx.send({
-      type: "JOIN_SUCCESS",
-      payload: { channel: ctx.payload.channel },
-    });
+    ctx.ws.subscribe(ctx.payload.channel);
   })
 
-  .onClose((ws) => {
+  .onClose((ctx) => {
     // Clean up rate limit data
-    messageLimiter.reset(ws.data.clientId);
-    joinLimiter.reset(ws.data.clientId);
+    messageLimiter.reset(ctx.ws.data.clientId);
+    joinLimiter.reset(ctx.ws.data.clientId);
   });
-```
-
-## Client-Side Example
-
-Using `createMessage` for type-safe WebSocket communication on the client.
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-
-const { messageSchema, createMessage } = createMessageSchema(z);
-
-// Share these schemas between client and server
-const ConnectionMessage = messageSchema(
-  "CONNECTION",
-  {
-    token: z.string(),
-  },
-);
-
-const ChatMessage = messageSchema(
-  "CHAT_MESSAGE",
-  {
-    roomId: z.string(),
-    text: z.string().min(1).max(500),
-  }),
-);
-
-const TypingMessage = messageSchema(
-  "TYPING",
-  {
-    roomId: z.string(),
-    isTyping: z.boolean(),
-  }),
-);
-
-// Client implementation
-class ChatClient {
-  private ws: WebSocket;
-  private reconnectTimer?: Timer;
-  private messageQueue: Array<{ schema: any; payload: any; meta?: any }> = [];
-
-  constructor(
-    private url: string,
-    private token: string,
-  ) {
-    this.connect();
-  }
-
-  private connect() {
-    this.ws = new WebSocket(this.url);
-
-    this.ws.onopen = () => {
-      console.log("Connected to chat server");
-
-      // Authenticate on connection
-      const authMsg = createMessage(ConnectionMessage, { token: this.token });
-      if (authMsg.success) {
-        this.ws.send(JSON.stringify(authMsg.data));
-      }
-
-      // Send any queued messages
-      this.flushMessageQueue();
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        this.handleMessage(message);
-      } catch (error) {
-        console.error("Failed to parse message:", error);
-      }
-    };
-
-    this.ws.onclose = () => {
-      console.log("Disconnected from server");
-      this.scheduleReconnect();
-    };
-
-    this.ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-  }
-
-  private handleMessage(message: any) {
-    switch (message.type) {
-      case "CHAT_MESSAGE":
-        this.onChatMessage?.(message.payload);
-        break;
-      case "TYPING":
-        this.onTypingUpdate?.(message.payload);
-        break;
-      case "ERROR":
-        this.onError?.(message.payload);
-        break;
-    }
-  }
-
-  sendMessage(roomId: string, text: string) {
-    const msg = createMessage(
-      ChatMessage,
-      { roomId, text },
-      { correlationId: crypto.randomUUID() },
-    );
-
-    if (!msg.success) {
-      console.error("Invalid message:", msg.error);
-      return false;
-    }
-
-    if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg.data));
-      return true;
-    } else {
-      // Queue message for later
-      this.messageQueue.push({
-        schema: ChatMessage,
-        payload: { roomId, text },
-        meta: { correlationId: crypto.randomUUID() },
-      });
-      return false;
-    }
-  }
-
-  setTyping(roomId: string, isTyping: boolean) {
-    const msg = createMessage(TypingMessage, { roomId, isTyping });
-
-    if (msg.success && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg.data));
-    }
-  }
-
-  private flushMessageQueue() {
-    while (this.messageQueue.length > 0) {
-      const { schema, payload, meta } = this.messageQueue.shift()!;
-      const msg = createMessage(schema, payload, meta);
-
-      if (msg.success) {
-        this.ws.send(JSON.stringify(msg.data));
-      }
-    }
-  }
-
-  private scheduleReconnect() {
-    if (this.reconnectTimer) return;
-
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = undefined;
-      this.connect();
-    }, 5000);
-  }
-
-  disconnect() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = undefined;
-    }
-    this.ws.close();
-  }
-
-  // Event handlers (to be set by consumer)
-  onChatMessage?: (payload: any) => void;
-  onTypingUpdate?: (payload: any) => void;
-  onError?: (error: any) => void;
-}
-
-// Usage
-const client = new ChatClient("ws://localhost:3000/ws", "auth-token");
-
-client.onChatMessage = (message) => {
-  console.log("New message:", message);
-};
-
-client.onError = (error) => {
-  console.error("Chat error:", error);
-};
-
-// Send a message
-client.sendMessage("general", "Hello everyone!");
-
-// Show typing indicator
-client.setTyping("general", true);
 ```

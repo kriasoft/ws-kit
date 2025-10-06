@@ -10,7 +10,6 @@ Type-safe WebSocket client for browsers with schema-based message validation.
 - 🔐 **Auth support** – Query param or WebSocket protocol attachment
 - ⏱️ **Request/response** – RPC-style messaging with correlation tracking
 - 🎯 **Multi-handler** – Register multiple handlers per message type
-- 🪶 **Tiny bundle** – ~3KB min+gz (without validator)
 
 ## Usage
 
@@ -19,18 +18,19 @@ Type-safe WebSocket client for browsers with schema-based message validation.
 ```typescript
 import { z } from "zod";
 import { createMessageSchema } from "bun-ws-router/zod";
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
 
 // Create schemas (shared with server)
 const { messageSchema } = createMessageSchema(z);
 const Hello = messageSchema("HELLO", { name: z.string() });
 const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
 
-// Create client
+// Create typed client (use /zod/client or /valibot/client for type inference)
 const client = createClient({ url: "wss://example.com/ws" });
 
-// Register handlers
+// Register handlers with full type inference
 client.on(HelloOk, (msg) => {
+  // ✅ msg.payload.text is typed as string (no manual type assertions needed)
   console.log("Server says:", msg.payload.text);
 });
 
@@ -38,6 +38,8 @@ client.on(HelloOk, (msg) => {
 await client.connect();
 client.send(Hello, { name: "Alice" });
 ```
+
+> **Typed vs Generic Client**: Use `/zod/client` or `/valibot/client` for automatic type inference in handlers. The generic client at `/client` requires manual type assertions and is only needed for custom validators.
 
 ### Request/Response
 

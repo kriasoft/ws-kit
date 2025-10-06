@@ -4,7 +4,7 @@ Message schemas are the foundation of type-safe WebSocket communication in Bun W
 
 ## Factory Pattern (Required)
 
-Starting with v0.4.0, you must use the factory pattern to create message schemas. This ensures proper type inference and fixes discriminated union support:
+**Required since v0.4.0** to fix discriminated union support. The factory pattern ensures proper type inference and prevents dual package hazard:
 
 ```typescript
 import { z } from "zod";
@@ -14,6 +14,10 @@ import { createMessageSchema } from "bun-ws-router/zod";
 const { messageSchema, createMessage, ErrorMessage, ErrorCode } =
   createMessageSchema(z);
 ```
+
+::: warning MIGRATION
+The old direct `messageSchema` export from root package is **deprecated** and will be removed in v1.0. Update imports to use factory pattern as shown above.
+:::
 
 ## Creating Message Schemas
 
@@ -92,13 +96,13 @@ const UserMessage = messageSchema("USER_UPDATE", {
   // Enum values
   role: z.enum(["user", "admin", "moderator"]),
 
-  // NEW in Zod v4: Advanced string validators
+  // Advanced string validators
   jwt: z.jwt(), // JWT token validation
   ipv4: z.ipv4(), // IPv4 address
   ipv6: z.ipv6(), // IPv6 address
   ulid: z.ulid(), // ULID validation
   nanoid: z.nanoid(), // NanoID validation
-  datetime: z.iso.datetime(), // ISO datetime string (Zod v4)
+  datetime: z.iso.datetime(), // ISO datetime string
 });
 ```
 
@@ -118,7 +122,7 @@ const GameMessage = messageSchema("GAME_UPDATE", {
   // Range validation
   health: z.number().min(0).max(100),
 
-  // NEW in Zod v4: multipleOf constraint
+  // Multiple of constraint
   price: z.number().multipleOf(0.01), // For currency
   quantity: z.number().int().multipleOf(5), // Must be multiple of 5
 });
@@ -160,20 +164,120 @@ const OrderMessage = messageSchema("CREATE_ORDER", {
 
 ## Custom Metadata
 
-Add custom metadata to messages:
+Add custom metadata to messages by providing a third parameter (a direct object, not wrapped):
 
 ```typescript
 const AuthenticatedMessage = messageSchema(
   "AUTHENTICATED_ACTION",
   { action: z.string() },
   {
-    // Custom metadata schema
-    meta: z.object({
-      correlationId: z.uuid(),
-      version: z.string(),
-    }),
+    // Defining base fields makes them required (overrides optional defaults)
+    correlationId: z.uuid(), // Now required (was optional in base)
+    version: z.string(), // Custom field
   },
 );
+
+// Resulting meta type:
+// {
+//   timestamp?: number,     // Still optional (auto-added by ctx.send()/publish())
+//   correlationId: string,  // Required (redefined above)
+//   version: string,        // Required custom field
+// }
+```
+
+## Strict Schema Enforcement
+
+::: warning SECURITY REQUIREMENT
+All schemas are **strict by default** - they reject unknown keys at all levels (root, meta, payload). This is a security feature and cannot be disabled.
+:::
+
+### Why Strict Schemas Matter
+
+**Security Benefits:**
+
+1. **DoS Prevention**: Prevents attackers from sending unbounded unknown fields that could exhaust server memory
+2. **Contract Enforcement**: Handlers trust schema validation; unknown keys violate this security contract
+3. **Wire Cleanliness**: Catches client bugs early (e.g., sending `payload` when schema expects none)
+4. **Type Safety**: Ensures runtime data exactly matches TypeScript types
+
+**Example Attack Vector (Prevented by Strict Mode):**
+
+```typescript
+// ❌ Without strict mode, attacker could send:
+{
+  type: "CHAT_MESSAGE",
+  payload: { text: "hi" },
+  extraField1: "x".repeat(1000000),  // 1MB of garbage
+  extraField2: "y".repeat(1000000),  // 1MB of garbage
+  // ... exhaust memory
+}
+
+// ✅ With strict mode (enforced), validation rejects this immediately
+// Error: Unknown keys not allowed: extraField1, extraField2
+```
+
+**Client-Server Symmetry:**
+
+Strict schemas work on both client and server, catching mistakes before they reach production:
+
+```typescript
+// Client tries to send invalid message
+const msg = createMessage(ChatMessage, {
+  text: "hello",
+  typo: "oops", // ❌ Validation fails client-side
+});
+
+if (!msg.success) {
+  // Caught before sending to server
+  console.error("Validation failed:", msg.error);
+}
+```
+
+## Reserved Meta Fields
+
+The following meta fields are **reserved for security** and cannot be defined in schemas or sent by clients:
+
+- **`clientId`** - Connection identity (UUID v7, auto-generated during WebSocket upgrade)
+  - Access via `ctx.ws.data.clientId` (not `ctx.meta.clientId`)
+  - Router strips this from client messages before validation (security boundary)
+
+- **`receivedAt`** - Server receive timestamp (milliseconds since epoch, `Date.now()`)
+  - Access via `ctx.receivedAt` (not `ctx.meta.receivedAt`)
+  - Captured before parsing, authoritative for all server-side logic
+
+### Why Reserved?
+
+1. **Connection identity belongs to transport layer** (not message payload)
+   - Prevents wire bloat (no need to send UUID in every message)
+   - Eliminates spoofing vectors (client cannot set connection identity)
+
+2. **Preserves client-side validation symmetry**
+   - Schemas work on both client and server
+   - Clients can validate messages they send
+
+3. **Security boundary via normalization**
+   - Router strips reserved keys before validation
+   - Handlers never receive un-normalized, spoofed data
+
+This is a security boundary that prevents client spoofing of server-controlled fields.
+
+### Schema Enforcement
+
+Extended meta schemas MUST NOT define reserved keys. The router throws at schema creation:
+
+```typescript
+// ❌ This throws immediately (caught at design time)
+const BadSchema = messageSchema(
+  "BAD",
+  { text: z.string() },
+  { clientId: z.string() }, // Error: Reserved meta keys not allowed: clientId
+);
+
+// ✅ Correct access in handlers
+router.onMessage(GoodSchema, (ctx) => {
+  const id = ctx.ws.data.clientId; // ✅ Connection identity
+  const time = ctx.receivedAt; // ✅ Server timestamp (authoritative)
+});
 ```
 
 ## Error Messages

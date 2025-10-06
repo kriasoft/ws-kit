@@ -84,8 +84,13 @@ router.onOpen((ctx) => {
 });
 
 router.onClose((ctx) => {
-  // ctx: { ws, code, reason?, send }
-  console.log("Client disconnected:", ctx.ws.data.clientId);
+  // ctx: { ws, code, reason, send }
+  console.log(
+    "Client disconnected:",
+    ctx.ws.data.clientId,
+    ctx.code,
+    ctx.reason,
+  );
 });
 ```
 

@@ -1,6 +1,6 @@
 # Getting Started
 
-Welcome to Bun WebSocket Router! This guide will help you get started with building type-safe WebSocket applications in Bun.
+This guide will help you build type-safe WebSocket applications with Bun.
 
 ## Installation
 
@@ -25,8 +25,9 @@ Here's a minimal example to get you started:
 ```typescript
 import { z } from "zod";
 import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { publish } from "bun-ws-router/zod/publish";
 
-// Create the message schema factory (required for proper type inference)
+// Create message schema factory
 const { messageSchema } = createMessageSchema(z);
 
 // Define a message schema
@@ -37,38 +38,33 @@ const ChatMessage = messageSchema("CHAT_MESSAGE", {
 
 // Create router and define handlers
 const router = new WebSocketRouter()
-  .onOpen((ws) => {
-    console.log(`Client ${ws.data.clientId} connected`);
+  .onOpen((ctx) => {
+    console.log(`Client ${ctx.ws.data.clientId} connected`);
   })
   .onMessage(ChatMessage, (ctx) => {
     // TypeScript knows ctx.payload has { text: string, roomId: string }
-    console.log(`Message from ${ctx.clientId}: ${ctx.payload.text}`);
+    console.log(`Message from ${ctx.ws.data.clientId}: ${ctx.payload.text}`);
 
-    // Broadcast to room
-    ctx.publish(`room:${ctx.payload.roomId}`, ChatMessage, {
+    // Subscribe to room for receiving broadcasts
+    ctx.ws.subscribe(`room:${ctx.payload.roomId}`);
+
+    // Broadcast to room with type-safe publish helper
+    publish(ctx.ws, `room:${ctx.payload.roomId}`, ChatMessage, {
       text: ctx.payload.text,
       roomId: ctx.payload.roomId,
     });
   })
-  .onClose((ws) => {
-    console.log(`Client ${ws.data.clientId} disconnected`);
+  .onClose((ctx) => {
+    console.log(`Client ${ctx.ws.data.clientId} disconnected`);
   });
 
 // Create Bun server
 Bun.serve({
   port: 3000,
   fetch(req, server) {
-    // Handle WebSocket upgrade
-    if (
-      server.upgrade(req, {
-        data: {
-          clientId: crypto.randomUUID(),
-        },
-      })
-    ) {
-      return; // WebSocket upgrade successful
-    }
-    return new Response("Please use a WebSocket client");
+    // Handle WebSocket upgrade - returns Response (101 or 500)
+    // The router automatically generates a UUID v7 clientId
+    return router.upgrade(req, { server });
   },
   websocket: router.websocket,
 });
@@ -84,18 +80,20 @@ All messages follow a consistent structure:
 
 ```typescript
 {
-  type: string,        // Message type for routing
-  meta: {              // Metadata (auto-populated)
-    clientId: string,  // Unique client identifier
-    timestamp: number, // Unix timestamp
+  type: string,         // Message type for routing
+  meta: {               // Metadata (optional)
+    timestamp?: number, // Producer time (client clock, UI display only)
+    correlationId?: string, // Optional request tracking
   },
-  payload?: any        // Your data (validated by schema)
+  payload?: any         // Your data (validated by schema)
 }
 ```
 
-### Creating Message Schemas
+::: tip Server Timestamp Usage
+**Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted). See [Core Concepts - Timestamp Handling](./core-concepts#timestamp-handling) for guidance.
+:::
 
-First create a message schema factory, then use it to define type-safe messages:
+### Creating Message Schemas
 
 ```typescript
 import { z } from "zod";
@@ -119,26 +117,32 @@ const JoinRoomMessage = messageSchema("JOIN_ROOM", {
 Register handlers for your message types:
 
 ```typescript
+import { publish } from "bun-ws-router/zod/publish";
+
+const PongMessage = messageSchema("PONG");
+const UserJoinedMessage = messageSchema("USER_JOINED", {
+  username: z.string(),
+});
+
 router
   .onMessage(PingMessage, (ctx) => {
-    // Respond with PONG
-    ctx.send({
-      type: "PONG",
-      meta: { clientId: ctx.clientId, timestamp: Date.now() },
-    });
+    // Respond with PONG (no payload for this message type)
+    ctx.send(PongMessage);
   })
   .onMessage(JoinRoomMessage, (ctx) => {
-    // Join the room
-    ctx.subscribe(`room:${ctx.payload.roomId}`);
+    // Subscribe to room
+    ctx.ws.subscribe(`room:${ctx.payload.roomId}`);
 
-    // Notify others in the room
-    ctx.publish(`room:${ctx.payload.roomId}`, {
-      type: "USER_JOINED",
-      meta: { clientId: ctx.clientId, timestamp: Date.now() },
-      payload: { username: ctx.payload.username },
+    // Notify others in the room with type-safe publish
+    publish(ctx.ws, `room:${ctx.payload.roomId}`, UserJoinedMessage, {
+      username: ctx.payload.username,
     });
   });
 ```
+
+### Message Validation Pipeline
+
+When a message arrives, the router processes it through a security pipeline. See [Core Concepts](./core-concepts#message-handling) for details.
 
 ## Integration with HTTP Frameworks
 
@@ -159,15 +163,14 @@ app.get("/", (c) => c.text("WebSocket server"));
 
 // WebSocket endpoint
 app.get("/ws", (c) => {
-  const success = c.env?.server?.upgrade(c.req.raw, {
+  // router.upgrade() auto-generates clientId (UUID v7) and returns Response
+  return router.upgrade(c.req.raw, {
+    server: c.env?.server,
+    // Add any custom auth data here (clientId is auto-generated)
     data: {
-      clientId: crypto.randomUUID(),
-      // Add any auth data here
+      // userId: getUserId(c),
     },
   });
-
-  if (success) return; // WebSocket upgrade successful
-  return c.text("WebSocket upgrade failed", 426);
 });
 
 // Start server

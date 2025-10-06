@@ -1175,15 +1175,146 @@ test("onError does NOT fire for request() rejections", async () => {
 });
 ```
 
+## Client Type Inference Tests {#client-type-inference}
+
+**Requirement**: Typed clients (`/zod/client`, `/valibot/client`) MUST provide full inference via type overrides (see @adrs.md#ADR-002).
+
+```typescript
+// Client typed handler inference (Zod)
+test("client: typed handler inference with Zod adapter", () => {
+  import { createClient } from "bun-ws-router/zod/client";
+  import { z } from "zod";
+  import { createMessageSchema } from "bun-ws-router/zod";
+
+  const { messageSchema } = createMessageSchema(z);
+  const JoinRoomOK = messageSchema("JOIN_ROOM_OK", { roomId: z.string() });
+
+  const client = createClient({ url: "ws://test" });
+
+  client.on(JoinRoomOK, (msg) => {
+    // ✅ Positive: msg fully typed
+    expectTypeOf(msg).toMatchTypeOf<{
+      type: "JOIN_ROOM_OK";
+      meta: { timestamp?: number; correlationId?: string };
+      payload: { roomId: string };
+    }>();
+    expectTypeOf(msg.payload.roomId).toBeString();
+    expectTypeOf(msg.type).toEqualTypeOf<"JOIN_ROOM_OK">();
+  });
+});
+
+// Negative: no payload for no-payload schemas
+test("client: no payload access for no-payload schema", () => {
+  const NoPayload = messageSchema("NO_PAYLOAD");
+  const client = createClient({ url: "ws://test" });
+
+  client.on(NoPayload, (msg) => {
+    expectTypeOf(msg.type).toEqualTypeOf<"NO_PAYLOAD">();
+    expectTypeOf(msg.meta).toBeDefined();
+
+    // @ts-expect-error - payload should not exist
+    msg.payload;
+  });
+});
+
+// Typed request inference
+test("client: typed request inference", async () => {
+  const RequestMsg = messageSchema("REQ", { id: z.number() });
+  const ReplyMsg = messageSchema("REPLY", { result: z.boolean() });
+
+  const client = createClient({ url: "ws://test" });
+
+  const reply = await client.request(RequestMsg, { id: 42 }, ReplyMsg);
+
+  // ✅ reply fully typed
+  expectTypeOf(reply).toMatchTypeOf<{
+    type: "REPLY";
+    meta: { timestamp?: number; correlationId?: string };
+    payload: { result: boolean };
+  }>();
+  expectTypeOf(reply.payload.result).toBeBoolean();
+});
+
+// Payload conditional typing (overloads)
+test("client: send() overloads enforce payload absence", () => {
+  const NoPayload = messageSchema("NO_PAYLOAD");
+  const WithPayload = messageSchema("WITH_PAYLOAD", { id: z.number() });
+
+  const client = createClient({ url: "ws://test" });
+
+  // @ts-expect-error - payload param should not exist for no-payload schema
+  client.send(NoPayload, {});
+
+  // @ts-expect-error - payload param should not exist
+  client.send(NoPayload, undefined);
+
+  // ✅ Correct: omit payload param
+  client.send(NoPayload);
+
+  // ✅ Correct: provide payload for with-payload schema
+  client.send(WithPayload, { id: 123 });
+
+  // @ts-expect-error - payload required for with-payload schema
+  client.send(WithPayload);
+});
+
+// Extended meta inference
+test("client: extended meta type enforcement", () => {
+  const RoomMsg = messageSchema(
+    "CHAT",
+    { text: z.string() },
+    { roomId: z.string() }, // Required meta field
+  );
+
+  const OptionalMetaMsg = messageSchema(
+    "NOTIFY",
+    { text: z.string() },
+    { priority: z.enum(["low", "high"]).optional() },
+  );
+
+  const client = createClient({ url: "ws://test" });
+
+  // @ts-expect-error - missing required meta.roomId
+  client.send(RoomMsg, { text: "hi" });
+
+  // ✅ Correct: provide required meta
+  client.send(RoomMsg, { text: "hi" }, { meta: { roomId: "general" } });
+
+  // ✅ Correct: optional meta can be omitted
+  client.send(OptionalMetaMsg, { text: "hi" });
+
+  // ✅ Correct: optional meta can be provided
+  client.send(OptionalMetaMsg, { text: "hi" }, { meta: { priority: "high" } });
+});
+
+// Generic client (fallback) uses unknown
+test("client: generic client handlers infer as unknown", () => {
+  import { createClient } from "bun-ws-router/client"; // Generic client
+
+  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const client = createClient({ url: "ws://test" });
+
+  client.on(TestMsg, (msg) => {
+    // ⚠️ msg is unknown in generic client
+    expectTypeOf(msg).toBeUnknown();
+
+    // Manual type assertion required
+    const typed = msg as InferMessage<typeof TestMsg>;
+    expectTypeOf(typed.payload.id).toBeNumber();
+  });
+});
+```
+
 ## Key Constraints
 
 > See @constraints.md for complete rules. Critical for testing:
 
 1. **Type-level tests** — Use `expectTypeOf` for compile-time validation (positive & negative cases)
 2. **Payload conditional typing** — Test that `ctx.payload` is type error when schema omits it (see @adrs.md#ADR-001)
-3. **Discriminated unions** — Verify factory pattern enables union support (see @schema.md#Discriminated-Unions)
-4. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see @schema.md#Strict-Schemas)
-5. **Normalization** — Test reserved key stripping before validation (see normalization test above; implementation tracked in @implementation-status.md#GAP-001)
-6. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see @client.md#message-processing-order and @constraints.md#inbound-message-routing)
-7. **Client multi-handler** — Test registration order, stable iteration, error isolation (see @client.md#Multiple-Handlers and @implementation-status.md#GAP-005)
-8. **Extended meta support** — Test required/optional meta fields, timestamp preservation, reserved key stripping (see extended meta tests above; implementation tracked in @implementation-status.md#GAP-015)
+3. **Client type inference** — Test typed clients provide full inference; generic client uses `unknown` (see @adrs.md#ADR-002 and #client-type-inference)
+4. **Discriminated unions** — Verify factory pattern enables union support (see @schema.md#Discriminated-Unions)
+5. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see @schema.md#Strict-Schemas)
+6. **Normalization** — Test reserved key stripping before validation (see normalization test above; implementation tracked in @implementation-status.md#GAP-001)
+7. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see @client.md#message-processing-order and @constraints.md#inbound-message-routing)
+8. **Client multi-handler** — Test registration order, stable iteration, error isolation (see @client.md#Multiple-Handlers and @implementation-status.md#GAP-005)
+9. **Extended meta support** — Test required/optional meta fields, timestamp preservation, reserved key stripping (see extended meta tests above; implementation tracked in @implementation-status.md#GAP-015)

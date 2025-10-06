@@ -35,6 +35,13 @@ export default defineConfig([
     },
   },
   {
+    name: "example-files-relaxed",
+    files: ["examples/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
     name: "prettier-overrides",
     extends: [prettier],
   },
