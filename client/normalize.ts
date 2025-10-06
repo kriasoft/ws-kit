@@ -35,7 +35,7 @@ export function normalizeOutboundMeta(
   }
 
   // Strip reserved server-only keys (security boundary)
-  for (const key of RESERVED_META_KEYS) {
+  for (const key of Array.from(RESERVED_META_KEYS)) {
     Reflect.deleteProperty(meta, key);
   }
 

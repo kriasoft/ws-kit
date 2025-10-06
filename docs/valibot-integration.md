@@ -4,13 +4,17 @@ This library now supports both **Zod** and **Valibot** validators through separa
 
 ## Quick Comparison
 
-| Feature             | Zod                     | Valibot               |
-| ------------------- | ----------------------- | --------------------- |
-| Bundle Size         | 5.36 kB (Zod v4)        | 1.37 kB (74% smaller) |
-| Runtime Performance | Baseline                | ~2x faster            |
-| API Style           | Method chaining         | Functional pipelines  |
-| Ecosystem           | Mature, large community | Growing, newer        |
-| TypeScript Support  | Excellent               | Excellent             |
+| Feature             | Zod (v4)                | Valibot (v1)         |
+| ------------------- | ----------------------- | -------------------- |
+| Bundle Size         | ~5-6 kB (minified)      | ~1-2 kB (minified)   |
+| Runtime Performance | Fast                    | ~2x faster           |
+| API Style           | Method chaining         | Functional pipelines |
+| Ecosystem           | Mature, large community | Growing, modern      |
+| TypeScript Support  | Excellent               | Excellent            |
+
+::: tip Bundle Size
+Actual bundle size depends on usage. Both libraries are tree-shakeable. Valibot typically results in 60-80% smaller bundles for typical WebSocket message validation use cases.
+:::
 
 ## Installation
 
@@ -51,12 +55,17 @@ const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
 // Create router
 const router = new WebSocketRouter<{ userId?: string }>();
 
+// Define response schema first
+const RoomJoinedMessage = messageSchema("ROOM_JOINED", {
+  success: z.boolean(),
+});
+
 // Register handlers
 router.onMessage(JoinRoomMessage, (ctx) => {
   console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
 
   // Type-safe response
-  ctx.send(messageSchema("ROOM_JOINED", { success: v.boolean() }), {
+  ctx.send(RoomJoinedMessage, {
     success: true,
   });
 });
@@ -84,12 +93,17 @@ const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
 // Create router
 const router = new WebSocketRouter<{ userId?: string }>();
 
+// Define response schema first
+const RoomJoinedMessage = messageSchema("ROOM_JOINED", {
+  success: v.boolean(),
+});
+
 // Register handlers
 router.onMessage(JoinRoomMessage, (ctx) => {
   console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
 
   // Type-safe response
-  ctx.send(messageSchema("ROOM_JOINED", { success: v.boolean() }), {
+  ctx.send(RoomJoinedMessage, {
     success: true,
   });
 });
@@ -146,11 +160,11 @@ const ChatMessage = messageSchema("CHAT", {
   roomId: z.string(),
 });
 
-// With custom metadata
+// With custom metadata (required field)
 const PrivateMessage = messageSchema(
   "PRIVATE",
   { content: z.string(), recipientId: z.string() },
-  { senderId: z.string() },
+  { roomId: z.string() },
 );
 ```
 
@@ -171,11 +185,11 @@ const ChatMessage = messageSchema("CHAT", {
   roomId: v.string(),
 });
 
-// With custom metadata
+// With custom metadata (required field)
 const PrivateMessage = messageSchema(
   "PRIVATE",
   { content: v.string(), recipientId: v.string() },
-  { senderId: v.string() },
+  { roomId: v.string() },
 );
 ```
 
@@ -267,11 +281,14 @@ zodRouter.addRoutes(valibotRouter);
 
 ## Backward Compatibility
 
-The main package export (`bun-ws-router`) continues to use Zod for backward compatibility:
+The main package export (`bun-ws-router`) continues to use Zod for backward compatibility, but you must use the factory pattern:
 
 ```typescript
-// This still works and uses Zod
-import { WebSocketRouter, messageSchema } from "bun-ws-router";
+import { z } from "zod";
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+
+// ✅ REQUIRED - use factory pattern
+const { messageSchema } = createMessageSchema(z);
 ```
 
 ## When to Choose Which

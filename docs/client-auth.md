@@ -5,7 +5,7 @@ The WebSocket client supports flexible token-based authentication with automatic
 ## Quick Start
 
 ```typescript
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
 
 const client = createClient({
   url: "wss://api.example.com/ws",
@@ -284,9 +284,10 @@ Bun.serve({
 
     const userId = getUserIdFromToken(token);
 
+    // router.upgrade() auto-generates clientId (UUID v7) and returns Response
     return router.upgrade(req, {
       server,
-      data: { userId }, // Attach user data
+      data: { userId },
     });
   },
   websocket: router.websocket,
@@ -311,6 +312,7 @@ Bun.serve({
 
     const userId = getUserIdFromToken(token);
 
+    // router.upgrade() auto-generates clientId (UUID v7) and returns Response
     return router.upgrade(req, {
       server,
       data: { userId },

@@ -90,6 +90,84 @@ export interface MessageHandlerEntry<Data = unknown> {
   handler: MessageHandler<MessageSchemaType, Data>;
 }
 
+/**
+ * Type helpers for client-side type inference (ADR-002).
+ * Used by typed client adapters to extract message types from schemas.
+ */
+
+/**
+ * Infer full inbound message type (as received by handlers).
+ *
+ * Includes optional timestamp/correlationId (may be present from client),
+ * plus schema-defined extended meta and payload (if defined).
+ *
+ * @example
+ * ```typescript
+ * const HelloOk = messageSchema("HELLO_OK", { text: v.string() });
+ * type Msg = InferMessage<typeof HelloOk>;
+ * // { type: "HELLO_OK", meta: { timestamp?: number, correlationId?: string }, payload: { text: string } }
+ *
+ * client.on(HelloOk, (msg) => {
+ *   msg.type // "HELLO_OK" (literal type)
+ *   msg.meta.timestamp // number | undefined
+ *   msg.payload.text // string
+ * });
+ * ```
+ */
+export type InferMessage<S extends MessageSchemaType> = InferOutput<S>;
+
+/**
+ * Infer payload type from schema, or never if no payload defined.
+ *
+ * Returns `never` (not `undefined`) for no-payload schemas to enable
+ * clean overload discrimination in send() and request() methods.
+ *
+ * @example
+ * ```typescript
+ * const WithPayload = messageSchema("MSG", { id: v.number() });
+ * const NoPayload = messageSchema("PING");
+ *
+ * type P1 = InferPayload<typeof WithPayload>; // { id: number }
+ * type P2 = InferPayload<typeof NoPayload>;   // never
+ * ```
+ */
+export type InferPayload<S extends MessageSchemaType> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  S extends ObjectSchema<infer TEntries, any>
+    ? TEntries extends Record<string, unknown>
+      ? "payload" extends keyof TEntries
+        ? InferOutput<TEntries["payload"]>
+        : never
+      : never
+    : never;
+
+/**
+ * Infer extended meta fields for outbound messages.
+ *
+ * Omits auto-injected fields (timestamp, correlationId) which are provided
+ * via opts.meta or opts.correlationId. Only includes schema-defined extended meta.
+ *
+ * Used to enforce required extended meta fields at compile time for send/request.
+ *
+ * @example
+ * ```typescript
+ * const RoomMsg = messageSchema("CHAT", { text: v.string() }, { roomId: v.string() });
+ * type Meta = InferMeta<typeof RoomMsg>; // { roomId: string }
+ * // timestamp and correlationId are omitted (auto-injected by client)
+ *
+ * client.send(RoomMsg, { text: "hi" }, { meta: { roomId: "general" } });
+ * ```
+ */
+export type InferMeta<S extends MessageSchemaType> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  S extends ObjectSchema<infer TEntries, any>
+    ? TEntries extends Record<string, unknown>
+      ? "meta" extends keyof TEntries
+        ? Omit<InferOutput<TEntries["meta"]>, "timestamp" | "correlationId">
+        : Record<string, never>
+      : Record<string, never>
+    : Record<string, never>;
+
 /** Re-export shared types that are validator-agnostic. See: shared/types.ts */
 export type {
   CloseHandler,

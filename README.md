@@ -5,16 +5,29 @@
 [![GitHub Actions](https://github.com/kriasoft/bun-ws-router/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/bun-ws-router/actions)
 [![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.com/invite/aW29wXyb7w)
 
-Tired of wrestling WebSocket connections like a tangled mess of holiday lights? `bun-ws-router` is here to bring order to the chaos! It's a type-safe WebSocket router for Bun, powered by **Zod** or **Valibot** validation, making your real-time message handling smoother than a fresh jar of peanut butter. Route WebSocket messages to handlers based on message type with full TypeScript support.
+Type-safe WebSocket communication for Bun servers and browsers with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
 
 ### Key Features
 
-- 🔒 **Type-safe messaging**: Built-in validation using Zod or Valibot schemas (catch errors before they bite!)
-- ⚡ **Choose your validator**: Use Zod for familiarity or Valibot for 90% smaller bundles
-- ✨ **Simple API**: Intuitive routing system for WebSocket messages (so easy, your cat could _almost_ use it)
-- 🚀 **Performance**: Leverages Bun's native WebSocket implementation (it's fast, like, _really_ fast)
-- 🧩 **Flexible**: Works with any Bun server setup, including Hono
-- 🪶 **Lightweight**: Minimal dependencies for fast startup
+**Server (Bun)**
+
+- 🔒 Type-safe message routing with Zod/Valibot validation
+- 🚀 Built on Bun's native WebSocket implementation
+- 📡 PubSub with schema-validated broadcasts
+- 🧩 Composable routers and middleware support
+
+**Client (Browser)**
+
+- 🔄 Auto-reconnection with exponential backoff
+- 📦 Configurable offline message queueing
+- ⏱️ Request/response pattern with timeouts
+- 🔐 Built-in auth (query param or protocol header)
+
+**Shared**
+
+- ✨ Shared schemas between server and client
+- ⚡ Choose Zod (familiar) or Valibot (60-80% smaller)
+- 🔒 Full TypeScript inference on both sides
 
 Perfect for real-time applications like chat systems, live dashboards, multiplayer games, and notification services.
 
@@ -23,11 +36,11 @@ Perfect for real-time applications like chat systems, live dashboards, multiplay
 Choose your validation library:
 
 ```bash
-# With Zod (recommended for beginners)
+# With Zod
 bun add bun-ws-router zod
 bun add @types/bun -D
 
-# With Valibot (90% smaller bundles)
+# With Valibot (60-80% smaller bundles)
 bun add bun-ws-router valibot
 bun add @types/bun -D
 ```
@@ -93,8 +106,8 @@ const { messageSchema } = createMessageSchema(v);
 
 | Feature     | Zod                      | Valibot                  |
 | ----------- | ------------------------ | ------------------------ |
-| Bundle Size | 5.36 kB (Zod v4)         | 1.37 kB                  |
-| Performance | Baseline                 | 2x faster                |
+| Bundle Size | ~5-6 kB (Zod v4)         | ~1-2 kB                  |
+| Performance | Baseline                 | ~2x faster               |
 | API Style   | Method chaining          | Functional               |
 | Best for    | Server-side, familiarity | Client-side, performance |
 
@@ -147,7 +160,7 @@ Bun.serve({
 
 The `verifyIdToken` function is a placeholder for your authentication logic which could use user ID token verification from `firebase-admin` or any other authentication library.
 
-By verifying the user _before_ the WebSocket connection is fully established and passing the `user` data, you ensure that only authenticated users can connect, and you have their info ready to use in your `onOpen`, `onMessage`, and `onClose` handlers without needing to ask again. Secure _and_ convenient!
+By verifying the user before the WebSocket connection is established and passing the `user` data, you ensure that only authenticated users can connect, and you have their info ready to use in your `onOpen`, `onMessage`, and `onClose` handlers.
 
 ## How to define message types
 
@@ -206,56 +219,78 @@ export const UserJoined = messageSchema("USER_JOINED", {
 
 ## How to define routes
 
-You can define routes using the `WebSocketRouter` instance methods: `onOpen`, `onMessage`, and `onClose`.
+Define routes using the `WebSocketRouter` instance methods: `onOpen`, `onMessage`, and `onClose`.
 
 ```ts
 import { z } from "zod";
 import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { Meta, JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
+import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
 
 const { messageSchema } = createMessageSchema(z);
 
-const ws = new WebSocketRouter<Meta>();
+// Define custom connection data type
+type ConnectionData = {
+  userId?: string;
+  roomId?: string;
+};
+
+const ws = new WebSocketRouter<ConnectionData>();
 
 // Handle new connections
-ws.onOpen((c) => {
-  console.log(
-    `Client connected: ${c.ws.data.clientId}, User ID: ${c.ws.data.userId}`,
-  );
-  // You could send a welcome message here
+ws.onOpen((ctx) => {
+  console.log(`Client connected: ${ctx.ws.data.clientId}`);
+  // ctx.ws.data.clientId is always present (UUID v7)
+  // Send welcome message if needed
 });
 
 // Handle specific message types
-ws.onMessage(JoinRoom, (c) => {
-  const { roomId } = c.payload;
-  const userId = c.ws.data.userId || c.ws.data.clientId; // Use userId if available, else clientId
-  c.ws.data.roomId = roomId; // Store room in connection data
-  console.log(`User ${userId} joining room: ${roomId}`);
+ws.onMessage(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
 
-  // Example: Send confirmation back or broadcast to room
-  // This requires implementing broadcast/room logic separately
-  // c.send(UserJoined, { roomId, userId });
+  // Store room in connection data
+  ctx.ws.data.roomId = roomId;
+
+  // Subscribe to room topic for broadcasts
+  ctx.ws.subscribe(roomId);
+
+  console.log(`User ${userId} joined room: ${roomId}`);
+  console.log(`Message received at: ${ctx.receivedAt}`); // Server timestamp
+
+  // Send confirmation back to this client
+  ctx.send(UserJoined, { roomId, userId });
 });
 
-ws.onMessage(SendMessage, (c) => {
-  const { message } = c.payload;
-  const userId = c.ws.data.userId || c.ws.data.clientId;
-  const roomId = c.ws.data.roomId;
+ws.onMessage(SendMessage, (ctx) => {
+  const { message } = ctx.payload;
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+  const roomId = ctx.ws.data.roomId;
+
   console.log(`Message in room ${roomId} from ${userId}: ${message}`);
-  // Add logic to broadcast message to others in the room
+  // See "How to broadcast messages" section for broadcasting logic
 });
 
 // Handle disconnections
-ws.onClose((c) => {
-  const userId = c.ws.data.userId || c.ws.data.clientId;
-  console.log(`Client disconnected: ${userId}, code: ${c.code}`);
-  // Example: Notify others in the room the user left
-  // This requires implementing broadcast/room logic separately
-  // broadcast(c.ws.data.roomId, UserLeft, { userId });
+ws.onClose((ctx) => {
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+  console.log(`Client disconnected: ${userId}, code: ${ctx.code}`);
+
+  if (ctx.ws.data.roomId) {
+    // Unsubscribe and notify others (see broadcasting section)
+    ctx.ws.unsubscribe(ctx.ws.data.roomId);
+  }
 });
 ```
 
-**Important Note:** The `c.send(...)` function sends a message back _only_ to the client that sent the original message. For broadcasting to rooms or multiple clients, you'll need to implement your own logic (we handle the routing, you handle the party!).
+**Handler Context Fields:**
+
+- `ctx.ws` — ServerWebSocket instance with connection data
+- `ctx.ws.data.clientId` — Auto-generated UUID v7 (always present)
+- `ctx.type` — Message type literal (e.g., `"JOIN_ROOM"`)
+- `ctx.payload` — Typed payload (only exists when schema defines it)
+- `ctx.meta` — Client-provided metadata (correlationId, timestamp, custom fields)
+- `ctx.receivedAt` — Server receive timestamp (use for rate limiting, ordering, TTL)
+- `ctx.send()` — Type-safe send function (sends to this client only)
 
 ## How to broadcast messages
 
@@ -266,20 +301,20 @@ Broadcasting messages to multiple clients is a common requirement for real-time 
 Bun's WebSocket implementation includes built-in support for the PubSub pattern through `subscribe`, `publish`, and `unsubscribe` methods:
 
 ```ts
-ws.onMessage(JoinRoom, (c) => {
-  const { roomId } = c.payload;
-  const userId = c.ws.data.userId || c.ws.data.clientId;
+ws.onMessage(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
 
   // Store room ID in connection data
-  c.ws.data.roomId = roomId;
+  ctx.ws.data.roomId = roomId;
 
   // Subscribe the client to the room's topic
-  c.ws.subscribe(roomId);
+  ctx.ws.subscribe(roomId);
 
   console.log(`User ${userId} joined room: ${roomId}`);
 
   // Send confirmation back to the user who joined
-  c.send(UserJoined, { roomId, userId });
+  ctx.send(UserJoined, { roomId, userId });
 
   // Broadcast to all other subscribers that a new user joined
   const message = JSON.stringify({
@@ -287,16 +322,16 @@ ws.onMessage(JoinRoom, (c) => {
     meta: { timestamp: Date.now() },
     payload: { roomId, userId },
   });
-  c.ws.publish(roomId, message);
+  ctx.ws.publish(roomId, message);
 });
 
-ws.onClose((c) => {
-  const userId = c.ws.data.userId || c.ws.data.clientId;
-  const roomId = c.ws.data.roomId;
+ws.onClose((ctx) => {
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+  const roomId = ctx.ws.data.roomId;
 
   if (roomId) {
     // Unsubscribe from room
-    c.ws.unsubscribe(roomId);
+    ctx.ws.unsubscribe(roomId);
 
     // Notify others the user has left
     const message = JSON.stringify({
@@ -304,7 +339,7 @@ ws.onClose((c) => {
       meta: { timestamp: Date.now() },
       payload: { userId },
     });
-    c.ws.publish(roomId, message);
+    ctx.ws.publish(roomId, message);
   }
 });
 ```
@@ -321,48 +356,50 @@ import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
 
 const { messageSchema } = createMessageSchema(z);
 
-ws.onMessage(JoinRoom, (c) => {
-  const { roomId } = c.payload;
-  const userId = c.ws.data.userId || c.ws.data.clientId;
+ws.onMessage(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
 
   // Store room ID and subscribe to topic
-  c.ws.data.roomId = roomId;
-  c.ws.subscribe(roomId);
+  ctx.ws.data.roomId = roomId;
+  ctx.ws.subscribe(roomId);
 
   // Send confirmation back to the user who joined
-  c.send(UserJoined, { roomId, userId });
+  ctx.send(UserJoined, { roomId, userId });
 
   // Broadcast to other subscribers with schema validation
-  publish(c.ws, roomId, UserJoined, {
-    roomId,
-    userId,
-  });
+  publish(ctx.ws, roomId, UserJoined, { roomId, userId });
 });
 
-ws.onMessage(SendMessage, (c) => {
-  const { roomId, message } = c.payload;
-  const userId = c.ws.data.userId || c.ws.data.clientId;
+ws.onMessage(SendMessage, (ctx) => {
+  const { roomId, message } = ctx.payload;
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
 
   console.log(`Message in room ${roomId} from ${userId}: ${message}`);
 
   // Broadcast the message to all subscribers in the room
-  publish(c.ws, roomId, NewMessage, {
+  const NewMessage = messageSchema("NEW_MESSAGE", {
+    roomId: z.string(),
+    userId: z.string(),
+    message: z.string(),
+  });
+
+  publish(ctx.ws, roomId, NewMessage, {
     roomId,
     userId,
     message,
-    timestamp: Date.now(),
   });
 });
 
-ws.onClose((c) => {
-  const userId = c.ws.data.userId || c.ws.data.clientId;
-  const roomId = c.ws.data.roomId;
+ws.onClose((ctx) => {
+  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+  const roomId = ctx.ws.data.roomId;
 
   if (roomId) {
-    c.ws.unsubscribe(roomId);
+    ctx.ws.unsubscribe(roomId);
 
     // Notify others using the publish helper
-    publish(c.ws, roomId, UserLeft, { userId });
+    publish(ctx.ws, roomId, UserLeft, { userId });
   }
 });
 ```
@@ -383,14 +420,14 @@ import { createMessageSchema } from "bun-ws-router/zod";
 
 const { ErrorMessage, ErrorCode } = createMessageSchema(z);
 
-ws.onMessage(JoinRoom, (c) => {
-  const { roomId } = c.payload;
+ws.onMessage(JoinRoom, async (ctx) => {
+  const { roomId } = ctx.payload;
 
   // Check if room exists
   const roomExists = await checkRoomExists(roomId);
   if (!roomExists) {
     // Send error with standardized code
-    c.send(ErrorMessage, {
+    ctx.send(ErrorMessage, {
       code: ErrorCode.RESOURCE_NOT_FOUND,
       message: `Room ${roomId} does not exist`,
       context: { roomId }, // Optional context for debugging
@@ -399,8 +436,8 @@ ws.onMessage(JoinRoom, (c) => {
   }
 
   // Continue with normal flow...
-  c.ws.data.roomId = roomId;
-  c.ws.subscribe(roomId);
+  ctx.ws.data.roomId = roomId;
+  ctx.ws.subscribe(roomId);
   // ...
 });
 ```
@@ -410,28 +447,29 @@ ws.onMessage(JoinRoom, (c) => {
 You can add your own error handling middleware by using the `onMessage` handler:
 
 ```ts
-// Catch-all handler for message processing errors
-ws.onOpen((c) => {
+// Error handling in connection setup
+ws.onOpen((ctx) => {
   try {
     // Your connection setup logic
+    console.log(`Client ${ctx.ws.data.clientId} connected`);
   } catch (error) {
     console.error("Error in connection setup:", error);
-    c.send(ErrorMessage, {
+    ctx.send(ErrorMessage, {
       code: ErrorCode.INTERNAL_SERVER_ERROR,
       message: "Failed to set up connection",
     });
   }
 });
 
-// Global error handler for authentication
-ws.onMessage(AuthenticateUser, (c) => {
+// Error handling in message handlers
+ws.onMessage(AuthenticateUser, (ctx) => {
   try {
     // Validate token
-    const { token } = c.payload;
+    const { token } = ctx.payload;
     const user = validateToken(token);
 
     if (!user) {
-      c.send(ErrorMessage, {
+      ctx.send(ErrorMessage, {
         code: ErrorCode.AUTHENTICATION_FAILED,
         message: "Invalid authentication token",
       });
@@ -439,13 +477,13 @@ ws.onMessage(AuthenticateUser, (c) => {
     }
 
     // Store user data for future requests
-    c.ws.data.userId = user.id;
-    c.ws.data.userRole = user.role;
+    ctx.ws.data.userId = user.id;
+    ctx.ws.data.userRole = user.role;
 
     // Send success response
-    c.send(AuthSuccess, { userId: user.id });
+    ctx.send(AuthSuccess, { userId: user.id });
   } catch (error) {
-    c.send(ErrorMessage, {
+    ctx.send(ErrorMessage, {
       code: ErrorCode.INTERNAL_SERVER_ERROR,
       message: "Authentication process failed",
     });
@@ -472,7 +510,7 @@ You can also broadcast error messages to multiple clients using the `publish` fu
 
 ```ts
 // Notify all users in a room that it's being deleted
-publish(c.ws, roomId, ErrorMessage, {
+publish(ctx.ws, roomId, ErrorMessage, {
   code: ErrorCode.RESOURCE_NOT_FOUND,
   message: "This room is being deleted and will no longer be available",
   context: { roomId },
@@ -499,20 +537,27 @@ ws.addRoutes(notificationRoutes);
 
 Where `chatRoutes` and `notificationRoutes` are other router instances defined in separate files.
 
-## Browser client
+## Browser Client
 
-The library provides a type-safe browser client with automatic reconnection, authentication, and request/response patterns:
+Type-safe browser WebSocket client with automatic reconnection, authentication, and request/response patterns:
 
 ```ts
-import { createClient } from "bun-ws-router/client";
-import { Hello, HelloOk } from "./shared/schemas"; // Shared with server
+import { z } from "zod";
+import { createMessageSchema } from "bun-ws-router/zod";
+import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
 
+// Define schemas (shared with server)
+const { messageSchema } = createMessageSchema(z);
+const Hello = messageSchema("HELLO", { name: z.string() });
+const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+
+// Create client with auth and reconnection
 const client = createClient({
   url: "wss://api.example.com/ws",
   reconnect: { enabled: true },
   auth: {
     getToken: () => localStorage.getItem("access_token"),
-    attach: "query", // or "protocol"
+    attach: "query", // Appends ?access_token=...
   },
 });
 
@@ -521,29 +566,38 @@ await client.connect();
 // Send fire-and-forget message
 client.send(Hello, { name: "Anna" });
 
-// Receive messages with type safety
+// Receive messages with full type inference
 client.on(HelloOk, (msg) => {
+  // ✅ msg.payload.text is typed as string
   console.log("Server says:", msg.payload.text);
 });
 
-// Request/response pattern
+// Request/response pattern with timeout
 try {
   const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
     timeoutMs: 5000,
   });
+  // ✅ reply.payload.text is typed as string
   console.log("Reply:", reply.payload.text);
 } catch (err) {
   console.error("Request failed:", err);
 }
 ```
 
-Features: automatic reconnection with exponential backoff, message queueing when offline, token refresh on reconnect, request/response with correlation IDs, and full TypeScript type inference.
+**Features:**
 
-See the [Client Documentation](https://kriasoft.github.io/bun-ws-router/client-setup) for complete API reference and advanced usage.
+- 🔄 Automatic reconnection with exponential backoff
+- 📦 Message queueing when offline (configurable strategies)
+- 🔐 Token refresh on reconnect
+- ⏱️ Request/response with correlation IDs
+- 🔒 Full TypeScript type inference
+- 🎯 Multi-handler support (unlike server's single-handler model)
+
+See the [Client Documentation](./docs/client-setup.md) for complete API reference and advanced usage.
 
 ## Support
 
-Got questions? Hit a snag? Or just want to share your awesome WebSocket creation? Find us on [Discord](https://discord.com/invite/bSsv7XM). We promise we don't bite (usually 😉).
+Questions or issues? Join us on [Discord](https://discord.com/invite/bSsv7XM).
 
 ## Backers
 

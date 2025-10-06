@@ -42,15 +42,15 @@ if (!config.jwtSecret) {
 import jwt from "jsonwebtoken";
 
 const router = new WebSocketRouter()
-  .onOpen((ws) => {
+  .onOpen((ctx) => {
     // Set auth timeout
     const authTimer = setTimeout(() => {
-      if (!ws.data.user?.authenticated) {
-        ws.close(1008, "Authentication timeout");
+      if (!ctx.ws.data.authenticated) {
+        ctx.ws.close(1008, "Authentication timeout");
       }
     }, config.authTimeout);
 
-    ws.data.authTimer = authTimer;
+    ctx.ws.data.authTimer = authTimer;
   })
 
   .onMessage(AuthMessage, async (ctx) => {
@@ -65,11 +65,9 @@ const router = new WebSocketRouter()
       clearTimeout(ctx.ws.data.authTimer);
 
       // Set authenticated
-      ctx.setData({
-        authenticated: true,
-        userId: decoded.sub,
-        roles: decoded.roles,
-      });
+      ctx.ws.data.authenticated = true;
+      ctx.ws.data.userId = decoded.sub;
+      ctx.ws.data.roles = decoded.roles;
     } catch (error) {
       ctx.ws.close(1008, "Invalid authentication");
     }
@@ -116,45 +114,21 @@ const connectionLimiter = new RateLimiterMemory({
 });
 
 // Apply rate limiting
-const server = Bun.serve({
-  async fetch(req) {
+Bun.serve({
+  async fetch(req, server) {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
 
     try {
       // Check connection limit
       await connectionLimiter.consume(ip);
 
-      if (server.upgrade(req)) {
-        return;
-      }
+      return router.upgrade(req, { server });
     } catch {
       return new Response("Too many connections", { status: 429 });
     }
   },
 
-  websocket: {
-    ...router.websocket,
-
-    async message(ws, message) {
-      try {
-        // Check message rate limit
-        await messageLimiter.consume(ws.data.clientId);
-
-        // Process message
-        router.websocket.message(ws, message);
-      } catch {
-        ws.send(
-          JSON.stringify({
-            type: "ERROR",
-            payload: {
-              code: "RATE_LIMIT",
-              message: "Too many messages",
-            },
-          }),
-        );
-      }
-    },
-  },
+  websocket: router.websocket,
 });
 ```
 
@@ -163,22 +137,18 @@ const server = Bun.serve({
 ### 1. Connection Pooling
 
 ```typescript
-// Efficient broadcast using Bun's publish
+import { publish } from "bun-ws-router/zod/publish";
+
+// Efficient broadcast using type-safe publish
 router.onMessage(BroadcastMessage, (ctx) => {
-  // Use native publish for performance
-  ctx.ws.publish(
-    "global",
-    JSON.stringify({
-      type: "BROADCAST",
-      payload: ctx.payload,
-    }),
-  );
+  // Type-safe publish validates message before sending
+  publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
 });
 
 // Subscribe clients efficiently
-router.onOpen((ws) => {
-  ws.subscribe("global");
-  ws.subscribe(`user:${ws.data.clientId}`);
+router.onOpen((ctx) => {
+  ctx.ws.subscribe("global");
+  ctx.ws.subscribe(`user:${ctx.ws.data.clientId}`);
 });
 ```
 
@@ -208,14 +178,17 @@ const server = Bun.serve({
 const cleanupManager = new Map<string, () => void>();
 
 router
-  .onOpen((ws) => {
-    const clientId = ws.data.clientId;
+  .onOpen((ctx) => {
+    const clientId = ctx.ws.data.clientId;
     const cleanup: Array<() => void> = [];
+
+    // Initialize activity tracking
+    ctx.ws.data.lastActivity = Date.now();
 
     // Set idle timeout
     const idleTimer = setInterval(() => {
-      if (Date.now() - ws.data.lastActivity > config.idleTimeout) {
-        ws.close(1000, "Idle timeout");
+      if (Date.now() - ctx.ws.data.lastActivity > config.idleTimeout) {
+        ctx.ws.close(1000, "Idle timeout");
       }
     }, 60000);
 
@@ -229,13 +202,13 @@ router
   })
 
   .onMessage(AnyMessage, (ctx) => {
-    // Update activity timestamp
+    // Update activity timestamp directly on ws.data
     ctx.ws.data.lastActivity = Date.now();
   })
 
-  .onClose((ws) => {
+  .onClose((ctx) => {
     // Run cleanup
-    cleanupManager.get(ws.data.clientId)?.();
+    cleanupManager.get(ctx.ws.data.clientId)?.();
   });
 ```
 
@@ -257,19 +230,19 @@ const logger = pino({
 });
 
 router
-  .onOpen((ws) => {
+  .onOpen((ctx) => {
     logger.info({
       event: "ws_connect",
-      clientId: ws.data.clientId,
-      ip: ws.data.ip,
+      clientId: ctx.ws.data.clientId,
+      ip: ctx.ws.data.ip,
     });
   })
 
   .onMessage(AnyMessage, (ctx) => {
     logger.debug({
       event: "ws_message",
-      clientId: ctx.clientId,
-      type: ctx.ws.data.lastMessageType,
+      clientId: ctx.ws.data.clientId,
+      type: ctx.type,
       size: JSON.stringify(ctx.payload).length,
     });
   })
@@ -321,7 +294,7 @@ router
   .onClose(() => metrics.connections.dec())
   .onMessage(AnyMessage, (ctx) => {
     const size = JSON.stringify(ctx.payload).length;
-    metrics.messages.inc({ type: ctx.ws.data.lastMessageType });
+    metrics.messages.inc({ type: ctx.type });
     metrics.messageSize.observe(size);
   });
 
@@ -344,7 +317,7 @@ await redis.connect();
 
 // Pub/Sub across instances
 router.onMessage(BroadcastMessage, async (ctx) => {
-  // Publish to Redis
+  // Publish to Redis for cross-instance communication
   await redis.publish(
     "broadcast",
     JSON.stringify({
@@ -353,14 +326,22 @@ router.onMessage(BroadcastMessage, async (ctx) => {
       origin: process.env.INSTANCE_ID,
     }),
   );
+
+  // Also broadcast to local clients using type-safe publish()
+  publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
 });
 
-// Subscribe to Redis broadcasts
+// Subscribe to Redis broadcasts from other instances
 redis.subscribe("broadcast", (message) => {
   const data = JSON.parse(message);
 
-  // Broadcast to local clients
-  server.publish("global", message);
+  // Skip if from current instance (already broadcasted above)
+  if (data.origin === process.env.INSTANCE_ID) return;
+
+  // Broadcast to local clients using server.publish()
+  // Note: This is raw server-level broadcast (no validation)
+  // Message is already validated by originating instance
+  server.publish("global", JSON.stringify(data));
 });
 ```
 
@@ -456,12 +437,18 @@ async function gracefulShutdown() {
   // Stop accepting new connections
   server.stop();
 
-  // Close existing connections gracefully
+  // Notify all clients of shutdown using server.publish()
+  // Note: This is server-level broadcast (no per-connection context)
+  const ShutdownMessage = messageSchema("SERVER_SHUTDOWN", {
+    reason: z.string(),
+  });
+
   server.publish(
-    "shutdown",
+    "global",
     JSON.stringify({
       type: "SERVER_SHUTDOWN",
-      message: "Server is shutting down",
+      meta: { timestamp: Date.now() },
+      payload: { reason: "Server maintenance" },
     }),
   );
 

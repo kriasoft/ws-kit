@@ -2,162 +2,9 @@
 
 Complete API documentation for the browser WebSocket client.
 
-## Types
-
-### ClientOptions
-
-Configuration options for creating a client.
-
-```typescript
-type ClientOptions = {
-  url: string | URL;
-  protocols?: string | string[]; // WebSocket subprotocols
-
-  reconnect?: {
-    enabled?: boolean; // default: true
-    maxAttempts?: number; // default: Infinity
-    initialDelayMs?: number; // default: 300
-    maxDelayMs?: number; // default: 10_000
-    jitter?: "full" | "none"; // default: "full"
-  };
-
-  queue?: "drop-oldest" | "drop-newest" | "off"; // default: "drop-newest"
-  queueSize?: number; // default: 1000
-
-  autoConnect?: boolean; // default: false
-
-  pendingRequestsLimit?: number; // default: 1000
-
-  auth?: {
-    getToken?: () =>
-      | string
-      | null
-      | undefined
-      | Promise<string | null | undefined>;
-    attach?: "query" | "protocol"; // default: "query"
-    queryParam?: string; // default: "access_token"
-    protocolPrefix?: string; // default: "bearer."
-    protocolPosition?: "append" | "prepend"; // default: "append"
-  };
-
-  wsFactory?: (url: string | URL, protocols?: string | string[]) => WebSocket;
-};
-```
-
-#### Options Details
-
-**`url`** - WebSocket server URL (required)
-
-- Must be a valid `ws://` or `wss://` URL
-
-**`protocols`** - WebSocket subprotocols
-
-- Single protocol: `"chat-v2"`
-- Multiple protocols: `["chat-v2", "auth-v1"]`
-
-**`reconnect`** - Automatic reconnection settings
-
-- `enabled`: Enable auto-reconnect (default: `true`)
-- `maxAttempts`: Max reconnect attempts (default: `Infinity`)
-- `initialDelayMs`: Starting delay (default: `300`)
-- `maxDelayMs`: Maximum delay cap (default: `10000`)
-- `jitter`: Randomization strategy (default: `"full"`)
-  - `"full"`: Random delay between 0 and calculated delay
-  - `"none"`: Use exact calculated delay
-
-**`queue`** - Message queueing strategy when offline
-
-- `"drop-newest"` (default): Queue until full, then reject new messages
-- `"drop-oldest"`: Queue until full, then evict oldest messages
-- `"off"`: Drop all messages immediately when offline
-
-**`queueSize`** - Maximum queue size (default: `1000`)
-
-**`autoConnect`** - Auto-connect on first operation (default: `false`)
-
-- When `true`, first `send()` or `request()` triggers connection
-- Does NOT auto-reconnect after manual `close()`
-
-**`pendingRequestsLimit`** - Max concurrent pending requests (default: `1000`)
-
-- Prevents memory leaks if server stops replying
-- New requests reject with `StateError` when exceeded
-
-**`auth`** - Authentication configuration
-
-- See [Authentication](/client-auth) for details
-
-**`wsFactory`** - WebSocket factory for testing
-
-- Dependency injection for tests with fake WebSocket
-
-### ClientState
-
-Connection states:
-
-```typescript
-type ClientState =
-  | "closed" // No connection; initial state
-  | "connecting" // Connection attempt in progress
-  | "open" // Connected, messages flow
-  | "closing" // Graceful disconnect initiated
-  | "reconnecting"; // Waiting during backoff delay
-```
-
-### WebSocketClient
-
-Main client interface:
-
-```typescript
-interface WebSocketClient {
-  // State properties
-  readonly state: ClientState;
-  readonly isConnected: boolean; // Sugar for state === "open"
-  readonly protocol: string; // Selected subprotocol
-
-  // Connection methods
-  connect(): Promise<void>;
-  close(opts?: { code?: number; reason?: string }): Promise<void>;
-
-  // State listeners
-  onState(cb: (state: ClientState) => void): () => void;
-  onceOpen(): Promise<void>;
-
-  // Message handlers
-  on<S extends AnyMessageSchema>(
-    schema: S,
-    handler: (msg: InferMessage<S>) => void,
-  ): () => void;
-
-  // Sending messages
-  send<S extends AnyMessageSchema>(
-    schema: S,
-    payload: InferPayload<S>,
-    opts?: { meta?: InferMeta<S>; correlationId?: string },
-  ): boolean;
-
-  request<S extends AnyMessageSchema, R extends AnyMessageSchema>(
-    schema: S,
-    payload: InferPayload<S>,
-    reply: R,
-    opts?: {
-      timeoutMs?: number;
-      meta?: InferMeta<S>;
-      correlationId?: string;
-      signal?: AbortSignal;
-    },
-  ): Promise<InferMessage<R>>;
-
-  // Hooks
-  onUnhandled(cb: (msg: AnyInboundMessage) => void): () => void;
-  onError(cb: (error: Error, context: ErrorContext) => void): () => void;
-}
-
-type ErrorContext = {
-  type: "parse" | "validation" | "overflow" | "unknown";
-  details?: unknown;
-};
-```
+::: tip
+For complete type definitions and implementation details, see the [Client Specification](https://github.com/kriasoft/bun-ws-router/blob/main/specs/client.md).
+:::
 
 ## Methods
 
@@ -279,9 +126,16 @@ unsubscribe();
 Send fire-and-forget message.
 
 ```typescript
+// With payload
 send<S extends AnyMessageSchema>(
   schema: S,
   payload: InferPayload<S>,
+  opts?: { meta?: InferMeta<S>; correlationId?: string }
+): boolean
+
+// Without payload (if schema has no payload)
+send<S extends AnyMessageSchema>(
+  schema: S,
   opts?: { meta?: InferMeta<S>; correlationId?: string }
 ): boolean
 ```
@@ -316,12 +170,25 @@ client.send(
 Send request and wait for reply.
 
 ```typescript
+// With payload
 request<S extends AnyMessageSchema, R extends AnyMessageSchema>(
   schema: S,
   payload: InferPayload<S>,
   reply: R,
   opts?: {
     timeoutMs?: number;        // default: 30000
+    meta?: InferMeta<S>;
+    correlationId?: string;
+    signal?: AbortSignal;
+  }
+): Promise<InferMessage<R>>
+
+// Without payload (if schema has no payload)
+request<S extends AnyMessageSchema, R extends AnyMessageSchema>(
+  schema: S,
+  reply: R,
+  opts?: {
+    timeoutMs?: number;
     meta?: InferMeta<S>;
     correlationId?: string;
     signal?: AbortSignal;
@@ -523,7 +390,7 @@ import type { InferMessage } from "bun-ws-router/zod";
 const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
 
 type HelloOkMessage = InferMessage<typeof HelloOk>;
-// { type: "HELLO_OK", meta: { timestamp: number }, payload: { text: string } }
+// { type: "HELLO_OK", meta: { timestamp?: number }, payload: { text: string } }
 ```
 
 ### InferPayload
@@ -551,5 +418,5 @@ const RoomMsg = messageSchema(
 );
 
 type RoomMeta = InferMeta<typeof RoomMsg>;
-// { timestamp: number, roomId: string }
+// { timestamp?: number, roomId: string }
 ```

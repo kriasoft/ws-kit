@@ -40,7 +40,7 @@ export const ChatMessage = messageSchema("CHAT", { text: z.string() });
 
 ```typescript
 // client.ts
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
 import { Hello, HelloOk } from "./shared/schemas";
 
 const client = createClient({
@@ -53,11 +53,16 @@ await client.connect();
 // Send message
 client.send(Hello, { name: "Anna" });
 
-// Receive messages
+// Receive messages with full type inference
 client.on(HelloOk, (msg) => {
+  // ✅ msg.payload.text is typed as string
   console.log("Server says:", msg.payload.text);
 });
 ```
+
+::: tip TYPED CLIENT REQUIRED
+Use `/zod/client` or `/valibot/client` for full type inference as shown above. The generic client (`/client`) provides `unknown` in handlers and is only for custom validators.
+:::
 
 ### 3. Use on the Server
 
@@ -82,10 +87,44 @@ Bun.serve({
 
 ## Import Patterns
 
-### Client Package
+### Typed Clients (Recommended)
+
+**For full type safety, import from validator-specific paths:**
 
 ```typescript
+// Zod users - RECOMMENDED
+import { createClient } from "bun-ws-router/zod/client";
+
+// Valibot users - RECOMMENDED
+import { createClient } from "bun-ws-router/valibot/client";
+```
+
+**Why typed clients?**
+
+Typed clients provide full TypeScript inference in message handlers:
+
+```typescript
+import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+
+const client = createClient({ url: "wss://api.example.com" });
+
+client.on(HelloOk, (msg) => {
+  // ✅ msg is fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
+  console.log(msg.type); // "HELLO_OK" (literal type)
+  console.log(msg.payload.text.toUpperCase()); // ✅ String methods work!
+});
+```
+
+**Generic client (custom validators only):**
+
+```typescript
+// ⚠️ Only for custom validators - handlers receive `unknown`
 import { createClient } from "bun-ws-router/client";
+
+client.on(HelloOk, (msg) => {
+  // ⚠️ msg is unknown - requires manual type assertion
+  const typed = msg as InferMessage<typeof HelloOk>;
+});
 ```
 
 ### Validator Packages
@@ -130,8 +169,27 @@ const client = createClient({
 client.send(Hello, { name: "Anna" }); // Triggers connection if idle
 ```
 
-::: warning
-Auto-connect is convenient for prototypes but may hide connection errors. For production apps, prefer explicit connection control.
+**AutoConnect Semantics:**
+
+- First `send()` or `request()` triggers `connect()` if `state === "closed"` AND client never connected before
+- Connection errors:
+  - `send()` returns `false` (logged to console, never throws)
+  - `request()` returns rejected Promise (never throws synchronously)
+- After successful auto-connect, normal queue behavior applies
+- Does **NOT** auto-reconnect from `"closed"` after manual `close()`
+
+**When to Use AutoConnect:**
+
+| Scenario                                 | Use AutoConnect? | Reason                                 |
+| ---------------------------------------- | ---------------- | -------------------------------------- |
+| Prototypes/demos                         | ✅ Yes           | Simplifies code, connection assumed    |
+| Single connection lifecycle              | ✅ Yes           | Connection established once at startup |
+| Complex apps with reconnect logic        | ❌ No            | Need explicit connection control       |
+| Apps requiring connection error handling | ❌ No            | Errors hidden in fire-and-forget       |
+| Production real-time dashboards          | ⚠️ Maybe         | If connection failure is acceptable    |
+
+::: warning Production Guidance
+Auto-connect is convenient for prototypes but may hide connection errors. For production apps with critical real-time requirements, prefer explicit connection control with error handling.
 :::
 
 ## Basic Usage

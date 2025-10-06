@@ -1,10 +1,11 @@
 {
   "name": "bun-ws-router",
-  "version": "0.5.0",
-  "description": "A simple and efficient WebSocket router for Bun with Zod/Valibot message validation.",
+  "version": "0.6.0",
+  "description": "Lightweight client/server WebSocket router for Bun with type-safe Zod/Valibot validation.",
   "keywords": [
     "broadcast",
     "bun",
+    "client",
     "framework",
     "handler",
     "hono",
@@ -14,9 +15,11 @@
     "realtime",
     "router",
     "schema",
+    "server",
     "socket",
     "socketio",
     "type-safe",
+    "typesafe",
     "typescript",
     "valibot",
     "validation",
@@ -36,7 +39,7 @@
   "contributors": [
     {
       "name": "Konstantin Tarkus",
-      "url": "https://github.com/koistya"
+      "url": "https://github.com/sponsors/koistya"
     }
   ],
   "type": "module",
@@ -55,6 +58,14 @@
       "bun": "./valibot/index.ts",
       "types": "./dist/valibot/index.d.ts",
       "default": "./dist/valibot/index.js"
+    },
+    "./zod/client": {
+      "types": "./dist/zod/client.d.ts",
+      "default": "./dist/zod/client.js"
+    },
+    "./valibot/client": {
+      "types": "./dist/valibot/client.d.ts",
+      "default": "./dist/valibot/client.js"
     },
     "./client": {
       "types": "./dist/client/index.d.ts",
@@ -88,21 +99,21 @@
     }
   },
   "devDependencies": {
-    "@eslint/js": "^9.36.0",
+    "@eslint/js": "^9.37.0",
     "@types/bun": "^1.2.23",
     "eslint-config-prettier": "^10.1.8",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "globals": "^16.4.0",
-    "hono": "^4.9.9",
+    "hono": "^4.9.10",
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
     "lint-staged": "^16.2.3",
     "prettier": "^3.6.2",
-    "typescript-eslint": "^8.45.0",
+    "typescript-eslint": "^8.46.0",
     "typescript": "^5.9.3",
     "valibot": "^1.1.0",
     "vitepress": "^1.6.4",
-    "zod": "^4.1.11"
+    "zod": "^4.1.12"
   },
   "scripts": {
     "prepare": "husky",

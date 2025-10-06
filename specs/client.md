@@ -17,7 +17,10 @@
 - **Imports:**
   - Server (Zod): `import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod"`
   - Server (Valibot): `import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot"`
-  - Client: `import { createClient } from "bun-ws-router/client"`
+  - **Client (Typed):** ✅ **Recommended for type safety**
+    - Zod: `import { createClient } from "bun-ws-router/zod/client"`
+    - Valibot: `import { createClient } from "bun-ws-router/valibot/client"`
+  - **Client (Generic):** `import { createClient } from "bun-ws-router/client"` (custom validators only; handlers infer as `unknown`)
   - **Types:** Import from the same validator package as your schemas:
     - Zod: `import type { AnyMessageSchema, InferMessage, InferPayload, InferMeta, AnyInboundMessage } from "bun-ws-router/zod"`
     - Valibot: `import type { AnyMessageSchema, InferMessage, InferPayload, InferMeta, AnyInboundMessage } from "bun-ws-router/valibot"`
@@ -25,8 +28,10 @@
 
 ## Public API (Stable v1)
 
+**Use typed clients** (`/zod/client` or `/valibot/client`) for full type inference. Generic client (`/client`) remains available but provides `unknown` in handlers—use only for custom validators. **See @adrs.md#ADR-002 for type override rationale.**
+
 ````ts
-// bun-ws-router/client
+// bun-ws-router/zod/client (similar interface for valibot/client)
 
 export type ClientOptions = {
   url: string | URL;
@@ -192,22 +197,27 @@ onState(cb: (state: ClientState) => void): () => void; // returns unsubscribe
 onceOpen(): Promise<void>;
 
 // Inbound routing with type-safe validation
-// Schema-based (typed, validates)
-// Multiple handlers may be registered for the same schema
+// Multiple handlers may be registered for the same schema (execute in registration order)
+// Returns unsubscribe function (removes only this handler)
+// See @client.md#Multiple-Handlers for multi-handler semantics
 on<S extends AnyMessageSchema>(
 schema: S,
 handler: (msg: InferMessage<S>) => void,
-): () => void; // unsubscribe (removes only this handler)
+): () => void;
 
 // Fire-and-forget to server (unicast)
+// Returns true if sent/enqueued; false if dropped (see @client.md#fire-and-forget-return)
+// Payload conditional: use overloads to omit payload param for no-payload schemas
 send<S extends AnyMessageSchema>(
 schema: S,
 payload: InferPayload<S>,
 opts?: { meta?: InferMeta<S>; correlationId?: string },
-): boolean; // true if sent/enqueued; false if dropped (see below)
+): boolean;
 
 // Request/response with correlationId (RPC-style)
 // Note: opts.meta applies to the outbound request, not the reply
+// Returns Promise resolving to fully typed reply message
+// Rejects on timeout, validation error, connection close, or server error
 request<S extends AnyMessageSchema, R extends AnyMessageSchema>(
 schema: S,
 payload: InferPayload<S>,
@@ -244,6 +254,56 @@ export {
 } from "bun-ws-router/client";
 
 ````
+
+**Type Inference**: Typed clients (`/zod/client`, `/valibot/client`) provide full inference via type overrides (see @adrs.md#ADR-002):
+
+```typescript
+// Zod typed client
+import { createClient } from "bun-ws-router/zod/client";
+
+const client = createClient({ url: "wss://api.example.com" });
+
+client.on(HelloOk, (msg) => {
+  // ✅ msg fully typed: { type: "HELLO_OK", meta: MessageMeta, payload: { text: string } }
+  msg.type; // "HELLO_OK" (literal type)
+  msg.meta.timestamp; // number | undefined
+  msg.payload.text; // string (was `unknown` in generic client)
+});
+```
+
+**Payload conditional typing** enforced via overloads:
+
+```typescript
+// Define schemas
+const Hello = messageSchema("HELLO", { name: z.string() });
+const Logout = messageSchema("LOGOUT"); // No payload
+
+// ✅ Payload required (schema has payload)
+client.send(Hello, { name: "Alice" });
+
+// ✅ Payload omitted (schema has no payload)
+client.send(Logout);
+
+// ❌ Type error - payload required but missing
+client.send(Hello);
+// Error: Expected 2-3 arguments, but got 1
+
+// ❌ Type error - payload provided but schema has none
+client.send(Logout, {});
+// Error: Expected 1-2 arguments, but got 2-3
+```
+
+**Generic client** (`/client`) remains available for custom validators but handlers receive `unknown`:
+
+```typescript
+// Generic client (custom validators only)
+import { createClient } from "bun-ws-router/client";
+
+client.on(HelloOk, (msg) => {
+  // ⚠️ msg is unknown - requires manual type assertion
+  const typed = msg as InferMessage<typeof HelloOk>;
+});
+```
 
 ### Multiple Handlers
 
@@ -941,7 +1001,7 @@ router.onMessage(Hello, (ctx) => {
 // client.ts
 import { z } from "zod";
 import { createMessageSchema } from "bun-ws-router/zod";
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
 
 // Create schemas (shared with server)
 const { messageSchema } = createMessageSchema(z);
@@ -961,6 +1021,7 @@ const client2 = createClient({
 client2.send(Hello, { name: "Anna" }); // Auto-connects if closed (never connected)
 
 client2.on(HelloOk, (msg) => {
+  // ✅ msg fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
   console.log("Server says:", msg.payload.text);
 });
 
@@ -968,15 +1029,14 @@ client2.on(HelloOk, (msg) => {
 const reply = await client2.request(Hello, { name: "Bob" }, HelloOk, {
   timeoutMs: 5000,
 });
-console.log(reply.payload.text);
+console.log(reply.payload.text); // ✅ Typed as string
 ```
 
 ### 2) Auth with token refresh + reconnect
 
 ```ts
 // client.ts
-import { createClient } from "bun-ws-router/client";
-import type { InferMessage } from "bun-ws-router/valibot"; // or /zod
+import { createClient } from "bun-ws-router/valibot/client"; // ✅ Typed client
 import { Hello, HelloOk, Chat } from "./shared/schemas";
 
 const client = createClient({
@@ -996,7 +1056,8 @@ const client = createClient({
 client.onState((s) => console.debug("state:", s));
 await client.onceOpen();
 
-client.on(HelloOk, (msg: InferMessage<typeof HelloOk>) => {
+client.on(HelloOk, (msg) => {
+  // ✅ msg fully typed via Valibot inference
   console.log("Server:", msg.payload.text);
 });
 
@@ -1007,7 +1068,7 @@ try {
   const reply = await client.request(Hello, { name: "Anna" }, HelloOk, {
     timeoutMs: 5000,
   });
-  console.log("Reply:", reply.payload.text);
+  console.log("Reply:", reply.payload.text); // ✅ Typed
 } catch (err) {
   // handle TimeoutError, ServerError, ValidationError, ConnectionClosedError
 }
@@ -1025,7 +1086,7 @@ const replyPromise = client.request(Hello, { name: "Bob" }, HelloOk, {
 
 try {
   const reply = await replyPromise;
-  console.log("Reply:", reply.payload.text);
+  console.log("Reply:", reply.payload.text); // ✅ Typed
 } catch (err) {
   if (err instanceof StateError) {
     console.log("Request aborted");

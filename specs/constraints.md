@@ -16,18 +16,25 @@ Single source of truth for MUST/SHOULD/NEVER rules when working with `bun-ws-rou
 3. **NEVER** import from `"bun-ws-router"` root - use `/zod` or `/valibot`
 4. **NEVER** use deprecated `messageSchema` export - use factory pattern
    - Required to avoid dual package hazard with discriminated unions
+5. **ALWAYS** use typed clients for Zod/Valibot:
+   - `import { createClient } from "bun-ws-router/zod/client"`
+   - `import { createClient } from "bun-ws-router/valibot/client"`
+   - See @adrs.md#ADR-002 for type override pattern
+6. **NEVER** use generic client (`/client`) unless implementing custom validator
+   - Generic client handlers infer as `unknown` (requires manual type assertions)
 
 ### Security & Validation
 
-5. **NEVER** re-validate data inside handlers - trust schema validation
-6. **NEVER** access connection identity via `ctx.meta.clientId` - use `ctx.ws.data.clientId`
-7. **NEVER** allow clients to set reserved meta keys (`clientId`, `receivedAt`)
+7. **NEVER** re-validate data inside handlers - trust schema validation
+8. **NEVER** access connection identity via `ctx.meta.clientId` - use `ctx.ws.data.clientId`
+9. **NEVER** allow clients to set reserved meta keys (`clientId`, `receivedAt`)
    - Router MUST strip these during normalization BEFORE validation (security boundary)
    - Implementation: `shared/message.ts` in `MessageRouter.handleMessage()`
    - See @validation.md#normalization-rules for canonical code
-8. **ALWAYS** use strict schemas - reject unknown keys at root/meta/payload levels
-   - See @schema.md#Strict-Schemas for rationale
-   - See @validation.md#Strict-Mode-Enforcement for adapter requirements
+10. **ALWAYS** use strict schemas - reject unknown keys at root/meta/payload levels
+
+- See @schema.md#Strict-Schemas for rationale
+- See @validation.md#Strict-Mode-Enforcement for adapter requirements
 
 ## Required Patterns (ALWAYS Use)
 
@@ -83,27 +90,27 @@ Single source of truth for MUST/SHOULD/NEVER rules when working with `bun-ws-rou
 
 ### Error Handling
 
-9. **ALWAYS** wrap async operations in try/catch
-10. **ALWAYS** log errors with `clientId` context (`ctx.ws.data.clientId`)
-11. **ALWAYS** keep connections open on errors (handler must explicitly close)
+11. **ALWAYS** wrap async operations in try/catch
+12. **ALWAYS** log errors with `clientId` context (`ctx.ws.data.clientId`)
+13. **ALWAYS** keep connections open on errors (handler must explicitly close)
 
 ### Messaging
 
-12. **ALWAYS** use `ctx.send()` for type-safe message sending
-13. **ALWAYS** use `publish()` helper for validated broadcasting
+14. **ALWAYS** use `ctx.send()` for type-safe message sending
+15. **ALWAYS** use `publish()` helper for validated broadcasting
     - Validates before publishing to prevent malformed messages reaching subscribers
-14. **NEVER** inject `clientId` into message meta (inbound or outbound)
+16. **NEVER** inject `clientId` into message meta (inbound or outbound)
     - Connection identity is transport state (`ctx.ws.data.clientId`)
     - Use `publish(..., { origin: "userId" })` for sender tracking (see @pubsub.md#Origin-Option)
     - Injects as `meta.senderId` (not `clientId`) for application-level identity
     - `origin` is a `ws.data` field name; function extractors NOT supported (hot-path performance)
     - **No-op if `ws.data[origin]` is undefined**
-15. **ALWAYS** auto-inject `timestamp` in outbound messages (`ctx.send()` and `publish()`)
+17. **ALWAYS** auto-inject `timestamp` in outbound messages (`ctx.send()` and `publish()`)
 
 ### Lifecycle
 
-16. **ALWAYS** unsubscribe in `onClose()` handler
-17. **ALWAYS** store topic identifiers in `ctx.ws.data` for cleanup
+18. **ALWAYS** unsubscribe in `onClose()` handler
+19. **ALWAYS** store topic identifiers in `ctx.ws.data` for cleanup
 
 ## Type System Trade-offs
 

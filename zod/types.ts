@@ -63,6 +63,76 @@ export interface MessageHandlerEntry<Data = unknown> {
   handler: MessageHandler<MessageSchemaType, Data>;
 }
 
+/**
+ * Type helpers for client-side type inference (ADR-002).
+ * Used by typed client adapters to extract message types from schemas.
+ */
+
+/**
+ * Infer full inbound message type (as received by handlers).
+ *
+ * Includes optional timestamp/correlationId (may be present from client),
+ * plus schema-defined extended meta and payload (if defined).
+ *
+ * @example
+ * ```typescript
+ * const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+ * type Msg = InferMessage<typeof HelloOk>;
+ * // { type: "HELLO_OK", meta: { timestamp?: number, correlationId?: string }, payload: { text: string } }
+ *
+ * client.on(HelloOk, (msg) => {
+ *   msg.type // "HELLO_OK" (literal type)
+ *   msg.meta.timestamp // number | undefined
+ *   msg.payload.text // string
+ * });
+ * ```
+ */
+export type InferMessage<S extends MessageSchemaType> = z.infer<S>;
+
+/**
+ * Infer payload type from schema, or never if no payload defined.
+ *
+ * Returns `never` (not `undefined`) for no-payload schemas to enable
+ * clean overload discrimination in send() and request() methods.
+ *
+ * @example
+ * ```typescript
+ * const WithPayload = messageSchema("MSG", { id: z.number() });
+ * const NoPayload = messageSchema("PING");
+ *
+ * type P1 = InferPayload<typeof WithPayload>; // { id: number }
+ * type P2 = InferPayload<typeof NoPayload>;   // never
+ * ```
+ */
+export type InferPayload<S extends MessageSchemaType> =
+  "payload" extends keyof S["shape"]
+    ? S["shape"]["payload"] extends ZodType
+      ? z.infer<S["shape"]["payload"]>
+      : never
+    : never;
+
+/**
+ * Infer extended meta fields for outbound messages.
+ *
+ * Omits auto-injected fields (timestamp, correlationId) which are provided
+ * via opts.meta or opts.correlationId. Only includes schema-defined extended meta.
+ *
+ * Used to enforce required extended meta fields at compile time for send/request.
+ *
+ * @example
+ * ```typescript
+ * const RoomMsg = messageSchema("CHAT", { text: z.string() }, { roomId: z.string() });
+ * type Meta = InferMeta<typeof RoomMsg>; // { roomId: string }
+ * // timestamp and correlationId are omitted (auto-injected by client)
+ *
+ * client.send(RoomMsg, { text: "hi" }, { meta: { roomId: "general" } });
+ * ```
+ */
+export type InferMeta<S extends MessageSchemaType> =
+  "meta" extends keyof S["shape"]
+    ? Omit<z.infer<S["shape"]["meta"]>, "timestamp" | "correlationId">
+    : Record<string, never>;
+
 /** Re-export shared types that are validator-agnostic. See: shared/types.ts */
 export type {
   CloseHandler,

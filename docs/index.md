@@ -3,7 +3,7 @@
 layout: home
 
 hero:
-  name: "Schema-First WebSocket Routing"
+  name: "Type-Safe WebSocket Routing"
   # text: "Type-safe WebSocket routing for Bun"
   tagline: Type-safe message routing for Bun's WebSocket server that complements native PubSub and connection handling
   actions:
@@ -29,7 +29,7 @@ features:
     details: Simple API with powerful features like error boundaries, connection metadata, and async handlers
   - icon: 📦
     title: Lightweight
-    details: Choose Valibot for 90% smaller bundles or Zod for familiar syntax. Core logic shared between adapters
+    details: Choose Valibot for significantly smaller bundles or Zod for familiar syntax. Core logic shared between adapters
   - icon: 🚀
     title: Production Ready
     details: Built-in error handling, authentication patterns, and room broadcasting for real-world applications

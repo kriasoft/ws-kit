@@ -196,46 +196,48 @@ export function createClient(opts: ClientOptions): WebSocketClient {
         // No schema handler found, invoke onUnhandled
         unhandledCallback(validationResult.data as AnyInboundMessage);
       }
-      return;
-    }
-
-    // Validation failed or no schema registered
-    if (validationResult.reason === "validation-failed") {
-      // Validation failed - drop message (do NOT pass to onUnhandled)
-      // Already logged warning in handlers.validate()
-      for (const cb of Array.from(errorCallbacks)) {
-        try {
-          cb(new Error("Message validation failed"), {
-            type: "validation",
-            details: { message: parsed, errors: validationResult.error },
-          });
-        } catch (cbError) {
-          console.error("[Client] Error callback failed:", cbError);
-        }
-      }
-      return;
-    }
-
-    // No schema registered - check if structurally valid for onUnhandled
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      "type" in parsed &&
-      typeof parsed.type === "string"
-    ) {
-      if (unhandledCallback) {
-        unhandledCallback(parsed as AnyInboundMessage);
-      }
     } else {
-      console.warn("[Client] Invalid message structure:", parsed);
-      for (const cb of Array.from(errorCallbacks)) {
-        try {
-          cb(new Error("Invalid message structure"), {
-            type: "validation",
-            details: parsed,
-          });
-        } catch (cbError) {
-          console.error("[Client] Error callback failed:", cbError);
+      // Validation failed or no schema registered
+      const failureResult = validationResult as
+        | { success: false; reason: "no-schema" }
+        | { success: false; reason: "validation-failed"; error: unknown };
+
+      if (failureResult.reason === "validation-failed") {
+        // Validation failed - drop message (do NOT pass to onUnhandled)
+        // Already logged warning in handlers.validate()
+        for (const cb of Array.from(errorCallbacks)) {
+          try {
+            cb(new Error("Message validation failed"), {
+              type: "validation",
+              details: { message: parsed, errors: failureResult.error },
+            });
+          } catch (cbError) {
+            console.error("[Client] Error callback failed:", cbError);
+          }
+        }
+      } else {
+        // No schema registered - check if structurally valid for onUnhandled
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "type" in parsed &&
+          typeof parsed.type === "string"
+        ) {
+          if (unhandledCallback) {
+            unhandledCallback(parsed as AnyInboundMessage);
+          }
+        } else {
+          console.warn("[Client] Invalid message structure:", parsed);
+          for (const cb of Array.from(errorCallbacks)) {
+            try {
+              cb(new Error("Invalid message structure"), {
+                type: "validation",
+                details: parsed,
+              });
+            } catch (cbError) {
+              console.error("[Client] Error callback failed:", cbError);
+            }
+          }
         }
       }
     }
@@ -451,7 +453,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
     // Strip reserved + managed keys from user meta
     const userMeta = opts?.meta ? { ...opts.meta } : {};
-    for (const key of RESERVED_MANAGED_META_KEYS) {
+    for (const key of Array.from(RESERVED_MANAGED_META_KEYS)) {
       Reflect.deleteProperty(userMeta, key);
     }
 
@@ -526,7 +528,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
     // Strip reserved + managed keys from user meta
     const userMeta = opts?.meta ? { ...opts.meta } : {};
-    for (const key of RESERVED_MANAGED_META_KEYS) {
+    for (const key of Array.from(RESERVED_MANAGED_META_KEYS)) {
       Reflect.deleteProperty(userMeta, key);
     }
 
