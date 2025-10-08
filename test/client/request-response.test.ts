@@ -10,9 +10,8 @@
  * 3. Wrong type → reject with ValidationError
  * 4. Malformed reply → reject with ValidationError
  *
- * See @client.md#Correlation
- * See @implementation-status.md#GAP-006
- * See @testing.md#request-rejects-on-wrong-type-reply
+ * See @specs/client.md#Correlation
+ * See @specs/test-requirements.md#Runtime-Testing
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";

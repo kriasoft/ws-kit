@@ -4,12 +4,13 @@
 /**
  * Reserved server-only meta keys.
  *
- * These keys MUST NOT be:
- * - Sent by clients (stripped during normalization)
- * - Defined in extended meta schemas (validation error at schema creation)
+ * Defense-in-depth enforcement:
+ * - Schema creation: Throws if extended meta defines these keys (design-time)
+ * - Runtime normalization: Strips these keys from inbound messages (security boundary)
  *
- * SOURCE: @specs/constraints.md#reserved-keys
- * USAGE: @specs/validation.md#normalization-rules
+ * CANONICAL LIST: @specs/rules.md#reserved-keys
+ * IMPLEMENTATION: @specs/validation.md#normalization-rules
+ * SCHEMA ENFORCEMENT: @specs/schema.md#Reserved-Server-Only-Meta-Keys
  */
 export const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 

@@ -5,13 +5,13 @@ Type-safe WebSocket router for Bun with Zod or Valibot validation.
 ## Specifications and ADRs
 
 - `specs/adrs.md`
+- `specs/broadcasting.md`
 - `specs/client.md`
-- `specs/constraints.md`
+- `specs/rules.md`
 - `specs/error-handling.md`
-- `specs/pubsub.md`
 - `specs/router.md`
 - `specs/schema.md`
-- `specs/testing.md`
+- `specs/test-requirements.md`
 - `specs/validation.md`
 
 ## Architecture

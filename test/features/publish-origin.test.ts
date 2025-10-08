@@ -7,9 +7,7 @@
  * Validates origin-based sender tracking in broadcast messages,
  * ensuring clientId is never injected and origin option works correctly.
  *
- * Spec: @specs/pubsub.md#Origin-Option
- * Spec: @specs/implementation-status.md#GAP-002
- * Spec: @specs/migrations.md#clientId-removal
+ * Spec: @specs/broadcasting.md#Origin-Option
  */
 
 import type { ServerWebSocket } from "bun";
@@ -51,7 +49,7 @@ function castMockWebSocket(
 }
 
 describe("Publish Origin Option", () => {
-  describe("ClientId Never Injected (GAP-002)", () => {
+  describe("ClientId Never Injected", () => {
     it("should NEVER inject clientId into broadcast meta", () => {
       const ChatMsg = messageSchema("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({ clientId: "client-123" });

@@ -2,6 +2,20 @@
 
 **Status**: ✅ Implemented
 
+## Validation vs Application Errors
+
+**This spec covers validation errors** (router rejects malformed messages before handlers run).
+
+For **application errors** (handlers send error messages to clients), see @error-handling.md.
+
+| Error Type              | Where Caught         | Handler Invoked? | Spec               |
+| ----------------------- | -------------------- | ---------------- | ------------------ |
+| Parse failures          | Router (pre-handler) | ❌ Never         | @validation.md     |
+| Schema validation       | Router (pre-handler) | ❌ Never         | @validation.md     |
+| Business logic failures | Handler (app code)   | ✅ Always        | @error-handling.md |
+
+**Key distinction**: Validation errors are **transport-layer** concerns (malformed wire format); application errors are **business-layer** concerns (invalid state, unauthorized access, resource not found).
+
 ## Flow
 
 ```text
@@ -87,7 +101,7 @@ export function messageSchema<Type extends string, Payload, Meta>(
 - Schema drift between client/server
 - Wire protocol violations (e.g., sending `payload` when schema defines none)
 
-See @testing.md#strict-schema-rejects-unexpected-payload for test requirements.
+See @test-requirements.md#Runtime-Testing for test requirements.
 
 ## Adapter Pattern
 
@@ -196,11 +210,11 @@ Routers MUST strip reserved keys **before** validation to:
 // shared/normalize.ts
 
 // Reserved server-only meta keys (MUST be stripped before validation)
-// SOURCE: @constraints.md#reserved-keys
+// SOURCE: @rules.md#reserved-keys
 const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 // To reserve additional keys in future, add them here AND update:
 // - @schema.md#Reserved-Server-Only-Meta-Keys
-// - @constraints.md#reserved-keys
+// - @rules.md#reserved-keys
 
 /**
  * Schema Creation Enforcement
@@ -233,6 +247,7 @@ function validateMetaSchema(meta?: Record<string, any>): void {
  * - Ensure meta exists (allows optional client meta)
  *
  * Mutates in place for performance (hot path, every message).
+ * Safe: single-threaded per Bun worker (no concurrent access).
  * O(k) complexity where k = RESERVED_META_KEYS.size (currently 2).
  */
 function normalizeInboundMessage(raw: unknown): Record<string, unknown> {
@@ -319,10 +334,10 @@ function buildContext<T>(
 
 ## Key Constraints
 
-> See @constraints.md for complete rules. Critical for validation:
+> See @rules.md for complete rules. Critical for validation:
 
 1. **Normalize before validate** — Strip reserved keys BEFORE schema validation (see @validation.md#normalization-rules)
 2. **Strict mode required** — Schemas MUST reject unknown keys (see @schema.md#Strict-Schemas and #Strict-Mode-Enforcement)
-3. **Validation flow** — Follow exact order: Parse → Type Check → Handler Lookup → Normalize → Validate → Handler (see @constraints.md#validation-flow)
-4. **Trust validation** — Handlers MUST NOT re-validate; trust schema (see @constraints.md#validation-flow)
-5. **Error handling** — Log validation failures with `clientId`; keep connections open (see @constraints.md#error-handling)
+3. **Validation flow** — Follow exact order: Parse → Type Check → Handler Lookup → Normalize → Validate → Handler (see @rules.md#validation-flow)
+4. **Trust validation** — Handlers MUST NOT re-validate; trust schema (see @rules.md#validation-flow)
+5. **Error handling** — Log validation failures with `clientId`; keep connections open (see @rules.md#error-handling)

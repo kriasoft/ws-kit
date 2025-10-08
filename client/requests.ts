@@ -3,7 +3,7 @@
 
 /**
  * Request/response correlation tracking.
- * See @client.md#request-response-timeout-semantics and @implementation-status.md#GAP-006.
+ * See @specs/client.md#request-response-timeout-semantics.
  */
 
 import {
@@ -100,7 +100,7 @@ export class RequestTracker {
 
   /**
    * Handles inbound message with correlationId.
-   * Four-way dispatch per @implementation-status.md#GAP-006:
+   * Four-way dispatch:
    * 1. Type matches → resolve with validated message
    * 2. Type is ERROR → reject with ServerError
    * 3. Type mismatches (non-error) → reject with ValidationError

@@ -432,5 +432,5 @@ export const LoginMessage = messageSchema("LOGIN", {
 1. **Use Factory Pattern**: Required for proper type inference and discriminated unions
 2. **Cache Schemas**: Define schemas once at module level
 3. **Avoid Complex Transforms**: Keep transforms simple for better performance
-4. **Use Valibot**: For 90% smaller bundles in production
+4. **Use Valibot**: For 60-80% smaller bundles in production
 5. **Validate Early**: Let the router validate before your handler runs

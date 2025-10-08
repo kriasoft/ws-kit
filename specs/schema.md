@@ -13,6 +13,48 @@ import { createMessageSchema } from "bun-ws-router/zod";
 const { messageSchema, createMessage } = createMessageSchema(z);
 ```
 
+## Canonical Import Patterns {#Canonical-Import-Patterns}
+
+**Single source of truth for all imports.** Reference this section from other specs instead of duplicating.
+
+```typescript
+// Server (Zod)
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+
+// Server (Valibot)
+import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
+
+// Client (Typed - ✅ Recommended for type safety)
+import { createClient } from "bun-ws-router/zod/client"; // Zod
+import { createClient } from "bun-ws-router/valibot/client"; // Valibot
+
+// Client (Generic - custom validators only; handlers infer as unknown)
+import { createClient } from "bun-ws-router/client";
+
+// Shared schemas (portable between client/server)
+const { messageSchema } = createMessageSchema(z); // Use validator instance
+
+// Broadcasting (server-side multicast)
+import { publish } from "bun-ws-router/zod/publish"; // Zod
+import { publish } from "bun-ws-router/valibot/publish"; // Valibot
+
+// Type imports (same package as your schemas)
+import type {
+  AnyMessageSchema,
+  InferMessage,
+  InferPayload,
+  InferMeta,
+} from "bun-ws-router/zod"; // or /valibot
+```
+
+**Validator Consistency**: Use the same validator (`/zod` or `/valibot`) across client, server, and schemas within a project. Mixing validators breaks type compatibility (TypeScript enforces this at compile time).
+
+**Key points:**
+
+- Schemas are **portable** — define once in shared module, import in both client and server
+- Use **typed clients** (`/zod/client`, `/valibot/client`) for automatic inference (see @adrs.md#ADR-002)
+- Generic client (`/client`) requires manual type assertions; use only for custom validators
+
 ## Strict Schemas (Required) {#Strict-Schemas}
 
 All message schemas **MUST** reject unknown keys at **root**, **meta**, and **payload** levels.
@@ -99,18 +141,18 @@ This is the **canonical table** for timestamp usage across all specs. All other 
 - Avoids wire bloat (no need to send UUID in every message)
 - Eliminates spoofing vectors (client cannot set connection identity)
 - Preserves client-side validation (clients can validate messages they send)
-- See @pubsub.md#Origin-Option for application-level sender tracking
+- See @broadcasting.md#Origin-Option for application-level sender tracking
 
 **Reserved Server-Only Meta Keys**: {#Reserved-Server-Only-Meta-Keys}
 
-The following keys are RESERVED and MUST NOT be set by clients:
+The following keys are RESERVED and MUST NOT be set by clients (see @rules.md#reserved-keys for canonical list):
 
 - `clientId`: Connection identity (stripped during normalization, access via `ctx.ws.data.clientId`)
 - `receivedAt`: Server receive timestamp (stripped during normalization, access via `ctx.receivedAt`)
 
 These keys are stripped during message normalization before validation (security boundary). See @validation.md#normalization-rules for implementation details.
 
-**Schema Constraint**: Extended meta schemas MUST NOT define reserved keys (`clientId`, `receivedAt`). Adapters MUST throw an error at schema creation if reserved keys are detected in the extended meta definition.
+**Schema Constraint**: Extended meta schemas MUST NOT define reserved keys (`clientId`, `receivedAt`). Adapters MUST throw an error at schema creation if reserved keys are detected in the extended meta definition (design-time enforcement layer).
 
 **Enforcement**: The `messageSchema()` factory function validates extended meta keys and throws:
 
@@ -236,7 +278,7 @@ if (msg1.success) {
 }
 ```
 
-**Client-side validation works**: Schemas MUST remain client-validatable; no server-only fields required. See @constraints.md#messaging for enforcement.
+**Client-side validation works**: Schemas MUST remain client-validatable; no server-only fields required. See @rules.md#messaging for enforcement.
 
 ## Standard Error Schema
 
@@ -253,14 +295,16 @@ const { ErrorMessage } = createMessageSchema(z);
 // }
 ```
 
+**Direction**: Server-to-client only. Clients MUST NOT send `ERROR` messages (see @error-handling.md#Error-Message-Direction for alternatives).
+
 **Error Codes**: See @error-handling.md#error-code-enum for the canonical ErrorCode enum definition and usage guidelines.
 
 ## Key Constraints
 
-> See @constraints.md for complete rules. Critical for message schemas:
+> See @rules.md for complete rules. Critical for message schemas:
 
-1. **Factory pattern required** — Use `createMessageSchema(validator)` (see @constraints.md#import-patterns)
-2. **Client-side validation** — Schemas MUST NOT require server-only fields (see @constraints.md#messaging)
+1. **Factory pattern required** — Use `createMessageSchema(validator)` (see @rules.md#import-patterns)
+2. **Client-side validation** — Schemas MUST NOT require server-only fields (see @rules.md#messaging)
 3. **Strict schemas** — Reject unknown keys at all levels (see @schema.md#Strict-Schemas)
-4. **Connection identity** — Access via `ctx.ws.data.clientId`, not `ctx.meta` (see @constraints.md#state-layering)
+4. **Connection identity** — Access via `ctx.ws.data.clientId`, not `ctx.meta` (see @rules.md#state-layering)
 5. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)

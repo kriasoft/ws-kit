@@ -3,7 +3,7 @@
 
 /**
  * Authentication token attachment for WebSocket connections.
- * See @client.md#protocol-merging for protocol handling.
+ * See @specs/client.md#protocol-merging for protocol handling.
  */
 
 export interface AuthConfig {

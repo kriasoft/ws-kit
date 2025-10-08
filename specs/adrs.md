@@ -212,5 +212,5 @@ console.log(reply.payload.text); // ✅ string
 
 1. **ALWAYS** use typed clients (`/zod/client`, `/valibot/client`) for Zod/Valibot schemas
 2. **NEVER** use generic client (`/client`) unless implementing custom validator
-3. **ALWAYS** test inference with `expectTypeOf` (see @testing.md#client-type-inference)
+3. **ALWAYS** test inference with `expectTypeOf` (see @test-requirements.md#client-type-inference)
 4. **ALWAYS** use overloads for payload conditional typing (not `undefined` parameter)

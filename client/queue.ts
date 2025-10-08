@@ -3,7 +3,7 @@
 
 /**
  * Message queue management for offline buffering.
- * See @client.md#queue-behavior.
+ * See @specs/client.md#queue-behavior.
  */
 
 export type QueuePolicy = "drop-oldest" | "drop-newest" | "off";

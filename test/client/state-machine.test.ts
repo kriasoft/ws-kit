@@ -11,8 +11,7 @@
  * - Reconnect cycle: closed → reconnecting → connecting → open
  * - Manual close prevents auto-reconnect
  *
- * See @client.md#connection-state-machine
- * See @implementation-status.md#GAP-014
+ * See @specs/client.md#connection-state-machine
  */
 
 import { describe, expect, it } from "bun:test";

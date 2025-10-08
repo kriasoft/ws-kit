@@ -2,7 +2,33 @@
 
 **Status**: ✅ Implemented (ErrorCode enum and patterns)
 
-See @constraints.md#error-handling for core requirements.
+**Core Requirements**:
+
+- Use ErrorCode enum values (not arbitrary strings)
+- Provide context in errors (e.g., `{ roomId, userId }`)
+- Log errors with `clientId` for traceability
+- Connections stay open unless handler explicitly closes
+
+See @rules.md#error-handling for complete rules.
+
+## Error Message Direction {#Error-Message-Direction}
+
+**`ERROR` type messages are server-to-client only.**
+
+Clients MUST NOT send `ERROR` type messages. Use instead:
+
+- **Connection close codes** for transport errors (`ws.close(1011, "reason")`)
+- **Application messages** for business errors (e.g., `UPLOAD_FAILED` schema)
+
+**Server behavior**: Inbound `ERROR` messages from clients are undefined. Servers MAY:
+
+- Log and ignore (recommended)
+- Close connection with protocol error (`1002`)
+- Treat as unhandled message type (if no handler registered)
+
+**Rationale**: Reserving `ERROR` for server responses simplifies protocol semantics and prevents clients from injecting error-handling logic into request/response flows.
+
+**Explicit handler registration**: If server registers `router.onMessage(ErrorMessage, handler)`, it WILL process inbound `ERROR` messages like any other type. This is **not recommended** but allowed for custom protocols.
 
 ## Standard Error Schema
 
@@ -90,6 +116,31 @@ publish(ctx.ws, roomId, ErrorMessage, {
 });
 ```
 
+## Explicit Connection Close
+
+Handlers must explicitly close connections when needed. The library never closes connections automatically.
+
+```typescript
+router.onMessage(RateLimitExceeded, (ctx) => {
+  // Send error message first
+  ctx.send(ErrorMessage, {
+    code: ErrorCode.RATE_LIMIT_EXCEEDED,
+    message: "Too many requests",
+  });
+
+  // Then close connection
+  ctx.ws.close(1008, "Rate limit exceeded");
+});
+```
+
+**When to close explicitly:**
+
+- Security violations (auth failures, rate limits, policy violations)
+- Protocol violations (client repeatedly sends malformed messages)
+- Resource exhaustion (client exceeds quota)
+
+**Normal errors** (business logic failures, not found, validation errors) should **not** close the connection.
+
 ## Error Behavior
 
 | Error Type       | Connection | Logged | Handler Called |
@@ -103,11 +154,22 @@ publish(ctx.ws, roomId, ErrorMessage, {
 
 **Critical**: Connections never auto-close on errors. Handler must explicitly call `ctx.ws.close()`.
 
-## Key Constraints
+## Process-Level Error Handling
 
-> See @constraints.md for complete rules. Critical for error handling:
+**Out of scope:** The router handles message-level errors (parse, validation, handler exceptions). Process-level concerns (unhandled promise rejections, uncaught exceptions) are managed by the Bun runtime.
 
-1. **Use ErrorCode enum** — No arbitrary strings; ensures consistency (see @error-handling.md#error-code-enum)
-2. **Provide context** — Include debugging info in `context` field (e.g., `{ roomId, userId }`)
-3. **Log with clientId** — Always include `ctx.ws.data.clientId` for traceability (see @constraints.md#error-handling)
-4. **Explicit close required** — Connections stay open; handler MUST call `ctx.ws.close()` to disconnect (see @constraints.md#error-handling)
+**Best practice:** Configure process-level error handlers in your application entry point:
+
+```typescript
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled rejection:", reason);
+  // Send to error tracking service (Sentry, DataDog, etc.)
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  // Log and potentially exit gracefully
+});
+```
+
+See [Bun Error Handling](https://bun.sh/docs/runtime/error-handling) for runtime configuration.

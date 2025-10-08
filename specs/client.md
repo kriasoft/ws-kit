@@ -1,7 +1,20 @@
-# Bun WS Router: Browser Client
+# Bun WS Router: Client SDK
 
-> **Goal:** A tiny, type-safe WebSocket client for browsers that reuses the same message schemas as the server.
+> **Goal:** A tiny, type-safe WebSocket client for browsers and Node.js that reuses the same message schemas as the server.
 > **Non-goals:** State management, persistence, plugin systems, or anything not essential to sending/receiving typed messages.
+
+## Section Map
+
+Quick navigation for AI tools:
+
+- [#Design-Principles](#design-principles) — Core design goals
+- [#Public-API](#public-api-stable-v1) — Complete API surface (types and methods)
+- [#Message-Contract](#message-contract-client--server) — Wire format and correlation
+- [#Validation--Normalization](#validation--normalization) — Outbound message processing
+- [#Reconnect--Queueing](#reconnect--queueing) — Connection state machine and queue behavior
+- [#Error-Handling](#error-handling-client-side) — Error types and contract
+- [#Usage-Examples](#usage-examples) — Integration patterns
+- **Server-side routing**: See @router.md for server message handling
 
 ## Design Principles
 
@@ -14,17 +27,12 @@
 
 - **Runtime:** Modern browsers (standard `WebSocket`), works under bundlers.
 - **Validator choice:** Valibot recommended for browser clients (smaller bundle); Zod acceptable for larger apps.
-- **Imports:**
-  - Server (Zod): `import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod"`
-  - Server (Valibot): `import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot"`
+- **Imports:** See @schema.md#Canonical-Import-Patterns for canonical import examples.
   - **Client (Typed):** ✅ **Recommended for type safety**
     - Zod: `import { createClient } from "bun-ws-router/zod/client"`
     - Valibot: `import { createClient } from "bun-ws-router/valibot/client"`
   - **Client (Generic):** `import { createClient } from "bun-ws-router/client"` (custom validators only; handlers infer as `unknown`)
-  - **Types:** Import from the same validator package as your schemas:
-    - Zod: `import type { AnyMessageSchema, InferMessage, InferPayload, InferMeta, AnyInboundMessage } from "bun-ws-router/zod"`
-    - Valibot: `import type { AnyMessageSchema, InferMessage, InferPayload, InferMeta, AnyInboundMessage } from "bun-ws-router/valibot"`
-  - **Shared schemas:** Use factory pattern from `/zod` or `/valibot` (see @schema.md#Factory-Pattern); schemas are portable between client and server when created via `createMessageSchema(validator)`.
+  - **Shared schemas:** Portable between client and server; use factory pattern (see @schema.md#Factory-Pattern).
 
 ## Public API (Stable v1)
 
@@ -499,9 +507,9 @@ client.send(
 
 ### Timestamps
 
-- Client sets **producer** `meta.timestamp = Date.now()` on `send()`/`request()` if not provided in `opts.meta`.
-- Server sets `receivedAt` when the message arrives.
-- **Rule:** Client logic may use `meta.timestamp` (latency, UX). Server logic must use `receivedAt`.
+Client auto-injects `meta.timestamp = Date.now()` on `send()`/`request()` if not provided in `opts.meta`. Server sets `receivedAt` when message arrives.
+
+**When to use which timestamp:** See @schema.md#Which-timestamp-to-use for canonical guidance (client UI vs server logic).
 
 ### Correlation
 
@@ -694,9 +702,30 @@ closed → reconnecting → connecting      (auto-reconnect)
 
 **Auto-Connect Interaction**: When `autoConnect: true` and first operation triggers `connect()`:
 
+- Auto-connect attempt happens **before** `queue` policy check
+- Connection errors reject with connection error (not `StateError`)
+- After failed auto-connect, subsequent operations follow `queue` policy (e.g., `queue: "off"` → immediate `StateError`)
+- Auto-connect only triggers once per `"closed"` state (does NOT retry after failure)
 - `send()`: Auto-connect failure → **returns `false`** (logged to `console.error`); **NEVER throws**
 - `request()`: Auto-connect failure → **returns rejected Promise**; **NEVER throws synchronously**
 - If auto-connect succeeds but socket not yet OPEN → apply `queue` policy
+
+**Order of Operations** (for `request()` with `autoConnect=true` + `queue="off"`):
+
+```text
+request()
+  ├─ state === "closed" && never connected? → YES
+  ├─ Trigger connect() (autoConnect)
+  ├─ connect() fails → Reject with connection error
+  └─ (queue policy NOT evaluated on first attempt)
+
+request() [second call]
+  ├─ state === "closed" && never connected? → NO (already attempted)
+  ├─ state !== "open" && queue === "off"? → YES
+  └─ Reject immediately with StateError
+```
+
+See @test-requirements.md#L873 for edge case validation.
 
 **Return values**:
 
@@ -773,11 +802,11 @@ Only during setup or preflight validation:
 
 **Promise-based methods:**
 
-| Method      | Synchronous Throws | Promise Rejection                                                                          | Notes                                                                                                    |
-| ----------- | ------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `connect()` | ❌ **Never**       | ✅ Connection errors                                                                       | Idempotent: returns in-flight promise if connecting; resolves immediately if already open                |
-| `request()` | ❌ **Never**       | ✅ `ValidationError`, `TimeoutError`, `ServerError`, `ConnectionClosedError`, `StateError` | `StateError` only when aborted, `queue: "off"` while disconnected, or pending limit exceeded             |
-| `close()`   | ❌ **Never**       | ❌ **NEVER rejects**                                                                       | **Fully idempotent**: safe to call in any state (including already `"closed"`); no `StateError` possible |
+| Method      | Synchronous Throws | Promise Rejection                                                                          | Notes                                                                                                                               |
+| ----------- | ------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `connect()` | ❌ **Never**       | ✅ Connection errors                                                                       | Idempotent: returns in-flight promise if connecting; resolves immediately if already open                                           |
+| `request()` | ❌ **Never**       | ✅ `ValidationError`, `TimeoutError`, `ServerError`, `ConnectionClosedError`, `StateError` | `StateError` **only** when: (1) aborted, (2) `queue: "off"` + disconnected + autoConnect didn't trigger, (3) pending limit exceeded |
+| `close()`   | ❌ **Never**       | ❌ **NEVER rejects**                                                                       | **Fully idempotent**: safe to call in any state (including already `"closed"`); no `StateError` possible                            |
 
 **Key guarantees:**
 
@@ -956,7 +985,9 @@ Client MUST use Map-based schema lookup (same pattern as server):
 
 ### Sharing Schemas Between Client and Server
 
-Schemas are portable TypeScript values created via the factory pattern. Define them once, import everywhere:
+Schemas are portable TypeScript values. See @schema.md#Factory-Pattern for the factory pattern and @schema.md#Canonical-Import-Patterns for imports.
+
+Define schemas once in a shared module, import in both client and server:
 
 ```ts
 // shared/schemas.ts (imported by both client and server)
@@ -970,16 +1001,15 @@ export const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
 export const ChatMessage = messageSchema("CHAT", { text: z.string() });
 
 // client.ts
-import { createClient } from "bun-ws-router/client";
-import type { InferMessage } from "bun-ws-router/zod";
+import { createClient } from "bun-ws-router/zod/client"; // Typed client
 import { Hello, HelloOk } from "./shared/schemas";
 
 const client = createClient({ url: "wss://api.example.com/ws" });
 await client.connect();
 client.send(Hello, { name: "Anna" });
 
-// Type inference works because schemas come from shared module
-client.on(HelloOk, (msg: InferMessage<typeof HelloOk>) => {
+// Full type inference via typed client
+client.on(HelloOk, (msg) => {
   console.log(msg.payload.text); // Fully typed
 });
 
@@ -999,14 +1029,8 @@ router.onMessage(Hello, (ctx) => {
 
 ```ts
 // client.ts
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
 import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
-
-// Create schemas (shared with server)
-const { messageSchema } = createMessageSchema(z);
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+import { Hello, HelloOk } from "./shared/schemas"; // Shared schemas
 
 // Option 1: Explicit connection (default)
 const client1 = createClient({ url: "wss://example.com/ws" });

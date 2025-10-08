@@ -3,7 +3,7 @@
 
 /**
  * TypeScript types for browser WebSocket client.
- * See @client.md for full API documentation.
+ * See @specs/client.md for full API documentation.
  */
 
 export type ClientState =
