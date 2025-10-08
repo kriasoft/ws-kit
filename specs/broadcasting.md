@@ -1,6 +1,15 @@
-# PubSub and Broadcasting
+# Broadcasting and Topic Subscriptions
 
-**Status**: ⚠️ Partial - Missing `origin` option for sender tracking (see @implementation-status.md#GAP-002 and @migrations.md#clientId-removal)
+**Status**: ✅ Implemented
+
+## Overview
+
+Broadcasting enables multicast messaging to multiple WebSocket clients via topic subscriptions. Uses Bun's native WebSocket pubsub (`subscribe()`, `publish()`, `unsubscribe()`).
+
+**Key patterns**:
+
+- **Unicast**: `ctx.send()` sends to single connection (see @router.md#Type-Safe-Sending)
+- **Multicast**: `publish()` broadcasts to topic subscribers (this spec)
 
 ## Bun Native WebSocket PubSub
 
@@ -143,7 +152,7 @@ publish(
 - **If `ws.data[origin]` is `undefined`, no injection occurs (no-op)**
 - `clientId` is **never** injected (use `origin` for application-level identity)
 
-**Performance:** Derived identity MUST be computed during `upgrade()` and stored in `ws.data`. Function extractors are NOT supported (hot-path performance). See @testing.md#origin-with-missing-field for no-op behavior validation.
+**Performance:** Derived identity MUST be computed during `upgrade()` and stored in `ws.data`. Function extractors are NOT supported (hot-path performance). See @test-requirements.md#Runtime-Testing for no-op behavior validation.
 
 ## When to Track Message Origin
 
@@ -218,10 +227,10 @@ router.onClose((ctx) => {
 
 ## Key Constraints
 
-> See @constraints.md for complete rules. Critical for pubsub:
+> See @rules.md for complete rules. Critical for pubsub:
 
-1. **Validate before broadcast** — Use `publish()` helper, not raw `ws.publish()` (see @constraints.md#messaging)
-2. **Origin tracking** — Use `{ origin: "userId" }` option for sender identity; NEVER broadcast `clientId` (see @pubsub.md#Origin-Option)
-3. **Unicast vs multicast** — `ctx.send()` = single connection; `publish()` = topic subscribers (see @pubsub.md#Patterns)
+1. **Validate before broadcast** — Use `publish()` helper, not raw `ws.publish()` (see @rules.md#messaging)
+2. **Origin tracking** — Use `{ origin: "userId" }` option for sender identity; NEVER broadcast `clientId` (see @broadcasting.md#Origin-Option)
+3. **Unicast vs multicast** — `ctx.send()` = single connection; `publish()` = topic subscribers (see @broadcasting.md#Patterns)
 4. **Auto-timestamp** — Both inject `timestamp` to `meta` automatically (see @router.md#Type-Safe-Sending)
-5. **Cleanup required** — Unsubscribe in `onClose()` handler; store topic IDs in `ctx.ws.data` (see @constraints.md#lifecycle)
+5. **Cleanup required** — Unsubscribe in `onClose()` handler; store topic IDs in `ctx.ws.data` (see @rules.md#lifecycle)

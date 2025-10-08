@@ -2,7 +2,16 @@
 
 **Status**: ✅ Implemented (type-level tests with expectTypeOf)
 
-See @constraints.md for testing patterns.
+## Section Map
+
+Quick navigation for AI tools:
+
+- [#Type-Level-Testing](#type-level-testing) — Compile-time validation with expectTypeOf
+- [#Handler-Context-Inference](#handler-context-inference) — Server handler type tests
+- [#Client-Type-Inference](#client-type-inference) — Client handler and request/response tests
+- [#Runtime-Testing](#runtime-testing) — Validation, normalization, and strict schema tests
+- [#Key-Constraints](#key-constraints) — Testing requirements summary
+- **Testing patterns**: See @rules.md for broader testing guidance
 
 ## Type-Level Testing
 
@@ -249,6 +258,7 @@ test("origin option injects from ws.data", () => {
 
 test("origin with missing field does not inject", () => {
   // #origin-with-missing-field
+  // Validates @broadcasting.md#Origin-Option no-op behavior when ws.data[origin] undefined
   const ws = { data: {} };
   const msg = publish(
     ws,
@@ -258,6 +268,8 @@ test("origin with missing field does not inject", () => {
     { origin: "missing" },
   );
   expect(msg.meta).not.toHaveProperty("senderId"); // No-op when ws.data.missing undefined
+  expect(msg.meta).toHaveProperty("timestamp"); // Other meta fields still added
+  expect(publish).not.toThrow(); // No error thrown
 });
 
 // Client Multi-Handler Tests {#client-multiple-handlers}
@@ -861,6 +873,61 @@ test("autoConnect fails fast on connection error", async () => {
   ).rejects.toThrow("Connection failed");
 });
 
+test("autoConnect + queue: off rejects with connection error (not StateError)", async () => {
+  const client = createClient({
+    url: "ws://invalid",
+    autoConnect: true,
+    queue: "off", // Critical: queue disabled
+    wsFactory: () => {
+      throw new Error("Connection refused");
+    },
+  });
+
+  // Auto-connect triggers but fails
+  // Should reject with connection error, NOT StateError
+  await expect(
+    client.request(Hello, { name: "test" }, HelloOk, { timeoutMs: 1000 }),
+  ).rejects.toThrow("Connection refused");
+
+  // Verify it's NOT a StateError
+  try {
+    await client.request(Hello, { name: "test" }, HelloOk);
+  } catch (err) {
+    expect(err).not.toBeInstanceOf(StateError);
+  }
+});
+
+test("autoConnect failure + queue: off → subsequent requests reject with StateError", async () => {
+  const client = createClient({
+    url: "ws://invalid",
+    autoConnect: true,
+    queue: "off",
+    wsFactory: () => {
+      throw new Error("Connection refused");
+    },
+  });
+
+  // First request fails auto-connect
+  await expect(client.request(Hello, { name: "1" }, HelloOk)).rejects.toThrow(
+    "Connection refused",
+  );
+
+  expect(client.state).toBe("closed");
+
+  // Second request does NOT auto-reconnect (per spec: only on "never connected")
+  // Should reject with StateError (queue: off + disconnected)
+  await expect(client.request(Hello, { name: "2" }, HelloOk)).rejects.toThrow(
+    StateError,
+  );
+  await expect(
+    client.request(Hello, { name: "2" }, HelloOk),
+  ).rejects.toMatchObject({
+    message: expect.stringContaining(
+      "Cannot send request while disconnected with queue disabled",
+    ),
+  });
+});
+
 test("autoConnect does not trigger from closed state after manual close", async () => {
   const client = createClient({
     url: "ws://test",
@@ -1307,14 +1374,14 @@ test("client: generic client handlers infer as unknown", () => {
 
 ## Key Constraints
 
-> See @constraints.md for complete rules. Critical for testing:
+> See @rules.md for complete rules. Critical for testing:
 
 1. **Type-level tests** — Use `expectTypeOf` for compile-time validation (positive & negative cases)
 2. **Payload conditional typing** — Test that `ctx.payload` is type error when schema omits it (see @adrs.md#ADR-001)
 3. **Client type inference** — Test typed clients provide full inference; generic client uses `unknown` (see @adrs.md#ADR-002 and #client-type-inference)
 4. **Discriminated unions** — Verify factory pattern enables union support (see @schema.md#Discriminated-Unions)
 5. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see @schema.md#Strict-Schemas)
-6. **Normalization** — Test reserved key stripping before validation (see normalization test above; implementation tracked in @implementation-status.md#GAP-001)
-7. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see @client.md#message-processing-order and @constraints.md#inbound-message-routing)
-8. **Client multi-handler** — Test registration order, stable iteration, error isolation (see @client.md#Multiple-Handlers and @implementation-status.md#GAP-005)
-9. **Extended meta support** — Test required/optional meta fields, timestamp preservation, reserved key stripping (see extended meta tests above; implementation tracked in @implementation-status.md#GAP-015)
+6. **Normalization** — Test reserved key stripping before validation (see normalization test above)
+7. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see @client.md#message-processing-order and @rules.md#inbound-message-routing)
+8. **Client multi-handler** — Test registration order, stable iteration, error isolation (see @client.md#Multiple-Handlers)
+9. **Extended meta support** — Test required/optional meta fields, timestamp preservation, reserved key stripping (see extended meta tests above)

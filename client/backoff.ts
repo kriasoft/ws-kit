@@ -3,7 +3,7 @@
 
 /**
  * Exponential backoff calculation with optional jitter.
- * See @client.md for backoff formula.
+ * See @specs/client.md for backoff formula.
  */
 
 export function calculateBackoff(

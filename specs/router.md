@@ -6,6 +6,18 @@
 
 Type-safe message routing for Bun WebSocket servers with automatic validation.
 
+## Section Map
+
+Quick navigation for AI tools:
+
+- [#Basic-Setup](#basic-setup) — Minimal router example
+- [#Router-API](#router-api) — Handler registration and context types
+- [#Message-Routing](#message-routing) — Type-based dispatch and validation flow
+- [#Type-Safe-Sending](#type-safe-sending) — Unicast messaging with ctx.send()
+- [#Custom-Connection-Data](#custom-connection-data) — Typed connection state
+- [#Error-Handling](#error-handling) — Handler error patterns
+- **Broadcasting**: See @broadcasting.md for multicast patterns
+
 ## Basic Setup
 
 ```typescript
@@ -171,26 +183,7 @@ router.onMessage(SomeMessage, (ctx) => {
 
 **Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
 
-**Status**: ⚠️ Needs verification — See @implementation-status.md#GAP-003 to confirm auto-timestamp injection is implemented.
-
-## Broadcasting
-
-```typescript
-import { publish } from "bun-ws-router/zod/publish";
-
-router.onMessage(ChatMessage, (ctx) => {
-  const roomTopic = `room:${ctx.meta.roomId}`;
-  publish(
-    ctx.ws,
-    roomTopic,
-    ChatMessage,
-    { text: ctx.payload.text },
-    { origin: "userId" }, // ✅ Canonical pattern: DX sugar for origin
-  );
-});
-```
-
-**Broadcast metadata**: `publish()` adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
+**For broadcasting to multiple clients**, see @broadcasting.md for multicast patterns using Bun's native pubsub.
 
 ## Custom Connection Data
 
@@ -237,10 +230,11 @@ router.onMessage(RiskyMessage, async (ctx) => {
 
 ## Key Constraints
 
-> See @constraints.md for complete rules. Critical for routing:
+> See @rules.md for complete rules. Critical for routing:
 
-1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see @constraints.md#state-layering)
+1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see @rules.md#state-layering)
 2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)
 3. **Payload typing** — `ctx.payload` exists only when schema defines it (see @adrs.md#ADR-001)
-4. **Error handling** — Connections stay open on errors; handlers MUST explicitly close (see @constraints.md#error-handling)
-5. **Validation flow** — Trust schema validation; never re-validate in handlers (see @constraints.md#validation-flow)
+4. **Error handling** — Connections stay open on errors; handlers MUST explicitly close (see @rules.md#error-handling)
+5. **Validation flow** — Trust schema validation; never re-validate in handlers (see @rules.md#validation-flow)
+6. **Broadcasting** — For multicast messaging, see @broadcasting.md (not covered in this spec)

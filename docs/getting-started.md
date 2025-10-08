@@ -1,69 +1,81 @@
 # Getting Started
 
-This guide will help you build type-safe WebSocket applications with Bun.
+This guide shows you how to build type-safe WebSocket applications with Bun WebSocket Router. You'll learn how to set up both the server (Bun) and client (browser) using shared message schemas for full-stack type safety.
 
 ## Installation
 
-Choose your preferred validation library:
+### Server (Bun)
 
-::: code-group
-
-```bash [Zod]
+```bash
 bun add bun-ws-router zod
+# or
+bun add bun-ws-router valibot  # 60-80% smaller bundles
 ```
 
-```bash [Valibot (90% smaller)]
-bun add bun-ws-router valibot
+### Client (Browser)
+
+```bash
+npm install bun-ws-router zod
+# or
+npm install bun-ws-router valibot  # Recommended for browsers
 ```
 
+::: tip
+Valibot is recommended for browser clients due to its smaller bundle size (~2-3 KB). Zod is great for servers or apps already using Zod.
 :::
 
 ## Quick Start
 
-Here's a minimal example to get you started:
+### 1. Define Shared Schemas
+
+Create schemas once and share them between server and client:
 
 ```typescript
+// shared/schemas.ts (imported by both server and client)
 import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { publish } from "bun-ws-router/zod/publish";
+import { createMessageSchema } from "bun-ws-router/zod";
 
-// Create message schema factory
 const { messageSchema } = createMessageSchema(z);
 
-// Define a message schema
-const ChatMessage = messageSchema("CHAT_MESSAGE", {
+export const ChatMessage = messageSchema("CHAT_MESSAGE", {
   text: z.string(),
   roomId: z.string(),
 });
 
-// Create router and define handlers
+export const UserJoined = messageSchema("USER_JOINED", {
+  username: z.string(),
+  roomId: z.string(),
+});
+```
+
+### 2. Set Up Server
+
+```typescript
+// server.ts
+import { WebSocketRouter } from "bun-ws-router/zod";
+import { publish } from "bun-ws-router/zod/publish";
+import { ChatMessage, UserJoined } from "./shared/schemas";
+
 const router = new WebSocketRouter()
   .onOpen((ctx) => {
     console.log(`Client ${ctx.ws.data.clientId} connected`);
   })
   .onMessage(ChatMessage, (ctx) => {
-    // TypeScript knows ctx.payload has { text: string, roomId: string }
     console.log(`Message from ${ctx.ws.data.clientId}: ${ctx.payload.text}`);
 
-    // Subscribe to room for receiving broadcasts
+    // Subscribe to room
     ctx.ws.subscribe(`room:${ctx.payload.roomId}`);
 
-    // Broadcast to room with type-safe publish helper
-    publish(ctx.ws, `room:${ctx.payload.roomId}`, ChatMessage, {
-      text: ctx.payload.text,
-      roomId: ctx.payload.roomId,
-    });
+    // Broadcast to room
+    publish(ctx.ws, `room:${ctx.payload.roomId}`, ChatMessage, ctx.payload);
   })
   .onClose((ctx) => {
     console.log(`Client ${ctx.ws.data.clientId} disconnected`);
   });
 
-// Create Bun server
 Bun.serve({
   port: 3000,
   fetch(req, server) {
-    // Handle WebSocket upgrade - returns Response (101 or 500)
-    // The router automatically generates a UUID v7 clientId
     return router.upgrade(req, { server });
   },
   websocket: router.websocket,
@@ -71,6 +83,39 @@ Bun.serve({
 
 console.log("WebSocket server running on ws://localhost:3000");
 ```
+
+### 3. Set Up Client
+
+```typescript
+// client.ts
+import { createClient } from "bun-ws-router/zod/client";
+import { ChatMessage, UserJoined } from "./shared/schemas";
+
+const client = createClient({
+  url: "ws://localhost:3000",
+  reconnect: { enabled: true },
+});
+
+// Register handlers before connecting
+client.on(ChatMessage, (msg) => {
+  console.log(`Received: ${msg.payload.text}`);
+});
+
+client.on(UserJoined, (msg) => {
+  console.log(`${msg.payload.username} joined ${msg.payload.roomId}`);
+});
+
+// Connect and send
+await client.connect();
+client.send(ChatMessage, {
+  text: "Hello, world!",
+  roomId: "general",
+});
+```
+
+::: tip Full Type Safety
+Notice how both server and client have complete TypeScript inference from the shared schemas. No manual type annotations needed!
+:::
 
 ## Basic Concepts
 
@@ -93,15 +138,11 @@ All messages follow a consistent structure:
 **Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted). See [Core Concepts - Timestamp Handling](./core-concepts#timestamp-handling) for guidance.
 :::
 
-### Creating Message Schemas
+### Schema Patterns
+
+Message schemas support different patterns:
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-
-// Create factory with your Zod instance
-const { messageSchema } = createMessageSchema(z);
-
 // Simple message without payload
 const PingMessage = messageSchema("PING");
 
@@ -110,73 +151,55 @@ const JoinRoomMessage = messageSchema("JOIN_ROOM", {
   roomId: z.uuid(),
   username: z.string().min(1).max(20),
 });
+
+// Message with extended metadata
+const RoomMessage = messageSchema(
+  "ROOM_MSG",
+  { text: z.string() },
+  { roomId: z.string() }, // Extended meta fields
+);
 ```
 
-### Handling Messages
+### Client Features
 
-Register handlers for your message types:
+The browser client provides:
+
+- **Auto-reconnection** with exponential backoff
+- **Message queueing** when offline
+- **Request/response pattern** with timeouts
+- **Built-in authentication** (query param or protocol header)
+- **Full type inference** from shared schemas
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
-
+// Request/response pattern (for schemas without payload)
+const PingMessage = messageSchema("PING");
 const PongMessage = messageSchema("PONG");
-const UserJoinedMessage = messageSchema("USER_JOINED", {
-  username: z.string(),
-});
 
-router
-  .onMessage(PingMessage, (ctx) => {
-    // Respond with PONG (no payload for this message type)
-    ctx.send(PongMessage);
-  })
-  .onMessage(JoinRoomMessage, (ctx) => {
-    // Subscribe to room
-    ctx.ws.subscribe(`room:${ctx.payload.roomId}`);
-
-    // Notify others in the room with type-safe publish
-    publish(ctx.ws, `room:${ctx.payload.roomId}`, UserJoinedMessage, {
-      username: ctx.payload.username,
-    });
+try {
+  const reply = await client.request(PingMessage, PongMessage, {
+    timeoutMs: 5000,
   });
+  console.log("Got pong!");
+} catch (err) {
+  console.error("Timeout or error:", err);
+}
 ```
 
-### Message Validation Pipeline
+See [Client Setup](./client-setup) for complete client documentation.
 
-When a message arrives, the router processes it through a security pipeline. See [Core Concepts](./core-concepts#message-handling) for details.
+## Next Steps
 
-## Integration with HTTP Frameworks
+Now that you understand the basics, explore:
 
-### Using with Hono
+- **[Core Concepts](./core-concepts)** - Message structure, routing, error handling
+- **[Client Setup](./client-setup)** - Full client API and advanced features
+- **[Message Schemas](./message-schemas)** - Schema patterns and validation
+- **[API Reference](./api-reference)** - Complete API documentation
+- **[Examples](./examples)** - Real-world usage patterns
 
-```typescript
-import { Hono } from "hono";
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+### Framework Integration
 
-const { messageSchema } = createMessageSchema(z);
+The router works with any HTTP framework. For framework-specific examples:
 
-const app = new Hono();
-const router = new WebSocketRouter();
-
-// Regular HTTP routes
-app.get("/", (c) => c.text("WebSocket server"));
-
-// WebSocket endpoint
-app.get("/ws", (c) => {
-  // router.upgrade() auto-generates clientId (UUID v7) and returns Response
-  return router.upgrade(c.req.raw, {
-    server: c.env?.server,
-    // Add any custom auth data here (clientId is auto-generated)
-    data: {
-      // userId: getUserId(c),
-    },
-  });
-});
-
-// Start server
-Bun.serve({
-  port: 3000,
-  fetch: app.fetch,
-  websocket: router.websocket,
-});
-```
+- **[Advanced Usage](./advanced-usage#framework-integration)** - Hono, Express, and more
+- **[Deployment](./deployment)** - Production deployment patterns

@@ -7,8 +7,8 @@
  * Critical security boundary: client MUST strip reserved/managed keys
  * from user-provided opts.meta before sending.
  *
- * See @client.md#client-normalization
- * See @constraints.md#client-side-constraints
+ * See @specs/client.md#client-normalization
+ * See @specs/rules.md#client-side-constraints
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";

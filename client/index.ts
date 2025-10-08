@@ -3,7 +3,7 @@
 
 /**
  * Browser WebSocket client with type-safe messaging.
- * See @client.md for full API documentation.
+ * See @specs/client.md for full API documentation.
  */
 
 import {
@@ -31,7 +31,7 @@ export * from "./errors.js";
 export * from "./types.js";
 
 // Reserved + managed meta keys (MUST strip from user meta)
-// See @client.md#client-normalization and @constraints.md#client-side-constraints
+// See @specs/client.md#client-normalization and @specs/rules.md#client-side-constraints
 const RESERVED_MANAGED_META_KEYS = new Set([
   "clientId", // Server-only
   "receivedAt", // Server-only
@@ -55,7 +55,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
   let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let connectPromise: Promise<void> | null = null;
   let manualClose = false; // Track if user called close() (prevents auto-reconnect)
-  let everConnected = false; // Track if connection ever succeeded (for autoConnect)
+  let everAttemptedConnect = false; // Track if connection was ever attempted (for autoConnect)
 
   // Configuration with defaults
   const config = {
@@ -139,7 +139,6 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     setState("open");
     selectedProtocol = ws?.protocol ?? "";
     reconnectAttempts = 0;
-    everConnected = true;
 
     // Flush queued messages
     if (ws) {
@@ -309,6 +308,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
       try {
         setState("connecting");
         manualClose = false; // Reset manual close flag
+        everAttemptedConnect = true; // Mark that we've attempted connection
 
         // Get auth token
         const token = await getAuthToken(config.auth.getToken);
@@ -366,6 +366,10 @@ export function createClient(opts: ClientOptions): WebSocketClient {
           ws?.addEventListener("error", errorHandler);
           ws?.addEventListener("close", closeHandler);
         });
+      } catch (error) {
+        // Connection failed - transition to closed state
+        setState("closed");
+        throw error;
       } finally {
         connectPromise = null;
       }
@@ -444,8 +448,8 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     payload: unknown,
     opts?: { meta?: Record<string, unknown>; correlationId?: string },
   ): boolean {
-    // Auto-connect if enabled and never connected
-    if (config.autoConnect && state === "closed" && !everConnected) {
+    // Auto-connect if enabled and never attempted
+    if (config.autoConnect && state === "closed" && !everAttemptedConnect) {
       connect().catch((error) => {
         console.error("[Client] Auto-connect failed:", error);
       });
@@ -497,8 +501,8 @@ export function createClient(opts: ClientOptions): WebSocketClient {
       correlationId?: string;
     },
   ): Promise<unknown> {
-    // Auto-connect if enabled and never connected
-    if (config.autoConnect && state === "closed" && !everConnected) {
+    // Auto-connect if enabled and never attempted
+    if (config.autoConnect && state === "closed" && !everAttemptedConnect) {
       return connect()
         .then(() => requestImpl(schema, payload, reply, opts))
         .catch((error) => {

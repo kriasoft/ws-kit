@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
 [![npm downloads](https://img.shields.io/npm/dm/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
 [![GitHub Actions](https://github.com/kriasoft/bun-ws-router/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/bun-ws-router/actions)
-[![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.com/invite/aW29wXyb7w)
+[![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
 Type-safe WebSocket communication for Bun servers and browsers with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
 
@@ -28,8 +28,6 @@ Type-safe WebSocket communication for Bun servers and browsers with **Zod** or *
 - ✨ Shared schemas between server and client
 - ⚡ Choose Zod (familiar) or Valibot (60-80% smaller)
 - 🔒 Full TypeScript inference on both sides
-
-Perfect for real-time applications like chat systems, live dashboards, multiplayer games, and notification services.
 
 ## Installation
 
@@ -110,8 +108,6 @@ const { messageSchema } = createMessageSchema(v);
 | Performance | Baseline                 | ~2x faster               |
 | API Style   | Method chaining          | Functional               |
 | Best for    | Server-side, familiarity | Client-side, performance |
-
-See the [Valibot Integration Guide](./docs/valibot-integration.md) for detailed migration instructions and examples.
 
 ## How to handle authentication
 
@@ -584,20 +580,11 @@ try {
 }
 ```
 
-**Features:**
-
-- 🔄 Automatic reconnection with exponential backoff
-- 📦 Message queueing when offline (configurable strategies)
-- 🔐 Token refresh on reconnect
-- ⏱️ Request/response with correlation IDs
-- 🔒 Full TypeScript type inference
-- 🎯 Multi-handler support (unlike server's single-handler model)
-
 See the [Client Documentation](./docs/client-setup.md) for complete API reference and advanced usage.
 
 ## Support
 
-Questions or issues? Join us on [Discord](https://discord.com/invite/bSsv7XM).
+Questions or issues? Join us on [Discord](https://discord.gg/aW29wXyb7w).
 
 ## Backers
 

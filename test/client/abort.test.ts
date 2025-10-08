@@ -10,8 +10,8 @@
  * - Abort cancels timeout timer
  * - Pending map cleanup
  *
- * See @client.md#request-timeout
- * See @testing.md#request-abort-tests
+ * See @specs/client.md#request-timeout
+ * See @specs/test-requirements.md#Runtime-Testing
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";

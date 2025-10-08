@@ -11,8 +11,8 @@
  * - Handler errors do NOT fire onError (logged only)
  * - Request rejections do NOT fire onError (caller handles)
  *
- * See @client.md#error-handling
- * See @client.md#centralized-error-reporting
+ * See @specs/client.md#error-handling
+ * See @specs/client.md#centralized-error-reporting
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";

@@ -6,7 +6,7 @@
  * Validates full type inference in handlers, send, and request methods.
  *
  * @see specs/adrs.md#ADR-002 - Type override implementation
- * @see specs/testing.md#client-type-inference - Test requirements
+ * @see specs/test-requirements.md#client-type-inference - Test requirements
  */
 
 import { expectTypeOf, test } from "bun:test";

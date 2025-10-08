@@ -3,7 +3,7 @@
 
 /**
  * Multi-handler dispatch for client-side message routing.
- * See @client.md#multiple-handlers and @constraints.md#server-client-asymmetry.
+ * See @specs/client.md#multiple-handlers and @specs/rules.md#server-client-asymmetry.
  */
 
 import type { AnyMessageSchema, MessageHandler } from "./types.js";

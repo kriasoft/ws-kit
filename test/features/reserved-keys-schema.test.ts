@@ -8,7 +8,7 @@
  * define reserved server-only keys.
  *
  * Spec: @specs/schema.md#Reserved-Server-Only-Meta-Keys
- * Spec: @specs/constraints.md#reserved-keys
+ * Spec: @specs/rules.md#reserved-keys
  * Spec: @specs/validation.md#normalization-rules
  */
 

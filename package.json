@@ -1,6 +1,6 @@
 {
   "name": "bun-ws-router",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Lightweight client/server WebSocket router for Bun with type-safe Zod/Valibot validation.",
   "keywords": [
     "broadcast",
