@@ -52,7 +52,7 @@ export class BunPubSub implements PubSub {
    */
   async publish(channel: string, message: unknown): Promise<void> {
     // Serialize message if needed
-    let data: string | ArrayBuffer;
+    let data: string | ArrayBuffer | Uint8Array;
 
     if (typeof message === "string") {
       data = message;

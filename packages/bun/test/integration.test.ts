@@ -116,7 +116,7 @@ describe("@ws-kit/bun integration tests", () => {
       const { websocket } = createBunHandler(router);
 
       // Call with missing clientId
-      const badWs = { data: {} };
+      const badWs = { data: {}, close: () => {} };
       await websocket.open(badWs);
 
       // Should handle gracefully (close called)

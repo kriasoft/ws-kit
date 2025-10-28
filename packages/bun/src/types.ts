@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket as BunServerWebSocket } from "bun";
-import type { ServerWebSocket, WebSocketData } from "@ws-kit/core";
+import type { WebSocketData } from "@ws-kit/core";
 
 /**
  * Options for WebSocket upgrade in Bun.
@@ -17,7 +17,7 @@ export interface UpgradeOptions<TData = unknown> {
   data?: TData;
 
   /** HTTP headers to include in the upgrade response */
-  headers?: HeadersInit;
+  headers?: Record<string, string> | Headers;
 
   /** Authentication function called during upgrade */
   authenticate?: (req: Request) => Promise<TData> | TData;

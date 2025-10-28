@@ -1,33 +1,120 @@
 # @ws-kit/cloudflare-do
 
-Cloudflare Durable Objects platform adapter.
+Cloudflare Durable Objects platform adapter for @ws-kit/core with per-instance pub/sub and explicit multi-DO federation.
 
 ## Purpose
 
-`@ws-kit/cloudflare-do` enables ws-kit routers to work seamlessly with Cloudflare Durable Objects, leveraging DO's state durability and BroadcastChannel for efficient per-instance messaging.
+`@ws-kit/cloudflare-do` provides the platform-specific integration layer for Cloudflare Durable Objects, enabling:
+
+- Per-instance WebSocket broadcasting via BroadcastChannel
+- State management integration with durable storage
+- Explicit cross-DO federation via RPC for multi-shard coordination
+- Type-safe handler composition with core router
+- Zero-copy message broadcasting within a DO instance
 
 ## What This Package Provides
 
-- **`createDurableObjectHandler()`**: Factory returning DO fetch handler
-- **`DurablePubSub`**: Per-DO-instance broadcasting via `BroadcastChannel`
-- **`federate()`**: Helper for explicit multi-DO coordination via HTTP RPC
-- **State integration**: Access to `DurableObjectState` and persistent storage
-- **Cost optimization**: Leverages Durable Objects' free broadcasting and cost model
+- **`createDurableObjectHandler()`**: Factory returning fetch handler for DO integration
+- **`DurablePubSub`**: BroadcastChannel-based pub/sub for per-instance messaging
+- **`federate()` helpers**: Explicit multi-DO coordination functions
+- **UUID v7 client IDs**: Time-ordered unique identifiers per connection
+- **Resource tracking**: Automatic `resourceId` and `connectedAt` metadata
+- **Connection limits**: Per-DO instance connection quota enforcement
 
 ## Platform Advantages Leveraged
 
-- **State durability**: Each DO instance maintains persistent state
-- **BroadcastChannel**: Low-latency in-memory messaging within a DO instance
-- **Automatic coordination**: DOs inherently coordinate without distributed consensus
-- **Cost optimization**: Broadcasts are free; only pays for fetch/RPC calls
-- **Strong isolation**: Per-tenant isolation preventing cross-shard leaks
-- **Automatic failover**: Cloudflare restarts failed instances
+- **Per-Instance Isolation**: Each DO instance is isolated; broadcasts don't cross shards automatically
+- **Durable Storage**: Direct access to persistent key-value storage via `DurableObjectState`
+- **BroadcastChannel**: Low-latency in-memory messaging to all connections within a DO
+- **Cost Optimization**: Broadcasts are free; only pays for fetch calls
+- **Automatic Failover**: Cloudflare automatically restarts failed DO instances
+- **Strong Isolation**: Per-resource instances prevent cross-tenant leaks
+
+## Installation
+
+```bash
+bun add @ws-kit/core @ws-kit/cloudflare-do
+```
+
+Install with a validator adapter (optional but recommended):
+
+```bash
+bun add zod @ws-kit/zod
+# OR
+bun add valibot @ws-kit/valibot
+```
+
+## Dependencies
+
+- `@ws-kit/core` (required) — Core router and types
+- `uuid` (required) — For UUID v7 client ID generation
+- `@cloudflare/workers-types` (peer) — TypeScript types for Cloudflare Workers (only in TypeScript projects)
+
+## Quick Start
+
+### Basic Setup (Single DO per Resource)
+
+```typescript
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { WebSocketRouter } from "@ws-kit/core";
+
+const router = new WebSocketRouter();
+
+const handler = createDurableObjectHandler({ router });
+
+export default {
+  fetch(req: Request, state: DurableObjectState, env: Env) {
+    return handler.fetch(req);
+  },
+};
+```
+
+### With Zod Validation
+
+```typescript
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { WebSocketRouter } from "@ws-kit/core";
+import { zodValidator, messageSchema } from "@ws-kit/zod";
+import { z } from "zod";
+
+// Create router with validator
+const router = new WebSocketRouter({
+  validator: zodValidator(),
+});
+
+// Define message schemas
+const JoinRoomMessage = messageSchema("ROOM:JOIN", { room: z.string() });
+const SendMessageMessage = messageSchema("ROOM:MESSAGE", { text: z.string() });
+
+// Type-safe handlers
+router.onMessage(JoinRoomMessage, (ctx) => {
+  // ctx.payload is { room: string }
+  ctx.ws.subscribe(`room:${ctx.payload.room}`);
+});
+
+router.onMessage(SendMessageMessage, (ctx) => {
+  // Broadcast within this DO instance
+  router.publish(`room:general`, {
+    type: "MESSAGE",
+    user: ctx.ws.data.clientId,
+    text: ctx.payload.text,
+  });
+});
+
+const handler = createDurableObjectHandler({ router });
+
+export default {
+  fetch(req: Request, state: DurableObjectState, env: Env) {
+    return handler.fetch(req);
+  },
+};
+```
 
 ## ⚠️ Critical: Per-Instance Broadcast Scope
 
 In Cloudflare DO, `router.publish()` broadcasts **ONLY to WebSocket connections within THIS DO instance**, not across shards.
 
-For multi-DO setups (e.g., sharded chat rooms), use the `federate()` helper to explicitly broadcast across shard sets:
+For multi-DO setups, use the `federate()` helper for explicit cross-DO coordination:
 
 ```typescript
 import { federate } from "@ws-kit/cloudflare-do";
@@ -35,6 +122,7 @@ import { federate } from "@ws-kit/cloudflare-do";
 router.onMessage(AnnouncementSchema, async (ctx) => {
   const rooms = ["room:1", "room:2", "room:3"];
 
+  // Explicitly broadcast to multiple shards
   await federate(env.ROOMS, rooms, async (room) => {
     await room.fetch(
       new Request("https://internal/announce", {
@@ -48,15 +136,121 @@ router.onMessage(AnnouncementSchema, async (ctx) => {
 
 This design is intentional: each DO is isolated for clarity and cost control.
 
-## Architecture Pattern
+## API Reference
 
-Designed for **per-resource DO instances** (one DO per chat room, game session, etc.), not multi-room broadcast from a single DO.
+### `createDurableObjectHandler(options)`
 
-## Dependencies
+Returns a fetch handler compatible with Durable Object script.
 
-- `@ws-kit/core` (required)
-- `wrangler` (peer dev) — for local testing with `wrangler dev`
+**Options:**
 
-## Implementation Status
+- `router: WebSocketRouter` — Router instance to handle messages
+- `authenticate?: (req: Request) => Promise<TData | undefined> | TData | undefined` — Custom auth function
+- `context?: unknown` — Custom context passed to handlers
+- `maxConnections?: number` — Maximum concurrent connections (default: 1000)
 
-Phase 6 (coming soon): Complete Durable Objects adapter with state management and federation.
+### Connection Data
+
+All connections automatically include:
+
+```typescript
+type DurableObjectWebSocketData<T> = {
+  clientId: string; // UUID v7 - unique per connection
+  resourceId?: string; // Extracted from URL (?room=... or path)
+  connectedAt: number; // Timestamp in milliseconds
+  // + your custom auth data (T)
+};
+```
+
+### `federate()` Helpers
+
+**`federate(namespace, shardIds, action)`** - Basic federation
+
+```typescript
+await federate(env.ROOMS, ["room:1", "room:2"], async (room) => {
+  await room.fetch(
+    new Request("https://internal/announce", {
+      method: "POST",
+      body: JSON.stringify({ event: "ANNOUNCEMENT" }),
+    }),
+  );
+});
+```
+
+**`federateWithErrors(namespace, shardIds, action)`** - With error details
+
+```typescript
+const results = await federateWithErrors(env.ROOMS, roomIds, async (room) => {
+  return await room.fetch(new Request("https://internal/sync"));
+});
+```
+
+**`federateWithFilter(namespace, shardIds, filter, action)`** - Conditional federation
+
+```typescript
+// Only notify US regions
+await federateWithFilter(
+  env.ROOMS,
+  allRoomIds,
+  (id) => id.startsWith("us:"),
+  async (room) => {
+    await room.fetch("https://internal/us-announcement");
+  },
+);
+```
+
+## Examples
+
+### Chat Application
+
+```typescript
+const router = new WebSocketRouter({
+  validator: zodValidator(),
+});
+
+const members = new Set<string>();
+
+router.onMessage(JoinRoom, async (ctx) => {
+  members.add(ctx.ws.data.clientId);
+  await router.publish("room:updates", {
+    type: "ROOM:LIST",
+    users: Array.from(members),
+  });
+});
+
+router.onMessage(SendMessage, async (ctx) => {
+  await router.publish("room:messages", {
+    type: "ROOM:MESSAGE",
+    user: ctx.ws.data.clientId,
+    text: ctx.payload.text,
+  });
+});
+```
+
+### Game Server with State
+
+```typescript
+router.onMessage(GameActionSchema, async (ctx) => {
+  // Save state
+  await state.storage.put(`action:${Date.now()}`, ctx.payload);
+
+  // Broadcast to all players in this game
+  await router.publish("game:state", ctx.payload);
+});
+```
+
+## TypeScript Support
+
+Full TypeScript support with generic `TData` type parameter for custom connection data and type inference from message schemas.
+
+## Related Packages
+
+- [`@ws-kit/core`](../core/README.md) — Core router and types
+- [`@ws-kit/bun`](../bun/README.md) — Bun adapter
+- [`@ws-kit/zod`](../zod/README.md) — Zod validator adapter
+- [`@ws-kit/valibot`](../valibot/README.md) — Valibot validator adapter
+- [`@ws-kit/client`](../client/README.md) — Browser/Node.js client
+
+## License
+
+MIT

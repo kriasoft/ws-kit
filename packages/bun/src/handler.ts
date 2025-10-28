@@ -8,13 +8,7 @@ import type {
   WebSocketData,
 } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
-import type {
-  BunHandler,
-  BunHandlerOptions,
-  BunWebSocketData,
-  UpgradeOptions,
-} from "./types";
-import { BunPubSub } from "./pubsub";
+import type { BunHandler, BunHandlerOptions, BunWebSocketData } from "./types";
 
 /**
  * Create Bun WebSocket handlers for use with Bun.serve.
@@ -48,6 +42,7 @@ import { BunPubSub } from "./pubsub";
  * @returns Object with `fetch` and `websocket` handlers for Bun.serve
  */
 export function createBunHandler<TData extends WebSocketData = WebSocketData>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   router: WebSocketRouter<any, TData>,
   options?: BunHandlerOptions<TData>,
 ): BunHandler<TData> {
@@ -90,7 +85,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       const clientId = uuidv7();
 
       // Call user's authentication function if provided
-      let customData: TData | undefined = options?.authenticate
+      const customData: TData | undefined = options?.authenticate
         ? await Promise.resolve(options.authenticate(req))
         : undefined;
 
@@ -109,19 +104,19 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
         },
       });
 
-      if (upgraded) {
-        // Note on PubSub initialization:
-        // - If router was created with createBunAdapterWithServer(server), BunPubSub is already set
-        // - If router uses MemoryPubSub (default), broadcasts are scoped to this instance only
-        // - For multi-instance clusters, use RedisPubSub or pre-initialize with the server
-        //
-        // Example of pre-initialization:
-        // ```typescript
-        // const { fetch, websocket } = createBunHandler(router);
-        // const server = Bun.serve({ fetch, websocket });
-        // // Broadcasts now use the server-aware PubSub
-        // ```
+      // Note on PubSub initialization:
+      // - If router was created with createBunAdapterWithServer(server), BunPubSub is already set
+      // - If router uses MemoryPubSub (default), broadcasts are scoped to this instance only
+      // - For multi-instance clusters, use RedisPubSub or pre-initialize with the server
+      //
+      // Example of pre-initialization:
+      // ```typescript
+      // const { fetch, websocket } = createBunHandler(router);
+      // const server = Bun.serve({ fetch, websocket });
+      // // Broadcasts now use the server-aware PubSub
+      // ```
 
+      if (upgraded) {
         return upgraded;
       }
 
@@ -139,7 +134,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       /**
        * Called when a WebSocket connection is successfully established.
        */
-      async open(ws: any): Promise<void> {
+      async open(ws: ServerWebSocket<BunWebSocketData<TData>>): Promise<void> {
         try {
           // Ensure ws has the clientId from the data
           if (!ws.data?.clientId) {
@@ -149,7 +144,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
           }
 
           // Call router's open handler
-          await router.handleOpen(ws as ServerWebSocket<TData>);
+          await router.handleOpen(ws);
         } catch (error) {
           console.error("[ws] Error in open handler:", error);
           try {
@@ -163,10 +158,13 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       /**
        * Called when a message is received from the client.
        */
-      async message(ws: any, message: string | Buffer): Promise<void> {
+      async message(
+        ws: ServerWebSocket<BunWebSocketData<TData>>,
+        message: string | Buffer,
+      ): Promise<void> {
         try {
           // Call router's message handler
-          await router.handleMessage(ws as ServerWebSocket<TData>, message);
+          await router.handleMessage(ws, message);
         } catch (error) {
           console.error("[ws] Error in message handler:", error);
           // Don't close the connection on message errors unless critical
@@ -176,10 +174,14 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       /**
        * Called when the WebSocket connection is closed.
        */
-      async close(ws: any, code: number, reason?: string): Promise<void> {
+      async close(
+        ws: ServerWebSocket<BunWebSocketData<TData>>,
+        code: number,
+        reason?: string,
+      ): Promise<void> {
         try {
           // Call router's close handler
-          await router.handleClose(ws as ServerWebSocket<TData>, code, reason);
+          await router.handleClose(ws, code, reason);
         } catch (error) {
           console.error("[ws] Error in close handler:", error);
         }
@@ -191,10 +193,11 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
        * Used for backpressure handling. Not implemented here, but can be
        * extended if needed for custom write buffer management.
        */
-      drain(ws: any): void {
+      drain(ws: ServerWebSocket<BunWebSocketData<TData>>): void {
         // Backpressure handling (optional)
         // Called when ws.send() buffers are flushed
         // Can be used to resume message processing if it was paused
+        void ws; // Mark parameter as intentionally unused
       },
     } as WebSocketHandler<BunWebSocketData<TData>>,
   };
@@ -225,7 +228,11 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
  */
 export function createDefaultBunFetch<
   TData extends WebSocketData = WebSocketData,
->(router: WebSocketRouter<any, TData>, options?: BunHandlerOptions<TData>) {
+>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  router: WebSocketRouter<any, TData>,
+  options?: BunHandlerOptions<TData>,
+) {
   const { fetch } = createBunHandler(router, options);
   return fetch;
 }
