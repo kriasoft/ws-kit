@@ -4,7 +4,7 @@
 /**
  * Example of using the type-safe browser client
  * NOTE: This example demonstrates the client API. For actual browser usage,
- * import from "bun-ws-router/client" (not available in this server-side example).
+ * import from "@ws-kit/client" (not available in this server-side example).
  */
 
 import { z } from "zod";
@@ -16,7 +16,7 @@ const { messageSchema } = createMessageSchema(z);
  * Browser client usage example
  * In a real browser environment, you would:
  *
- * import { createClient } from "bun-ws-router/client";
+ * import { createClient } from "@ws-kit/client";
  * import { JoinRoomMessage, SendChatMessage, ... } from "./shared/schemas";
  */
 export function exampleBrowserClient() {

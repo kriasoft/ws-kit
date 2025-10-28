@@ -21,9 +21,9 @@ import {
   StateError,
   TimeoutError,
   ValidationError,
-} from "../../client/errors";
-import { createClient } from "../../client/index";
-import type { WebSocketClient } from "../../client/types";
+} from "../../packages/client/src/errors";
+import { createClient } from "../../packages/client/src/index";
+import type { WebSocketClient } from "../../packages/client/src/types";
 import { createMessageSchema } from "../../packages/zod/src/schema";
 import { createMockWebSocket } from "./helpers";
 

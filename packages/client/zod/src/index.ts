@@ -4,35 +4,33 @@
 /**
  * Typed WebSocket client adapter for Zod schemas.
  *
- * Provides full type inference for message handlers via type override pattern (ADR-002).
+ * Provides full type inference for message handlers via type override pattern.
  * Zero runtime overhead - pure type-level wrapper around generic client.
- *
- * @see specs/adrs.md#ADR-002 - Type override rationale
- * @see specs/client.md - Client API specification
  */
 
-import { createClient as createGenericClient } from "../client/index.js";
+import { createClient as createGenericClient } from "../../src/index.js";
 import type {
   AnyInboundMessage,
   ClientOptions,
   ClientState,
   WebSocketClient,
-} from "../client/types.js";
+} from "../../src/types.js";
 import type {
   InferMessage,
   InferMeta,
   InferPayload,
   MessageSchemaType as ZodMessageSchema,
-} from "../packages/zod/src/types.js";
+} from "../../../zod/src/types.js";
 
 // Re-export base types and error classes
-export * from "../client/types.js";
+export * from "../../src/types.js";
+export * from "../../src/errors.js";
 export type {
   InferMessage,
   InferMeta,
   InferPayload,
   MessageSchemaType as ZodMessageSchema,
-} from "../packages/zod/src/types.js";
+} from "../../../zod/src/types.js";
 
 /**
  * Options for send() method with typed meta field inference.
@@ -57,8 +55,6 @@ interface RequestOptions<S extends ZodMessageSchema> extends SendOptions<S> {
  * - on(): Handler receives InferMessage<S> (typed msg with payload/meta)
  * - send(): Payload conditional typing via overloads
  * - request(): Returns Promise<InferMessage<R>>
- *
- * @see specs/adrs.md#ADR-002 - Type override implementation pattern
  */
 export interface ZodWebSocketClient
   extends Omit<WebSocketClient, "on" | "send" | "request"> {
@@ -151,8 +147,8 @@ export interface ZodWebSocketClient
  * @example
  * ```typescript
  * import { z } from "zod";
- * import { createMessageSchema } from "bun-ws-router/zod";
- * import { createClient } from "bun-ws-router/zod/client";
+ * import { createMessageSchema } from "@ws-kit/zod";
+ * import { createClient } from "@ws-kit/client/zod";
  *
  * const { messageSchema } = createMessageSchema(z);
  * const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
@@ -164,9 +160,6 @@ export interface ZodWebSocketClient
  *   console.log(msg.payload.text.toUpperCase());
  * });
  * ```
- *
- * @see specs/client.md - Full client API documentation
- * @see specs/adrs.md#ADR-002 - Type override implementation details
  */
 export function createClient(opts: ClientOptions): ZodWebSocketClient {
   return createGenericClient(opts) as ZodWebSocketClient;

@@ -44,7 +44,7 @@ router.onClose((ctx) => {
 ## Type-Safe Publish Helper
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
+import { publish } from "@ws-kit/zod/publish";
 
 publish(ws, topic, schema, payload, metaOrOpts?);
 // Validates message against schema before publishing

@@ -40,10 +40,8 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
-    "@ws-kit/core": "workspace:*"
-  },
+  "dependencies": {},
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

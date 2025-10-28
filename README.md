@@ -565,7 +565,7 @@ Type-safe browser WebSocket client with automatic reconnection, authentication, 
 ```ts
 import { z } from "zod";
 import { createMessageSchema } from "bun-ws-router/zod";
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
 
 // Define schemas (shared with server)
 const { messageSchema } = createMessageSchema(z);

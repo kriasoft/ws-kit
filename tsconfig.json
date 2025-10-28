@@ -35,6 +35,8 @@
     { "path": "./packages/zod" },
     { "path": "./packages/valibot" },
     { "path": "./packages/client" },
+    { "path": "./packages/client/zod" },
+    { "path": "./packages/client/valibot" },
     { "path": "./packages/cloudflare-do" },
     { "path": "./packages/redis-pubsub" }
   ]

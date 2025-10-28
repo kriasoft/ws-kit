@@ -75,7 +75,7 @@ expectTypeOf(MessageUnion.parse({ type: "PING", meta: {} })).toMatchTypeOf<{
 ```typescript
 // Test factory pattern preserves types across package boundaries
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 const TestSchema = messageSchema("TEST", { value: z.number() });
@@ -1249,9 +1249,9 @@ test("onError does NOT fire for request() rejections", async () => {
 ```typescript
 // Client typed handler inference (Zod)
 test("client: typed handler inference with Zod adapter", () => {
-  import { createClient } from "bun-ws-router/zod/client";
+  import { createClient } from "@ws-kit/client/zod";
   import { z } from "zod";
-  import { createMessageSchema } from "bun-ws-router/zod";
+  import { createMessageSchema } from "@ws-kit/zod";
 
   const { messageSchema } = createMessageSchema(z);
   const JoinRoomOK = messageSchema("JOIN_ROOM_OK", { roomId: z.string() });
@@ -1356,7 +1356,7 @@ test("client: extended meta type enforcement", () => {
 
 // Generic client (fallback) uses unknown
 test("client: generic client handlers infer as unknown", () => {
-  import { createClient } from "bun-ws-router/client"; // Generic client
+  import { createClient } from "@ws-kit/client"; // Generic client
 
   const TestMsg = messageSchema("TEST", { id: z.number() });
   const client = createClient({ url: "ws://test" });

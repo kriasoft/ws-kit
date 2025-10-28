@@ -13,7 +13,7 @@ import {
   ServerError,
   ConnectionClosedError,
   StateError,
-} from "bun-ws-router/client";
+} from "@ws-kit/client";
 ```
 
 ### ValidationError

@@ -5,7 +5,7 @@ The WebSocket client supports flexible token-based authentication with automatic
 ## Quick Start
 
 ```typescript
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
 
 const client = createClient({
   url: "wss://api.example.com/ws",

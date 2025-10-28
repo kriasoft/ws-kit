@@ -15,8 +15,8 @@
  */
 
 import { z } from "zod";
-import { createMessageSchema } from "../zod/index.js";
-import { createClient } from "../zod/client.js";
+import { createMessageSchema } from "../packages/zod/src/index.js";
+import { createClient } from "../packages/client/zod/src/index.js";
 
 // Create schema factory
 const { messageSchema } = createMessageSchema(z);
@@ -149,8 +149,8 @@ async function requestExamples() {
 // ============================================================================
 
 // For comparison: generic client requires manual type assertions
-import { createClient as createGenericClient } from "../client/index.js";
-import type { InferMessage } from "../zod/types.js";
+import { createClient as createGenericClient } from "../packages/client/src/index.js";
+import type { InferMessage } from "../packages/zod/src/types.js";
 
 const genericClient = createGenericClient({ url: "wss://api.example.com" });
 

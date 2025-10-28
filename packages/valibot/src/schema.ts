@@ -230,21 +230,31 @@ export function createMessageSchema(valibot: ValibotLike) {
       meta: metaSchema,
     };
 
+    let schema: ObjectSchema<any, undefined>;
+
     if (payload === undefined) {
-      return valibot.strictObject(baseSchema);
+      schema = valibot.strictObject(baseSchema);
+    } else {
+      // Payloads can be a Valibot object or a raw shape
+      const payloadSchema =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload as any).kind === "object"
+          ? (payload as ObjectSchema<Record<string, GenericSchema>, undefined>)
+          : valibot.strictObject(payload as Record<string, GenericSchema>);
+
+      schema = valibot.strictObject({
+        ...baseSchema,
+        payload: payloadSchema,
+      });
     }
 
-    // Payloads can be a Valibot object or a raw shape
-    const payloadSchema =
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (payload as any).kind === "object"
-        ? (payload as ObjectSchema<Record<string, GenericSchema>, undefined>)
-        : valibot.strictObject(payload as Record<string, GenericSchema>);
+    // Add safeParse method to make schema compatible with generic client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (schema as any).safeParse = function (data: unknown) {
+      return valibot.safeParse(schema, data);
+    };
 
-    return valibot.strictObject({
-      ...baseSchema,
-      payload: payloadSchema,
-    });
+    return schema;
   }
 
   // Standard schemas used across most WebSocket applications

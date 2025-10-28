@@ -14,9 +14,9 @@ import { z } from "zod";
 import * as v from "valibot";
 import { createMessageSchema as createZodSchema } from "../../zod/index.js";
 import { createMessageSchema as createValibotSchema } from "../../valibot/index.js";
-import { createClient as createZodClient } from "../../zod/client.js";
-import { createClient as createValibotClient } from "../../valibot/client.js";
-import { createClient as createGenericClient } from "../../client/index.js";
+import { createClient as createZodClient } from "../../packages/client/zod/src/index.js";
+import { createClient as createValibotClient } from "../../packages/client/valibot/src/index.js";
+import { createClient as createGenericClient } from "../../packages/client/src/index.js";
 
 // Zod schemas for testing
 const { messageSchema: zodMessageSchema } = createZodSchema(z);

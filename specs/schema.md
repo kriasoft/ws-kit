@@ -8,7 +8,7 @@
 
 ```typescript
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema, createMessage } = createMessageSchema(z);
 ```
@@ -19,24 +19,24 @@ const { messageSchema, createMessage } = createMessageSchema(z);
 
 ```typescript
 // Server (Zod)
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { WebSocketRouter, createMessageSchema } from "@ws-kit/zod";
 
 // Server (Valibot)
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
+import { WebSocketRouter, createMessageSchema } from "@ws-kit/valibot";
 
 // Client (Typed - ✅ Recommended for type safety)
-import { createClient } from "bun-ws-router/zod/client"; // Zod
-import { createClient } from "bun-ws-router/valibot/client"; // Valibot
+import { createClient } from "@ws-kit/client/zod"; // Zod
+import { createClient } from "@ws-kit/client/valibot"; // Valibot
 
 // Client (Generic - custom validators only; handlers infer as unknown)
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "@ws-kit/client";
 
 // Shared schemas (portable between client/server)
 const { messageSchema } = createMessageSchema(z); // Use validator instance
 
 // Broadcasting (server-side multicast)
-import { publish } from "bun-ws-router/zod/publish"; // Zod
-import { publish } from "bun-ws-router/valibot/publish"; // Valibot
+import { publish } from "@ws-kit/zod/publish"; // Zod
+import { publish } from "@ws-kit/valibot/publish"; // Valibot
 
 // Type imports (same package as your schemas)
 import type {
@@ -44,7 +44,7 @@ import type {
   InferMessage,
   InferPayload,
   InferMeta,
-} from "bun-ws-router/zod"; // or /valibot
+} from "@ws-kit/zod"; // or /valibot
 ```
 
 **Validator Consistency**: Use the same validator (`/zod` or `/valibot`) across client, server, and schemas within a project. Mixing validators breaks type compatibility (TypeScript enforces this at compile time).
@@ -216,7 +216,7 @@ const RoomMessage = messageSchema(
 type JoinRoomType = z.infer<typeof JoinRoom>;
 
 // Handler context type
-import type { MessageContext } from "bun-ws-router/zod";
+import type { MessageContext } from "@ws-kit/zod";
 type Ctx = MessageContext<typeof JoinRoom, WebSocketData<{}>>;
 // {
 //   ws: ServerWebSocket<...>,

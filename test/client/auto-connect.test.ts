@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { createClient, StateError } from "../../client/index";
+import { createClient, StateError } from "../../packages/client/src/index";
 import { createMessageSchema } from "../../packages/zod/src/schema";
 import { createMockWebSocket } from "./helpers";
 

@@ -88,7 +88,7 @@ console.log("WebSocket server running on ws://localhost:3000");
 
 ```typescript
 // client.ts
-import { createClient } from "bun-ws-router/zod/client";
+import { createClient } from "@ws-kit/client/zod";
 import { ChatMessage, UserJoined } from "./shared/schemas";
 
 const client = createClient({

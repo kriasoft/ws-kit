@@ -62,15 +62,15 @@ Technical specifications for `bun-ws-router` - type-safe WebSocket routing with 
 
 ## Import Quick Reference
 
-| Context                 | Import Path                                         | Spec                                 |
-| ----------------------- | --------------------------------------------------- | ------------------------------------ |
-| Server router (Zod)     | `bun-ws-router/zod`                                 | @router.md                           |
-| Server router (Valibot) | `bun-ws-router/valibot`                             | @router.md                           |
-| Client (Zod typed)      | `bun-ws-router/zod/client`                          | @client.md, @adrs.md#ADR-002         |
-| Client (Valibot typed)  | `bun-ws-router/valibot/client`                      | @client.md, @adrs.md#ADR-002         |
-| Client (generic)        | `bun-ws-router/client`                              | @client.md                           |
-| Schema factory          | Same as router (`/zod` or `/valibot`)               | @schema.md#Canonical-Import-Patterns |
-| Broadcasting            | `bun-ws-router/zod/publish` (or `/valibot/publish`) | @broadcasting.md                     |
+| Context                 | Import Path                                   | Spec                                 |
+| ----------------------- | --------------------------------------------- | ------------------------------------ |
+| Server router (Zod)     | `@ws-kit/zod`                                 | @router.md                           |
+| Server router (Valibot) | `@ws-kit/valibot`                             | @router.md                           |
+| Client (Zod typed)      | `@ws-kit/client/zod`                          | @client.md, @adrs.md#ADR-002         |
+| Client (Valibot typed)  | `@ws-kit/client/valibot`                      | @client.md, @adrs.md#ADR-002         |
+| Client (generic)        | `@ws-kit/client`                              | @client.md                           |
+| Schema factory          | Same as router (`/zod` or `/valibot`)         | @schema.md#Canonical-Import-Patterns |
+| Broadcasting            | `@ws-kit/zod/publish` (or `/valibot/publish`) | @broadcasting.md                     |
 
 See @schema.md#Canonical-Import-Patterns for complete import examples.
 
@@ -106,7 +106,7 @@ ctx = {
 ```typescript
 // 1. Factory pattern (required for discriminated unions)
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 const { messageSchema } = createMessageSchema(z);
 
 // 2. Define schemas
@@ -120,7 +120,7 @@ router.onMessage(PingMsg, (ctx) => {
 });
 
 // 4. Broadcasting with origin tracking
-import { publish } from "bun-ws-router/zod/publish";
+import { publish } from "@ws-kit/zod/publish";
 publish(ctx.ws, "room:123", ChatMsg, { text: "hi" }, { origin: "userId" });
 // Injects meta.senderId = ws.data.userId
 ```

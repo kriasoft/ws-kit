@@ -128,7 +128,7 @@ Accept these TypeScript violations for better DX:
 
 ## Client-Side Constraints
 
-> Applies to browser/Node client (`bun-ws-router/client`)
+> Applies to browser/Node client (`@ws-kit/client`)
 
 ### Message Normalization (Outbound)
 

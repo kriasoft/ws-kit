@@ -77,7 +77,7 @@ Use type overrides (not separate implementations) for validator-specific clients
 
 ```typescript
 // Generic client (before)
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "@ws-kit/client";
 client.on(HelloOk, (msg) => {
   msg.type; // ❌ Type error: msg is unknown
   msg.payload.text; // ❌ Type error: msg is unknown
@@ -95,8 +95,8 @@ client.on(HelloOk, (msg) => {
 
 ```typescript
 // zod/client.ts
-import { createClient as createGenericClient } from "bun-ws-router/client";
-import type { WebSocketClient } from "bun-ws-router/client";
+import { createClient as createGenericClient } from "@ws-kit/client";
+import type { WebSocketClient } from "@ws-kit/client";
 
 export interface ZodWebSocketClient
   extends Omit<WebSocketClient, "on" | "send" | "request"> {
@@ -164,20 +164,20 @@ send<S extends ZodMessageSchema & { shape: { payload?: never } }>(
 **Before**:
 
 ```typescript
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "@ws-kit/client";
 ```
 
 **After**:
 
 ```typescript
 // Zod users
-import { createClient } from "bun-ws-router/zod/client";
+import { createClient } from "@ws-kit/client/zod";
 
 // Valibot users
-import { createClient } from "bun-ws-router/valibot/client";
+import { createClient } from "@ws-kit/client/valibot";
 
 // Custom validators (explicit opt-in)
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "@ws-kit/client";
 ```
 
 **No other changes required** - runtime behavior identical, types now infer automatically.
@@ -187,8 +187,8 @@ import { createClient } from "bun-ws-router/client";
 ```typescript
 // With typed client (after)
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-import { createClient } from "bun-ws-router/zod/client";
+import { createMessageSchema } from "@ws-kit/zod";
+import { createClient } from "@ws-kit/client/zod";
 
 const { messageSchema } = createMessageSchema(z);
 const HelloOk = messageSchema("HELLO_OK", { text: z.string() });

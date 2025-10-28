@@ -27,7 +27,7 @@ Define schemas once, import everywhere:
 ```typescript
 // shared/schemas.ts (imported by both client and server)
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -40,7 +40,7 @@ export const ChatMessage = messageSchema("CHAT", { text: z.string() });
 
 ```typescript
 // client.ts
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
 import { Hello, HelloOk } from "./shared/schemas";
 
 const client = createClient({
@@ -68,7 +68,7 @@ Use `/zod/client` or `/valibot/client` for full type inference as shown above. T
 
 ```typescript
 // server.ts
-import { WebSocketRouter } from "bun-ws-router/zod";
+import { WebSocketRouter } from "@ws-kit/zod";
 import { Hello, HelloOk } from "./shared/schemas";
 
 const router = new WebSocketRouter();
@@ -93,10 +93,10 @@ Bun.serve({
 
 ```typescript
 // Zod users - RECOMMENDED
-import { createClient } from "bun-ws-router/zod/client";
+import { createClient } from "@ws-kit/client/zod";
 
 // Valibot users - RECOMMENDED
-import { createClient } from "bun-ws-router/valibot/client";
+import { createClient } from "@ws-kit/client/valibot";
 ```
 
 **Why typed clients?**
@@ -104,7 +104,7 @@ import { createClient } from "bun-ws-router/valibot/client";
 Typed clients provide full TypeScript inference in message handlers:
 
 ```typescript
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
 
 const client = createClient({ url: "wss://api.example.com" });
 
@@ -119,7 +119,7 @@ client.on(HelloOk, (msg) => {
 
 ```typescript
 // ⚠️ Only for custom validators - handlers receive `unknown`
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "@ws-kit/client";
 
 client.on(HelloOk, (msg) => {
   // ⚠️ msg is unknown - requires manual type assertion
@@ -133,12 +133,12 @@ Choose Zod or Valibot:
 
 ```typescript
 // Zod (server and client)
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import type { AnyMessageSchema, InferMessage } from "bun-ws-router/zod";
+import { WebSocketRouter, createMessageSchema } from "@ws-kit/zod";
+import type { AnyMessageSchema, InferMessage } from "@ws-kit/zod";
 
 // Valibot (recommended for browsers)
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
-import type { AnyMessageSchema, InferMessage } from "bun-ws-router/valibot";
+import { WebSocketRouter, createMessageSchema } from "@ws-kit/valibot";
+import type { AnyMessageSchema, InferMessage } from "@ws-kit/valibot";
 ```
 
 ::: tip

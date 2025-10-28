@@ -3,7 +3,7 @@
 Complete API documentation for the browser WebSocket client.
 
 ::: tip
-For complete type definitions and implementation details, see the [Client Specification](https://github.com/kriasoft/bun-ws-router/blob/main/specs/client.md).
+For complete type definitions and implementation details, see the [Client Specification](https://github.com/kriasoft/ws-kit/blob/main/specs/client.md).
 :::
 
 ## Methods
@@ -365,7 +365,7 @@ import {
   ServerError,
   ConnectionClosedError,
   StateError,
-} from "bun-ws-router/client";
+} from "@ws-kit/client";
 
 try {
   const reply = await client.request(Hello, { name: "test" }, HelloOk);
@@ -385,7 +385,7 @@ try {
 Extract full message type from schema.
 
 ```typescript
-import type { InferMessage } from "bun-ws-router/zod";
+import type { InferMessage } from "@ws-kit/zod";
 
 const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
 
@@ -398,7 +398,7 @@ type HelloOkMessage = InferMessage<typeof HelloOk>;
 Extract payload type from schema.
 
 ```typescript
-import type { InferPayload } from "bun-ws-router/zod";
+import type { InferPayload } from "@ws-kit/zod";
 
 type HelloPayload = InferPayload<typeof Hello>;
 // { name: string }
@@ -409,7 +409,7 @@ type HelloPayload = InferPayload<typeof Hello>;
 Extract meta type from schema.
 
 ```typescript
-import type { InferMeta } from "bun-ws-router/zod";
+import type { InferMeta } from "@ws-kit/zod";
 
 const RoomMsg = messageSchema(
   "CHAT",

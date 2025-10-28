@@ -22,7 +22,7 @@ Quick navigation for AI tools:
 
 ```typescript
 import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { WebSocketRouter, createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 const router = new WebSocketRouter();

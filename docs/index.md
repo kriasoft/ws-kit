@@ -12,7 +12,7 @@ hero:
       link: /getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/kriasoft/bun-ws-router
+      link: https://github.com/kriasoft/ws-kit
 
 features:
   - icon: 🛡️

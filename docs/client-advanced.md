@@ -9,7 +9,7 @@ The client automatically reconnects on connection loss with exponential backoff.
 ### Basic Reconnection
 
 ```typescript
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
 
 const client = createClient({
   url: "wss://api.example.com/ws",
@@ -578,7 +578,7 @@ client.onUnhandled((msg) => {
 Use `wsFactory` for dependency injection:
 
 ```typescript
-import { createClient } from "bun-ws-router/zod/client";
+import { createClient } from "@ws-kit/client/zod";
 
 class FakeWebSocket {
   readyState = WebSocket.CONNECTING;

@@ -29,9 +29,9 @@ Quick navigation for AI tools:
 - **Validator choice:** Valibot recommended for browser clients (smaller bundle); Zod acceptable for larger apps.
 - **Imports:** See @schema.md#Canonical-Import-Patterns for canonical import examples.
   - **Client (Typed):** ✅ **Recommended for type safety**
-    - Zod: `import { createClient } from "bun-ws-router/zod/client"`
-    - Valibot: `import { createClient } from "bun-ws-router/valibot/client"`
-  - **Client (Generic):** `import { createClient } from "bun-ws-router/client"` (custom validators only; handlers infer as `unknown`)
+    - Zod: `import { createClient } from "@ws-kit/client/zod"`
+    - Valibot: `import { createClient } from "@ws-kit/client/valibot"`
+  - **Client (Generic):** `import { createClient } from "@ws-kit/client"` (custom validators only; handlers infer as `unknown`)
   - **Shared schemas:** Portable between client and server; use factory pattern (see @schema.md#Factory-Pattern).
 
 ## Public API (Stable v1)
@@ -39,7 +39,7 @@ Quick navigation for AI tools:
 **Use typed clients** (`/zod/client` or `/valibot/client`) for full type inference. Generic client (`/client`) remains available but provides `unknown` in handlers—use only for custom validators. **See @adrs.md#ADR-002 for type override rationale.**
 
 ````ts
-// bun-ws-router/zod/client (similar interface for valibot/client)
+// @ws-kit/client/zod (similar interface for valibot/client)
 
 export type ClientOptions = {
   url: string | URL;
@@ -259,7 +259,7 @@ export {
   ServerError,
   ConnectionClosedError,
   StateError,
-} from "bun-ws-router/client";
+} from "@ws-kit/client";
 
 ````
 
@@ -267,7 +267,7 @@ export {
 
 ```typescript
 // Zod typed client
-import { createClient } from "bun-ws-router/zod/client";
+import { createClient } from "@ws-kit/client/zod";
 
 const client = createClient({ url: "wss://api.example.com" });
 
@@ -305,7 +305,7 @@ client.send(Logout, {});
 
 ```typescript
 // Generic client (custom validators only)
-import { createClient } from "bun-ws-router/client";
+import { createClient } from "@ws-kit/client";
 
 client.on(HelloOk, (msg) => {
   // ⚠️ msg is unknown - requires manual type assertion
@@ -855,7 +855,7 @@ import {
   TimeoutError,
   ServerError,
   ConnectionClosedError,
-} from "bun-ws-router/client";
+} from "@ws-kit/client";
 
 try {
   const reply = await client.request(Hello, { name: "test" }, HelloOk, {
@@ -978,7 +978,7 @@ Client MUST use Map-based schema lookup (same pattern as server):
 
 - `wsFactory` for dependency injection (FakeWebSocket in tests).
 - Deterministic backoff when `jitter: "none"` for reproducible tests.
-- Provide helper fakes in `bun-ws-router/testing` (optional):
+- Provide helper fakes in `@ws-kit/testing` (optional):
   - `createFakeWS()`, `flushBackoff()`, `tick(ms)`.
 
 ## Usage Examples
@@ -992,7 +992,7 @@ Define schemas once in a shared module, import in both client and server:
 ```ts
 // shared/schemas.ts (imported by both client and server)
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -1001,7 +1001,7 @@ export const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
 export const ChatMessage = messageSchema("CHAT", { text: z.string() });
 
 // client.ts
-import { createClient } from "bun-ws-router/zod/client"; // Typed client
+import { createClient } from "@ws-kit/client/zod"; // Typed client
 import { Hello, HelloOk } from "./shared/schemas";
 
 const client = createClient({ url: "wss://api.example.com/ws" });
@@ -1014,7 +1014,7 @@ client.on(HelloOk, (msg) => {
 });
 
 // server.ts
-import { WebSocketRouter } from "bun-ws-router/zod";
+import { WebSocketRouter } from "@ws-kit/zod";
 import { Hello, HelloOk } from "./shared/schemas";
 
 const router = new WebSocketRouter();
@@ -1029,7 +1029,7 @@ router.onMessage(Hello, (ctx) => {
 
 ```ts
 // client.ts
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
 import { Hello, HelloOk } from "./shared/schemas"; // Shared schemas
 
 // Option 1: Explicit connection (default)
@@ -1060,7 +1060,7 @@ console.log(reply.payload.text); // ✅ Typed as string
 
 ```ts
 // client.ts
-import { createClient } from "bun-ws-router/valibot/client"; // ✅ Typed client
+import { createClient } from "@ws-kit/client/valibot"; // ✅ Typed client
 import { Hello, HelloOk, Chat } from "./shared/schemas";
 
 const client = createClient({
@@ -1124,8 +1124,8 @@ await client.close({ code: 1000, reason: "Done" });
 
 ```ts
 // client.test.ts
-import { createClient } from "bun-ws-router/client";
-import { createFakeWS } from "bun-ws-router/testing";
+import { createClient } from "@ws-kit/client";
+import { createFakeWS } from "@ws-kit/testing";
 
 const client = createClient({
   url: "ws://test",
