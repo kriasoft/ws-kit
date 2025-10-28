@@ -908,7 +908,7 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 
 ### Phase 2: Implement @ws-kit/core (Composition Foundation)
 
-**STATUS**: Phase 2.1 Complete (Type System & Interfaces)
+**STATUS**: ✅ Phase 2.2 Complete (Router Implementation & Tests)
 
 #### Phase 2.1: Core Type System & Interfaces ✅
 
@@ -930,29 +930,35 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
   - [x] Assert config option types (heartbeat, limits)
   - [x] Verify `tsc --noEmit` passes all type assertions ✅
 
-#### Phase 2.2: Router Implementation (NEXT)
+#### Phase 2.2: Router Implementation ✅
 
-- [ ] Implement single **`WebSocketRouter<V>`** class (generic over `ValidatorAdapter`)
-  - [ ] Constructor accepts `{ validator?, platform?, pubsub?, hooks?, heartbeat?, limits? }`
-  - [ ] `onMessage()` method with type overloads for type inference
-  - [ ] `publish()` delegating to platform's PubSub
-  - [ ] Authentication hook (`onAuth`) invoked on first message before handler dispatch
-  - [ ] Close hook (`onClose`) with connection code and reason
-  - [ ] Error hook (`onError`) for all recoverable/fatal errors
-- [ ] Implement **heartbeat management**:
-  - [ ] Configurable ping interval (default 30s)
-  - [ ] Configurable pong timeout (default 5s)
-  - [ ] Auto-close stale connections (no pong within timeout)
-  - [ ] Per-socket heartbeat tracking
-- [ ] Implement **message limits**:
-  - [ ] `maxPayloadBytes` enforced before deserialization (default 1MB)
-  - [ ] Reject oversized messages with appropriate error code
-- [ ] Migrate core logic from `/shared/` to `packages/core/src/`
-- [ ] **Establish Core Scope Boundaries** (codify in `@ws-kit/core/README.md`):
-  - [ ] Define **What Core IS**: Platform-agnostic router, pluggable adapters, lifecycle hooks, message limits, type inference
-  - [ ] Define **What Core IS NOT**: Codec abstraction, middleware chain, protocol versioning, backpressure policies, auth implementation
-  - [ ] Document **Why This Boundary**: Keeps core lean, avoids coupling adapters, lets platforms handle specifics optimally
-  - [ ] State **Principle for Future PRs**: "Does this benefit ALL platform adapters equally, or can it be implemented in specific adapters?"
+- [x] Implement single **`WebSocketRouter<V>`** class (generic over `ValidatorAdapter`)
+  - [x] Constructor accepts `{ validator?, platform?, pubsub?, hooks?, heartbeat?, limits? }`
+  - [x] `onMessage()` method with type overloads for type inference (packages/core/src/router.ts:118-143)
+  - [x] `publish()` delegating to platform's PubSub (packages/core/src/router.ts:283-285)
+  - [x] Authentication hook (`onAuth`) invoked on first message before handler dispatch (packages/core/src/router.ts:445-459)
+  - [x] Close hook (`onClose`) with connection code and reason (packages/core/src/router.ts:365-379)
+  - [x] Error hook (`onError`) for all recoverable/fatal errors (packages/core/src/router.ts:627-644)
+- [x] Implement **heartbeat management**:
+  - [x] Configurable ping interval (default 30s) (packages/core/src/router.ts:84-88)
+  - [x] Configurable pong timeout (default 5s) (packages/core/src/router.ts:84-88)
+  - [x] Auto-close stale connections (no pong within timeout) (packages/core/src/router.ts:765-769)
+  - [x] Per-socket heartbeat tracking (packages/core/src/router.ts:30-36, 68-69)
+- [x] Implement **message limits**:
+  - [x] `maxPayloadBytes` enforced before deserialization (default 1MB) (packages/core/src/router.ts:565-579)
+  - [x] Reject oversized messages with appropriate error code (packages/core/src/router.ts:410, 575-578)
+- [x] Migrate core logic from `/shared/` to `packages/core/src/` (files deleted and moved)
+- [x] **Establish Core Scope Boundaries** (codify in `@ws-kit/core/README.md`):
+  - [x] Define **What Core IS**: Platform-agnostic router, pluggable adapters, lifecycle hooks, message limits, type inference (README.md:9-18)
+  - [x] Define **What Core IS NOT**: Codec abstraction, middleware chain, protocol versioning, backpressure policies, auth implementation (README.md:21-28)
+  - [x] Document **Why This Boundary**: Keeps core lean, avoids coupling adapters, lets platforms handle specifics optimally (README.md:30-49)
+  - [x] State **Principle for Future PRs**: "Does this benefit ALL platform adapters equally, or can it be implemented in specific adapters?" (README.md:43-49)
+- [x] **Comprehensive runtime tests** (103 tests, all passing):
+  - [x] Router message handling (packages/core/test/router.test.ts)
+  - [x] Lifecycle hooks (packages/core/test/lifecycle.test.ts)
+  - [x] Heartbeat management (packages/core/test/heartbeat.test.ts)
+  - [x] Payload limits (packages/core/test/limits.test.ts)
+  - [x] Type tests with `expectTypeOf` (packages/core/test/types/index.test.ts)
 
 ### Phase 3: Implement @ws-kit/bun (Platform Adapter)
 

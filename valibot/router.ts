@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { WebSocketRouter as BaseWebSocketRouter } from "../shared/router";
+import { WebSocketRouter as BaseWebSocketRouter } from "../packages/core/src/router";
 import { ValibotValidatorAdapter } from "./adapter";
 import type {
   MessageHandler as ValibotMessageHandler,

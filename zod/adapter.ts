@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from "zod";
-import type { ValidatorAdapter } from "../shared/router";
+import type { ValidatorAdapter } from "../packages/core/src/types";
 import type { MessageSchemaType } from "./types";
 
 /**

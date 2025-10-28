@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import type { SendFunction } from "../../shared/types";
+import type { SendFunction } from "../../packages/core/src/types";
 import { createMessageSchema, WebSocketRouter } from "../../valibot";
 
 const { messageSchema } = createMessageSchema(v);

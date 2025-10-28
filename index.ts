@@ -17,7 +17,7 @@
  */
 
 // Only export shared types that are validator-agnostic
-export type { UpgradeOptions, WebSocketData } from "./shared/types";
+export type { UpgradeOptions, WebSocketData } from "./packages/core/src/types";
 
 // Throw helpful error if someone tries to import non-existent exports
 const errorMessage = `

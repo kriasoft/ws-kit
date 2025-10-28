@@ -81,3 +81,47 @@ export type { ReservedMetaKey } from "./constants";
  * Use platform-specific adapters for production deployments.
  */
 export { MemoryPubSub } from "./pubsub";
+
+// ============================================================================
+// Message Normalization & Validation
+// ============================================================================
+
+export { validateMetaSchema, normalizeInboundMessage } from "./normalize";
+
+// ============================================================================
+// Router Implementation
+// ============================================================================
+
+/**
+ * Platform-agnostic WebSocket router for type-safe message routing.
+ *
+ * Provides:
+ * - Message routing with pluggable validators (Zod, Valibot, custom)
+ * - Lifecycle hooks (onOpen, onClose, onAuth, onError)
+ * - Connection heartbeat with auto-close on timeout
+ * - Message payload size limits
+ * - Router composition via addRoutes()
+ *
+ * Platform-agnostic design allows composition with any platform adapter
+ * (Bun, Cloudflare DO, Node.js, etc.) and any validator.
+ *
+ * @example
+ * ```typescript
+ * import { WebSocketRouter } from "@ws-kit/core";
+ * import { zodValidator, messageSchema } from "@ws-kit/zod";
+ * import { createBunAdapter } from "@ws-kit/bun";
+ * import { z } from "zod";
+ *
+ * const { messageSchema } = messageSchema(z);
+ * const router = new WebSocketRouter({
+ *   validator: zodValidator(),
+ *   platform: createBunAdapter(),
+ * });
+ *
+ * const PingMessage = messageSchema("PING", { text: z.string() });
+ * router.onMessage(PingMessage, (ctx) => {
+ *   console.log("Ping:", ctx.payload.text);
+ * });
+ * ```
+ */
+export { WebSocketRouter } from "./router";

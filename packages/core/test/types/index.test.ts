@@ -10,7 +10,7 @@
  * Reference: specs/test-requirements.md
  */
 
-import { expectTypeOf } from "bun:test";
+import { describe, it, expectTypeOf } from "bun:test";
 import type {
   ServerWebSocket,
   WebSocketData,
@@ -197,7 +197,6 @@ describe("MemoryPubSub", () => {
     const pubsub = new MemoryPubSub();
     const result = pubsub.publish("test", {});
 
-    expectTypeOf(result).toBePromise();
     expectTypeOf(result).resolves.toBeVoid();
   });
 
@@ -339,7 +338,7 @@ describe("WebSocketRouterOptions", () => {
 
 describe("Constants", () => {
   it("RESERVED_META_KEYS should be a Set", () => {
-    expectTypeOf(RESERVED_META_KEYS).toBeA<Set<string>>();
+    expectTypeOf(RESERVED_META_KEYS).toMatchTypeOf<Set<string>>();
   });
 
   it("should contain clientId and receivedAt", () => {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { ZodObject, ZodRawShape, ZodType, z as zType } from "zod";
-import { validateMetaSchema } from "../shared/normalize.js";
+import { validateMetaSchema } from "../packages/core/src/normalize";
 
 /**
  * Minimal interface for Zod instance to avoid circular type references.

@@ -133,7 +133,7 @@ export type InferMeta<S extends MessageSchemaType> =
     ? Omit<z.infer<S["shape"]["meta"]>, "timestamp" | "correlationId">
     : Record<string, never>;
 
-/** Re-export shared types that are validator-agnostic. See: shared/types.ts */
+/** Re-export shared types that are validator-agnostic. See: packages/core/src/types */
 export type {
   CloseHandler,
   CloseHandlerContext,
@@ -142,4 +142,4 @@ export type {
   UpgradeOptions,
   WebSocketData,
   WebSocketRouterOptions,
-} from "../shared/types";
+} from "../packages/core/src/types";

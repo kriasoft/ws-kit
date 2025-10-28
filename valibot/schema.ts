@@ -9,7 +9,7 @@ import type {
   OptionalSchema,
   StringSchema,
 } from "valibot";
-import { validateMetaSchema } from "../shared/normalize.js";
+import { validateMetaSchema } from "../packages/core/src/normalize";
 
 /**
  * Minimal interface for Valibot instance to avoid circular type references.
