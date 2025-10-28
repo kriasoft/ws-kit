@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/cloudflare-do",
   "version": "0.0.0",
-  "description": "Cloudflare Durable Objects platform adapter for @ws-kit/core",
+  "description": "Cloudflare Durable Objects adapter for @ws-kit/core that enables stateful, globally-distributed WebSocket applications with built-in coordination and per-instance pub/sub messaging at the edge.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -13,13 +13,27 @@
     "url": "https://github.com/kriasoft/ws-kit.git",
     "directory": "packages/cloudflare-do"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
   "keywords": [
     "cloudflare",
+    "cloudflare-workers",
     "durable-objects",
+    "durable-state",
     "adapter",
     "websocket",
     "real-time",
-    "typescript"
+    "typescript",
+    "edge-computing",
+    "edge-adapter",
+    "serverless",
+    "stateful",
+    "distributed-websocket",
+    "coordination",
+    "globally-distributed",
+    "at-scale"
   ],
   "exports": {
     ".": {

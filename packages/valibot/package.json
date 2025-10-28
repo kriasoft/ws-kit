@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/valibot",
   "version": "0.0.0",
-  "description": "Valibot validator adapter for @ws-kit/core",
+  "description": "Lightweight Valibot validator adapter for @ws-kit/core that enables type-safe WebSocket message validation with runtime schema checking. Build modular, high-performance real-time applications with full TypeScript inference and minimal bundle size.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -13,13 +13,29 @@
     "url": "https://github.com/kriasoft/ws-kit.git",
     "directory": "packages/valibot"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
   "keywords": [
     "valibot",
     "validator",
     "adapter",
     "validation",
     "schema",
-    "typescript"
+    "typescript",
+    "schema-validation",
+    "type-safety",
+    "websocket-validation",
+    "data-validation",
+    "runtime-validation",
+    "valibot-integration",
+    "message-validation",
+    "lightweight",
+    "modular",
+    "websocket",
+    "realtime",
+    "type-safe"
   ],
   "exports": {
     ".": {

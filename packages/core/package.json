@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/core",
   "version": "0.0.0",
-  "description": "Platform-agnostic WebSocket router with pluggable adapters",
+  "description": "Type-safe WebSocket message router with pluggable runtime adapters and schema validation, designed for building real-time applications with maximum developer experience and zero vendor lock-in.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -13,13 +13,27 @@
     "url": "https://github.com/kriasoft/ws-kit.git",
     "directory": "packages/core"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
   "keywords": [
     "websocket",
     "router",
     "type-safe",
     "adapter",
     "validation",
-    "typescript"
+    "typescript",
+    "real-time",
+    "server",
+    "messaging",
+    "framework",
+    "event-driven",
+    "infrastructure",
+    "websocket-server",
+    "rpc",
+    "pluggable",
+    "pub-sub"
   ],
   "exports": {
     ".": {

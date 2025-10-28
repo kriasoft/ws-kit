@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/bun",
   "version": "0.0.0",
-  "description": "Bun WebSocket server adapter for @ws-kit/core",
+  "description": "Native Bun WebSocket server adapter leveraging Bun's high-performance WebSocket API with built-in pub/sub, low-latency message routing, and type-safe handler integration for real-time applications.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -13,13 +13,29 @@
     "url": "https://github.com/kriasoft/ws-kit.git",
     "directory": "packages/bun"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
   "keywords": [
     "bun",
     "websocket",
     "server",
     "adapter",
     "real-time",
-    "typescript"
+    "typescript",
+    "bun-runtime",
+    "bun-websocket",
+    "server-adapter",
+    "websocket-server",
+    "full-stack",
+    "low-latency",
+    "native",
+    "performant",
+    "streaming",
+    "http-upgrade",
+    "pubsub",
+    "pub-sub"
   ],
   "exports": {
     ".": {
@@ -40,6 +56,7 @@
     "@types/bun": ">=1.0.0"
   },
   "engines": {
+    "bun": ">=1.3",
     "node": ">=22"
   }
 }

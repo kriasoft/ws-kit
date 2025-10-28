@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/client",
   "version": "0.0.0",
-  "description": "Universal WebSocket client for @ws-kit",
+  "description": "Universal WebSocket client with type-safe message validation for browser and Node.js, supporting Zod and Valibot schemas with full TypeScript inference.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -13,13 +13,27 @@
     "url": "https://github.com/kriasoft/ws-kit.git",
     "directory": "packages/client"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
   "keywords": [
     "websocket",
     "client",
     "browser",
     "real-time",
     "type-safe",
-    "typescript"
+    "typescript",
+    "universal-client",
+    "isomorphic",
+    "message-client",
+    "schema-validation",
+    "zod-support",
+    "valibot-support",
+    "browser-client",
+    "node-client",
+    "type-inference",
+    "client-library"
   ],
   "exports": {
     ".": {

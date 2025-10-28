@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/redis-pubsub",
   "version": "0.0.0",
-  "description": "Redis PubSub adapter for @ws-kit (optional, post-launch)",
+  "description": "Redis PubSub adapter for @ws-kit/core that enables distributed WebSocket message broadcasting across multiple server instances. Leverages Redis pub/sub to synchronize real-time messages in horizontally scaled deployments.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -13,13 +13,28 @@
     "url": "https://github.com/kriasoft/ws-kit.git",
     "directory": "packages/redis-pubsub"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
   "keywords": [
     "redis",
     "pubsub",
     "adapter",
     "distributed",
     "broadcasting",
-    "typescript"
+    "typescript",
+    "redis-adapter",
+    "message-broadcasting",
+    "cross-instance",
+    "distributed-messaging",
+    "pub-sub",
+    "scaling",
+    "horizontal-scaling",
+    "multi-instance",
+    "real-time-broadcasting",
+    "websocket",
+    "infrastructure"
   ],
   "exports": {
     ".": {
@@ -33,7 +48,9 @@
     "dist"
   ],
   "dependencies": {
-    "@ws-kit/core": "workspace:*",
+    "@ws-kit/core": "workspace:*"
+  },
+  "peerDependencies": {
     "redis": "^4.6.0"
   },
   "engines": {
