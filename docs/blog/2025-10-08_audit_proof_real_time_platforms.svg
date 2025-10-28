@@ -1,0 +1,284 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Modern gradient background -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e27;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1a1f3a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0e27;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Glow effects -->
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="strongGlow">
+      <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Radial gradients for orbs -->
+    <radialGradient id="dangerOrb">
+      <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#c92a2a;stop-opacity:0" />
+    </radialGradient>
+
+    <radialGradient id="safeOrb">
+      <stop offset="0%" style="stop-color:#51cf66;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#2f9e44;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+
+  <!-- Subtle tech pattern -->
+  <g opacity="0.03">
+    <circle cx="200" cy="200" r="100" fill="none" stroke="#4dabf7" stroke-width="1"/>
+    <circle cx="200" cy="200" r="150" fill="none" stroke="#4dabf7" stroke-width="1"/>
+    <circle cx="1720" cy="880" r="120" fill="none" stroke="#4dabf7" stroke-width="1"/>
+    <circle cx="1720" cy="880" r="180" fill="none" stroke="#4dabf7" stroke-width="1"/>
+  </g>
+
+  <!-- Main Title Section -->
+  <g>
+    <text x="960" y="180"
+          font-family="system-ui, -apple-system, sans-serif"
+          font-size="84"
+          font-weight="900"
+          fill="#ffffff"
+          text-anchor="middle"
+          letter-spacing="-2">
+      Two Timestamps, One Message
+    </text>
+
+    <text x="960" y="250"
+          font-family="system-ui, -apple-system, sans-serif"
+          font-size="38"
+          font-weight="400"
+          fill="#94a3b8"
+          text-anchor="middle">
+      Is Your WebSocket Rate Limiter a Sitting Duck?
+    </text>
+  </g>
+
+  <!-- Central Visual: Timeline/Flow Diagram -->
+  <g transform="translate(0, 380)">
+    <!-- Left side: Untrusted client timestamp -->
+    <g transform="translate(280, 140)">
+      <!-- Danger glow -->
+      <circle cx="0" cy="0" r="100" fill="url(#dangerOrb)" filter="url(#strongGlow)"/>
+
+      <!-- Main circle -->
+      <circle cx="0" cy="0" r="80" fill="#1a1f3a" stroke="#ff6b6b" stroke-width="4"/>
+
+      <!-- Warning symbol -->
+      <path d="M 0 -40 L 12 20 L -12 20 Z" fill="#ff6b6b" opacity="0.9"/>
+      <circle cx="0" cy="15" r="3" fill="#1a1f3a"/>
+      <rect x="-2" y="-5" width="4" height="15" fill="#1a1f3a"/>
+
+      <!-- Label -->
+      <text x="0" y="130"
+            font-family="'SF Mono', 'Courier New', monospace"
+            font-size="28"
+            font-weight="700"
+            fill="#ff6b6b"
+            text-anchor="middle">
+        meta.timestamp
+      </text>
+      <text x="0" y="165"
+            font-family="system-ui, sans-serif"
+            font-size="20"
+            fill="#94a3b8"
+            text-anchor="middle">
+        Client Clock (Untrusted)
+      </text>
+    </g>
+
+    <!-- Connection flow line -->
+    <g>
+      <!-- WebSocket message flow -->
+      <path d="M 400 140 Q 960 100 1520 140"
+            fill="none"
+            stroke="#4dabf7"
+            stroke-width="3"
+            stroke-dasharray="12,8"
+            opacity="0.6"/>
+
+      <!-- Flow direction indicators -->
+      <circle cx="640" cy="115" r="4" fill="#4dabf7" opacity="0.8"/>
+      <circle cx="960" cy="100" r="4" fill="#4dabf7" opacity="0.8"/>
+      <circle cx="1280" cy="115" r="4" fill="#4dabf7" opacity="0.8"/>
+
+      <!-- WebSocket icon/label -->
+      <text x="960" y="80"
+            font-family="'SF Mono', monospace"
+            font-size="18"
+            fill="#4dabf7"
+            text-anchor="middle"
+            opacity="0.7">
+        WebSocket Message
+      </text>
+    </g>
+
+    <!-- Right side: Trusted server timestamp -->
+    <g transform="translate(1640, 140)">
+      <!-- Safe glow -->
+      <circle cx="0" cy="0" r="100" fill="url(#safeOrb)" filter="url(#strongGlow)"/>
+
+      <!-- Main circle -->
+      <circle cx="0" cy="0" r="80" fill="#1a1f3a" stroke="#51cf66" stroke-width="4"/>
+
+      <!-- Shield/check symbol -->
+      <path d="M 0 -35 L 20 -25 L 20 0 Q 20 25 0 35 Q -20 25 -20 0 L -20 -25 Z"
+            fill="none"
+            stroke="#51cf66"
+            stroke-width="3"/>
+      <path d="M -12 0 L -4 12 L 16 -12"
+            fill="none"
+            stroke="#51cf66"
+            stroke-width="4"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+
+      <!-- Label -->
+      <text x="0" y="130"
+            font-family="'SF Mono', 'Courier New', monospace"
+            font-size="28"
+            font-weight="700"
+            fill="#51cf66"
+            text-anchor="middle">
+        receivedAt
+      </text>
+      <text x="0" y="165"
+            font-family="system-ui, sans-serif"
+            font-size="20"
+            fill="#94a3b8"
+            text-anchor="middle">
+        Server Authority
+      </text>
+    </g>
+
+    <!-- Middle: The fix -->
+    <g transform="translate(960, 300)">
+      <rect x="-200" y="-35" width="400" height="70" rx="12"
+            fill="#1e293b"
+            stroke="#4dabf7"
+            stroke-width="2"
+            opacity="0.9"/>
+
+      <text x="0" y="5"
+            font-family="'SF Mono', monospace"
+            font-size="22"
+            fill="#4dabf7"
+            text-anchor="middle"
+            font-weight="600">
+        const receivedAt = Date.now()
+      </text>
+    </g>
+  </g>
+
+  <!-- Bottom section: Key impacts -->
+  <g transform="translate(0, 850)">
+    <!-- Impact cards -->
+    <g transform="translate(200, 0)">
+      <rect x="0" y="0" width="360" height="140" rx="12"
+            fill="#1e293b"
+            stroke="#ff6b6b"
+            stroke-width="2"
+            opacity="0.85"/>
+      <text x="180" y="45"
+            font-family="system-ui, sans-serif"
+            font-size="24"
+            font-weight="700"
+            fill="#ff6b6b"
+            text-anchor="middle">
+        Without receivedAt
+      </text>
+      <text x="180" y="80"
+            font-family="system-ui, sans-serif"
+            font-size="18"
+            fill="#cbd5e1"
+            text-anchor="middle">
+        Rate limits bypassed
+      </text>
+      <text x="180" y="110"
+            font-family="system-ui, sans-serif"
+            font-size="18"
+            fill="#cbd5e1"
+            text-anchor="middle">
+        Audit trails corrupted
+      </text>
+    </g>
+
+    <g transform="translate(780, 0)">
+      <rect x="0" y="0" width="360" height="140" rx="12"
+            fill="#1e293b"
+            stroke="#4dabf7"
+            stroke-width="2"
+            opacity="0.85"/>
+      <text x="180" y="45"
+            font-family="system-ui, sans-serif"
+            font-size="24"
+            font-weight="700"
+            fill="#4dabf7"
+            text-anchor="middle">
+        The Solution
+      </text>
+      <text x="180" y="80"
+            font-family="system-ui, sans-serif"
+            font-size="18"
+            fill="#cbd5e1"
+            text-anchor="middle">
+        Dual timestamp pattern
+      </text>
+      <text x="180" y="110"
+            font-family="system-ui, sans-serif"
+            font-size="18"
+            fill="#cbd5e1"
+            text-anchor="middle">
+        Server-side enforcement
+      </text>
+    </g>
+
+    <g transform="translate(1360, 0)">
+      <rect x="0" y="0" width="360" height="140" rx="12"
+            fill="#1e293b"
+            stroke="#51cf66"
+            stroke-width="2"
+            opacity="0.85"/>
+      <text x="180" y="45"
+            font-family="system-ui, sans-serif"
+            font-size="24"
+            font-weight="700"
+            fill="#51cf66"
+            text-anchor="middle">
+        With receivedAt
+      </text>
+      <text x="180" y="80"
+            font-family="system-ui, sans-serif"
+            font-size="18"
+            fill="#cbd5e1"
+            text-anchor="middle">
+        Compliance ready
+      </text>
+      <text x="180" y="110"
+            font-family="system-ui, sans-serif"
+            font-size="18"
+            fill="#cbd5e1"
+            text-anchor="middle">
+        Attack prevention
+      </text>
+    </g>
+  </g>
+
+  <!-- Accent line -->
+  <rect x="0" y="1072" width="1920" height="8" fill="#4dabf7" opacity="0.5"/>
+</svg>
