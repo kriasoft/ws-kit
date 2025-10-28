@@ -49,7 +49,7 @@ describe("@ws-kit/valibot Validator", () => {
       expect(PingSchema).toBeDefined();
 
       // Should accept messages with type and meta
-      const result = v.safeParse(PingSchema, {
+      const result = PingSchema.safeParse({
         type: "PING",
         meta: { timestamp: Date.now() },
       });
@@ -59,7 +59,7 @@ describe("@ws-kit/valibot Validator", () => {
     it("should validate message type strictly", () => {
       const PingSchema = messageSchema("PING");
 
-      const wrongType = v.safeParse(PingSchema, {
+      const wrongType = PingSchema.safeParse({
         type: "PONG",
         meta: { timestamp: Date.now() },
       });
@@ -69,7 +69,7 @@ describe("@ws-kit/valibot Validator", () => {
     it("should reject unknown keys", () => {
       const PingSchema = messageSchema("PING");
 
-      const result = v.safeParse(PingSchema, {
+      const result = PingSchema.safeParse({
         type: "PING",
         meta: { timestamp: Date.now() },
         unknown: "field",
@@ -85,7 +85,7 @@ describe("@ws-kit/valibot Validator", () => {
       const ChatPayload = v.object({ text: v.string() });
       const ChatSchema = messageSchema("CHAT", ChatPayload);
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: "Hello" },
@@ -97,7 +97,7 @@ describe("@ws-kit/valibot Validator", () => {
       const ChatPayload = v.object({ text: v.string() });
       const ChatSchema = messageSchema("CHAT", ChatPayload);
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: 123 }, // Wrong type
@@ -109,7 +109,7 @@ describe("@ws-kit/valibot Validator", () => {
       const ChatPayload = v.object({ text: v.string() });
       const ChatSchema = messageSchema("CHAT", ChatPayload);
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: {}, // Missing required 'text'
@@ -124,7 +124,7 @@ describe("@ws-kit/valibot Validator", () => {
       });
       const ChatSchema = messageSchema("CHAT", ChatPayload);
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: "Hello" },
@@ -136,40 +136,36 @@ describe("@ws-kit/valibot Validator", () => {
   describe("messageSchema() - With Extended Meta", () => {
     const { messageSchema } = createMessageSchema(v);
 
-    // TODO: Extended meta tests are currently failing due to valibot schema
-    // building issues. This needs to be fixed in the valibot schema implementation.
-    // The issue is with how valibot's strictObject handles spreading of schema definitions.
-
-    it.skip("should extend meta with additional fields", () => {
+    it("should extend meta with additional fields", () => {
       const RoomSchema = messageSchema("ROOM", undefined, {
         roomId: v.string(),
       });
 
-      const result = v.safeParse(RoomSchema, {
+      const result = RoomSchema.safeParse({
         type: "ROOM",
         meta: { timestamp: Date.now(), roomId: "room-123" },
       });
       expect(result.success).toBe(true);
     });
 
-    it.skip("should validate extended meta fields", () => {
+    it("should validate extended meta fields", () => {
       const RoomSchema = messageSchema("ROOM", undefined, {
         roomId: v.string(),
       });
 
-      const result = v.safeParse(RoomSchema, {
+      const result = RoomSchema.safeParse({
         type: "ROOM",
         meta: { timestamp: Date.now(), roomId: 123 }, // Wrong type
       });
       expect(result.success).toBe(false);
     });
 
-    it.skip("should reject unknown meta fields in strict mode", () => {
+    it("should reject unknown meta fields in strict mode", () => {
       const RoomSchema = messageSchema("ROOM", undefined, {
         roomId: v.string(),
       });
 
-      const result = v.safeParse(RoomSchema, {
+      const result = RoomSchema.safeParse({
         type: "ROOM",
         meta: {
           timestamp: Date.now(),
@@ -184,16 +180,13 @@ describe("@ws-kit/valibot Validator", () => {
   describe("messageSchema() - With Payload and Meta", () => {
     const { messageSchema } = createMessageSchema(v);
 
-    // TODO: These tests are skipped due to the same valibot schema building issue
-    // with extended meta. Once the valibot schema implementation is fixed, enable these.
-
-    it.skip("should handle both payload and extended meta", () => {
+    it("should handle both payload and extended meta", () => {
       const RoomChatPayload = v.object({ text: v.string() });
       const RoomChatSchema = messageSchema("ROOM_CHAT", RoomChatPayload, {
         roomId: v.string(),
       });
 
-      const result = v.safeParse(RoomChatSchema, {
+      const result = RoomChatSchema.safeParse({
         type: "ROOM_CHAT",
         meta: { timestamp: Date.now(), roomId: "room-123" },
         payload: { text: "Hello room" },
@@ -201,14 +194,14 @@ describe("@ws-kit/valibot Validator", () => {
       expect(result.success).toBe(true);
     });
 
-    it.skip("should validate both payload and meta", () => {
+    it("should validate both payload and meta", () => {
       const RoomChatPayload = v.object({ text: v.string() });
       const RoomChatSchema = messageSchema("ROOM_CHAT", RoomChatPayload, {
         roomId: v.string(),
       });
 
       // Invalid payload
-      const result1 = v.safeParse(RoomChatSchema, {
+      const result1 = RoomChatSchema.safeParse({
         type: "ROOM_CHAT",
         meta: { timestamp: Date.now(), roomId: "room-123" },
         payload: { text: 123 },
@@ -216,7 +209,7 @@ describe("@ws-kit/valibot Validator", () => {
       expect(result1.success).toBe(false);
 
       // Invalid meta
-      const result2 = v.safeParse(RoomChatSchema, {
+      const result2 = RoomChatSchema.safeParse({
         type: "ROOM_CHAT",
         meta: { timestamp: Date.now(), roomId: 123 },
         payload: { text: "Hello" },
@@ -369,7 +362,7 @@ describe("@ws-kit/valibot Validator", () => {
       const ChatSchema = messageSchema("CHAT", ChatPayload);
       const ts = Date.now();
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: { timestamp: ts },
         payload: { text: "test" },
@@ -380,12 +373,11 @@ describe("@ws-kit/valibot Validator", () => {
       }
     });
 
-    // TODO: This test fails due to valibot schema building issues with the base meta schema
-    it.skip("should accept optional correlationId", () => {
+    it("should accept optional correlationId", () => {
       const ChatPayload = v.object({ text: v.string() });
       const ChatSchema = messageSchema("CHAT", ChatPayload);
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: { correlationId: "req-123" },
         payload: { text: "test" },
@@ -396,12 +388,11 @@ describe("@ws-kit/valibot Validator", () => {
       }
     });
 
-    // TODO: This test fails due to valibot schema building issues
-    it.skip("should allow empty meta object", () => {
+    it("should allow empty meta object", () => {
       const ChatPayload = v.object({ text: v.string() });
       const ChatSchema = messageSchema("CHAT", ChatPayload);
 
-      const result = v.safeParse(ChatSchema, {
+      const result = ChatSchema.safeParse({
         type: "CHAT",
         meta: {},
         payload: { text: "test" },

@@ -13,8 +13,9 @@
 
 import { describe, expect, expectTypeOf, it, mock } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../../zod/router";
-import { createMessageSchema } from "../../packages/zod/src/schema";
+import { WebSocketRouter } from "../../src/router";
+import zodValidator from "../../../zod/src/validator";
+import { createMessageSchema } from "../../../zod/src/schema";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -40,7 +41,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("ctx.receivedAt - Server Authoritative Time", () => {
     it("should provide receivedAt in message context", () => {
       const TestMsg = messageSchema("TEST", { id: z.number() });
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const handlerMock = mock((ctx) => {
@@ -65,7 +66,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should capture receivedAt before parsing (ingress time)", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       let capturedReceivedAt: number | undefined;
@@ -90,7 +91,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use receivedAt for server-side ordering", () => {
       const TestMsg = messageSchema("TEST", { data: z.string() });
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const receivedTimes: number[] = [];
@@ -124,7 +125,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should be independent of client-provided meta.timestamp", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       let serverTime: number | undefined;
@@ -156,7 +157,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("meta.timestamp - Client Producer Time", () => {
     it("should be optional in message context", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
 
       router.onMessage(TestMsg, (ctx) => {
         // Type check: timestamp is optional
@@ -166,7 +167,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should accept messages without timestamp", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const handlerMock = mock((ctx) => {
@@ -189,7 +190,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should preserve client-provided timestamp", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const clientTimestamp = 1234567890;
@@ -213,7 +214,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should be used for UI display (not server logic)", () => {
       const ChatMsg = messageSchema("CHAT", { text: z.string() });
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       router.onMessage(ChatMsg, (ctx) => {
@@ -245,7 +246,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("Timestamp Decision Matrix", () => {
     it("should use receivedAt for rate limiting", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       // Rate limiter state
@@ -279,7 +280,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use receivedAt for event ordering", () => {
       const EventMsg = messageSchema("EVENT", { action: z.string() });
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const events: { action: string; serverTime: number }[] = [];
@@ -319,7 +320,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use timestamp for UI lag display", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       router.onMessage(TestMsg, (ctx) => {
@@ -345,7 +346,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use receivedAt for TTL checks", () => {
       const RequestMsg = messageSchema("REQUEST", { id: z.string() });
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const TTL_MS = 5000; // 5 seconds
@@ -378,7 +379,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("Type Safety", () => {
     it("should require receivedAt to be number type", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
 
       router.onMessage(TestMsg, (ctx) => {
         expectTypeOf(ctx.receivedAt).toBeNumber();
@@ -388,7 +389,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should make meta.timestamp optional number", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
 
       router.onMessage(TestMsg, (ctx) => {
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
@@ -397,7 +398,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should distinguish between the two timestamps", () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter();
+      const router = new WebSocketRouter({ validator: zodValidator() });
 
       router.onMessage(TestMsg, (ctx) => {
         // Different types and semantics

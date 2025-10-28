@@ -177,7 +177,10 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
   if (!rooms.has(room)) {
     rooms.set(room, new Set());
   }
-  rooms.get(room)!.add(clientId);
+  const roomSet = rooms.get(room);
+  if (roomSet) {
+    roomSet.add(clientId);
+  }
 
   console.log(`[${clientId}] Joined room: ${room}`);
 
@@ -189,13 +192,15 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
   });
 
   // Send updated user list
-  const roomUsers = rooms.get(room)!;
-  await router.publish(`room:${room}`, {
-    type: "ROOM:USERS",
-    room,
-    users: Array.from(roomUsers),
-    count: roomUsers.size,
-  });
+  const roomUsers = rooms.get(room);
+  if (roomUsers) {
+    await router.publish(`room:${room}`, {
+      type: "ROOM:USERS",
+      room,
+      users: Array.from(roomUsers),
+      count: roomUsers.size,
+    });
+  }
 });
 
 router.onMessage(SendMessageMessage, async (ctx) => {

@@ -11,8 +11,10 @@ import {
   spyOn,
 } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../../zod/router";
-import { createMessageSchema } from "../../packages/zod/src/schema";
+import { WebSocketRouter } from "../../src/router";
+import zodValidator from "../../../zod/src/validator";
+import { createMessageSchema } from "../../../zod/src/schema";
+import { createBunAdapter, createBunHandler } from "../../../bun/src/index";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -63,8 +65,11 @@ describe("WebSocketServer E2E", () => {
     // Use a random port for each test to avoid conflicts
     port = 50000 + Math.floor(Math.random() * 10000);
 
-    // Create a new router for each test
-    ws = new WebSocketRouter();
+    // Create a new router with platform adapter and validator
+    ws = new WebSocketRouter({
+      platform: createBunAdapter(),
+      validator: zodValidator(),
+    });
 
     // Set up message handlers
     ws.onMessage(Ping, (ctx) => {
@@ -93,19 +98,14 @@ describe("WebSocketServer E2E", () => {
     });
     ws.onClose(closeHandlerMock);
 
+    // Create Bun handler from router
+    const { fetch, websocket } = createBunHandler(ws);
+
     // Start the server
     server = Bun.serve({
       port,
-
-      fetch(req, server) {
-        const url = new URL(req.url);
-        if (url.pathname === "/ws") {
-          return ws.upgrade(req, { server });
-        }
-        return new Response("Not Found", { status: 404 });
-      },
-
-      websocket: ws.websocket,
+      fetch,
+      websocket,
     });
   });
 

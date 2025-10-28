@@ -13,8 +13,8 @@
 import type { ServerWebSocket } from "bun";
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { publish } from "../../zod/publish";
-import { createMessageSchema } from "../../packages/zod/src/schema";
+import { publish } from "../../src/pubsub";
+import { createMessageSchema } from "../../../zod/src/schema";
 
 const { messageSchema } = createMessageSchema(z);
 

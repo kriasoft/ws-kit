@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { createClient } from "../../packages/client/src/index";
+import { createClient } from "../../src/index";
 import { createMockWebSocket } from "./helpers";
 
 describe("Client: Auth - Query Mode", () => {

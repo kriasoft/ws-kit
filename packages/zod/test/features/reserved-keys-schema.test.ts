@@ -15,8 +15,8 @@
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
 import { z } from "zod";
-import { createMessageSchema as createValibotSchema } from "../../packages/valibot/src/schema";
-import { createMessageSchema as createZodSchema } from "../../packages/zod/src/schema";
+import { createMessageSchema as createValibotSchema } from "../../../valibot/src/schema";
+import { createMessageSchema as createZodSchema } from "../../src/schema";
 
 const { messageSchema: zodMessageSchema } = createZodSchema(z);
 const { messageSchema: valibotMessageSchema } = createValibotSchema(v);

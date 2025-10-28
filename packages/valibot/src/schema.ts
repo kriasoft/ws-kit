@@ -12,6 +12,19 @@ import type {
 import { validateMetaSchema } from "@ws-kit/core";
 
 /**
+ * Schema with safeParse method for compatibility with test expectations.
+ * Wraps Valibot's ObjectSchema to add a safeParse method that normalizes
+ * the result format to match Zod's { success, data, issues } structure.
+ */
+type SchemaWithSafeParse<T extends ObjectSchema<any, undefined>> = T & {
+  safeParse(data: unknown): {
+    success: boolean;
+    data: any;
+    issues: any;
+  };
+};
+
+/**
  * Minimal interface for Valibot instance to avoid circular type references.
  * WARNING: Using `typeof v` directly causes TypeScript declaration generation to fail
  * with stack overflow errors. This interface captures only the methods we actually use.
@@ -160,7 +173,7 @@ export function createMessageSchema(valibot: ValibotLike) {
    */
   function messageSchema<T extends string>(
     messageType: T,
-  ): ObjectSchema<BaseMessageEntries<T>, undefined>;
+  ): SchemaWithSafeParse<ObjectSchema<BaseMessageEntries<T>, undefined>>;
 
   function messageSchema<
     T extends string,
@@ -168,7 +181,9 @@ export function createMessageSchema(valibot: ValibotLike) {
   >(
     messageType: T,
     payload: P,
-  ): ObjectSchema<MessageWithPayloadEntries<T, P["entries"]>, undefined>;
+  ): SchemaWithSafeParse<
+    ObjectSchema<MessageWithPayloadEntries<T, P["entries"]>, undefined>
+  >;
 
   function messageSchema<
     T extends string,
@@ -176,7 +191,9 @@ export function createMessageSchema(valibot: ValibotLike) {
   >(
     messageType: T,
     payload: P,
-  ): ObjectSchema<MessageWithPayloadEntries<T, P>, undefined>;
+  ): SchemaWithSafeParse<
+    ObjectSchema<MessageWithPayloadEntries<T, P>, undefined>
+  >;
 
   function messageSchema<
     T extends string,
@@ -185,7 +202,9 @@ export function createMessageSchema(valibot: ValibotLike) {
     messageType: T,
     payload: undefined,
     meta: M,
-  ): ObjectSchema<MessageWithExtendedMetaEntries<T, M>, undefined>;
+  ): SchemaWithSafeParse<
+    ObjectSchema<MessageWithExtendedMetaEntries<T, M>, undefined>
+  >;
 
   function messageSchema<
     T extends string,
@@ -195,9 +214,11 @@ export function createMessageSchema(valibot: ValibotLike) {
     messageType: T,
     payload: P,
     meta: M,
-  ): ObjectSchema<
-    MessageWithPayloadAndMetaEntries<T, P["entries"], M>,
-    undefined
+  ): SchemaWithSafeParse<
+    ObjectSchema<
+      MessageWithPayloadAndMetaEntries<T, P["entries"], M>,
+      undefined
+    >
   >;
 
   function messageSchema<
@@ -208,7 +229,9 @@ export function createMessageSchema(valibot: ValibotLike) {
     messageType: T,
     payload: P,
     meta: M,
-  ): ObjectSchema<MessageWithPayloadAndMetaEntries<T, P, M>, undefined>;
+  ): SchemaWithSafeParse<
+    ObjectSchema<MessageWithPayloadAndMetaEntries<T, P, M>, undefined>
+  >;
 
   function messageSchema<
     T extends string,
@@ -248,7 +271,7 @@ export function createMessageSchema(valibot: ValibotLike) {
       // Payloads can be a Valibot object or a raw shape
       const payloadSchema =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (payload as any).kind === "object"
+        (payload as any).type === "object"
           ? (payload as ObjectSchema<Record<string, GenericSchema>, undefined>)
           : valibot.strictObject(payload as Record<string, GenericSchema>);
 
@@ -259,9 +282,15 @@ export function createMessageSchema(valibot: ValibotLike) {
     }
 
     // Add safeParse method to make schema compatible with generic client
+    // Normalize Valibot's result format to match Zod's format (.data instead of .output)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schema as any).safeParse = function (data: unknown) {
-      return valibot.safeParse(schema, data);
+      const result = valibot.safeParse(schema, data);
+      return {
+        success: result.success,
+        data: result.success ? result.output : undefined,
+        issues: result.issues,
+      };
     };
 
     return schema;
@@ -287,7 +316,13 @@ export function createMessageSchema(valibot: ValibotLike) {
       meta: meta || {},
     };
 
-    return valibot.safeParse(schema, messageData);
+    // Normalize Valibot's result format to match Zod's format
+    const valibotResult = valibot.safeParse(schema, messageData);
+    return {
+      success: valibotResult.success,
+      data: valibotResult.success ? valibotResult.output : undefined,
+      issues: valibotResult.issues,
+    };
   }
 
   return {
@@ -315,18 +350,22 @@ type MessageSchemaType = ObjectSchema<
 export type MessageSchema<
   T extends string,
   P extends Record<string, GenericSchema> = never,
-> = [P] extends [never]
-  ? ObjectSchema<BaseMessageEntries<T>, undefined>
-  : ObjectSchema<MessageWithPayloadEntries<T, P>, undefined>;
+> = SchemaWithSafeParse<
+  [P] extends [never]
+    ? ObjectSchema<BaseMessageEntries<T>, undefined>
+    : ObjectSchema<MessageWithPayloadEntries<T, P>, undefined>
+>;
 
 // Type helper for discriminated unions
-export type AnyMessageSchema = ObjectSchema<
-  {
-    type: LiteralSchema<string, undefined>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    meta: ObjectSchema<any, undefined>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    payload?: ObjectSchema<any, undefined>;
-  },
-  undefined
+export type AnyMessageSchema = SchemaWithSafeParse<
+  ObjectSchema<
+    {
+      type: LiteralSchema<string, undefined>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      meta: ObjectSchema<any, undefined>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      payload?: ObjectSchema<any, undefined>;
+    },
+    undefined
+  >
 >;

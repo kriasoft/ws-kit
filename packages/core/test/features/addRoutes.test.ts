@@ -3,15 +3,16 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../../zod/router";
-import { createMessageSchema } from "../../packages/zod/src/schema";
+import { WebSocketRouter } from "../../src/router";
+import zodValidator from "../../../zod/src/validator";
+import { createMessageSchema } from "../../../zod/src/schema";
 
 const { messageSchema } = createMessageSchema(z);
 
 describe("addRoutes", () => {
   it("should merge routes from another router", () => {
     // Create first router with a message handler
-    const router1 = new WebSocketRouter();
+    const router1 = new WebSocketRouter({ validator: zodValidator() });
     const PingMessage = messageSchema("PING");
     let pingHandlerCalled = false;
     router1.onMessage(PingMessage, () => {
@@ -19,7 +20,7 @@ describe("addRoutes", () => {
     });
 
     // Create second router with different handlers
-    const router2 = new WebSocketRouter();
+    const router2 = new WebSocketRouter({ validator: zodValidator() });
     const PongMessage = messageSchema("PONG");
     let pongHandlerCalled = false;
     let openHandlerCalled = false;
@@ -75,9 +76,9 @@ describe("addRoutes", () => {
   });
 
   it("should handle multiple route merges", () => {
-    const mainRouter = new WebSocketRouter();
-    const router1 = new WebSocketRouter();
-    const router2 = new WebSocketRouter();
+    const mainRouter = new WebSocketRouter({ validator: zodValidator() });
+    const router1 = new WebSocketRouter({ validator: zodValidator() });
+    const router2 = new WebSocketRouter({ validator: zodValidator() });
 
     const Message1 = messageSchema("MSG1");
     const Message2 = messageSchema("MSG2");

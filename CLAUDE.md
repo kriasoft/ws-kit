@@ -131,3 +131,33 @@ bun run format      # Prettier formatting
 bun test            # Run all tests
 bun test --watch    # Watch mode
 ```
+
+## Test Structure
+
+Tests are organized by package. Each package owns its test directory:
+
+```
+packages/
+├── core/test/              # Core router tests + features/
+├── zod/test/               # Zod validator tests + features/
+├── valibot/test/           # Valibot validator tests + features/
+├── bun/test/               # Bun adapter tests
+├── client/test/            # Client tests (runtime/ + types/)
+└── cloudflare-do/test/     # Cloudflare DO adapter tests
+```
+
+**When adding tests:**
+
+- **Core features**: `packages/core/test/features/`
+- **Validator features**: Mirror Zod tests in Valibot with same structure
+- **Type inference tests**: Use `packages/*/test/types/`
+- **Adapters**: Add to respective `packages/*/test/`
+
+**Run tests:**
+
+```bash
+bun test                           # All tests
+bun test packages/zod/test         # Specific package
+bun test --grep "pattern"          # By pattern
+bun test --watch                   # Watch mode
+```
