@@ -3,11 +3,11 @@
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
     "outDir": "./dist",
     "rootDir": "./src"
   },
   "include": ["src"],
-  "references": [
-    { "path": "../core" }
-  ]
+  "references": [{ "path": "../core" }]
 }

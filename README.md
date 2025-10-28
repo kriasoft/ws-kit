@@ -7,6 +7,31 @@
 
 Type-safe WebSocket communication for Bun servers and browsers with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
 
+## ⚠️ Environment Requirements
+
+**ws-kit is ESM-only** and requires a modern JavaScript environment:
+
+- **Bun** (recommended) — native ESM support
+- **Node.js 14+** — with `"type": "module"` in package.json
+- **Cloudflare Workers/Durable Objects** — native ESM support
+- **Modern bundlers** — Vite, esbuild, Rollup, etc.
+
+**Not compatible** with CommonJS-only projects or legacy Node.js versions.
+
+## Monorepo Structure
+
+ws-kit is organized as a modular monorepo with independent packages:
+
+- **`@ws-kit/core`** — Platform-agnostic router and type system (foundation)
+- **`@ws-kit/bun`** — Bun WebSocket server adapter
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
+- **`@ws-kit/zod`** — Zod validator adapter
+- **`@ws-kit/valibot`** — Valibot validator adapter
+- **`@ws-kit/client`** — Universal browser/Node.js client
+- **`@ws-kit/redis-pubsub`** — Optional Redis PubSub for multi-server scaling
+
+Combine any platform adapter with any validator adapter for your use case.
+
 ### Key Features
 
 **Server (Bun)**

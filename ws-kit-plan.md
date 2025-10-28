@@ -884,24 +884,27 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 
 ### Phase 1: Setup Monorepo Structure
 
-**Status**: Partially completed (minimal structure setup done, TypeScript & changesets pending)
+**Status**: ✅ Completed
 
 - [x] Create `packages/` directory
 - [x] Migrate to `bun` workspaces in root `package.json`
-- [ ] Add `@changesets/cli` to root dev dependencies
-- [ ] Create `.changeset` directory for change tracking
+- [x] Add `@changesets/cli` to root dev dependencies
+- [x] Create `.changeset` directory for change tracking
 - [x] Initialize individual `package.json` files for each package
-- [ ] Configure TypeScript Project References for incremental builds and dependency enforcement:
-  - [ ] Create root `tsconfig.json` with `"composite": true` and `"references"` array
-  - [ ] Add per-package `tsconfig.json` files with `"composite": true` and package dependencies listed in `"references"`
-  - [ ] Configure `tsc --build` for ordered, incremental compilation (see CLI Commands section)
-  - [ ] Document dependency graph: `core` (no deps) → `zod`, `valibot`, `bun`, `cloudflare-do`, `client` (all depend on core)
-  - [ ] Enforce via CI: any import violating the graph fails at type-check time
+- [x] Configure TypeScript Project References for incremental builds and dependency enforcement:
+  - [x] Create root `tsconfig.json` with `"composite": true` and `"references"` array
+  - [x] Add per-package `tsconfig.json` files with `"composite": true` and package dependencies listed in `"references"`
+  - [x] Configure `tsc --build` for ordered, incremental compilation (see CLI Commands section)
+  - [x] Document dependency graph: `core` (no deps) → `zod`, `valibot`, `bun`, `cloudflare-do`, `client` (all depend on core)
+  - [x] Enforce via CI: any import violating the graph fails at type-check time
 - [x] Configure ESM-only setup:
   - [x] Set `"type": "module"` in root and all package `package.json` files
   - [x] Create `package.json` template with `"exports"` field patterns (see Module Format section)
-  - [ ] Configure TypeScript to generate `.d.ts` files alongside JS output
-  - [ ] Document ESM requirement in README (Node.js 14+, Bun, modern bundlers only)
+  - [x] Configure TypeScript to generate `.d.ts` files alongside JS output
+  - [x] Document ESM requirement in README (Node.js 14+, Bun, modern bundlers only)
+- [x] Create `src/index.ts` placeholder files in all 7 packages (ready for implementation)
+- [x] Create comprehensive `README.md` for each package documenting scope and purpose
+- [x] Update `.changeset/config.json` to `"access": "public"` for NPM publishing
 
 ### Phase 2: Implement @ws-kit/core (Composition Foundation)
 
