@@ -935,6 +935,11 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
   - [ ] Assert hook types (onAuth return bool, onClose/onError params)
   - [ ] Assert config option types (heartbeat, limits)
   - [ ] Verify `tsc --noEmit` passes all type assertions
+- [ ] **Establish Core Scope Boundaries** (codify in `@ws-kit/core/README.md`):
+  - [ ] Define **What Core IS**: Platform-agnostic router, pluggable adapters, lifecycle hooks, message limits, type inference
+  - [ ] Define **What Core IS NOT**: Codec abstraction, middleware chain, protocol versioning, backpressure policies, auth implementation
+  - [ ] Document **Why This Boundary**: Keeps core lean, avoids coupling adapters, lets platforms handle specifics optimally
+  - [ ] State **Principle for Future PRs**: "Does this benefit ALL platform adapters equally, or can it be implemented in specific adapters?"
 
 ### Phase 3: Implement @ws-kit/bun (Platform Adapter)
 
@@ -1049,12 +1054,18 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 
 ### Phase 9: Documentation & Release
 
+- [ ] **@ws-kit/core README** includes explicit Scope Boundaries section:
+  - [ ] "What Core IS" list: router, adapters, lifecycle hooks, message limits, type inference
+  - [ ] "What Core IS NOT" list: codec abstraction, middleware, protocol versioning, backpressure, auth implementation
+  - [ ] "Why This Boundary" rationale: leanness, adapter independence, platform optimization, type simplicity
+  - [ ] "Future PR Principle": Does it benefit ALL platform adapters, or belong in a specific adapter?
 - [ ] Update docs to reflect new package names and composition pattern
 - [ ] Add migration guide for existing users (`bun-ws-router` → `@ws-kit/bun` + `@ws-kit/core`)
 - [ ] Create "Getting Started" guides per combination (e.g., "Bun + Zod", "Cloudflare + Valibot")
 - [ ] Document adapter interface for custom validators/platforms
 - [ ] Set up NPM organization and publish first versions
 - [ ] Add GitHub workflows for multi-package publishing
+- [ ] Create PR review checklist template referencing Core Scope Boundaries for design reviews
 
 #### Critical Documentation Priorities
 
