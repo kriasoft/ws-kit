@@ -222,7 +222,17 @@ export function createMessageSchema(valibot: ValibotLike) {
     validateMetaSchema(meta);
 
     const metaSchema = meta
-      ? valibot.strictObject({ ...MessageMetadataSchema.entries, ...meta })
+      ? valibot.strictObject({
+          timestamp: valibot.optional(
+            valibot.pipe(
+              valibot.number(),
+              valibot.integer(),
+              valibot.minValue(1),
+            ),
+          ),
+          correlationId: valibot.optional(valibot.string()),
+          ...meta,
+        })
       : MessageMetadataSchema;
 
     const baseSchema = {
