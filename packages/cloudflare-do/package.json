@@ -1,0 +1,44 @@
+{
+  "name": "@ws-kit/cloudflare-do",
+  "version": "0.0.0",
+  "description": "Cloudflare Durable Objects platform adapter for @ws-kit/core",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/cloudflare-do"
+  },
+  "keywords": [
+    "cloudflare",
+    "durable-objects",
+    "adapter",
+    "websocket",
+    "real-time",
+    "typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ws-kit/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": ">=4.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

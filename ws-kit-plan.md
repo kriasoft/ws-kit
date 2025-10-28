@@ -884,20 +884,22 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 
 ### Phase 1: Setup Monorepo Structure
 
-- [ ] Create `packages/` directory
-- [ ] Migrate to `bun` workspaces in root `package.json`
+**Status**: Partially completed (minimal structure setup done, TypeScript & changesets pending)
+
+- [x] Create `packages/` directory
+- [x] Migrate to `bun` workspaces in root `package.json`
 - [ ] Add `@changesets/cli` to root dev dependencies
 - [ ] Create `.changeset` directory for change tracking
-- [ ] Initialize individual `package.json` files for each package
+- [x] Initialize individual `package.json` files for each package
 - [ ] Configure TypeScript Project References for incremental builds and dependency enforcement:
   - [ ] Create root `tsconfig.json` with `"composite": true` and `"references"` array
   - [ ] Add per-package `tsconfig.json` files with `"composite": true` and package dependencies listed in `"references"`
   - [ ] Configure `tsc --build` for ordered, incremental compilation (see CLI Commands section)
   - [ ] Document dependency graph: `core` (no deps) → `zod`, `valibot`, `bun`, `cloudflare-do`, `client` (all depend on core)
   - [ ] Enforce via CI: any import violating the graph fails at type-check time
-- [ ] Configure ESM-only setup:
-  - [ ] Set `"type": "module"` in root and all package `package.json` files
-  - [ ] Create `package.json` template with `"exports"` field patterns (see Module Format section)
+- [x] Configure ESM-only setup:
+  - [x] Set `"type": "module"` in root and all package `package.json` files
+  - [x] Create `package.json` template with `"exports"` field patterns (see Module Format section)
   - [ ] Configure TypeScript to generate `.d.ts` files alongside JS output
   - [ ] Document ESM requirement in README (Node.js 14+, Bun, modern bundlers only)
 

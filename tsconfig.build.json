@@ -4,7 +4,6 @@
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
-    "emitDeclarationOnly": false,
     "allowImportingTsExtensions": false,
     "moduleResolution": "node",
     "outDir": "./dist",

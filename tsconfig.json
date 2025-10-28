@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "tsBuildInfoFile": "node_modules/.tsbuildinfo",
+    "composite": true,
 
     // Environment setup & latest features
     "lib": ["ESNext"],
@@ -28,5 +28,15 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/bun" },
+    { "path": "./packages/zod" },
+    { "path": "./packages/valibot" },
+    { "path": "./packages/client" },
+    { "path": "./packages/cloudflare-do" },
+    { "path": "./packages/redis-pubsub" }
+  ]
 }
