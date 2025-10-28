@@ -33,7 +33,8 @@
     "dist"
   ],
   "dependencies": {
-    "@ws-kit/core": "workspace:*"
+    "@ws-kit/core": "workspace:*",
+    "uuid": "^10.0.0"
   },
   "peerDependencies": {
     "@types/bun": ">=1.0.0"
