@@ -3,8 +3,11 @@
 
 import { describe, expectTypeOf, test } from "bun:test";
 import * as v from "valibot";
-import { createMessageSchema } from "../../valibot/schema";
-import type { MessageContext, WebSocketData } from "../../valibot/types";
+import { createMessageSchema } from "../../packages/valibot/src/schema";
+import type {
+  MessageContext,
+  WebSocketData,
+} from "../../packages/valibot/src/types";
 
 describe("Valibot type tests", () => {
   const { messageSchema } = createMessageSchema(v);

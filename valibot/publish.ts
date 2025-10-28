@@ -4,7 +4,7 @@
 import type { ServerWebSocket } from "bun";
 import type { InferOutput } from "valibot";
 import * as v from "valibot";
-import type { MessageSchemaType } from "./types";
+import type { MessageSchemaType } from "../packages/valibot/src/types";
 
 /**
  * Validates a message against its schema and publishes it to a WebSocket topic.

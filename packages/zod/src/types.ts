@@ -1,33 +1,22 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { ServerWebSocket } from "bun";
-import type { InferOutput, ObjectSchema } from "valibot";
+import type { ServerWebSocket } from "@ws-kit/core";
+import type { ZodObject, ZodType } from "zod";
+import { z, ZodLiteral } from "zod";
 
 /**
  * Type-safe function for sending validated messages through WebSocket.
- * Uses nested conditionals to extract payload/meta types from Valibot's ObjectSchema entries.
+ * Extracts payload/meta types from ZodObject shape for compile-time validation.
  */
 export type SendFunction = <Schema extends MessageSchemaType>(
   schema: Schema,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: Schema extends ObjectSchema<infer TEntries, any>
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      TEntries extends Record<string, any>
-      ? "payload" extends keyof TEntries
-        ? InferOutput<TEntries["payload"]>
-        : unknown
+  data: Schema["shape"] extends { payload: infer P }
+    ? P extends ZodType
+      ? z.infer<P>
       : unknown
     : unknown,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  meta?: Schema extends ObjectSchema<infer TEntries, any>
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      TEntries extends Record<string, any>
-      ? "meta" extends keyof TEntries
-        ? InferOutput<TEntries["meta"]>
-        : unknown
-      : unknown
-    : unknown,
+  meta?: z.infer<Schema["shape"]["meta"]>,
 ) => void;
 
 /**
@@ -40,37 +29,17 @@ export type SendFunction = <Schema extends MessageSchemaType>(
 export type MessageContext<Schema extends MessageSchemaType, Data> = {
   /** WebSocket connection with custom data */
   ws: ServerWebSocket<Data>;
-  /** Message type extracted from schema */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type: Schema extends ObjectSchema<infer TEntries, any>
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      TEntries extends Record<string, any>
-      ? "type" extends keyof TEntries
-        ? InferOutput<TEntries["type"]>
-        : unknown
-      : unknown
-    : unknown;
-  /** Message metadata extracted from schema */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  meta: Schema extends ObjectSchema<infer TEntries, any>
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      TEntries extends Record<string, any>
-      ? "meta" extends keyof TEntries
-        ? InferOutput<TEntries["meta"]>
-        : unknown
-      : unknown
-    : unknown;
+  /** Message type literal from schema */
+  type: Schema["shape"]["type"]["value"];
+  /** Message metadata inferred from schema */
+  meta: z.infer<Schema["shape"]["meta"]>;
   /** Server receive timestamp (milliseconds since epoch) - authoritative for server logic */
   receivedAt: number;
   /** Type-safe send function for validated messages */
   send: SendFunction;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} & (Schema extends ObjectSchema<infer TEntries, any>
-  ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TEntries extends Record<string, any>
-    ? "payload" extends keyof TEntries
-      ? { payload: InferOutput<TEntries["payload"]> }
-      : Record<string, never>
+} & ("payload" extends keyof Schema["shape"]
+  ? Schema["shape"]["payload"] extends ZodType
+    ? { payload: z.infer<Schema["shape"]["payload"]> }
     : Record<string, never>
   : Record<string, never>);
 
@@ -80,10 +49,14 @@ export type MessageHandler<Schema extends MessageSchemaType, Data> = (
 
 /**
  * Base constraint for all message schemas created by messageSchema().
- * ObjectSchema with any entries allows flexible metadata structures.
+ * type is ZodLiteral for exact string matching during routing.
+ * meta uses ZodType to allow MessageMetadataSchema extensions.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type MessageSchemaType = ObjectSchema<any, any>;
+export type MessageSchemaType = ZodObject<{
+  type: ZodLiteral<string>;
+  meta: ZodType;
+  payload?: ZodType;
+}>;
 
 export interface MessageHandlerEntry<Data = unknown> {
   schema: MessageSchemaType;
@@ -103,7 +76,7 @@ export interface MessageHandlerEntry<Data = unknown> {
  *
  * @example
  * ```typescript
- * const HelloOk = messageSchema("HELLO_OK", { text: v.string() });
+ * const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
  * type Msg = InferMessage<typeof HelloOk>;
  * // { type: "HELLO_OK", meta: { timestamp?: number, correlationId?: string }, payload: { text: string } }
  *
@@ -114,7 +87,7 @@ export interface MessageHandlerEntry<Data = unknown> {
  * });
  * ```
  */
-export type InferMessage<S extends MessageSchemaType> = InferOutput<S>;
+export type InferMessage<S extends MessageSchemaType> = z.infer<S>;
 
 /**
  * Infer payload type from schema, or never if no payload defined.
@@ -124,7 +97,7 @@ export type InferMessage<S extends MessageSchemaType> = InferOutput<S>;
  *
  * @example
  * ```typescript
- * const WithPayload = messageSchema("MSG", { id: v.number() });
+ * const WithPayload = messageSchema("MSG", { id: z.number() });
  * const NoPayload = messageSchema("PING");
  *
  * type P1 = InferPayload<typeof WithPayload>; // { id: number }
@@ -132,12 +105,9 @@ export type InferMessage<S extends MessageSchemaType> = InferOutput<S>;
  * ```
  */
 export type InferPayload<S extends MessageSchemaType> =
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  S extends ObjectSchema<infer TEntries, any>
-    ? TEntries extends Record<string, unknown>
-      ? "payload" extends keyof TEntries
-        ? InferOutput<TEntries["payload"]>
-        : never
+  "payload" extends keyof S["shape"]
+    ? S["shape"]["payload"] extends ZodType
+      ? z.infer<S["shape"]["payload"]>
       : never
     : never;
 
@@ -151,7 +121,7 @@ export type InferPayload<S extends MessageSchemaType> =
  *
  * @example
  * ```typescript
- * const RoomMsg = messageSchema("CHAT", { text: v.string() }, { roomId: v.string() });
+ * const RoomMsg = messageSchema("CHAT", { text: z.string() }, { roomId: z.string() });
  * type Meta = InferMeta<typeof RoomMsg>; // { roomId: string }
  * // timestamp and correlationId are omitted (auto-injected by client)
  *
@@ -159,22 +129,16 @@ export type InferPayload<S extends MessageSchemaType> =
  * ```
  */
 export type InferMeta<S extends MessageSchemaType> =
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  S extends ObjectSchema<infer TEntries, any>
-    ? TEntries extends Record<string, unknown>
-      ? "meta" extends keyof TEntries
-        ? Omit<InferOutput<TEntries["meta"]>, "timestamp" | "correlationId">
-        : Record<string, never>
-      : Record<string, never>
+  "meta" extends keyof S["shape"]
+    ? Omit<z.infer<S["shape"]["meta"]>, "timestamp" | "correlationId">
     : Record<string, never>;
 
-/** Re-export shared types that are validator-agnostic. See: packages/core/src/types */
+/** Re-export shared types that are validator-agnostic. See: @ws-kit/core */
 export type {
   CloseHandler,
   CloseHandlerContext,
   OpenHandler,
   OpenHandlerContext,
-  UpgradeOptions,
   WebSocketData,
   WebSocketRouterOptions,
-} from "../packages/core/src/types";
+} from "@ws-kit/core";

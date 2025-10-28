@@ -419,15 +419,15 @@ export type { RedisPubSubOptions } from "./types";
 **Simple (most users)**:
 
 ```typescript
-import { zodValidator } from "@ws-kit/zod";
-import { messageSchema } from "@ws-kit/zod";
+import { zodValidator, createMessageSchema } from "@ws-kit/zod";
 import { WebSocketRouter } from "@ws-kit/core";
 import { z } from "zod";
 
-// Use defaults (Zod imported internally)
+// Create router with Zod validation
 const router = new WebSocketRouter({ validator: zodValidator() });
 
-// Define typed schemas
+// Define typed schemas using your Zod instance
+const { messageSchema } = createMessageSchema(z);
 const PingMessage = messageSchema("PING", { text: z.string() });
 const PongMessage = messageSchema("PONG", { reply: z.string() });
 
@@ -441,32 +441,49 @@ router.onMessage(PingMessage, (ctx) => {
 **Advanced (custom Zod configs)**:
 
 ```typescript
-import { createZodValidator } from "@ws-kit/zod";
-import { createMessageSchema } from "@ws-kit/zod";
+import { zodValidator, createMessageSchema } from "@ws-kit/zod";
 import { WebSocketRouter } from "@ws-kit/core";
 import { z } from "zod";
 
-// Use custom Zod instance or config
+// Create custom Zod instance
 const customZ = z.strict(); // Example: strict mode
-const validator = createZodValidator(customZ);
+
+// Create message schema factory with custom Zod instance
 const { messageSchema } = createMessageSchema(customZ);
 
-// Same API from here on
-const router = new WebSocketRouter({ validator });
-// ... rest is identical
+// Router uses default Zod validator (validation still works with schemas from customZ)
+const router = new WebSocketRouter({ validator: zodValidator() });
+
+// Define schemas with custom Zod instance
+const LoginMessage = messageSchema("LOGIN", { username: customZ.string() });
+
+// Handler works normally
+router.onMessage(LoginMessage, (ctx) => {
+  // Full type inference even with custom Zod instance
+  console.log(ctx.payload.username);
+});
 ```
 
 **Exports**:
 
 ```typescript
-// Default export (convenience)
+// Main exports
 export { default as zodValidator } from "./validator";
-export { default as messageSchema } from "./schema";
-
-// Named exports (advanced)
-export { createZodValidator } from "./validator";
 export { createMessageSchema } from "./schema";
-export type { ZodMessageSchema } from "./types";
+
+// Utility exports
+export { ZodValidatorAdapter } from "./adapter";
+
+// Types
+export type { AnyMessageSchema, MessageSchema } from "./schema";
+export type {
+  InferMeta,
+  InferMessage,
+  InferPayload,
+  MessageContext,
+  MessageHandler,
+  MessageSchemaType,
+} from "./types";
 ```
 
 **Note**: Platform-agnostic. Compose with any platform adapter (Bun, Cloudflare, Node.js, etc.)
@@ -497,15 +514,15 @@ export type { ZodMessageSchema } from "./types";
 **Simple (most users)**:
 
 ```typescript
-import { valibotValidator } from "@ws-kit/valibot";
-import { messageSchema } from "@ws-kit/valibot";
+import { valibotValidator, createMessageSchema } from "@ws-kit/valibot";
 import { WebSocketRouter } from "@ws-kit/core";
 import * as v from "valibot";
 
-// Use defaults (Valibot imported internally)
+// Create router with Valibot validation
 const router = new WebSocketRouter({ validator: valibotValidator() });
 
-// Define typed schemas
+// Define typed schemas using your Valibot instance
+const { messageSchema } = createMessageSchema(v);
 const PingMessage = messageSchema("PING", { text: v.string() });
 const PongMessage = messageSchema("PONG", { reply: v.string() });
 
@@ -519,32 +536,46 @@ router.onMessage(PingMessage, (ctx) => {
 **Advanced (custom Valibot configs)**:
 
 ```typescript
-import { createValibotValidator } from "@ws-kit/valibot";
-import { createMessageSchema } from "@ws-kit/valibot";
+import { valibotValidator, createMessageSchema } from "@ws-kit/valibot";
 import { WebSocketRouter } from "@ws-kit/core";
 import * as v from "valibot";
 
-// Use custom Valibot instance or config
-const customV = { ...v, strict: true }; // Example: custom config
-const validator = createValibotValidator(customV);
-const { messageSchema } = createMessageSchema(customV);
+// Create message schema factory with your Valibot instance
+const { messageSchema } = createMessageSchema(v);
 
-// Same API from here on
-const router = new WebSocketRouter({ validator });
-// ... rest is identical
+// Router uses default Valibot validator (validation still works with schemas from your v)
+const router = new WebSocketRouter({ validator: valibotValidator() });
+
+// Define schemas with your Valibot instance
+const LoginMessage = messageSchema("LOGIN", { username: v.string() });
+
+// Handler works normally
+router.onMessage(LoginMessage, (ctx) => {
+  // Full type inference even with custom Valibot instance
+  console.log(ctx.payload.username);
+});
 ```
 
 **Exports**:
 
 ```typescript
-// Default export (convenience)
+// Main exports
 export { default as valibotValidator } from "./validator";
-export { default as messageSchema } from "./schema";
-
-// Named exports (advanced)
-export { createValibotValidator } from "./validator";
 export { createMessageSchema } from "./schema";
-export type { ValibotMessageSchema } from "./types";
+
+// Utility exports
+export { ValibotValidatorAdapter } from "./adapter";
+
+// Types
+export type { AnyMessageSchema, MessageSchema } from "./schema";
+export type {
+  InferMeta,
+  InferMessage,
+  InferPayload,
+  MessageContext,
+  MessageHandler,
+  MessageSchemaType,
+} from "./types";
 ```
 
 **Note**: Platform-agnostic. Compose with any platform adapter (Bun, Cloudflare, Node.js, etc.)
@@ -980,27 +1011,31 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 
 ### Phase 4: Implement @ws-kit/zod & @ws-kit/valibot (Validator Adapters)
 
-- [ ] For Zod:
-  - [ ] Create **`zodValidator()`** default export (convenience wrapper) returning `ValidatorAdapter`
-  - [ ] Create **`createZodValidator(z)`** factory (advanced) for custom Zod instances
-  - [ ] Implement `messageSchema()` default export and `createMessageSchema(z)` factory for schema definition
-  - [ ] Add type overloads for `router.onMessage()` to preserve Zod inference
-  - [ ] Depend on `@ws-kit/core` only (platform-agnostic)
-  - [ ] **Type tests**: Schema inference, discriminated union narrowing, handler context
-- [ ] For Valibot:
-  - [ ] Create **`valibotValidator()`** default export (convenience wrapper) returning `ValidatorAdapter`
-  - [ ] Create **`createValibotValidator(v)`** factory (advanced) for custom Valibot instances
-  - [ ] Implement `messageSchema()` default export and `createMessageSchema(v)` factory for schema definition
-  - [ ] Add type overloads for `router.onMessage()` to preserve Valibot inference
-  - [ ] Depend on `@ws-kit/core` only (platform-agnostic)
-  - [ ] **Type tests**: Mirror Zod tests with Valibot schema system
-- [ ] No inheritance; both are adapters that slot into core
-- [ ] Support both simple and advanced patterns:
-  - [ ] Simple: `new WebSocketRouter({ validator: zodValidator() })`
-  - [ ] Advanced: `new WebSocketRouter({ validator: createZodValidator(customZ) })`
-- [ ] **Cross-package composition type tests**:
-  - [ ] Zod + Bun: Type inference preserved through adapter composition
-  - [ ] Valibot + Cloudflare: Type inference preserved through adapter composition
+**STATUS**: ✅ Phase 4.1 Complete (Core Validator Adapters & Schema Factories)
+
+#### Phase 4.1: Core Validator Adapters ✅
+
+- [x] For Zod:
+  - [x] Implement `ZodValidatorAdapter` class implementing `ValidatorAdapter` interface
+  - [x] Create `zodValidator()` factory function for simple setup (default export)
+  - [x] Migrate `createMessageSchema(z)` factory for schema definition (critical for dual package hazard prevention)
+  - [x] Migrate type definitions (MessageContext, SendFunction, InferMessage, InferPayload, InferMeta)
+  - [x] Depend on `@ws-kit/core` only (platform-agnostic)
+  - [x] Import `ServerWebSocket` from `@ws-kit/core`, not from `"bun"` (enforces platform-agnostic design)
+  - [x] Proper exports in index.ts
+- [x] For Valibot:
+  - [x] Implement `ValibotValidatorAdapter` class implementing `ValidatorAdapter` interface
+  - [x] Create `valibotValidator()` factory function for simple setup (default export)
+  - [x] Migrate `createMessageSchema(v)` factory for schema definition (critical for dual package hazard prevention)
+  - [x] Migrate type definitions (MessageContext, SendFunction, InferMessage, InferPayload, InferMeta)
+  - [x] Depend on `@ws-kit/core` only (platform-agnostic)
+  - [x] Import `ServerWebSocket` from `@ws-kit/core`, not from `"bun"` (enforces platform-agnostic design)
+  - [x] Proper exports in index.ts
+- [x] No inheritance; both are adapters that slot into core router
+- [x] Simplified factory pattern: `zodValidator()` and `valibotValidator()` (avoids unnecessary complexity)
+- [x] Critical factory pattern preserved in `createMessageSchema()` (avoids dual package hazard)
+- [x] Both packages build successfully with TypeScript
+- [x] Verify platform-agnostic design (no imports from platform-specific modules like `"bun"`)
 
 ### Phase 5: Relocate Client
 

@@ -9,7 +9,7 @@ import type {
   OptionalSchema,
   StringSchema,
 } from "valibot";
-import { validateMetaSchema } from "../packages/core/src/normalize";
+import { validateMetaSchema } from "@ws-kit/core";
 
 /**
  * Minimal interface for Valibot instance to avoid circular type references.
@@ -109,7 +109,7 @@ type MessageWithPayloadAndMetaEntries<
  * @example Basic usage:
  * ```typescript
  * import * as v from "valibot";
- * import { createMessageSchema } from "bun-ws-router/valibot";
+ * import { createMessageSchema } from "@ws-kit/valibot";
  *
  * const { messageSchema } = createMessageSchema(v);
  * const PingSchema = messageSchema("PING");

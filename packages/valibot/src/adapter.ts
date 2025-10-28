@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import * as v from "valibot";
-import type { ValidatorAdapter } from "../packages/core/src/types";
+import type { ValidatorAdapter } from "@ws-kit/core";
 import type { MessageSchemaType } from "./types";
 
 /**

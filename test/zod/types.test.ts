@@ -3,8 +3,11 @@
 
 import { describe, expectTypeOf, test } from "bun:test";
 import { z } from "zod";
-import { createMessageSchema } from "../../zod/schema";
-import type { MessageContext, WebSocketData } from "../../zod/types";
+import { createMessageSchema } from "../../packages/zod/src/schema";
+import type {
+  MessageContext,
+  WebSocketData,
+} from "../../packages/zod/src/types";
 
 describe("Zod type tests", () => {
   const { messageSchema } = createMessageSchema(z);

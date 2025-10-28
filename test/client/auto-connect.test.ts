@@ -14,7 +14,7 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createClient, StateError } from "../../client/index";
-import { createMessageSchema } from "../../zod/schema";
+import { createMessageSchema } from "../../packages/zod/src/schema";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

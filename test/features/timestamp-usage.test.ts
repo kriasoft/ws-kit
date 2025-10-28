@@ -14,7 +14,7 @@
 import { describe, expect, expectTypeOf, it, mock } from "bun:test";
 import { z } from "zod";
 import { WebSocketRouter } from "../../zod/router";
-import { createMessageSchema } from "../../zod/schema";
+import { createMessageSchema } from "../../packages/zod/src/schema";
 
 const { messageSchema } = createMessageSchema(z);
 

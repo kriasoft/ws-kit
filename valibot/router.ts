@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../packages/core/src/router";
-import { ValibotValidatorAdapter } from "./adapter";
+import { ValibotValidatorAdapter } from "../packages/valibot/src/adapter";
 import type {
   MessageHandler as ValibotMessageHandler,
   MessageSchemaType as ValibotMessageSchemaType,
   WebSocketData,
-} from "./types";
+} from "../packages/valibot/src/types";
 
 /**
  * WebSocket router for Bun that provides type-safe message routing with Valibot validation.

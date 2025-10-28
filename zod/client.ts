@@ -23,7 +23,7 @@ import type {
   InferMeta,
   InferPayload,
   MessageSchemaType as ZodMessageSchema,
-} from "./types.js";
+} from "../packages/zod/src/types.js";
 
 // Re-export base types and error classes
 export * from "../client/types.js";
@@ -32,7 +32,7 @@ export type {
   InferMeta,
   InferPayload,
   MessageSchemaType as ZodMessageSchema,
-} from "./types.js";
+} from "../packages/zod/src/types.js";
 
 /**
  * Options for send() method with typed meta field inference.

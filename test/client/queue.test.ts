@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createClient } from "../../client/index";
 import type { WebSocketClient } from "../../client/types";
-import { createMessageSchema } from "../../zod/schema";
+import { createMessageSchema } from "../../packages/zod/src/schema";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

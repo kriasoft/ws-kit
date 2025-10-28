@@ -13,8 +13,8 @@ import {
 } from "bun:test";
 import { z } from "zod";
 import { WebSocketRouter } from "../../zod/router";
-import { createMessageSchema } from "../../zod/schema";
-import type { MessageContext } from "../../zod/types";
+import { createMessageSchema } from "../../packages/zod/src/schema";
+import type { MessageContext } from "../../packages/zod/src/types";
 
 const { messageSchema } = createMessageSchema(z);
 

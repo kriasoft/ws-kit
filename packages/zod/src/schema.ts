@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { ZodObject, ZodRawShape, ZodType, z as zType } from "zod";
-import { validateMetaSchema } from "../packages/core/src/normalize";
+import { validateMetaSchema } from "@ws-kit/core";
 
 /**
  * Minimal interface for Zod instance to avoid circular type references.
@@ -91,7 +91,7 @@ type MessageWithPayloadAndMetaShape<
  * @example Basic usage:
  * ```typescript
  * import { z } from "zod";
- * import { createMessageSchema } from "bun-ws-router/zod";
+ * import { createMessageSchema } from "@ws-kit/zod";
  *
  * const { messageSchema } = createMessageSchema(z);
  * const PingSchema = messageSchema("PING");

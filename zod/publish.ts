@@ -4,7 +4,7 @@
 import type { ServerWebSocket } from "bun";
 import type { ZodType } from "zod";
 import { z } from "zod";
-import type { MessageSchemaType } from "./types";
+import type { MessageSchemaType } from "../packages/zod/src/types";
 
 /**
  * Validates a message against its schema and publishes it to a WebSocket topic.

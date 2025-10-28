@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { WebSocketRouter as BaseWebSocketRouter } from "../packages/core/src/router";
-import { ZodValidatorAdapter } from "./adapter";
+import { ZodValidatorAdapter } from "../packages/zod/src/adapter";
 import type {
   WebSocketData,
   MessageHandler as ZodMessageHandler,
   MessageSchemaType as ZodMessageSchemaType,
-} from "./types";
+} from "../packages/zod/src/types";
 
 /**
  * WebSocket router for Bun that provides type-safe message routing with Zod validation.

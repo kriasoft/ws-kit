@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createMessageSchema } from "../../zod/schema";
+import { createMessageSchema } from "../../packages/zod/src/schema";
 
 describe("Cross-package type safety", () => {
   const { messageSchema } = createMessageSchema(z);

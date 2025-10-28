@@ -14,7 +14,7 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { normalizeInboundMessage } from "../../packages/core/src/normalize";
-import { createMessageSchema } from "../../zod/schema";
+import { createMessageSchema } from "../../packages/zod/src/schema";
 
 const { messageSchema } = createMessageSchema(z);
 

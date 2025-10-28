@@ -5,7 +5,7 @@ import type { ServerWebSocket } from "bun";
 import { describe, expect, it, mock, spyOn } from "bun:test";
 import { z } from "zod";
 import { publish } from "../../zod/publish";
-import { createMessageSchema } from "../../zod/schema";
+import { createMessageSchema } from "../../packages/zod/src/schema";
 
 const { messageSchema } = createMessageSchema(z);
 
