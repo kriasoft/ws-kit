@@ -908,10 +908,30 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 
 ### Phase 2: Implement @ws-kit/core (Composition Foundation)
 
-- [ ] Define **adapter interfaces** (NOT implementation):
-  - [ ] `ValidatorAdapter` interface for pluggable validators
-  - [ ] `PlatformAdapter` interface for pluggable platforms
-  - [ ] `PubSub` interface with `publish()`, `subscribe()`, `unsubscribe()`
+**STATUS**: Phase 2.1 Complete (Type System & Interfaces)
+
+#### Phase 2.1: Core Type System & Interfaces ✅
+
+- [x] Define **adapter interfaces** (NOT implementation):
+  - [x] `ValidatorAdapter` interface for pluggable validators (packages/core/src/types.ts)
+  - [x] `PlatformAdapter` interface for pluggable platforms (packages/core/src/types.ts)
+  - [x] `PubSub` interface with `publish()`, `subscribe()`, `unsubscribe()` (packages/core/src/types.ts)
+- [x] Implement **`MemoryPubSub`** as default for testing and single-server (packages/core/src/pubsub.ts)
+- [x] Define abstract `ServerWebSocket` interface (packages/core/src/types.ts)
+- [x] Define `MessageContext` type with full type inference support (packages/core/src/types.ts)
+- [x] Error codes and standardized error handling (packages/core/src/error.ts)
+- [x] Remove platform-specific code; ensure interface contracts are clear (all interfaces platform-agnostic)
+- [x] **Type tests** (see Type Testing Strategy):
+  - [x] Create `test/types/` folder structure (packages/core/test/types/index.test.ts)
+  - [x] Assert router generics and composition behavior with `expectTypeOf`
+  - [x] Assert PubSub interface types
+  - [x] Assert MessageContext type inference
+  - [x] Assert hook types (onAuth return bool, onClose/onError params)
+  - [x] Assert config option types (heartbeat, limits)
+  - [x] Verify `tsc --noEmit` passes all type assertions ✅
+
+#### Phase 2.2: Router Implementation (NEXT)
+
 - [ ] Implement single **`WebSocketRouter<V>`** class (generic over `ValidatorAdapter`)
   - [ ] Constructor accepts `{ validator?, platform?, pubsub?, hooks?, heartbeat?, limits? }`
   - [ ] `onMessage()` method with type overloads for type inference
@@ -927,19 +947,7 @@ type WebSocketRouterOptions<V extends ValidatorAdapter = never> = {
 - [ ] Implement **message limits**:
   - [ ] `maxPayloadBytes` enforced before deserialization (default 1MB)
   - [ ] Reject oversized messages with appropriate error code
-- [ ] Implement **`MemoryPubSub`** as default for testing and single-server
-- [ ] Define abstract `ServerWebSocket` interface
-- [ ] Define `MessageContext` type with full type inference support
-- [ ] Error codes and standardized error handling
-- [ ] Remove platform-specific code; ensure interface contracts are clear
-- [ ] **Type tests** (see Type Testing Strategy):
-  - [ ] Create `test/types/` folder structure
-  - [ ] Assert router generics and composition behavior with `expectTypeOf`
-  - [ ] Assert PubSub interface types
-  - [ ] Assert MessageContext type inference
-  - [ ] Assert hook types (onAuth return bool, onClose/onError params)
-  - [ ] Assert config option types (heartbeat, limits)
-  - [ ] Verify `tsc --noEmit` passes all type assertions
+- [ ] Migrate core logic from `/shared/` to `packages/core/src/`
 - [ ] **Establish Core Scope Boundaries** (codify in `@ws-kit/core/README.md`):
   - [ ] Define **What Core IS**: Platform-agnostic router, pluggable adapters, lifecycle hooks, message limits, type inference
   - [ ] Define **What Core IS NOT**: Codec abstraction, middleware chain, protocol versioning, backpressure policies, auth implementation
