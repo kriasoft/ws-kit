@@ -45,16 +45,34 @@ Introduce a unified `serve()` function that:
 
 **Production Policy:** Auto-detection is **disallowed in production**. One of the explicit approaches is required.
 
+### Canonical Production Approach: Platform Entrypoints
+
+**Platform-specific entrypoints are the "one true way" for production deployments.** They provide:
+
+- **Correct semantics**: Platform-specific options and error messages
+- **Optimal bundling**: Zero detection logic, excellent tree-shaking
+- **Developer clarity**: Import path makes runtime explicit
+- **Type safety**: Options narrowed to platform capabilities
+
+The generic `serve(router, { runtime })` approach exists for:
+
+- **Integration tests** spinning up routers under multiple runtimes
+- **Framework-agnostic examples** in documentation and benchmarks
+- **Monorepo tooling** that auto-targets different platforms
+- **Development servers** where runtime is chosen via environment variable or CLI flag
+
+**For production code**: Always use `import { serve } from "@ws-kit/serve/bun"` (or platform-specific variant). Never rely on generic `serve()` with runtime detection in production—it limits type precision and error clarity.
+
 ### Implementation: Three Approaches
 
-#### Approach 1: Explicit Runtime (Recommended for Production)
+#### Approach 1: Explicit Runtime (Advanced / Multi-Target)
 
 ```typescript
 import { serve } from "@ws-kit/serve";
 
 serve(router, {
   port: 3000,
-  runtime: "bun", // ← Required in production, explicit and clear
+  runtime: "bun", // For multi-target deployments or tests
   authenticate(req) {
     return { userId: "123" };
   },
@@ -63,15 +81,16 @@ serve(router, {
 
 **Benefits:**
 
-- ✅ No detection overhead
-- ✅ Clear deployment intent in code
-- ✅ Works everywhere (test, CI, prod)
-- ✅ Fails fast if runtime mismatch
+- ✅ Works for tests, multi-target deployments, CLI tools
+- ✅ Environment-variable friendly (`WSKIT_RUNTIME=bun`)
+- ✅ Can conditionally select runtime in code
 
-#### Approach 2: Platform Entrypoints (Zero-Ambiguity)
+**Best for:** Integration tests, monorepo tooling, dev servers with `--runtime` flag.
+
+#### Approach 2: Platform Entrypoints (Recommended for Production)
 
 ```typescript
-// ✅ Direct import—zero detection logic
+// ✅ Direct import—zero detection logic, runtime explicit in code
 import { serve } from "@ws-kit/serve/bun";
 
 serve(router, {
@@ -84,10 +103,13 @@ serve(router, {
 
 **Benefits:**
 
-- ✅ Zero detection logic (no globals probing)
-- ✅ Optimal tree-shaking (only imports what you use)
-- ✅ Works great for monorepos with multiple deployment targets
-- ✅ Impossible to misconfigure
+- ✅ **Zero detection logic** — No globals probing, deterministic
+- ✅ **Optimal tree-shaking** — Only imports what you use
+- ✅ **Type-safe options** — Options narrowed to platform capabilities
+- ✅ **Clear error messages** — Platform-specific guidance
+- ✅ **Impossible to misconfigure** — Import path makes target explicit
+
+**Best for:** Production deployments (single or multi-target monorepos).
 
 #### Approach 3: Auto-Detection in Development (Convenience)
 

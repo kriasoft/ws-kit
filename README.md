@@ -170,11 +170,11 @@ import { serve } from "@ws-kit/serve/bun";
 
 Configure how your router runs on your platform. All approaches support authentication, lifecycle hooks, and error handling.
 
-### Runtime Selection
+**TL;DR:** Use platform-specific entrypoints for production (`@ws-kit/serve/bun`, `@ws-kit/serve/cloudflare-do`). They provide correct, runtime-specific options and better errors. The generic `serve(router, { runtime })` is for advanced/test harnesses only. See [Advanced: Multi-Runtime Harness](#advanced-multi-runtime-harness) below.
 
-Choose your deployment target. All adapters work with both Zod and Valibot:
+### Platform-Specific Entrypoints (Recommended)
 
-**Recommended: Platform-Specific Entrypoint** (zero detection overhead)
+Use platform-specific imports for production deployments. This is the "one true way"—all adapters work with both Zod and Valibot:
 
 ```ts
 // For Bun:
@@ -185,9 +185,35 @@ const router = createRouter();
 serve(router, { port: 3000 });
 ```
 
-Use this pattern in production for deterministic behavior, optimal tree-shaking, and no detection overhead.
+Benefits:
 
-**Alternative: Explicit Runtime Selection** (multi-target deployments)
+- **Zero detection overhead** — No runtime detection, optimal tree-shaking
+- **Type-safe options** — Platform-specific options are available (e.g., backpressure handling for Bun, bindings for Cloudflare)
+- **Clear error messages** — Misconfigurations fail fast with helpful guidance
+- **Deterministic behavior** — No surprises in different environments
+
+**For Cloudflare Durable Objects:**
+
+```ts
+import { serve } from "@ws-kit/serve/cloudflare-do";
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter();
+
+export default {
+  fetch(req: Request) {
+    return serve(router, {
+      authenticate(req) {
+        /* ... */
+      },
+    }).fetch(req);
+  },
+};
+```
+
+### Advanced: Multi-Runtime Harness
+
+For tests, integration suites, or code that deploys to multiple runtimes, use the generic `serve()` with explicit runtime selection:
 
 ```ts
 import { serve } from "@ws-kit/serve";
@@ -200,29 +226,15 @@ serve(router, {
 });
 ```
 
-Use this for code that might deploy to multiple runtimes. You can also set `WSKIT_RUNTIME=bun` environment variable.
+Or set the `WSKIT_RUNTIME` environment variable:
 
-**For Cloudflare Durable Objects:**
-
-```ts
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { createRouter } from "@ws-kit/zod";
-
-const router = createRouter();
-const handler = createDurableObjectHandler(router, {
-  authenticate(req) {
-    /* ... */
-  },
-});
-
-export default {
-  fetch(req: Request) {
-    return handler.fetch(req);
-  },
-};
+```bash
+WSKIT_RUNTIME=bun node server.js
 ```
 
-⚠️ **Production Safety:** Always explicitly specify your deployment target in production. Use platform-specific entrypoints (recommended) or explicit `runtime` option to prevent silent misconfiguration.
+See [Advanced: Multi-Runtime Harness guide](./docs/guides/advanced-multi-runtime.md) for when to use this approach.
+
+⚠️ **Production Safety:** Always use platform-specific entrypoints in production. Avoid the generic `serve()` with runtime detection in production code—it limits type safety and error clarity.
 
 ### Authentication
 

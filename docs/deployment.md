@@ -1,6 +1,6 @@
 # Deployment
 
-This guide covers best practices for deploying Bun WebSocket Router applications to production.
+This guide covers best practices for deploying WS-Kit applications to production on Bun, Cloudflare Workers/Durable Objects, and other platforms.
 
 ## Environment Configuration
 
@@ -10,7 +10,6 @@ Use environment variables for production settings:
 // config.ts
 export const config = {
   port: parseInt(process.env.PORT || "3000"),
-  wsPath: process.env.WS_PATH || "/ws",
 
   // Security
   jwtSecret: process.env.JWT_SECRET!,
@@ -34,51 +33,169 @@ if (!config.jwtSecret) {
 }
 ```
 
-## Security Best Practices
+## Deploying to Bun
 
-### 1. Authentication & Authorization
+### Basic Setup with `serve()` Helper
+
+The simplest approach uses the platform-specific `serve()` helper:
 
 ```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
 import jwt from "jsonwebtoken";
+import { config } from "./config";
 
-const router = new WebSocketRouter()
-  .onOpen((ctx) => {
-    // Set auth timeout
-    const authTimer = setTimeout(() => {
-      if (!ctx.ws.data.authenticated) {
-        ctx.ws.close(1008, "Authentication timeout");
+type AppData = {
+  userId?: string;
+  roles?: string[];
+  authenticated?: boolean;
+};
+
+const AuthMessage = message("AUTH", {
+  token: z.string(),
+});
+
+const router = createRouter<AppData>();
+
+// Middleware: require auth for protected messages
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.authenticated && ctx.type !== "AUTH") {
+    ctx.error("AUTH_ERROR", "Not authenticated");
+    return;
+  }
+  return next();
+});
+
+router.on(AuthMessage, (ctx) => {
+  try {
+    const decoded = jwt.verify(ctx.payload.token, config.jwtSecret, {
+      algorithms: ["HS256"],
+    });
+
+    ctx.assignData({
+      userId: decoded.sub as string,
+      roles: decoded.roles as string[],
+      authenticated: true,
+    });
+  } catch (error) {
+    ctx.error("AUTH_ERROR", "Invalid token");
+  }
+});
+
+// Serve with type-safe handlers
+serve(router, {
+  port: config.port,
+  authenticate(req) {
+    // Optional: authenticate during WebSocket upgrade
+    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, config.jwtSecret);
+        return {
+          userId: decoded.sub as string,
+          roles: decoded.roles as string[],
+          authenticated: true,
+        };
+      } catch {
+        return undefined;
       }
-    }, config.authTimeout);
-
-    ctx.ws.data.authTimer = authTimer;
-  })
-
-  .on(AuthMessage, async (ctx) => {
-    try {
-      // Verify token
-      const decoded = jwt.verify(ctx.payload.token, config.jwtSecret, {
-        algorithms: ["HS256"],
-        maxAge: "24h",
-      });
-
-      // Clear auth timer
-      clearTimeout(ctx.ws.data.authTimer);
-
-      // Set authenticated
-      ctx.ws.data.authenticated = true;
-      ctx.ws.data.userId = decoded.sub;
-      ctx.ws.data.roles = decoded.roles;
-    } catch (error) {
-      ctx.ws.close(1008, "Invalid authentication");
     }
-  });
+  },
+  onError(error, ctx) {
+    console.error(`Error in ${ctx?.type}:`, error);
+  },
+  onOpen(ctx) {
+    console.log(`User ${ctx.ws.data?.userId} connected`);
+  },
+  onClose(ctx) {
+    console.log(`User ${ctx.ws.data?.userId} disconnected`);
+  },
+});
+
+console.log(`Server running on ws://localhost:${config.port}`);
 ```
 
-### 2. Input Validation
+## Deploying to Cloudflare Durable Objects
+
+Cloudflare Durable Objects provide stateful serverless compute for WebSocket connections:
 
 ```typescript
-// Strict schema validation
-const MessageSchema = messageSchema("MESSAGE", {
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/cloudflare-do";
+import jwt from "jsonwebtoken";
+
+type AppData = {
+  userId?: string;
+  roles?: string[];
+};
+
+const AuthMessage = message("AUTH", {
+  token: z.string(),
+});
+
+const router = createRouter<AppData>();
+
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.userId && ctx.type !== "AUTH") {
+    ctx.error("AUTH_ERROR", "Not authenticated");
+    return;
+  }
+  return next();
+});
+
+router.on(AuthMessage, (ctx) => {
+  try {
+    const decoded = jwt.verify(ctx.payload.token, JWT_SECRET);
+    ctx.assignData({
+      userId: decoded.sub as string,
+      roles: (decoded.roles as string[]) || [],
+    });
+  } catch {
+    ctx.error("AUTH_ERROR", "Invalid token");
+  }
+});
+
+export default {
+  async fetch(req: Request) {
+    return await serve(router, {
+      authenticate(req) {
+        const token = req.headers.get("authorization")?.replace("Bearer ", "");
+        if (token) {
+          try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            return {
+              userId: decoded.sub as string,
+              roles: (decoded.roles as string[]) || [],
+            };
+          } catch {
+            return undefined;
+          }
+        }
+      },
+      onError(error) {
+        console.error("WebSocket error:", error);
+      },
+    }).fetch(req);
+  },
+} satisfies ExportedHandler;
+```
+
+Deploy to Cloudflare:
+
+```bash
+wrangler publish
+```
+
+## Security Best Practices
+
+### 1. Input Validation
+
+Use schemas to validate all message payloads:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+
+const MessageSchema = message("MESSAGE", {
   // Limit string lengths
   text: z.string().min(1).max(1000),
 
@@ -86,135 +203,156 @@ const MessageSchema = messageSchema("MESSAGE", {
   email: z.email(),
   url: z.url().startsWith("https://"),
 
-  // Sanitize HTML
-  content: z.string().transform(sanitizeHtml),
-
   // Validate enums
   type: z.enum(["text", "image", "video"]),
 
   // Limit array sizes
   tags: z.array(z.string()).max(10),
 });
+
+const router = createRouter();
+
+router.on(MessageSchema, (ctx) => {
+  // Payload is guaranteed valid—TypeScript knows the shape
+  console.log(`Message type: ${ctx.payload.type}`);
+});
 ```
 
-### 3. Rate Limiting
+### 2. Rate Limiting
+
+Implement per-user rate limiting in middleware:
 
 ```typescript
-import { RateLimiterMemory } from "rate-limiter-flexible";
+const rateLimiters = new Map<string, { count: number; resetAt: number }>();
 
-// Create rate limiters
-const messageLimiter = new RateLimiterMemory({
-  points: config.messageRateLimit,
-  duration: 60, // Per minute
-});
+router.use((ctx, next) => {
+  const userId = ctx.ws.data?.userId || "anonymous";
+  const now = Date.now();
+  const limit = rateLimiters.get(userId);
 
-const connectionLimiter = new RateLimiterMemory({
-  points: config.maxConnectionsPerIP,
-  duration: 0, // No expiry
-});
-
-// Apply rate limiting
-Bun.serve({
-  async fetch(req, server) {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
-
-    try {
-      // Check connection limit
-      await connectionLimiter.consume(ip);
-
-      return router.upgrade(req, { server });
-    } catch {
-      return new Response("Too many connections", { status: 429 });
+  if (limit && now < limit.resetAt) {
+    if (limit.count >= 100) {
+      ctx.error("RATE_LIMIT", "Too many messages");
+      return;
     }
-  },
+    limit.count++;
+  } else {
+    rateLimiters.set(userId, {
+      count: 1,
+      resetAt: now + 60000, // Reset every minute
+    });
+  }
 
-  websocket: router.websocket,
+  return next();
+});
+```
+
+### 3. Idle Timeout Handling
+
+Track idle connections and close them:
+
+```typescript
+const idleTimeout = 5 * 60 * 1000; // 5 minutes
+const activityMap = new Map<WebSocket<AppData>, number>();
+
+router.onOpen((ctx) => {
+  activityMap.set(ctx.ws, Date.now());
+
+  // Check for idle connections periodically
+  const idleCheck = setInterval(() => {
+    const lastActivity = activityMap.get(ctx.ws);
+    if (lastActivity && Date.now() - lastActivity > idleTimeout) {
+      ctx.ws.close(1000, "Idle timeout");
+      activityMap.delete(ctx.ws);
+      clearInterval(idleCheck);
+    }
+  }, 60000); // Check every minute
+});
+
+router.use((ctx, next) => {
+  activityMap.set(ctx.ws, Date.now());
+  return next();
+});
+
+router.onClose((ctx) => {
+  activityMap.delete(ctx.ws);
 });
 ```
 
 ## Performance Optimization
 
-### 1. Connection Pooling
+### 1. Broadcasting
+
+Type-safe broadcasting with schema validation:
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
-
-// Efficient broadcast using type-safe publish
-router.on(BroadcastMessage, (ctx) => {
-  // Type-safe publish validates message before sending
-  publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
+const RoomUpdate = message("ROOM_UPDATE", {
+  roomId: z.string(),
+  message: z.string(),
 });
 
-// Subscribe clients efficiently
-router.onOpen((ctx) => {
-  ctx.ws.subscribe("global");
-  ctx.ws.subscribe(`user:${ctx.ws.data.clientId}`);
+router.on(SendMessage, (ctx) => {
+  const { text, roomId } = ctx.payload;
+
+  // Type-safe broadcast (validated against schema)
+  router.publish(roomId, RoomUpdate, {
+    roomId,
+    message: text,
+  });
 });
 ```
 
 ### 2. Message Compression
 
-```typescript
-// Enable per-message deflate
-const server = Bun.serve({
-  port: process.env.PORT || 3000,
-  fetch: app.fetch, // Your HTTP handler
-  websocket: {
-    ...router.websocket,
+Enable per-message deflate in production:
 
-    // Enable compression
-    perMessageDeflate: {
-      threshold: 1024, // Compress messages > 1KB
-      compress: true,
-    },
+```typescript
+import { serve } from "@ws-kit/serve/bun";
+
+serve(router, {
+  port: 3000,
+  backpressure: {
+    lowWaterMark: 16 * 1024, // Start buffering at 16KB
+    highWaterMark: 64 * 1024, // Stop accepting at 64KB
   },
 });
 ```
 
 ### 3. Memory Management
 
+Clean up resources on connection close:
+
 ```typescript
-// Clean up resources
-const cleanupManager = new Map<string, () => void>();
+const connectionResources = new Map<WebSocket<AppData>, () => void>();
 
-router
-  .onOpen((ctx) => {
-    const clientId = ctx.ws.data.clientId;
-    const cleanup: Array<() => void> = [];
+router.onOpen((ctx) => {
+  const cleanup: Array<() => void> = [];
 
-    // Initialize activity tracking
-    ctx.ws.data.lastActivity = Date.now();
+  // Track timers for cleanup
+  const idleTimer = setInterval(() => {
+    // Check idle status
+  }, 60000);
 
-    // Set idle timeout
-    const idleTimer = setInterval(() => {
-      if (Date.now() - ctx.ws.data.lastActivity > config.idleTimeout) {
-        ctx.ws.close(1000, "Idle timeout");
-      }
-    }, 60000);
+  cleanup.push(() => clearInterval(idleTimer));
 
-    cleanup.push(() => clearInterval(idleTimer));
-
-    // Store cleanup functions
-    cleanupManager.set(clientId, () => {
-      cleanup.forEach((fn) => fn());
-      cleanupManager.delete(clientId);
-    });
-  })
-
-  .on(AnyMessage, (ctx) => {
-    // Update activity timestamp directly on ws.data
-    ctx.ws.data.lastActivity = Date.now();
-  })
-
-  .onClose((ctx) => {
-    // Run cleanup
-    cleanupManager.get(ctx.ws.data.clientId)?.();
+  // Store cleanup function
+  connectionResources.set(ctx.ws, () => {
+    cleanup.forEach((fn) => fn());
+    connectionResources.delete(ctx.ws);
   });
+});
+
+router.onClose((ctx) => {
+  const cleanup = connectionResources.get(ctx.ws);
+  cleanup?.();
+});
 ```
 
 ## Monitoring & Logging
 
 ### 1. Structured Logging
+
+Log connection lifecycle and message handling:
 
 ```typescript
 import pino from "pino";
@@ -229,137 +367,126 @@ const logger = pino({
   },
 });
 
-router
-  .onOpen((ctx) => {
-    logger.info({
-      event: "ws_connect",
-      clientId: ctx.ws.data.clientId,
-      ip: ctx.ws.data.ip,
-    });
-  })
-
-  .on(AnyMessage, (ctx) => {
-    logger.debug({
-      event: "ws_message",
-      clientId: ctx.ws.data.clientId,
-      type: ctx.type,
-      size: JSON.stringify(ctx.payload).length,
-    });
-  })
-
-  .onError((ws, error) => {
-    logger.error({
-      event: "ws_error",
-      clientId: ws.data.clientId,
-      error: error.message,
-      stack: error.stack,
-    });
+router.onOpen((ctx) => {
+  logger.info({
+    event: "ws_connect",
+    userId: ctx.ws.data?.userId,
+    timestamp: new Date().toISOString(),
   });
+});
+
+router.use((ctx, next) => {
+  logger.debug({
+    event: "ws_message",
+    userId: ctx.ws.data?.userId,
+    type: ctx.type,
+    size: JSON.stringify(ctx.payload).length,
+  });
+  return next();
+});
+
+router.onClose((ctx) => {
+  logger.info({
+    event: "ws_disconnect",
+    userId: ctx.ws.data?.userId,
+  });
+});
 ```
 
 ### 2. Metrics Collection
 
+Track key metrics:
+
 ```typescript
-// Prometheus metrics
-import { register, Counter, Gauge, Histogram } from "prom-client";
-
 const metrics = {
-  connections: new Gauge({
-    name: "ws_connections_total",
-    help: "Total WebSocket connections",
-  }),
-
-  messages: new Counter({
-    name: "ws_messages_total",
-    help: "Total messages processed",
-    labelNames: ["type"],
-  }),
-
-  errors: new Counter({
-    name: "ws_errors_total",
-    help: "Total errors",
-    labelNames: ["code"],
-  }),
-
-  messageSize: new Histogram({
-    name: "ws_message_size_bytes",
-    help: "Message size in bytes",
-    buckets: [100, 1000, 10000, 100000],
-  }),
+  activeConnections: 0,
+  totalMessages: 0,
+  totalErrors: 0,
 };
 
-// Track metrics
-router
-  .onOpen(() => metrics.connections.inc())
-  .onClose(() => metrics.connections.dec())
-  .on(AnyMessage, (ctx) => {
-    const size = JSON.stringify(ctx.payload).length;
-    metrics.messages.inc({ type: ctx.type });
-    metrics.messageSize.observe(size);
-  });
+router.onOpen(() => {
+  metrics.activeConnections++;
+});
 
-// Expose metrics endpoint
-app.get("/metrics", (c) => c.text(register.metrics()));
+router.onClose(() => {
+  metrics.activeConnections--;
+});
+
+router.use((ctx, next) => {
+  try {
+    metrics.totalMessages++;
+    return next();
+  } catch (error) {
+    metrics.totalErrors++;
+    throw error;
+  }
+});
+
+// Expose metrics endpoint (if using HTTP framework)
+app.get("/metrics", (c) => {
+  return c.json(metrics);
+});
 ```
 
 ## Scaling Strategies
 
 ### 1. Horizontal Scaling with Redis
 
+Use Redis for cross-instance pub/sub:
+
 ```typescript
 import { createClient } from "redis";
 
-const redis = createClient({
-  url: process.env.REDIS_URL,
-});
-
+const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
-// Pub/Sub across instances
-router.on(BroadcastMessage, async (ctx) => {
-  // Publish to Redis for cross-instance communication
+const GlobalBroadcast = message("GLOBAL_BROADCAST", {
+  message: z.string(),
+});
+
+router.on(GlobalBroadcast, async (ctx) => {
+  // Publish to Redis for other instances
   await redis.publish(
-    "broadcast",
+    "global_broadcast",
     JSON.stringify({
-      type: "BROADCAST",
+      type: "GLOBAL_BROADCAST",
       payload: ctx.payload,
-      origin: process.env.INSTANCE_ID,
+      from: process.env.INSTANCE_ID,
     }),
   );
 
-  // Also broadcast to local clients using type-safe publish()
-  publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
+  // Also broadcast to local clients
+  router.publish("global", GlobalBroadcast, ctx.payload);
 });
 
-// Subscribe to Redis broadcasts from other instances
-redis.subscribe("broadcast", (message) => {
+// Subscribe to broadcasts from other instances
+redis.subscribe("global_broadcast", (message) => {
   const data = JSON.parse(message);
 
-  // Skip if from current instance (already broadcasted above)
-  if (data.origin === process.env.INSTANCE_ID) return;
+  // Skip if from current instance
+  if (data.from === process.env.INSTANCE_ID) return;
 
-  // Broadcast to local clients using server.publish()
-  // Note: This is raw server-level broadcast (no validation)
-  // Message is already validated by originating instance
-  server.publish("global", JSON.stringify(data));
+  // Broadcast to local clients
+  router.publish("global", GlobalBroadcast, data.payload);
 });
 ```
 
 ### 2. Load Balancing
 
-Configure your load balancer for WebSocket support:
+Configure your load balancer for sticky WebSocket sessions:
 
 ```nginx
 # nginx.conf
 upstream websocket {
-    ip_hash;  # Sticky sessions
-    server app1:3000;
-    server app2:3000;
-    server app3:3000;
+    ip_hash;  # Sticky sessions to same backend
+    server app1.internal:3000;
+    server app2.internal:3000;
+    server app3.internal:3000;
 }
 
 server {
-    listen 80;
+    listen 443 ssl http2;
+    server_name api.example.com;
 
     location /ws {
         proxy_pass http://websocket;
@@ -371,7 +498,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Timeouts
+        # Long timeouts for persistent connections
         proxy_connect_timeout 7d;
         proxy_send_timeout 7d;
         proxy_read_timeout 7d;
@@ -379,89 +506,89 @@ server {
 }
 ```
 
-## Health Checks
+## Testing Multiple Runtimes
 
-Implement health check endpoints:
+Before production, test your router under multiple deployment targets. See [Advanced: Multi-Runtime Harness](../guides/advanced-multi-runtime.md) for integration test patterns that run the same router under Bun, Cloudflare DO, and other platforms.
+
+Quick example with multiple runtimes:
 
 ```typescript
-const healthRouter = new Hono();
+import { serve } from "@ws-kit/serve";
+import { describe, it } from "bun:test";
 
-healthRouter.get("/health", (c) => {
-  return c.json({
-    status: "healthy",
-    timestamp: Date.now(),
-    connections: connectionCount,
-    uptime: process.uptime(),
+for (const runtime of ["bun", "cloudflare-do"] as const) {
+  describe(`Production deployment test (${runtime})`, () => {
+    it("handles authenticated messages", async () => {
+      await serve(router, {
+        port: 3000,
+        runtime,
+        authenticate(req) {
+          // Your auth logic
+          return { userId: "test" };
+        },
+      });
+
+      // Run client tests...
+    });
   });
-});
-
-healthRouter.get("/health/ready", async (c) => {
-  try {
-    // Check dependencies
-    await redis.ping();
-
-    return c.json({ status: "ready" });
-  } catch (error) {
-    return c.json({ status: "not ready", error: error.message }, 503);
-  }
-});
+}
 ```
-
-## Deployment Checklist
-
-Before deploying to production:
-
-- [ ] Set all required environment variables
-- [ ] Enable HTTPS/WSS with valid certificates
-- [ ] Configure rate limiting
-- [ ] Set up monitoring and alerting
-- [ ] Test authentication flow
-- [ ] Configure log aggregation
-- [ ] Set up automated backups
-- [ ] Create runbooks for common issues
-- [ ] Test graceful shutdown
-- [ ] Load test with expected traffic
 
 ## Graceful Shutdown
 
+Handle shutdown signals and drain connections gracefully:
+
 ```typescript
-// Handle shutdown signals
+import { serve } from "@ws-kit/serve/bun";
+
 let isShuttingDown = false;
 
 async function gracefulShutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  logger.info("Starting graceful shutdown...");
+  console.log("Starting graceful shutdown...");
 
   // Stop accepting new connections
   server.stop();
 
-  // Notify all clients of shutdown using server.publish()
-  // Note: This is server-level broadcast (no per-connection context)
-  const ShutdownMessage = messageSchema("SERVER_SHUTDOWN", {
+  // Notify clients of shutdown
+  const ShutdownNotice = message("SERVER_SHUTDOWN", {
     reason: z.string(),
   });
 
-  server.publish(
-    "global",
-    JSON.stringify({
-      type: "SERVER_SHUTDOWN",
-      meta: { timestamp: Date.now() },
-      payload: { reason: "Server maintenance" },
-    }),
-  );
+  router.publish("all", ShutdownNotice, {
+    reason: "Server maintenance",
+  });
 
-  // Give clients time to handle shutdown message
+  // Give clients time to gracefully disconnect
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  // Clean up resources
-  await redis.quit();
-
-  logger.info("Graceful shutdown complete");
+  // Close remaining connections
   process.exit(0);
 }
 
 process.on("SIGTERM", gracefulShutdown);
 process.on("SIGINT", gracefulShutdown);
 ```
+
+## Deployment Checklist
+
+Before deploying to production:
+
+- [ ] Set all required environment variables (JWT_SECRET, etc.)
+- [ ] Enable WSS/HTTPS with valid certificates
+- [ ] Configure rate limiting per user
+- [ ] Set up structured logging and aggregation
+- [ ] Test authentication flow end-to-end
+- [ ] Configure idle timeout handling
+- [ ] Test graceful shutdown
+- [ ] Load test with expected concurrent connections
+- [ ] Set up monitoring and alerting
+- [ ] Test multi-runtime compatibility (see Advanced guide)
+- [ ] Configure automatic restarts and health checks
+
+## See Also
+
+- [Advanced: Multi-Runtime Harness](../guides/advanced-multi-runtime.md) — Integration testing across platforms
+- [ADR-006: Multi-Runtime serve()](../adr/006-multi-runtime-serve-with-explicit-selection.md) — Runtime selection design
