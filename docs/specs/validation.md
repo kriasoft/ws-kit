@@ -16,10 +16,10 @@ For **application errors** (handlers send error messages to clients), see @error
 
 **Key distinction**: Validation errors are **transport-layer** concerns (malformed wire format); application errors are **business-layer** concerns (invalid state, unauthorized access, resource not found).
 
-## Flow
+## Flow {#Flow}
 
 ```text
-Message → JSON Parse → Type Check → Handler Lookup → Normalize → Schema Validation → Handler
+Message → JSON Parse → Type Check → Handler Lookup → Normalize → Middleware → Schema Validation → Handler
 ```
 
 **Pipeline stages**:
@@ -27,9 +27,10 @@ Message → JSON Parse → Type Check → Handler Lookup → Normalize → Schem
 1. **Parse**: JSON.parse() the raw WebSocket message
 2. **Type check**: Ensure `type` field exists and is a string
 3. **Handler lookup**: Find registered handler for message type
-4. **Normalize**: Ensure `meta` exists, strip reserved keys (security)
-5. **Validate**: Schema validation on normalized message (strict mode - see below)
-6. **Handler**: Invoke handler with validated message + server context
+4. **Normalize**: Ensure `meta` exists, strip reserved keys (security boundary)
+5. **Middleware**: Execute global and per-route middleware (can skip handler)
+6. **Validate**: Schema validation on normalized message (strict mode - see below)
+7. **Handler**: Invoke handler with validated message + server context
 
 Adapters MUST receive normalized messages for validation.
 
@@ -56,33 +57,39 @@ Adapters MUST configure validators to reject unknown keys at all levels (root, m
 | Has `payload` field | Includes `payload` with valid data                | ✅ MUST pass (if otherwise valid) |
 | Any schema          | Unknown keys at root/meta/payload                 | ❌ MUST fail validation           |
 
-**Implementation:**
+**Implementation (using export-with-helpers pattern from ADR-007):**
 
 ```typescript
-// Zod adapter (zod/types.ts)
-export function messageSchema<Type extends string, Payload, Meta>(
+// Zod adapter (@ws-kit/zod/src/index.ts)
+export function message<
+  const Type extends string,
+  const Shape extends z.ZodRawShape | undefined = undefined,
+>(
   type: Type,
-  payload?: Payload,
-  meta?: Meta,
-): ZodMessageSchema<Type, Payload, Meta> {
+  payload?: Shape extends z.ZodRawShape ? Shape : undefined,
+  meta?: z.ZodRawShape,
+): ZodSchema<Type, Payload, Meta> {
   const baseShape = {
     type: z.literal(type),
-    meta: z.object({ ...defaultMeta, ...meta }),
+    meta: z.object({ ...defaultMeta, ...meta }).strict(),
   };
 
   const schema = payload
-    ? z.object({ ...baseShape, payload: z.object(payload) })
+    ? z.object({ ...baseShape, payload: z.object(payload).strict() })
     : z.object(baseShape);
 
   return schema.strict(); // CRITICAL: Rejects unknown keys including unexpected 'payload'
 }
 
-// Valibot adapter (valibot/types.ts)
-export function messageSchema<Type extends string, Payload, Meta>(
+// Valibot adapter (@ws-kit/valibot/src/index.ts)
+export function message<
+  const Type extends string,
+  const Shape extends Record<string, any> | undefined = undefined,
+>(
   type: Type,
-  payload?: Payload,
-  meta?: Meta,
-): ValibotMessageSchema<Type, Payload, Meta> {
+  payload?: Shape,
+  meta?: Record<string, any>,
+): ValibotSchema<Type, Payload, Meta> {
   const baseShape = {
     type: v.literal(type),
     meta: v.strictObject({ ...defaultMeta, ...meta }), // Strict for meta
@@ -220,7 +227,7 @@ const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
  * Schema Creation Enforcement
  *
  * Adapters MUST validate that extended meta schemas do not define reserved keys.
- * This check occurs in messageSchema() factory to fail fast at design time.
+ * This check occurs in message() helper to fail fast at design time.
  */
 function validateMetaSchema(meta?: Record<string, any>): void {
   if (!meta) return;
@@ -236,7 +243,7 @@ function validateMetaSchema(meta?: Record<string, any>): void {
   }
 }
 
-// Called in messageSchema() before creating schema:
+// Called in message() before creating schema:
 // validateMetaSchema(meta);
 
 /**

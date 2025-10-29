@@ -322,7 +322,7 @@ export class RedisPubSub implements PubSub {
    */
   private async subscribeToChannel(channel: string): Promise<void> {
     const client = await this.ensureSubscribeClient();
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
+
     await client.subscribe?.(channel, () => {
       // Subscription callback - no-op
     });

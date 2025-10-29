@@ -2,10 +2,41 @@
 
 **Status**: ✅ Implemented (type-level tests with expectTypeOf)
 
+## Test Organization
+
+Tests are organized by package. Each package owns its test directory:
+
+```text
+packages/
+├── core/test/              # Core router tests + features/
+├── zod/test/               # Zod validator tests + features/
+├── valibot/test/           # Valibot validator tests + features/
+├── bun/test/               # Bun adapter tests
+├── client/test/            # Client tests (runtime/ + types/)
+└── cloudflare-do/test/     # Cloudflare DO adapter tests
+```
+
+### When Adding Tests
+
+- **Core features**: `packages/core/test/features/`
+- **Validator features**: Mirror Zod tests in Valibot with same structure
+- **Type inference tests**: Use `packages/*/test/types/`
+- **Adapters**: Add to respective `packages/*/test/`
+
+### Running Tests
+
+```bash
+bun test                           # All tests
+bun test packages/zod/test         # Specific package
+bun test --grep "pattern"          # By pattern
+bun test --watch                   # Watch mode
+```
+
 ## Section Map
 
 Quick navigation for AI tools:
 
+- [#Test-Organization](#test-organization) — Directory structure and running tests
 - [#Type-Level-Testing](#type-level-testing) — Compile-time validation with expectTypeOf
 - [#Handler-Context-Inference](#handler-context-inference) — Server handler type tests
 - [#Client-Type-Inference](#client-type-inference) — Client handler and request/response tests

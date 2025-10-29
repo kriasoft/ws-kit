@@ -11,57 +11,58 @@
  * Connect: ws://localhost:3000/ws
  */
 
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
-import { z } from "zod";
+import { createBunHandler } from "@ws-kit/bun";
+import { createRouter, message, z } from "@ws-kit/zod";
 
 // =======================
 // Message Schemas
 // =======================
 
-const { messageSchema: msg } = createMessageSchema(z);
+// Using the new export-with-helpers pattern:
+// - Import message() directly instead of factory
+// - Single import source for z, message(), and createRouter()
 
 // Client -> Server messages
-const JoinRoomMessage = msg("ROOM:JOIN", {
+const JoinRoomMessage = message("ROOM:JOIN", {
   room: z.string().min(1).max(50),
 });
 
-const SendMessageMessage = msg("MESSAGE:SEND", {
+const SendMessageMessage = message("MESSAGE:SEND", {
   text: z.string().min(1).max(500),
 });
 
-const LeaveRoomMessage = msg("ROOM:LEAVE", {});
+const LeaveRoomMessage = message("ROOM:LEAVE", {});
 
 // Server -> Client messages
-const RoomUsersMessage = msg("ROOM:USERS", {
+const RoomUsersMessage = message("ROOM:USERS", {
   room: z.string(),
   users: z.array(z.string()),
   count: z.number(),
 });
 
-const UserJoinedMessage = msg("USER:JOINED", {
+const UserJoinedMessage = message("USER:JOINED", {
   user: z.string(),
   room: z.string(),
 });
 
-const UserLeftMessage = msg("USER:LEFT", {
+const UserLeftMessage = message("USER:LEFT", {
   user: z.string(),
   room: z.string(),
 });
 
-const MessageBroadcastMessage = msg("MESSAGE:BROADCAST", {
+const MessageBroadcastMessage = message("MESSAGE:BROADCAST", {
   user: z.string(),
   room: z.string(),
   text: z.string(),
   timestamp: z.number(),
 });
 
-const WelcomeMessage = msg("SERVER:WELCOME", {
+const WelcomeMessage = message("SERVER:WELCOME", {
   clientId: z.string(),
   timestamp: z.number(),
 });
 
-const ErrorMessage = msg("SERVER:ERROR", {
+const ErrorMessage = message("SERVER:ERROR", {
   message: z.string(),
 });
 
@@ -84,8 +85,27 @@ const rooms = new Map<string, Set<string>>();
 // Router Setup
 // =======================
 
-const router = createZodRouter<WebSocketData>({
-  platform: createBunAdapter(),
+const router = createRouter<WebSocketData>();
+
+// =======================
+// Middleware
+// =======================
+
+// Authentication middleware - validates user exists before handling message
+router.use((ctx, next) => {
+  const clientId = ctx.ws.data?.clientId;
+  const user = users.get(clientId || "");
+
+  // User must exist to process messages
+  if (!user) {
+    ctx.send(ErrorMessage, {
+      message: "Not authenticated. Please reconnect.",
+    });
+    return; // Skip handler
+  }
+
+  // Continue to next middleware or handler
+  return next();
 });
 
 // =======================
@@ -124,15 +144,13 @@ router.onClose(async (ctx) => {
         roomUsers.delete(clientId);
 
         // Broadcast user left message
-        await router.publish(`room:${room}`, {
-          type: "USER:LEFT",
+        await router.publish(`room:${room}`, UserLeftMessage, {
           user: user.name,
           room,
         });
 
         // Broadcast updated user list
-        await router.publish(`room:${room}`, {
-          type: "ROOM:USERS",
+        await router.publish(`room:${room}`, RoomUsersMessage, {
           room,
           users: Array.from(roomUsers),
           count: roomUsers.size,
@@ -186,8 +204,7 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
   console.log(`[${clientId}] Joined room: ${room}`);
 
   // Broadcast user joined
-  await router.publish(`room:${room}`, {
-    type: "USER:JOINED",
+  await router.publish(`room:${room}`, UserJoinedMessage, {
     user: user.name,
     room,
   });
@@ -195,8 +212,7 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
   // Send updated user list
   const roomUsers = rooms.get(room);
   if (roomUsers) {
-    await router.publish(`room:${room}`, {
-      type: "ROOM:USERS",
+    await router.publish(`room:${room}`, RoomUsersMessage, {
       room,
       users: Array.from(roomUsers),
       count: roomUsers.size,
@@ -219,8 +235,7 @@ router.onMessage(SendMessageMessage, async (ctx) => {
   // Broadcast to all rooms user is in
   const roomsArray = Array.from(user.rooms);
   for (const room of roomsArray) {
-    await router.publish(`room:${room}`, {
-      type: "MESSAGE:BROADCAST",
+    await router.publish(`room:${room}`, MessageBroadcastMessage, {
       user: user.name,
       room,
       text,
@@ -253,15 +268,13 @@ router.onMessage(LeaveRoomMessage, async (ctx) => {
       roomUsers.delete(clientId);
 
       // Broadcast user left
-      await router.publish(`room:${room}`, {
-        type: "USER:LEFT",
+      await router.publish(`room:${room}`, UserLeftMessage, {
         user: user.name,
         room,
       });
 
       // Send updated user list
-      await router.publish(`room:${room}`, {
-        type: "ROOM:USERS",
+      await router.publish(`room:${room}`, RoomUsersMessage, {
         room,
         users: Array.from(roomUsers),
         count: roomUsers.size,
@@ -283,7 +296,7 @@ router.onMessage(LeaveRoomMessage, async (ctx) => {
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 // Create handler with authentication for client ID initialization
-const { fetch: handleWebSocket, websocket } = createBunHandler(router._core, {
+const { fetch: handleWebSocket, websocket } = createBunHandler(router, {
   authenticate() {
     // Generate unique client ID for this connection
     return { clientId: crypto.randomUUID() };

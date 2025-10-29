@@ -26,7 +26,7 @@ const mockValidator: ValidatorAdapter = {
 };
 
 function createMockWebSocket(
-  clientId: string = "test-client",
+  clientId = "test-client",
 ): ServerWebSocket<WebSocketData> {
   const messages: string[] = [];
 

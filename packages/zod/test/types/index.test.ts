@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expectTypeOf } from "bun:test";
-import { z } from "zod";
+import { describe, it, expect, expectTypeOf } from "bun:test";
 import {
-  createZodRouter,
+  z,
+  message,
+  createRouter,
   zodValidator,
-  createMessageSchema,
   type InferMessage,
   type InferPayload,
   type InferMeta,
@@ -24,16 +24,14 @@ describe("@ws-kit/zod - Type Tests", () => {
 
     it("getMessageType should accept MessageSchemaType and return string", () => {
       const validator = zodValidator();
-      const { messageSchema } = createMessageSchema(z);
-      const schema = messageSchema("PING");
+      const schema = message("PING");
       expectTypeOf(validator.getMessageType).toBeFunction();
       expectTypeOf(validator.getMessageType(schema)).toBeString();
     });
 
     it("safeParse should validate and return normalized result", () => {
       const validator = zodValidator();
-      const { messageSchema } = createMessageSchema(z);
-      const schema = messageSchema("PING", { text: z.string() });
+      const schema = message("PING", { text: z.string() });
 
       const result = validator.safeParse(schema, {
         type: "PING",
@@ -46,22 +44,33 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
   });
 
-  describe("createMessageSchema(z) factory", () => {
-    it("should return factory with messageSchema function", () => {
-      const factory = createMessageSchema(z);
-      expectTypeOf(factory).toHaveProperty("messageSchema");
-      expectTypeOf(factory.messageSchema).toBeFunction();
-      expectTypeOf(factory).toHaveProperty("MessageMetadataSchema");
-      expectTypeOf(factory).toHaveProperty("ErrorCode");
-      expectTypeOf(factory).toHaveProperty("ErrorMessage");
-      expectTypeOf(factory).toHaveProperty("createMessage");
+  describe("message() helper function", () => {
+    it("should create message schema with message() helper", () => {
+      const schema = message("PING");
+      expect(schema).toBeDefined();
+      expectTypeOf(schema).not.toBeNever();
+    });
+
+    it("should support payload schema parameter", () => {
+      const schema = message("MSG", { text: z.string() });
+      expect(schema).toBeDefined();
+      expectTypeOf(schema).not.toBeNever();
+    });
+
+    it("should support extended meta parameter", () => {
+      const schema = message(
+        "ROOM_MSG",
+        { text: z.string() },
+        { roomId: z.string() },
+      );
+      expect(schema).toBeDefined();
+      expectTypeOf(schema).not.toBeNever();
     });
   });
 
   describe("Schema type inference - Type-Only", () => {
     it("should create schema with type and meta only", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       // Verify schema shape
       expectTypeOf(PingSchema.shape).toHaveProperty("type");
@@ -70,8 +79,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should preserve message type literal", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       type PingType = typeof PingSchema.shape.type.value;
       expectTypeOf<PingType>().toEqualTypeOf<"PING">();
@@ -80,8 +88,7 @@ describe("@ws-kit/zod - Type Tests", () => {
 
   describe("Schema type inference - With Payload", () => {
     it("should infer payload type correctly", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const MessageSchema = messageSchema("MSG", {
+      const MessageSchema = message("MSG", {
         id: z.number(),
         text: z.string(),
       });
@@ -94,8 +101,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should include payload in context type", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const MessageSchema = messageSchema("MSG", { text: z.string() });
+      const MessageSchema = message("MSG", { text: z.string() });
 
       type Context = MessageContext<typeof MessageSchema, unknown>;
       expectTypeOf<Context>().toHaveProperty("payload");
@@ -103,8 +109,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("no payload schema should not have payload property in context", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       type Context = MessageContext<typeof PingSchema, unknown>;
       // Should not have payload property
@@ -115,8 +120,7 @@ describe("@ws-kit/zod - Type Tests", () => {
 
   describe("Schema type inference - With Extended Meta", () => {
     it("should infer extended meta fields", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const RoomMessageSchema = messageSchema(
+      const RoomMessageSchema = message(
         "ROOM_MSG",
         { text: z.string() },
         { roomId: z.string() },
@@ -127,8 +131,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should omit auto-injected timestamp and correlationId from InferMeta", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const MessageSchema = messageSchema("MSG", undefined, {
+      const MessageSchema = message("MSG", undefined, {
         roomId: z.string(),
         userId: z.number(),
       });
@@ -142,8 +145,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should include extended meta in full inferred message", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const MessageSchema = messageSchema("MSG", undefined, {
+      const MessageSchema = message("MSG", undefined, {
         roomId: z.string(),
       });
 
@@ -159,10 +161,9 @@ describe("@ws-kit/zod - Type Tests", () => {
 
   describe("Discriminated Union Support", () => {
     it("should support z.discriminatedUnion with multiple schemas", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const PingSchema = messageSchema("PING");
-      const PongSchema = messageSchema("PONG");
-      const MessageSchema = messageSchema("MSG", { text: z.string() });
+      const PingSchema = message("PING");
+      const PongSchema = message("PONG");
+      const MessageSchema = message("MSG", { text: z.string() });
 
       // Create discriminated union
       const MessageUnion = z.discriminatedUnion("type", [
@@ -181,9 +182,8 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should allow proper narrowing with discriminated unions", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const PingSchema = messageSchema("PING");
-      const MessageSchema = messageSchema("MSG", { text: z.string() });
+      const PingSchema = message("PING");
+      const MessageSchema = message("MSG", { text: z.string() });
 
       const union = z.discriminatedUnion("type", [PingSchema, MessageSchema]);
 
@@ -214,8 +214,7 @@ describe("@ws-kit/zod - Type Tests", () => {
 
   describe("Type Inference - Full Message", () => {
     it("should infer complete message with payload", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const LoginSchema = messageSchema("LOGIN", {
+      const LoginSchema = message("LOGIN", {
         username: z.string(),
         password: z.string(),
       });
@@ -235,8 +234,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should infer complete message without payload", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       type Message = InferMessage<typeof PingSchema>;
       expectTypeOf<Message>().toMatchTypeOf<{
@@ -249,8 +247,7 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should infer message with extended meta", () => {
-      const { messageSchema } = createMessageSchema(z);
-      const MessageSchema = messageSchema(
+      const MessageSchema = message(
         "CHAT",
         { text: z.string() },
         { roomId: z.string() },
@@ -273,10 +270,8 @@ describe("@ws-kit/zod - Type Tests", () => {
 
   describe("Router type inference", () => {
     it("should preserve schema types in router handlers", () => {
-      const router = createZodRouter();
-      const { messageSchema } = createMessageSchema(z);
-
-      const LoginSchema = messageSchema("LOGIN", {
+      const router = createRouter();
+      const LoginSchema = message("LOGIN", {
         username: z.string(),
       });
 
@@ -291,47 +286,83 @@ describe("@ws-kit/zod - Type Tests", () => {
     });
 
     it("should type-check send function within handlers", () => {
-      const router = createZodRouter();
-      const { messageSchema } = createMessageSchema(z);
+      const router = createRouter();
 
-      const RequestSchema = messageSchema("REQUEST", { id: z.number() });
-      const ResponseSchema = messageSchema("RESPONSE", { result: z.string() });
+      const RequestSchema = message("REQUEST", { id: z.number() });
+      const ResponseSchema = message("RESPONSE", { result: z.string() });
 
       router.onMessage(RequestSchema, (ctx) => {
         // send should be type-safe
         expectTypeOf(ctx.send).toBeFunction();
       });
     });
-  });
 
-  describe("Error schema", () => {
-    it("should provide pre-built error message schema", () => {
-      const { ErrorMessage, ErrorCode } = createMessageSchema(z);
+    it("should support middleware with proper typing", () => {
+      const router = createRouter();
+      const TestMessage = message("TEST", { data: z.string() });
 
-      type ErrorMsg = z.infer<typeof ErrorMessage>;
-      expectTypeOf<ErrorMsg>().toHaveProperty("type");
-      expectTypeOf<ErrorMsg["type"]>().toEqualTypeOf<"ERROR">();
-      expectTypeOf<ErrorMsg>().toHaveProperty("payload");
-      expectTypeOf<ErrorMsg["payload"]>().toHaveProperty("code");
-      expectTypeOf<ErrorMsg["payload"]>().toHaveProperty("message");
+      router.use((ctx, next) => {
+        expectTypeOf(ctx).toBeDefined();
+        expectTypeOf(next).toBeFunction();
+        return next();
+      });
+
+      router.use(TestMessage, (ctx, next) => {
+        expectTypeOf(ctx.payload).toEqualTypeOf<{ data: string }>();
+        return next();
+      });
     });
   });
 
   describe("Generic type parameters", () => {
     it("should support generic message handlers", () => {
-      const { messageSchema } = createMessageSchema(z);
-
-      function createHandler<T extends { type: z.ZodLiteral<string> }>(
-        schema: T,
-      ) {
+      function createHandler<T extends { shape: { type: any } }>(schema: T) {
         return (ctx: MessageContext<T, unknown>) => {
           expectTypeOf(ctx.type).toBeString();
         };
       }
 
-      const schema = messageSchema("TEST");
+      const schema = message("TEST");
       const handler = createHandler(schema);
       expectTypeOf(handler).toBeFunction();
+    });
+  });
+
+  describe("createRouter with connection data", () => {
+    it("should type connection data through handlers", () => {
+      type AppData = { userId?: string; roles?: string[] };
+      const router = createRouter<AppData>();
+
+      const SecureMessage = message("SECURE", { action: z.string() });
+
+      router.onMessage(SecureMessage, (ctx) => {
+        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+        expectTypeOf(ctx.ws.data).toHaveProperty("roles");
+      });
+    });
+
+    it("should support connection data assignment", () => {
+      type AppData = { userId?: string };
+      const router = createRouter<AppData>();
+
+      const LoginMessage = message("LOGIN", { id: z.string() });
+
+      router.onMessage(LoginMessage, (ctx) => {
+        ctx.assignData({ userId: ctx.payload.id });
+      });
+    });
+
+    it("should type connection data in lifecycle callbacks", () => {
+      type AppData = { userId?: string };
+      const router = createRouter<AppData>();
+
+      router.onOpen((ctx) => {
+        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+      });
+
+      router.onClose((ctx) => {
+        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+      });
     });
   });
 });

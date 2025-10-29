@@ -4,7 +4,7 @@
 /**
  * Type inference tests for typed Zod router.
  *
- * These tests verify that the createZodRouter factory provides proper
+ * These tests verify that the createRouter factory provides proper
  * TypeScript type inference for message handlers, eliminating the need
  * for manual type assertions like `(ctx.payload as any)`.
  *
@@ -16,25 +16,22 @@
  * - Send function inference
  */
 
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
-import { z } from "zod";
+import { createRouter, message, z } from "@ws-kit/zod";
 import { expectTypeOf } from "expect-type";
 
-describe("Type inference in createZodRouter handlers", () => {
-  const { messageSchema } = createMessageSchema(z);
-
+describe("Type inference in createRouter handlers", () => {
   // ==================================================================================
   // Payload Inference Tests
   // ==================================================================================
 
   describe("Payload type inference (schemas with payload)", () => {
     it("should infer simple object payload", () => {
-      const LoginSchema = messageSchema("LOGIN", {
+      const LoginSchema = message("LOGIN", {
         username: z.string(),
         password: z.string(),
       });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       // Register handler and verify types within the handler
       router.onMessage(LoginSchema, (ctx) => {
@@ -58,13 +55,13 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should infer payload with optional fields", () => {
-      const UserSchema = messageSchema("USER:UPDATE", {
+      const UserSchema = message("USER:UPDATE", {
         id: z.string(),
         name: z.string().optional(),
         email: z.string().optional(),
       });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(UserSchema, (ctx) => {
         expectTypeOf(ctx.payload).toMatchTypeOf<{
@@ -87,7 +84,7 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should infer nested object payloads", () => {
-      const PostSchema = messageSchema("POST:CREATE", {
+      const PostSchema = message("POST:CREATE", {
         title: z.string(),
         content: z.string(),
         author: z.object({
@@ -97,7 +94,7 @@ describe("Type inference in createZodRouter handlers", () => {
         tags: z.array(z.string()),
       });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(PostSchema, (ctx) => {
         expectTypeOf(ctx.payload).toMatchTypeOf<{
@@ -116,7 +113,7 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should infer union type payloads", () => {
-      const ActionSchema = messageSchema("ACTION", {
+      const ActionSchema = message("ACTION", {
         action: z.union([
           z.literal("start"),
           z.literal("stop"),
@@ -125,7 +122,7 @@ describe("Type inference in createZodRouter handlers", () => {
         duration: z.number().optional(),
       });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(ActionSchema, (ctx) => {
         expectTypeOf(ctx.payload.action).toEqualTypeOf<
@@ -146,9 +143,9 @@ describe("Type inference in createZodRouter handlers", () => {
 
   describe("No-payload schema handling", () => {
     it("should NOT have payload field for empty schemas", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(PingSchema, (ctx) => {
         // payload should not exist at all
@@ -166,9 +163,9 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should NOT have payload field for schemas with only empty object", () => {
-      const PingEmptySchema = messageSchema("PING_EMPTY", {});
+      const PingEmptySchema = message("PING_EMPTY", {});
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(PingEmptySchema, (ctx) => {
         // @ts-expect-error - payload should not be available
@@ -183,11 +180,11 @@ describe("Type inference in createZodRouter handlers", () => {
 
   describe("Message type literal inference", () => {
     it("should infer message type as literal", () => {
-      const ConnectSchema = messageSchema("CONNECT", {
+      const ConnectSchema = message("CONNECT", {
         version: z.string(),
       });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(ConnectSchema, (ctx) => {
         // ctx.type should be literal "CONNECT", not string
@@ -207,10 +204,10 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should preserve distinct literal types across handlers", () => {
-      const LoginSchema = messageSchema("LOGIN", { username: z.string() });
-      const LogoutSchema = messageSchema("LOGOUT");
+      const LoginSchema = message("LOGIN", { username: z.string() });
+      const LogoutSchema = message("LOGOUT");
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(LoginSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGIN">();
@@ -228,11 +225,11 @@ describe("Type inference in createZodRouter handlers", () => {
 
   describe("Metadata field inference", () => {
     it("should infer base metadata fields", () => {
-      const MessageSchema = messageSchema("MESSAGE", {
+      const MessageSchema = message("MESSAGE", {
         text: z.string(),
       });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(MessageSchema, (ctx) => {
         // Should have base meta fields
@@ -250,13 +247,13 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should infer extended meta fields", () => {
-      const RoomMessageSchema = messageSchema(
+      const RoomMessageSchema = message(
         "ROOM:MESSAGE",
         { text: z.string() },
         { roomId: z.string(), priority: z.number().optional() },
       );
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(RoomMessageSchema, (ctx) => {
         // Should include extended meta fields
@@ -282,12 +279,12 @@ describe("Type inference in createZodRouter handlers", () => {
 
   describe("Send function overloads", () => {
     it("should require payload for send() when schema has payload", () => {
-      const InfoSchema = messageSchema("INFO", { message: z.string() });
+      const InfoSchema = message("INFO", { message: z.string() });
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(InfoSchema, (ctx) => {
-        const AckSchema = messageSchema("ACK", { success: z.boolean() });
+        const AckSchema = message("ACK", { success: z.boolean() });
 
         // Should allow sending with payload
         ctx.send(AckSchema, { success: true });
@@ -303,12 +300,12 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should NOT allow payload for send() when schema has no payload", () => {
-      const DoneSchema = messageSchema("DONE");
+      const DoneSchema = message("DONE");
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(DoneSchema, (ctx) => {
-        const AckSchema = messageSchema("ACK");
+        const AckSchema = message("ACK");
 
         // Should allow sending without payload
         ctx.send(AckSchema);
@@ -323,16 +320,16 @@ describe("Type inference in createZodRouter handlers", () => {
     });
 
     it("should handle send() with extended meta", () => {
-      const ChatSchema = messageSchema(
+      const ChatSchema = message(
         "CHAT",
         { text: z.string() },
         { roomId: z.string() },
       );
 
-      const router = createZodRouter();
+      const router = createRouter();
 
       router.onMessage(ChatSchema, (ctx) => {
-        const ReplySchema = messageSchema(
+        const ReplySchema = message(
           "REPLY",
           { text: z.string() },
           { roomId: z.string() },
@@ -362,25 +359,25 @@ describe("Type inference in createZodRouter handlers", () => {
 
   describe("Router composition type preservation", () => {
     it("should preserve types when composing routers", () => {
-      const AuthSchema = messageSchema("AUTH", {
+      const AuthSchema = message("AUTH", {
         token: z.string(),
       });
-      const ChatSchema = messageSchema("CHAT", {
+      const ChatSchema = message("CHAT", {
         message: z.string(),
       });
 
-      const authRouter = createZodRouter();
+      const authRouter = createRouter();
       authRouter.onMessage(AuthSchema, (ctx) => {
         expectTypeOf(ctx.payload.token).toBeString();
       });
 
-      const chatRouter = createZodRouter();
+      const chatRouter = createRouter();
       chatRouter.onMessage(ChatSchema, (ctx) => {
         expectTypeOf(ctx.payload.message).toBeString();
       });
 
       // Compose routers
-      const mainRouter = createZodRouter();
+      const mainRouter = createRouter();
       mainRouter.addRoutes(authRouter);
       mainRouter.addRoutes(chatRouter);
 
@@ -400,8 +397,8 @@ describe("Type inference in createZodRouter handlers", () => {
         roles: string[];
       }
 
-      const dataRouter = createZodRouter<UserData>();
-      const AuthSchema = messageSchema("AUTH", { token: z.string() });
+      const dataRouter = createRouter<UserData>();
+      const AuthSchema = message("AUTH", { token: z.string() });
 
       dataRouter.onMessage(AuthSchema, (ctx) => {
         // ctx.ws.data should be typed as UserData

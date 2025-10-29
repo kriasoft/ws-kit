@@ -14,26 +14,21 @@
  * @see docs/specs/client.md - Full client API
  */
 
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createClient } from "@ws-kit/client/zod";
-
-// Create schema factory
-const { messageSchema } = createMessageSchema(z);
+import { z, message, wsClient } from "@ws-kit/client/zod";
 
 // Define message schemas
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
-const Logout = messageSchema("LOGOUT"); // No payload
-const LogoutOk = messageSchema("LOGOUT_OK"); // No payload
-const ChatMessage = messageSchema(
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
+const Logout = message("LOGOUT"); // No payload
+const LogoutOk = message("LOGOUT_OK"); // No payload
+const ChatMessage = message(
   "CHAT",
   { text: z.string() },
   { roomId: z.string() }, // Required extended meta
 );
 
 // Create typed client
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com",
   autoConnect: true,
   reconnect: { enabled: true },
@@ -148,11 +143,11 @@ async function requestExamples() {
 // Generic Client (Fallback - No Type Inference)
 // ============================================================================
 
-// For comparison: generic client requires manual type assertions
-import { createClient as createGenericClient } from "@ws-kit/client";
-import type { InferMessage } from "@ws-kit/zod";
+// For comparison: generic client without schema types requires manual type assertions
+import { wsClient as wsClientGeneric } from "@ws-kit/client";
+import type { InferMessage } from "@ws-kit/client/zod";
 
-const genericClient = createGenericClient({ url: "wss://api.example.com" });
+const genericClient = wsClientGeneric({ url: "wss://api.example.com" });
 
 genericClient.on(HelloOk, (msg) => {
   // ⚠️ msg is unknown - requires manual type assertion

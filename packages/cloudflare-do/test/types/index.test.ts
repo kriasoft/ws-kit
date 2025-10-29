@@ -96,10 +96,10 @@ describe("@ws-kit/cloudflare-do type tests", () => {
     });
 
     it("should support generic TData type", () => {
-      type CustomData = {
+      interface CustomData {
         userId: string;
         role: "admin" | "user";
-      };
+      }
 
       const mockRouter = {
         handleOpen: async () => {},
@@ -143,7 +143,9 @@ describe("@ws-kit/cloudflare-do type tests", () => {
     });
 
     it("should support custom type parameter", () => {
-      type CustomData = { userId: string };
+      interface CustomData {
+        userId: string;
+      }
 
       const data: DurableObjectWebSocketData<CustomData> = {
         clientId: "uuid-123",

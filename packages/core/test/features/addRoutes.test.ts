@@ -2,24 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { createRouter, message, z } from "@ws-kit/zod";
 
 describe("addRoutes", () => {
   it("should merge routes from another router", async () => {
     // Create first router with a message handler
-    const router1 = createZodRouter();
-    const PingMessage = messageSchema("PING", { text: z.string().optional() });
+    const router1 = createRouter();
+    const PingMessage = message("PING", { text: z.string().optional() });
     let pingHandlerCalled = false;
     router1.onMessage(PingMessage, () => {
       pingHandlerCalled = true;
     });
 
     // Create second router with different handlers
-    const router2 = createZodRouter();
-    const PongMessage = messageSchema("PONG", { reply: z.string().optional() });
+    const router2 = createRouter();
+    const PongMessage = message("PONG", { reply: z.string().optional() });
     let pongHandlerCalled = false;
     let openHandlerCalled = false;
     let closeHandlerCalled = false;
@@ -76,13 +73,13 @@ describe("addRoutes", () => {
   });
 
   it("should handle multiple route merges", async () => {
-    const mainRouter = createZodRouter();
-    const router1 = createZodRouter();
-    const router2 = createZodRouter();
+    const mainRouter = createRouter();
+    const router1 = createRouter();
+    const router2 = createRouter();
 
-    const Message1 = messageSchema("MSG1", { value: z.string().optional() });
-    const Message2 = messageSchema("MSG2", { value: z.string().optional() });
-    const Message3 = messageSchema("MSG3", { value: z.string().optional() });
+    const Message1 = message("MSG1", { value: z.string().optional() });
+    const Message2 = message("MSG2", { value: z.string().optional() });
+    const Message3 = message("MSG3", { value: z.string().optional() });
 
     let msg1Called = false;
     let msg2Called = false;

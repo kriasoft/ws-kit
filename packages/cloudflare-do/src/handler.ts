@@ -13,15 +13,19 @@ import type { DurableObjectHandler, DurableObjectWebSocketData } from "./types";
  * Create a Cloudflare Durable Object WebSocket handler.
  *
  * Returns a fetch handler compatible with Durable Object script's fetch method.
+ * Accepts both typed routers and core routers.
  *
- * **Usage in a Durable Object**:
+ * **Recommended Usage**:
  * ```typescript
+ * import { createRouter } from "@ws-kit/zod";
  * import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
- * import { createZodRouter } from "@ws-kit/zod";
  *
- * const router = createZodRouter();
+ * const router = createRouter<AppData>();
  *
- * const handler = createDurableObjectHandler({ router: router._core });
+ * const handler = createDurableObjectHandler(router, {
+ *   authenticate: (req) => ({ userId: "123" }),
+ *   maxConnections: 1000,
+ * });
  *
  * export default {
  *   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -41,15 +45,19 @@ import type { DurableObjectHandler, DurableObjectWebSocketData } from "./types";
  */
 export function createDurableObjectHandler<
   TData extends WebSocketData = WebSocketData,
->(options: {
+>(
+  router: WebSocketRouter<any, TData>,
+  options?: {
+    authenticate?: (
+      req: Request,
+    ) => Promise<TData | undefined> | TData | undefined;
+    maxConnections?: number;
+  },
+): DurableObjectHandler {
+  const { authenticate, maxConnections = 1000 } = options ?? {};
+  // Extract core router if a typed router wrapper is passed
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  router: WebSocketRouter<any, TData>;
-  authenticate?: (
-    req: Request,
-  ) => Promise<TData | undefined> | TData | undefined;
-  maxConnections?: number;
-}): DurableObjectHandler {
-  const { router, authenticate, maxConnections = 1000 } = options;
+  const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
   let connectionCount = 0;
 
   return {
@@ -124,7 +132,14 @@ export function createDurableObjectHandler<
 
         // Set up handlers
         try {
-          await router.handleOpen(serverWs);
+          // Validate clientId was set during upgrade
+          if (!serverWs.data?.clientId) {
+            console.error("[ws] WebSocket missing clientId in data, closing");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (server as any).close(1008, "Missing client ID");
+            return;
+          }
+          await coreRouter.handleOpen(serverWs);
         } catch (error) {
           console.error(`[ws] Error in open handler:`, error);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,7 +150,7 @@ export function createDurableObjectHandler<
         (server as any).addEventListener("message", async (event: any) => {
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await router.handleMessage(serverWs, (event as any).data);
+            await coreRouter.handleMessage(serverWs, (event as any).data);
           } catch (error) {
             console.error(`[ws] Error in message handler:`, error);
           }
@@ -145,7 +160,7 @@ export function createDurableObjectHandler<
         (server as any).addEventListener("close", async () => {
           connectionCount--;
           try {
-            await router.handleClose(serverWs, 1006, "Connection closed");
+            await coreRouter.handleClose(serverWs, 1006, "Connection closed");
           } catch (error) {
             console.error(`[ws] Error in close handler:`, error);
           }

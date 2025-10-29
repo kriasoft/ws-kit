@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expectTypeOf } from "bun:test";
+import { describe, it, expect, expectTypeOf } from "bun:test";
 import * as v from "valibot";
 import {
-  createValibotRouter,
+  message,
+  createRouter,
   valibotValidator,
-  createMessageSchema,
   type InferMessage,
   type InferPayload,
   type InferMeta,
@@ -24,16 +24,14 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
     it("getMessageType should accept MessageSchemaType and return string", () => {
       const validator = valibotValidator();
-      const { messageSchema } = createMessageSchema(v);
-      const schema = messageSchema("PING");
+      const schema = message("PING");
       expectTypeOf(validator.getMessageType).toBeFunction();
       expectTypeOf(validator.getMessageType(schema)).toBeString();
     });
 
     it("safeParse should validate and return normalized result", () => {
       const validator = valibotValidator();
-      const { messageSchema } = createMessageSchema(v);
-      const schema = messageSchema("PING", { text: v.string() });
+      const schema = message("PING", { text: v.string() });
 
       const result = validator.safeParse(schema, {
         type: "PING",
@@ -46,22 +44,33 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
   });
 
-  describe("createMessageSchema(v) factory", () => {
-    it("should return factory with messageSchema function", () => {
-      const factory = createMessageSchema(v);
-      expectTypeOf(factory).toHaveProperty("messageSchema");
-      expectTypeOf(factory.messageSchema).toBeFunction();
-      expectTypeOf(factory).toHaveProperty("MessageMetadataSchema");
-      expectTypeOf(factory).toHaveProperty("ErrorCode");
-      expectTypeOf(factory).toHaveProperty("ErrorMessage");
-      expectTypeOf(factory).toHaveProperty("createMessage");
+  describe("message() helper function", () => {
+    it("should create message schema with message() helper", () => {
+      const schema = message("PING");
+      expect(schema).toBeDefined();
+      expectTypeOf(schema).not.toBeNever();
+    });
+
+    it("should support payload schema parameter", () => {
+      const schema = message("MSG", { text: v.string() });
+      expect(schema).toBeDefined();
+      expectTypeOf(schema).not.toBeNever();
+    });
+
+    it("should support extended meta parameter", () => {
+      const schema = message(
+        "ROOM_MSG",
+        { text: v.string() },
+        { roomId: v.string() },
+      );
+      expect(schema).toBeDefined();
+      expectTypeOf(schema).not.toBeNever();
     });
   });
 
   describe("Schema type inference - Type-Only", () => {
     it("should create schema with type and meta only", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       // Verify schema can parse a valid message
       const parsed = v.safeParse(PingSchema, { type: "PING", meta: {} });
@@ -69,8 +78,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should preserve message type literal", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       type ParsedPing = v.InferOutput<typeof PingSchema>;
       expectTypeOf<ParsedPing["type"]>().toEqualTypeOf<"PING">();
@@ -79,8 +87,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
   describe("Schema type inference - With Payload", () => {
     it("should infer payload type correctly", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const MessageSchema = messageSchema("MSG", {
+      const MessageSchema = message("MSG", {
         id: v.number(),
         text: v.string(),
       });
@@ -93,8 +100,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should include payload in context type", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const MessageSchema = messageSchema("MSG", { text: v.string() });
+      const MessageSchema = message("MSG", { text: v.string() });
 
       type Context = MessageContext<typeof MessageSchema, unknown>;
       expectTypeOf<Context>().toHaveProperty("payload");
@@ -102,8 +108,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("no payload schema should not have payload property in context", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       type Context = MessageContext<typeof PingSchema, unknown>;
       // Should not have payload property
@@ -114,8 +119,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
   describe("Schema type inference - With Extended Meta", () => {
     it("should infer extended meta fields", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const RoomMessageSchema = messageSchema(
+      const RoomMessageSchema = message(
         "ROOM_MSG",
         { text: v.string() },
         { roomId: v.string() },
@@ -126,8 +130,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should omit auto-injected timestamp and correlationId from InferMeta", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const MessageSchema = messageSchema("MSG", undefined, {
+      const MessageSchema = message("MSG", undefined, {
         roomId: v.string(),
         userId: v.number(),
       });
@@ -141,8 +144,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should include extended meta in full inferred message", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const MessageSchema = messageSchema("MSG", undefined, {
+      const MessageSchema = message("MSG", undefined, {
         roomId: v.string(),
       });
 
@@ -158,8 +160,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
   describe("Type Inference - Full Message", () => {
     it("should infer complete message with payload", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const LoginSchema = messageSchema("LOGIN", {
+      const LoginSchema = message("LOGIN", {
         username: v.string(),
         password: v.string(),
       });
@@ -179,8 +180,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should infer complete message without payload", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       type Message = InferMessage<typeof PingSchema>;
       expectTypeOf<Message>().toMatchTypeOf<{
@@ -193,8 +193,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should infer message with extended meta", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const MessageSchema = messageSchema(
+      const MessageSchema = message(
         "CHAT",
         { text: v.string() },
         { roomId: v.string() },
@@ -217,10 +216,8 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
   describe("Router type inference", () => {
     it("should preserve schema types in router handlers", () => {
-      const router = createValibotRouter();
-      const { messageSchema } = createMessageSchema(v);
-
-      const LoginSchema = messageSchema("LOGIN", {
+      const router = createRouter();
+      const LoginSchema = message("LOGIN", {
         username: v.string(),
       });
 
@@ -235,34 +232,36 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should type-check send function within handlers", () => {
-      const router = createValibotRouter();
-      const { messageSchema } = createMessageSchema(v);
+      const router = createRouter();
 
-      const RequestSchema = messageSchema("REQUEST", { id: v.number() });
+      const RequestSchema = message("REQUEST", { id: v.number() });
 
       router.onMessage(RequestSchema, (ctx) => {
         // send should be type-safe
         expectTypeOf(ctx.send).toBeFunction();
       });
     });
-  });
 
-  describe("Error schema", () => {
-    it("should provide pre-built error message schema", () => {
-      const { ErrorMessage } = createMessageSchema(v);
+    it("should support middleware with proper typing", () => {
+      const router = createRouter();
+      const TestMessage = message("TEST", { data: v.string() });
 
-      type ErrorMsg = v.InferOutput<typeof ErrorMessage>;
-      expectTypeOf<ErrorMsg>().toHaveProperty("type");
-      expectTypeOf<ErrorMsg["type"]>().toEqualTypeOf<"ERROR">();
-      expectTypeOf<ErrorMsg>().toHaveProperty("payload");
-      expectTypeOf<ErrorMsg["payload"]>().toHaveProperty("code");
+      router.use((ctx, next) => {
+        expectTypeOf(ctx).toBeDefined();
+        expectTypeOf(next).toBeFunction();
+        return next();
+      });
+
+      router.use(TestMessage, (ctx, next) => {
+        expectTypeOf(ctx.payload).toEqualTypeOf<{ data: string }>();
+        return next();
+      });
     });
   });
 
   describe("Input validation with Valibot schemas", () => {
     it("should properly validate strings with minLength", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const SchemaWithValidation = messageSchema("MSG", {
+      const SchemaWithValidation = message("MSG", {
         username: v.pipe(v.string(), v.minLength(3)),
       });
 
@@ -271,8 +270,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should support optional fields", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const SchemaWithOptional = messageSchema("MSG", {
+      const SchemaWithOptional = message("MSG", {
         text: v.string(),
         description: v.optional(v.string()),
       });
@@ -285,8 +283,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
     });
 
     it("should support union types", () => {
-      const { messageSchema } = createMessageSchema(v);
-      const SchemaWithUnion = messageSchema("MSG", {
+      const SchemaWithUnion = message("MSG", {
         value: v.union([v.string(), v.number()]),
       });
 
@@ -299,9 +296,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
   describe("Generic type parameters", () => {
     it("should support generic message handlers", () => {
-      const { messageSchema } = createMessageSchema(v);
-
-      function createHandler<T extends { entries: Record<string, any> }>(
+      function createHandler<T extends { entries?: Record<string, any> }>(
         schema: T,
       ) {
         return (ctx: MessageContext<T, unknown>) => {
@@ -309,7 +304,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
         };
       }
 
-      const schema = messageSchema("TEST");
+      const schema = message("TEST");
       const handler = createHandler(schema as any);
       expectTypeOf(handler).toBeFunction();
     });
@@ -317,22 +312,20 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
   describe("Type comparison with Zod", () => {
     it("should have feature parity with Zod types", () => {
-      const { messageSchema } = createMessageSchema(v);
-
       // Both should support payload
-      const MsgWithPayload = messageSchema("MSG", { text: v.string() });
+      const MsgWithPayload = message("MSG", { text: v.string() });
       type PayloadMsg = InferPayload<typeof MsgWithPayload>;
       expectTypeOf<PayloadMsg>().toEqualTypeOf<{ text: string }>();
 
       // Both should support extended meta
-      const MsgWithMeta = messageSchema("MSG2", undefined, {
+      const MsgWithMeta = message("MSG2", undefined, {
         roomId: v.string(),
       });
       type ExtendedMeta = InferMeta<typeof MsgWithMeta>;
       expectTypeOf<ExtendedMeta>().toEqualTypeOf<{ roomId: string }>();
 
       // Both should support full message inference
-      const FullMsg = messageSchema(
+      const FullMsg = message(
         "FULL",
         { id: v.number() },
         { userId: v.string() },
@@ -341,6 +334,44 @@ describe("@ws-kit/valibot - Type Tests", () => {
       expectTypeOf<Full>().toHaveProperty("type");
       expectTypeOf<Full>().toHaveProperty("payload");
       expectTypeOf<Full>().toHaveProperty("meta");
+    });
+  });
+
+  describe("createRouter with connection data", () => {
+    it("should type connection data through handlers", () => {
+      type AppData = { userId?: string; roles?: string[] };
+      const router = createRouter<AppData>();
+
+      const SecureMessage = message("SECURE", { action: v.string() });
+
+      router.onMessage(SecureMessage, (ctx) => {
+        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+        expectTypeOf(ctx.ws.data).toHaveProperty("roles");
+      });
+    });
+
+    it("should support connection data assignment", () => {
+      type AppData = { userId?: string };
+      const router = createRouter<AppData>();
+
+      const LoginMessage = message("LOGIN", { id: v.string() });
+
+      router.onMessage(LoginMessage, (ctx) => {
+        ctx.assignData({ userId: ctx.payload.id });
+      });
+    });
+
+    it("should type connection data in lifecycle callbacks", () => {
+      type AppData = { userId?: string };
+      const router = createRouter<AppData>();
+
+      router.onOpen((ctx) => {
+        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+      });
+
+      router.onClose((ctx) => {
+        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+      });
     });
   });
 });

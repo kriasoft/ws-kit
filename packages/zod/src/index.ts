@@ -4,25 +4,95 @@
 /**
  * @ws-kit/zod - Zod validator adapter
  *
- * Zod-based validator adapter providing:
- * - zodValidator() for setting up Zod validation
- * - createMessageSchema() factory for defining typed message schemas
- * - Type-safe message handlers with discriminated union support
- * - Full TypeScript inference from schema to handler context
+ * Type-safe WebSocket router with Zod validation.
+ *
+ * Core exports (export-with-helpers pattern):
+ * - z: Re-exported Zod instance (canonical import source)
+ * - message(): Helper to create type-safe message schemas
+ * - createRouter(): Create a type-safe router
+ *
+ * Additional exports:
+ * - zodValidator(): Validator adapter for core router
+ * - wsClient(): Type-safe WebSocket client
+ *
+ * Legacy exports (deprecated, backwards compatible):
+ * - createMessageSchema(): Old factory pattern (use message() instead)
+ * - createZodRouter(): Old function name (use createRouter() instead)
+ *
+ * @example Modern API (recommended)
+ * ```typescript
+ * import { z, message, createRouter } from "@ws-kit/zod";
+ *
+ * const LoginMessage = message("LOGIN", {
+ *   username: z.string(),
+ *   password: z.string(),
+ * });
+ *
+ * type AppData = { userId?: string };
+ * const router = createRouter<AppData>();
+ *
+ * router.onMessage(LoginMessage, (ctx) => {
+ *   // ctx.payload.username is typed as string
+ * });
+ * ```
  */
 
-// Main exports
+// Import Zod as canonical instance
+import { z } from "zod";
+import { createMessageSchema } from "./schema";
+
+// Create message helper using canonical Zod instance
+// (This creates the messageSchema function without requiring a factory)
+const { messageSchema: message, ErrorMessage } = createMessageSchema(z);
+
+// Main exports: export-with-helpers pattern
+export { z, message, ErrorMessage };
 export { default as zodValidator } from "./validator";
-export { createMessageSchema } from "./schema";
 export { createZodRouter } from "./router";
+
+// Convenience: export createRouter as alias for createZodRouter
+/**
+ * Create a type-safe WebSocket router using Zod validation.
+ *
+ * This is the recommended function name. Use this instead of createZodRouter().
+ *
+ * @example
+ * ```typescript
+ * import { createRouter } from "@ws-kit/zod";
+ *
+ * type AppData = { userId?: string };
+ * const router = createRouter<AppData>();
+ * ```
+ *
+ * @see createZodRouter - Deprecated name, same functionality
+ */
+export { createZodRouter as createRouter } from "./router";
 
 // Utility exports for advanced use cases
 export { ZodValidatorAdapter } from "./adapter";
+
+// Backwards compatibility: re-export old factory (deprecated)
+/**
+ * @deprecated Use `message()` helper instead.
+ *
+ * ```typescript
+ * // ❌ Old way (factory pattern)
+ * import { createMessageSchema } from "@ws-kit/zod";
+ * const { messageSchema } = createMessageSchema(z);
+ * const LoginSchema = messageSchema("LOGIN", { username: z.string() });
+ *
+ * // ✅ New way (export-with-helpers)
+ * import { message } from "@ws-kit/zod";
+ * const LoginSchema = message("LOGIN", { username: z.string() });
+ * ```
+ */
+export { createMessageSchema } from "./schema";
 
 // Type exports
 export type { AnyMessageSchema, MessageSchema } from "./schema";
 export type { TypedZodRouter } from "./router";
 export type {
+  ErrorCode,
   InferMeta,
   InferMessage,
   InferPayload,

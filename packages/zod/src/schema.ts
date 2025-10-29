@@ -221,7 +221,7 @@ export function createMessageSchema(zod: ZodLike) {
   const ErrorMessage = messageSchema("ERROR", {
     code: ErrorCode,
     message: zod.string().optional(),
-    context: zod.record(zod.string(), zod.any()).optional(),
+    details: zod.record(zod.string(), zod.any()).optional(),
   });
 
   // Client-side helper: validates and creates messages for sending

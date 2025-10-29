@@ -12,10 +12,7 @@
  */
 
 import { describe, expect, expectTypeOf, it, mock } from "bun:test";
-import { z } from "zod";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { createRouter, message, z } from "@ws-kit/zod";
 
 // Mock WebSocket
 class MockServerWebSocket {
@@ -38,8 +35,8 @@ class MockServerWebSocket {
 describe("Timestamp Usage Patterns", () => {
   describe("ctx.receivedAt - Server Authoritative Time", () => {
     it("should provide receivedAt in message context", async () => {
-      const TestMsg = messageSchema("TEST", { id: z.number() });
-      const router = createZodRouter();
+      const TestMsg = message("TEST", { id: z.number() });
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const handlerMock = mock((ctx) => {
@@ -65,8 +62,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should capture receivedAt before parsing (ingress time)", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       let capturedReceivedAt: number | undefined;
@@ -92,8 +89,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should use receivedAt for server-side ordering", async () => {
-      const TestMsg = messageSchema("TEST", { data: z.string() });
-      const router = createZodRouter();
+      const TestMsg = message("TEST", { data: z.string() });
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const receivedTimes: number[] = [];
@@ -128,8 +125,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should be independent of client-provided meta.timestamp", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       let serverTime: number | undefined;
@@ -162,8 +159,8 @@ describe("Timestamp Usage Patterns", () => {
 
   describe("meta.timestamp - Client Producer Time", () => {
     it("should be optional in message context", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         // Type check: timestamp is optional
@@ -172,8 +169,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should accept messages without timestamp", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const handlerMock = mock((ctx) => {
@@ -196,8 +193,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should preserve client-provided timestamp", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const clientTimestamp = 1234567890;
@@ -221,8 +218,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should be used for UI display (not server logic)", async () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
-      const router = createZodRouter();
+      const ChatMsg = message("CHAT", { text: z.string() });
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       router.onMessage(ChatMsg, (ctx) => {
@@ -254,8 +251,8 @@ describe("Timestamp Usage Patterns", () => {
 
   describe("Timestamp Decision Matrix", () => {
     it("should use receivedAt for rate limiting", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       // Rate limiter state
@@ -289,8 +286,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should use receivedAt for event ordering", async () => {
-      const EventMsg = messageSchema("EVENT", { action: z.string() });
-      const router = createZodRouter();
+      const EventMsg = message("EVENT", { action: z.string() });
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const events: { action: string; serverTime: number }[] = [];
@@ -330,8 +327,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should use timestamp for UI lag display", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       router.onMessage(TestMsg, (ctx) => {
@@ -357,8 +354,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should use receivedAt for TTL checks", async () => {
-      const RequestMsg = messageSchema("REQUEST", { id: z.string() });
-      const router = createZodRouter();
+      const RequestMsg = message("REQUEST", { id: z.string() });
+      const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const TTL_MS = 5000; // 5 seconds
@@ -391,8 +388,8 @@ describe("Timestamp Usage Patterns", () => {
 
   describe("Type Safety", () => {
     it("should require receivedAt to be number type", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         expectTypeOf(ctx.receivedAt).toBeNumber();
@@ -401,8 +398,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should make meta.timestamp optional number", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
@@ -410,8 +407,8 @@ describe("Timestamp Usage Patterns", () => {
     });
 
     it("should distinguish between the two timestamps", async () => {
-      const TestMsg = messageSchema("TEST");
-      const router = createZodRouter();
+      const TestMsg = message("TEST");
+      const router = createRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         // Different types and semantics

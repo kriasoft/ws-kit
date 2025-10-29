@@ -4,19 +4,16 @@
 /**
  * Example of using the type-safe browser client
  * NOTE: This example demonstrates the client API. For actual browser usage,
- * import from "@ws-kit/client" (not available in this server-side example).
+ * import from "@ws-kit/client/zod" (not available in this server-side example).
  */
 
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { z, message, wsClient } from "@ws-kit/client/zod";
 
 /**
  * Browser client usage example
  * In a real browser environment, you would:
  *
- * import { createClient } from "@ws-kit/client";
+ * import { z, message, wsClient } from "@ws-kit/client/zod";
  * import { JoinRoomMessage, SendChatMessage, ... } from "./shared/schemas";
  */
 export function exampleBrowserClient() {
@@ -24,34 +21,34 @@ export function exampleBrowserClient() {
   // Schemas would be defined and shared between client and server in real app
   /*
   // Define schemas (would be shared with server in real app)
-  const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+  const JoinRoomMessage = message("JOIN_ROOM", {
     roomId: z.string(),
   });
 
-  const UserJoinedMessage = messageSchema("USER_JOINED", {
+  const UserJoinedMessage = message("USER_JOINED", {
     roomId: z.string(),
     userId: z.string(),
   });
 
-  const SendChatMessage = messageSchema("SEND_MESSAGE", {
+  const SendChatMessage = message("SEND_MESSAGE", {
     roomId: z.string(),
     text: z.string(),
   });
 
-  const NewMessageReceived = messageSchema("NEW_MESSAGE", {
+  const NewMessageReceived = message("NEW_MESSAGE", {
     roomId: z.string(),
     userId: z.string(),
     text: z.string(),
     timestamp: z.number(),
   });
 
-  const PingMessage = messageSchema("PING");
-  const PongMessage = messageSchema("PONG", {
+  const PingMessage = message("PING");
+  const PongMessage = message("PONG", {
     timestamp: z.number(),
   });
 
   // Client setup and usage
-  const client = createClient({
+  const client = wsClient({
     url: "wss://api.example.com/ws",
     reconnect: { enabled: true },
     auth: {
@@ -98,14 +95,13 @@ export function exampleBrowserClient() {
 }
 
 /**
- * Legacy example: Manual WebSocket with createMessage helper
- * This approach is still supported but the createClient API is recommended for browsers.
+ * Alternative example: Manual WebSocket with message helper
+ * For browsers, the wsClient() API above is recommended.
+ * This shows how to work with raw WebSocket connections.
  */
 export function exampleManualWebSocket() {
-  const { createMessage } = createMessageSchema(z);
-
-  const PingMessage = messageSchema("PING");
-  const JoinRoomMessage = messageSchema("JOIN_ROOM", {
+  const PingMessage = message("PING");
+  const JoinRoomMessage = message("JOIN_ROOM", {
     roomId: z.string(),
   });
 
@@ -115,16 +111,21 @@ export function exampleManualWebSocket() {
     console.log("Connected to server");
 
     // Send a ping message without payload
-    const ping = createMessage(PingMessage, undefined);
-    if (ping.success) {
-      ws.send(JSON.stringify(ping.data));
-    }
+    ws.send(
+      JSON.stringify({
+        type: "PING",
+        meta: { timestamp: Date.now() },
+      }),
+    );
 
     // Join a room
-    const joinMsg = createMessage(JoinRoomMessage, { roomId: "general" });
-    if (joinMsg.success) {
-      ws.send(JSON.stringify(joinMsg.data));
-    }
+    ws.send(
+      JSON.stringify({
+        type: "JOIN_ROOM",
+        meta: { timestamp: Date.now() },
+        payload: { roomId: "general" },
+      }),
+    );
   };
 
   ws.onmessage = (event) => {
@@ -138,37 +139,29 @@ export function exampleManualWebSocket() {
 }
 
 /**
- * Legacy example: Authentication with complex schemas using createMessage
+ * Example: Authentication with type-safe schemas
  */
 export function exampleAuthentication(ws: WebSocket) {
-  const { createMessage } = createMessageSchema(z);
-
-  const AuthMessage = messageSchema("AUTH", {
+  const AuthMessage = message("AUTH", {
     username: z.string(),
     password: z.string(),
   });
 
-  const authMsg = createMessage(
-    AuthMessage,
-    { username: "user123", password: "secure-pass" },
-    { timestamp: Date.now() },
+  // Send auth message
+  ws.send(
+    JSON.stringify({
+      type: "AUTH",
+      meta: { timestamp: Date.now() },
+      payload: { username: "user123", password: "secure-pass" },
+    }),
   );
-
-  if (authMsg.success) {
-    ws.send(JSON.stringify(authMsg.data));
-  } else {
-    // Handle validation errors
-    console.error("Invalid auth data:", authMsg.error.issues);
-  }
 }
 
 /**
- * Legacy example: Union types for different message variants
+ * Example: Union types for different message variants
  */
 export function exampleActionMessages(ws: WebSocket) {
-  const { createMessage } = createMessageSchema(z);
-
-  const ActionMessage = messageSchema("ACTION", {
+  const ActionMessage = message("ACTION", {
     action: z.union([
       z.literal("start"),
       z.literal("stop"),
@@ -180,27 +173,38 @@ export function exampleActionMessages(ws: WebSocket) {
   });
 
   // Start action
-  const startMsg = createMessage(ActionMessage, {
-    action: "start",
-    gameId: "game123",
-  });
+  ws.send(
+    JSON.stringify({
+      type: "ACTION",
+      meta: { timestamp: Date.now() },
+      payload: {
+        action: "start",
+        gameId: "game123",
+      },
+    }),
+  );
 
   // Pause action
-  const pauseMsg = createMessage(ActionMessage, {
-    action: "pause",
-    position: { x: 10, y: 20 },
-  });
+  ws.send(
+    JSON.stringify({
+      type: "ACTION",
+      meta: { timestamp: Date.now() },
+      payload: {
+        action: "pause",
+        position: { x: 10, y: 20 },
+      },
+    }),
+  );
 
   // Stop action
-  const stopMsg = createMessage(ActionMessage, {
-    action: "stop",
-    reason: "User requested",
-  });
-
-  // Send all messages
-  [startMsg, pauseMsg, stopMsg].forEach((msg) => {
-    if (msg.success) {
-      ws.send(JSON.stringify(msg.data));
-    }
-  });
+  ws.send(
+    JSON.stringify({
+      type: "ACTION",
+      meta: { timestamp: Date.now() },
+      payload: {
+        action: "stop",
+        reason: "User requested",
+      },
+    }),
+  );
 }

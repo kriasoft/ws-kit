@@ -139,21 +139,23 @@ export interface ZodWebSocketClient
 }
 
 /**
- * Create typed WebSocket client with Zod schema inference.
+ * Create a typed WebSocket client with Zod schema inference.
  *
  * Pure type cast - zero runtime overhead compared to generic client.
  * All type safety is compile-time only via TypeScript inference.
  *
+ * This is the recommended function name, emphasizing that this creates
+ * a WebSocket client (vs other factory patterns).
+ *
  * @example
  * ```typescript
+ * import { message } from "@ws-kit/zod";
+ * import { wsClient } from "@ws-kit/client/zod";
  * import { z } from "zod";
- * import { createMessageSchema } from "@ws-kit/zod";
- * import { createClient } from "@ws-kit/client/zod";
  *
- * const { messageSchema } = createMessageSchema(z);
- * const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+ * const HelloOk = message("HELLO_OK", { text: z.string() });
  *
- * const client = createClient({ url: "wss://api.example.com" });
+ * const client = wsClient({ url: "wss://api.example.com" });
  *
  * client.on(HelloOk, (msg) => {
  *   // ✅ msg fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
@@ -161,6 +163,26 @@ export interface ZodWebSocketClient
  * });
  * ```
  */
-export function createClient(opts: ClientOptions): ZodWebSocketClient {
+export function wsClient(opts: ClientOptions): ZodWebSocketClient {
   return createGenericClient(opts) as ZodWebSocketClient;
+}
+
+/**
+ * @deprecated Use `wsClient()` instead.
+ *
+ * The new `wsClient()` name emphasizes that this creates a WebSocket client
+ * and is more consistent with the export-with-helpers pattern.
+ *
+ * ```typescript
+ * // ❌ Old way
+ * import { createClient } from "@ws-kit/client/zod";
+ * const client = createClient({ url: "..." });
+ *
+ * // ✅ New way
+ * import { wsClient } from "@ws-kit/client/zod";
+ * const client = wsClient({ url: "..." });
+ * ```
+ */
+export function createClient(opts: ClientOptions): ZodWebSocketClient {
+  return wsClient(opts);
 }

@@ -60,8 +60,8 @@ export interface ErrorPayload {
   /** Human-readable error message */
   message?: string;
 
-  /** Additional debugging context (varies by error type) */
-  context?: Record<string, unknown>;
+  /** Additional debugging details (varies by error type) */
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -71,17 +71,17 @@ export interface ErrorPayload {
  */
 export class WebSocketError extends Error {
   code: ErrorCode;
-  context?: Record<string, unknown>;
+  details?: Record<string, unknown>;
 
   constructor(
     code: ErrorCode,
     message?: string,
-    context?: Record<string, unknown>,
+    details?: Record<string, unknown>,
   ) {
     super(message || code);
     this.name = "WebSocketError";
     this.code = code;
-    this.context = context;
+    this.details = details;
   }
 
   /** Convert to error payload for sending to client */
@@ -89,7 +89,7 @@ export class WebSocketError extends Error {
     return {
       code: this.code,
       message: this.message,
-      context: this.context,
+      details: this.details,
     };
   }
 }

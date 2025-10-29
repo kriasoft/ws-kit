@@ -14,6 +14,7 @@ import type {
   MessageHandler,
   AuthHandler,
   ErrorHandler,
+  Middleware,
   MessageSchemaType,
   MessageHandlerEntry,
   WebSocketRouterOptions,
@@ -75,9 +76,15 @@ export class WebSocketRouter<
   private readonly closeHandlers: CloseHandler<TData>[] = [];
   private readonly authHandlers: AuthHandler<TData>[] = [];
   private readonly errorHandlers: ErrorHandler<TData>[] = [];
+  private readonly middlewares: Middleware<TData>[] = [];
+  private readonly routeMiddleware = new Map<string, Middleware<TData>[]>(); // Per-route middleware by message type
 
   // Heartbeat state
-  private readonly heartbeatConfig?: { intervalMs: number; timeoutMs: number };
+  private readonly heartbeatConfig?: {
+    intervalMs: number;
+    timeoutMs: number;
+    onStaleConnection?: (clientId: string, ws: ServerWebSocket<TData>) => void;
+  };
   private readonly heartbeatStates = new Map<string, HeartbeatState>();
 
   // Limits
@@ -98,6 +105,7 @@ export class WebSocketRouter<
         options.heartbeat?.intervalMs ?? DEFAULT_CONFIG.HEARTBEAT_INTERVAL_MS,
       timeoutMs:
         options.heartbeat?.timeoutMs ?? DEFAULT_CONFIG.HEARTBEAT_TIMEOUT_MS,
+      onStaleConnection: options.heartbeat?.onStaleConnection,
     };
 
     // Register hooks if provided
@@ -211,6 +219,106 @@ export class WebSocketRouter<
     return this;
   }
 
+  /**
+   * Register global middleware for all messages.
+   *
+   * Middleware executes before message handlers in registration order.
+   * Each middleware receives a `next()` function to proceed to the next
+   * middleware or handler. Middleware can return early to skip the handler.
+   *
+   * @param middleware - Middleware function
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * // Global authentication middleware
+   * router.use((ctx, next) => {
+   *   if (!ctx.ws.data?.userId) {
+   *     ctx.error("AUTH_ERROR", "Not authenticated");
+   *     return; // Skip handler
+   *   }
+   *   return next(); // Proceed to handler
+   * });
+   *
+   * // Logging middleware with async support
+   * router.use(async (ctx, next) => {
+   *   const start = performance.now();
+   *   await next(); // Wait for handler
+   *   const duration = performance.now() - start;
+   *   console.log(`[${ctx.type}] ${duration}ms`);
+   * });
+   * ```
+   */
+  use(middleware: Middleware<TData>): this;
+
+  /**
+   * Register per-route middleware for a specific message type.
+   *
+   * Runs only for messages matching the given schema, after global middleware.
+   *
+   * @param schema - Message schema (identifies the message type)
+   * @param middleware - Middleware function to run for this message type
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * const RateLimiter = new Map<string, number[]>();
+   *
+   * // Rate limiting for SendMessage only
+   * router.use(SendMessage, (ctx, next) => {
+   *   const userId = ctx.ws.data?.userId || "anon";
+   *   const now = Date.now();
+   *   const timestamps = RateLimiter.get(userId) || [];
+   *   const recent = timestamps.filter((t) => now - t < 1000);
+   *
+   *   if (recent.length > 10) {
+   *     ctx.error("RATE_LIMIT", "Max 10 messages per second");
+   *     return;
+   *   }
+   *
+   *   recent.push(now);
+   *   RateLimiter.set(userId, recent);
+   *   return next();
+   * });
+   *
+   * router.onMessage(SendMessage, (ctx) => {
+   *   // This handler only runs if rate limit middleware calls next()
+   *   console.log("Message:", ctx.payload);
+   * });
+   * ```
+   */
+  use<Schema extends MessageSchemaType>(
+    schema: Schema,
+    middleware: Middleware<TData>,
+  ): this;
+
+  use<Schema extends MessageSchemaType>(
+    schemaOrMiddleware: Schema | Middleware<TData>,
+    middleware?: Middleware<TData>,
+  ): this {
+    // If only one argument, it's global middleware
+    if (middleware === undefined) {
+      this.middlewares.push(schemaOrMiddleware as Middleware<TData>);
+      return this;
+    }
+
+    // If two arguments, it's per-route middleware
+    if (!this.validator) {
+      console.warn(
+        "[ws] No validator configured. Per-route middleware will not be registered.",
+      );
+      return this;
+    }
+
+    const messageType = this.validator.getMessageType(
+      schemaOrMiddleware as MessageSchemaType,
+    );
+    const routeMiddlewareList = this.routeMiddleware.get(messageType) || [];
+    routeMiddlewareList.push(middleware);
+    this.routeMiddleware.set(messageType, routeMiddlewareList);
+    return this;
+  }
+
   // ———————————————————————————————————————————————————————————————————————————
   // Public API - Router Composition & Publishing
   // ———————————————————————————————————————————————————————————————————————————
@@ -251,6 +359,8 @@ export class WebSocketRouter<
       closeHandlers: CloseHandler<TData>[];
       authHandlers: AuthHandler<TData>[];
       errorHandlers: ErrorHandler<TData>[];
+      middlewares: Middleware<TData>[];
+      routeMiddleware: Map<string, Middleware<TData>[]>;
     }
 
     const other = router as unknown as AccessibleRouter;
@@ -280,6 +390,19 @@ export class WebSocketRouter<
     // Merge error handlers
     if (other.errorHandlers) {
       this.errorHandlers.push(...other.errorHandlers);
+    }
+
+    // Merge global middleware
+    if (other.middlewares) {
+      this.middlewares.push(...other.middlewares);
+    }
+
+    // Merge per-route middleware
+    if (other.routeMiddleware) {
+      other.routeMiddleware.forEach((middlewares, messageType) => {
+        const existing = this.routeMiddleware.get(messageType) || [];
+        this.routeMiddleware.set(messageType, [...existing, ...middlewares]);
+      });
     }
 
     return this;
@@ -582,28 +705,139 @@ export class WebSocketRouter<
       meta.clientId = clientId;
       meta.receivedAt = receivedAt;
 
-      // Step 8: Handler dispatch
+      // Step 8: Handler dispatch with middleware pipeline
+      // Create error sending function for type-safe error responses
+      const errorSend = (
+        code: string,
+        message: string,
+        details?: Record<string, unknown>,
+      ) => {
+        try {
+          if (!this.validator) {
+            console.warn("[ws] No validator configured. Cannot send error.");
+            return;
+          }
+
+          // Create error message using the standard ERROR type
+          // Error messages have code, message, and optional details fields
+          const errorMessage = {
+            type: "ERROR",
+            meta: {
+              timestamp: Date.now(),
+            },
+            payload: {
+              code,
+              message,
+              ...(details && { details }),
+            },
+          };
+
+          // Validate error message structure (lenient - allow any valid structure)
+          // We don't have the ERROR schema here, so we'll just send it raw after validation
+          const messageType = "ERROR";
+
+          // Send error message
+          ws.send(
+            JSON.stringify({
+              type: messageType,
+              meta: {
+                timestamp: Date.now(),
+              },
+              payload: {
+                code,
+                message,
+                ...(details && { details }),
+              },
+            }),
+          );
+        } catch (error) {
+          console.error("[ws] Error sending error message:", error);
+        }
+      };
+
+      // Create assignData function for clean connection data updates
+      const assignData = (partial: Partial<TData>): void => {
+        try {
+          if (ws.data && typeof ws.data === "object") {
+            Object.assign(ws.data, partial);
+          }
+        } catch (error) {
+          console.error("[ws] Error assigning data to connection:", error);
+        }
+      };
+
+      // Create subscribe function as convenience method
+      const subscribe = (channel: string): void => {
+        try {
+          ws.subscribe(channel);
+        } catch (error) {
+          console.error("[ws] Error subscribing to channel:", error);
+        }
+      };
+
+      // Create unsubscribe function as convenience method
+      const unsubscribe = (channel: string): void => {
+        try {
+          ws.unsubscribe(channel);
+        } catch (error) {
+          console.error("[ws] Error unsubscribing from channel:", error);
+        }
+      };
+
       const context: MessageContext<MessageSchemaType, TData> = {
         ws,
         type: messageType,
         meta: validatedData.meta,
         receivedAt: receivedAt,
         send,
+        error: errorSend,
+        reply: send, // Semantic alias for send() in request/response patterns
+        assignData,
+        subscribe,
+        unsubscribe,
         ...(validatedData.payload !== undefined && {
           payload: validatedData.payload,
         }),
       };
 
-      const result = handlerEntry.handler(context);
+      // Execute middleware pipeline followed by handler
+      const executeHandlerWithMiddleware = async (): Promise<void> => {
+        // Build combined middleware list: global + per-route
+        const allMiddleware: Middleware<TData>[] = [
+          ...this.middlewares,
+          ...(this.routeMiddleware.get(messageType) || []),
+        ];
+        let middlewareIndex = 0;
 
-      // Handle async handlers
-      if (result instanceof Promise) {
-        result.catch((error) => {
-          this.callErrorHandlers(
-            error instanceof Error ? error : new Error(String(error)),
-            context,
-          );
-        });
+        const next = async (): Promise<void> => {
+          // Execute remaining middleware in order
+          if (middlewareIndex < allMiddleware.length) {
+            const middleware = allMiddleware[middlewareIndex++];
+            const result = middleware(context, next);
+            if (result instanceof Promise) {
+              await result;
+            }
+          } else {
+            // All middleware executed, now dispatch handler
+            const result = handlerEntry.handler(context);
+            if (result instanceof Promise) {
+              await result;
+            }
+          }
+        };
+
+        // Start middleware pipeline and await it
+        await next();
+      };
+
+      // Execute the middleware pipeline with proper error handling
+      try {
+        await executeHandlerWithMiddleware();
+      } catch (error) {
+        this.callErrorHandlers(
+          error instanceof Error ? error : new Error(String(error)),
+          context,
+        );
       }
     } catch (error) {
       this.callErrorHandlers(
@@ -845,6 +1079,17 @@ export class WebSocketRouter<
     // Set new timeout
     heartbeat.pongTimer = setTimeout(() => {
       console.warn(`[ws] Heartbeat timeout for ${clientId}`);
+      // Call optional callback before closing
+      if (this.heartbeatConfig?.onStaleConnection) {
+        try {
+          this.heartbeatConfig.onStaleConnection(clientId, heartbeat.ws);
+        } catch (error) {
+          console.error(
+            `[ws] Error in onStaleConnection callback for ${clientId}:`,
+            error,
+          );
+        }
+      }
       heartbeat.ws.close(4000, "HEARTBEAT_TIMEOUT");
       this.stopHeartbeat(clientId);
     }, timeoutMs) as unknown as ReturnType<typeof setTimeout>;

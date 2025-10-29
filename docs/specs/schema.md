@@ -1,46 +1,22 @@
 # Message Schema Specification
 
-**Status**: ✅ Implemented (factory pattern, conditional typing)
+**Status**: ✅ Implemented (export-with-helpers pattern, conditional typing)
 
-## Factory Pattern (Critical)
+## Export-with-Helpers Pattern
 
-**MUST use factory pattern** to avoid dual package hazard with discriminated unions:
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema, createMessage } = createMessageSchema(z);
-```
-
-## Canonical Import Patterns {#Canonical-Import-Patterns}
-
-**Single source of truth for all imports.** Reference this section from other specs instead of duplicating.
+Import validator and helpers from a single canonical source. This eliminates factory complexity and prevents dual-package hazards.
 
 ```typescript
-// Server (Zod) - ✅ Recommended for type-safe routing
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+// Server (Zod) - ✅ RECOMMENDED
+import { z, message, createRouter } from "@ws-kit/zod";
 
-// Server (Valibot) - ✅ Recommended for type-safe routing
-import { createValibotRouter, createMessageSchema } from "@ws-kit/valibot";
+// Server (Valibot) - ✅ RECOMMENDED
+import { v, message, createRouter } from "@ws-kit/valibot";
 
-// Server (Advanced - custom validators only)
-import { WebSocketRouter } from "@ws-kit/core";
-import { zodValidator } from "@ws-kit/zod"; // or valibotValidator
-
-// Client (Typed - ✅ Recommended for type safety)
-import { createClient } from "@ws-kit/client/zod"; // Zod
-import { createClient } from "@ws-kit/client/valibot"; // Valibot
-
-// Client (Generic - custom validators only; handlers infer as unknown)
-import { createClient } from "@ws-kit/client";
-
-// Shared schemas (portable between client/server)
-const { messageSchema } = createMessageSchema(z); // Use validator instance
-
-// Broadcasting (server-side multicast)
-import { publish } from "@ws-kit/zod/publish"; // Zod
-import { publish } from "@ws-kit/valibot/publish"; // Valibot
+// Client (Typed) - ✅ RECOMMENDED
+import { wsClient } from "@ws-kit/client/zod";
+// or
+import { wsClient } from "@ws-kit/client/valibot";
 
 // Type imports (same package as your schemas)
 import type {
@@ -51,14 +27,42 @@ import type {
 } from "@ws-kit/zod"; // or /valibot
 ```
 
+**Why This Pattern (See ADR-007):**
+
+- **Single canonical source** — Import `z`, `message()`, and `createRouter()` from ONE place to prevent dual-package hazards
+- **No factory complexity** — `message()` is a plain helper, not a factory return. No `createMessageSchema()` setup needed.
+- **Runtime identity preserved** — Validator is re-exported as-is; no prototype tricks, no `instanceof` issues
+- **Schemas are portable** — Define once, use in client + server
+- **Full type inference** — Constrained generics flow through handlers without assertions
+- **Tree-shakeable** — Bundlers eliminate unused helpers
+
+## Canonical Import Patterns {#Canonical-Import-Patterns}
+
+**Single source of truth for all imports.** Reference this section from other specs instead of duplicating.
+
+```typescript
+// ✅ Server setup (Zod)
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve";
+
+type AppData = { userId?: string };
+const router = createRouter<AppData>();
+
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
+
+// ✅ Server setup (Valibot)
+import { v, message, createRouter } from "@ws-kit/valibot";
+
+// ✅ Client setup (Typed)
+import { wsClient } from "@ws-kit/client/zod";
+const client = wsClient<typeof router>("ws://localhost:3000");
+
+// ❌ NEVER: Mixing imports from different sources
+// Using both 'zod' and '@ws-kit/zod' risks dual package hazard
+```
+
 **Validator Consistency**: Use the same validator (`/zod` or `/valibot`) across client, server, and schemas within a project. Mixing validators breaks type compatibility (TypeScript enforces this at compile time).
-
-**Key points:**
-
-- Schemas are **portable** — define once in shared module, import in both client and server
-- Use **typed router factories** (`createZodRouter`, `createValibotRouter`) for full type inference in handlers (see ADR-004 for details)
-- Use **typed clients** (`/zod/client`, `/valibot/client`) for automatic inference (see ADR-002)
-- Generic client (`/client`) and core router require manual type assertions; use only for custom validators
 
 ## Strict Schemas (Required) {#Strict-Schemas}
 
@@ -187,7 +191,7 @@ See ADR-001 for implementation details.
 ### Without Payload
 
 ```typescript
-const PingMessage = messageSchema("PING");
+const PingMessage = message("PING");
 // { type: "PING", meta: { ... } }
 // Handler: ctx.type === "PING", no ctx.payload
 ```
@@ -195,7 +199,7 @@ const PingMessage = messageSchema("PING");
 ### With Payload
 
 ```typescript
-const JoinRoom = messageSchema("JOIN_ROOM", {
+const JoinRoom = message("JOIN_ROOM", {
   roomId: z.string(),
 });
 // { type: "JOIN_ROOM", meta: { ... }, payload: { roomId: string } }
@@ -205,7 +209,7 @@ const JoinRoom = messageSchema("JOIN_ROOM", {
 ### Extended Meta
 
 ```typescript
-const RoomMessage = messageSchema(
+const RoomMessage = message(
   "ROOM_MSG",
   { text: z.string() },
   { roomId: z.string() }, // Extended meta
@@ -217,20 +221,33 @@ const RoomMessage = messageSchema(
 ## Type Inference
 
 ```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import type { MessageContext } from "@ws-kit/zod";
+
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+
 // Schema type
 type JoinRoomType = z.infer<typeof JoinRoom>;
 
-// Handler context type
-import type { MessageContext } from "@ws-kit/zod";
-type Ctx = MessageContext<typeof JoinRoom, WebSocketData<{}>>;
-// {
-//   ws: ServerWebSocket<...>,
-//   type: "JOIN_ROOM",
-//   meta: { correlationId?, timestamp?, ... },
-//   payload: { roomId: string },  // ✅ Only if schema defines it
-//   receivedAt: number,
-//   send: SendFunction
-// }
+// Handler context type (automatically inferred)
+type AppData = { userId?: string };
+const router = createRouter<AppData>();
+
+router.onMessage(JoinRoom, (ctx) => {
+  // ctx is fully typed by schema!
+  // {
+  //   ws: ServerWebSocket<AppData & { clientId: string }>,
+  //   type: "JOIN_ROOM" (literal),
+  //   meta: { correlationId?, timestamp?, ... },
+  //   payload: { roomId: string },  // ✅ Required (schema defines it)
+  //   receivedAt: number,
+  //   send: (schema, payload) => void,
+  //   reply: (schema, payload) => void,
+  //   error: (code, message, details?) => void,
+  //   subscribe: (topic) => void,
+  //   unsubscribe: (topic) => void,
+  // }
+});
 ```
 
 ## Conditional Payload Typing
@@ -238,8 +255,8 @@ type Ctx = MessageContext<typeof JoinRoom, WebSocketData<{}>>;
 **Key Feature**: `ctx.payload` exists **only** when schema defines it:
 
 ```typescript
-const WithPayload = messageSchema("WITH", { id: z.number() });
-const WithoutPayload = messageSchema("WITHOUT");
+const WithPayload = message("WITH", { id: z.number() });
+const WithoutPayload = message("WITHOUT");
 
 router.onMessage(WithPayload, (ctx) => {
   ctx.payload.id; // ✅ Typed as number
@@ -253,33 +270,34 @@ router.onMessage(WithoutPayload, (ctx) => {
 ## Discriminated Unions
 
 ```typescript
-const PingMsg = messageSchema("PING");
-const PongMsg = messageSchema("PONG", { reply: z.string() });
+const PingMsg = message("PING");
+const PongMsg = message("PONG", { reply: z.string() });
 
 const MessageUnion = z.discriminatedUnion("type", [PingMsg, PongMsg]);
 ```
 
-**Critical**: Factory pattern required for discriminated unions to pass instanceof checks.
+**Note**: Discriminated unions work naturally with the export-with-helpers pattern since all schemas are created with the same validator instance.
 
-## Client-Side Message Creation
+## Client-Side Message Validation
+
+Schemas are portable and work client-side for validation before sending:
 
 ```typescript
-const { createMessage } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
 
-// Minimal (no meta)
-const msg1 = createMessage(JoinRoom, { roomId: "general" });
-// { type: "JOIN_ROOM", meta: {}, payload: { roomId: "general" } }
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
 
-// With client metadata
-const msg2 = createMessage(
-  JoinRoom,
-  { roomId: "general" },
-  { correlationId: "req-123" },
-);
-// { type: "JOIN_ROOM", meta: { correlationId: "req-123" }, payload: {...} }
+// Validate on client before sending
+const result = JoinRoom.safeParse({
+  type: "JOIN_ROOM",
+  payload: { roomId: "general" },
+  meta: {},
+});
 
-if (msg1.success) {
-  ws.send(JSON.stringify(msg1.data));
+if (result.success) {
+  ws.send(JSON.stringify(result.data));
+} else {
+  console.error("Validation failed:", result.error);
 }
 ```
 
@@ -287,17 +305,30 @@ if (msg1.success) {
 
 ## Standard Error Schema
 
+Export a standard `ErrorMessage` helper from validator packages:
+
 ```typescript
-const { ErrorMessage } = createMessageSchema(z);
-// {
-//   type: "ERROR",
-//   meta: { correlationId?, timestamp?, ... },
-//   payload: {
-//     code: ErrorCode,
-//     message?: string,
-//     context?: Record<string, any>
-//   }
-// }
+import { ErrorMessage } from "@ws-kit/zod";
+// or get it from schema exports if custom
+const ErrorMsg = message("ERROR", {
+  code: z.enum([
+    "VALIDATION_FAILED",
+    "AUTHENTICATION_FAILED",
+    "AUTHORIZATION_FAILED",
+    "RESOURCE_NOT_FOUND",
+    "RATE_LIMIT_EXCEEDED",
+    "INTERNAL_SERVER_ERROR",
+  ]),
+  message: z.string().optional(),
+  context: z.record(z.any()).optional(),
+});
+
+// Usage in handlers:
+router.onMessage(SomeMessage, (ctx) => {
+  if (!authorized) {
+    ctx.error("AUTHORIZATION_FAILED", "Not allowed");
+  }
+});
 ```
 
 **Direction**: Server-to-client only. Clients MUST NOT send `ERROR` messages (see @error-handling.md#Error-Message-Direction for alternatives).
@@ -308,7 +339,7 @@ const { ErrorMessage } = createMessageSchema(z);
 
 > See @rules.md for complete rules. Critical for message schemas:
 
-1. **Factory pattern required** — Use `createMessageSchema(validator)` (see @rules.md#import-patterns)
+1. **Export-with-helpers pattern** — Use `message()` helper from `@ws-kit/zod` or `@ws-kit/valibot` (see ADR-007, @rules.md#import-patterns)
 2. **Client-side validation** — Schemas MUST NOT require server-only fields (see @rules.md#messaging)
 3. **Strict schemas** — Reject unknown keys at all levels (see @schema.md#Strict-Schemas)
 4. **Connection identity** — Access via `ctx.ws.data.clientId`, not `ctx.meta` (see @rules.md#state-layering)

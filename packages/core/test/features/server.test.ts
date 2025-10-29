@@ -10,11 +10,8 @@ import {
   mock,
   spyOn,
 } from "bun:test";
-import { z } from "zod";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+import { createRouter, message, z } from "@ws-kit/zod";
 import { createBunAdapter, createBunHandler } from "../../../bun/src/index";
-
-const { messageSchema } = createMessageSchema(z);
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;
@@ -40,16 +37,16 @@ afterEach(() => {
 });
 
 // Test message schemas
-const Ping = messageSchema("PING", {
+const Ping = message("PING", {
   message: z.string(),
 });
 
-const Pong = messageSchema("PONG", {
+const Pong = message("PONG", {
   message: z.string(),
   timestamp: z.number(),
 });
 
-const Error = messageSchema("ERROR", {
+const Error = message("ERROR", {
   code: z.number(),
   message: z.string(),
 });

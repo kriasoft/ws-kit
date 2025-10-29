@@ -80,7 +80,7 @@ describe("RedisPubSub Types", () => {
   test("RedisPubSub options support pre-configured client", () => {
     // Note: This type test doesn't need an actual Redis client instance
     // Just verifies the options can accept a client-like object
-    type ClientLike = {
+    interface ClientLike {
       isOpen?: boolean;
       connect?(): Promise<void>;
       quit?(): Promise<void>;
@@ -88,7 +88,7 @@ describe("RedisPubSub Types", () => {
       subscribe?(channel: string, callback: () => void): Promise<unknown>;
       unsubscribe?(channel: string): Promise<unknown>;
       on?(event: string, handler: (data: unknown) => void): void;
-    };
+    }
 
     const options: RedisPubSubOptions = {
       // TypeScript allows duck typing - actual Redis client would work here

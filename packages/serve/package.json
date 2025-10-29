@@ -1,0 +1,71 @@
+{
+  "name": "@ws-kit/serve",
+  "version": "0.0.0",
+  "description": "Multi-runtime serve function for WS-Kit routers (Bun, Cloudflare, Deno)",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/serve"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "server",
+    "multi-runtime",
+    "bun",
+    "cloudflare",
+    "deno",
+    "typescript",
+    "portable"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bun": {
+      "types": "./dist/bun.d.ts",
+      "default": "./dist/bun.js"
+    },
+    "./cloudflare-do": {
+      "types": "./dist/cloudflare-do.d.ts",
+      "default": "./dist/cloudflare-do.js"
+    },
+    "./deno": {
+      "types": "./dist/deno.d.ts",
+      "default": "./dist/deno.js"
+    },
+    "./test": {
+      "types": "./dist/test.d.ts",
+      "default": "./dist/test.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ws-kit/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@ws-kit/bun": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@ws-kit/bun": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

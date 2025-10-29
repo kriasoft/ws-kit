@@ -84,8 +84,102 @@ export interface MessageContext<
   /** Message metadata including clientId and receivedAt */
   meta: MessageMeta;
 
+  /** Server receive timestamp (milliseconds since epoch) */
+  receivedAt: number;
+
   /** Type-safe send function for validated messages */
   send: SendFunction;
+
+  /**
+   * Send a type-safe error response to the client.
+   *
+   * Creates and sends an ERROR message with standard error structure.
+   * Use this for errors that should be communicated to the client.
+   *
+   * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
+   * @param message - Human-readable error description
+   * @param details - Optional error context/details
+   *
+   * @example
+   * ```typescript
+   * ctx.error("AUTH_ERROR", "Invalid credentials", { hint: "Check your password" });
+   * ctx.error("NOT_FOUND", "User not found");
+   * ```
+   */
+  error(code: string, message: string, details?: Record<string, unknown>): void;
+
+  /**
+   * Send a response message to the client.
+   *
+   * Semantic alias for send() with the same signature.
+   * Use this for request/response patterns to clarify intent.
+   * Functionally equivalent to ctx.send().
+   *
+   * @example
+   * ```typescript
+   * router.onMessage(QueryMessage, (ctx) => {
+   *   const result = await queryDatabase(ctx.payload);
+   *   ctx.reply(QueryResponse, result);  // Clearer than ctx.send()
+   * });
+   * ```
+   */
+  reply: SendFunction;
+
+  /**
+   * Merge partial data into the connection's custom data object.
+   *
+   * Safe way to update connection data without replacing it entirely.
+   * Calls Object.assign(ctx.ws.data, partial) internally.
+   *
+   * @param partial - Partial object to merge into ctx.ws.data
+   *
+   * @example
+   * ```typescript
+   * router.use((ctx, next) => {
+   *   ctx.assignData({ userId: "123", roles: ["admin"] });
+   *   return next();
+   * });
+   * ```
+   */
+  assignData(partial: Partial<TData>): void;
+
+  /**
+   * Subscribe this connection to a pubsub topic/channel.
+   *
+   * The connection will receive messages published to this topic via router.publish().
+   * This is a convenience method that delegates to ctx.ws.subscribe(channel).
+   *
+   * @param channel - Topic/channel name to subscribe to
+   *
+   * @example
+   * ```typescript
+   * router.onMessage(JoinRoom, (ctx) => {
+   *   const { roomId } = ctx.payload;
+   *   ctx.subscribe(`room:${roomId}`);
+   * });
+   * ```
+   */
+  subscribe(channel: string): void;
+
+  /**
+   * Unsubscribe this connection from a pubsub topic/channel.
+   *
+   * The connection will no longer receive messages published to this topic.
+   * This is a convenience method that delegates to ctx.ws.unsubscribe(channel).
+   *
+   * @param channel - Topic/channel name to unsubscribe from
+   *
+   * @example
+   * ```typescript
+   * router.onClose((ctx) => {
+   *   const roomId = ctx.ws.data?.roomId;
+   *   if (roomId) {
+   *     ctx.unsubscribe(`room:${roomId}`);
+   *   }
+   * });
+   * ```
+   */
+  unsubscribe(channel: string): void;
 
   /** Payload data (conditionally present if schema defines payload) */
   payload?: unknown;
@@ -199,6 +293,54 @@ export type ErrorHandler<TData extends WebSocketData = WebSocketData> = (
 ) => void;
 
 /**
+ * Middleware function that executes before message handlers.
+ *
+ * Middleware receives the message context and a `next()` function to proceed
+ * to the next middleware or handler. Middleware can:
+ * - Call `next()` to proceed to the next middleware/handler
+ * - Return early to skip the handler (useful for auth checks, rate limiting, etc.)
+ * - Modify `ctx.ws.data` to store data for downstream handlers
+ * - Throw errors which are caught and passed to error handlers
+ *
+ * Middleware executes in registration order. All global middleware execute before
+ * per-route middleware.
+ *
+ * @param context - Message context (generic payload type since middleware doesn't know specific schema)
+ * @param next - Function to proceed to next middleware or handler. Returns the result of the handler.
+ * @returns Void or Promise<void>. Return value is for logging/instrumentation purposes only.
+ *
+ * @example Authentication middleware
+ * ```typescript
+ * const requireAuth = (ctx, next) => {
+ *   if (!ctx.ws.data?.userId) {
+ *     ctx.send(ErrorSchema, { code: "AUTH_ERROR", message: "Not authenticated" });
+ *     return; // Skip handler
+ *   }
+ *   return next(); // Proceed to handler
+ * };
+ *
+ * router.use(requireAuth);
+ * ```
+ *
+ * @example Logging middleware with async support
+ * ```typescript
+ * const logTiming = async (ctx, next) => {
+ *   const start = performance.now();
+ *   await next(); // Wait for handler to complete
+ *   const duration = performance.now() - start;
+ *   console.log(`[${ctx.type}] completed in ${duration}ms`);
+ * };
+ *
+ * router.use(logTiming);
+ * ```
+ */
+export type Middleware<TData extends WebSocketData = WebSocketData> = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  context: MessageContext<any, TData>,
+  next: () => void | Promise<void>,
+) => void | Promise<void>;
+
+/**
  * Router lifecycle hooks.
  *
  * Each hook can be registered multiple times. Hooks are executed in registration order.
@@ -230,6 +372,36 @@ export interface HeartbeatConfig {
 
   /** Timeout in milliseconds to wait for pong response (default: 5000) */
   timeoutMs?: number;
+
+  /**
+   * Optional callback when a connection is detected as stale.
+   *
+   * Called when a connection fails to respond to heartbeat (times out).
+   * The connection is automatically closed after this callback.
+   *
+   * Useful for:
+   * - Logging/metrics
+   * - Cleanup of associated resources
+   * - Notifying other parts of system
+   *
+   * @param clientId - Unique connection identifier
+   * @param ws - The WebSocket connection
+   *
+   * @example
+   * ```typescript
+   * const router = createRouter({
+   *   heartbeat: {
+   *     intervalMs: 30000,
+   *     timeoutMs: 5000,
+   *     onStaleConnection: (clientId, ws) => {
+   *       console.log(`Closing stale connection: ${clientId}`);
+   *       // Clean up resources, update metrics, etc.
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  onStaleConnection?: (clientId: string, ws: ServerWebSocket) => void;
 }
 
 /**
@@ -241,11 +413,42 @@ export interface LimitsConfig {
 }
 
 /**
+ * Default connection data type for ambient module declaration.
+ *
+ * Applications can declare their default connection data type once using
+ * TypeScript's declaration merging, then omit the TData generic everywhere:
+ *
+ * @example
+ * ```typescript
+ * // types/app-data.d.ts
+ * declare module "@ws-kit/core" {
+ *   interface AppDataDefault {
+ *     userId?: string;
+ *     roles?: string[];
+ *     tenant?: string;
+ *   }
+ * }
+ *
+ * // Now in any module (no generic needed):
+ * import { createRouter } from "@ws-kit/zod";
+ * const router = createRouter(); // Automatically uses AppDataDefault
+ *
+ * router.onMessage(LoginSchema, (ctx) => {
+ *   // ctx.ws.data is properly typed with userId, roles, tenant
+ * });
+ * ```
+ *
+ * This avoids repeating the TData generic at every router instantiation.
+ * Keep this interface empty in the library; users extend it in their own code.
+ */
+export interface AppDataDefault {}
+
+/**
  * Router configuration options.
  *
  * Specifies the ValidatorAdapter (for schema validation), PlatformAdapter
  * (for platform-specific features), PubSub implementation (for broadcasting),
- * lifecycle hooks, heartbeat settings, and payload limits.
+ * lifecycle hooks, heartbeat settings, payload limits, and logging.
  */
 export interface WebSocketRouterOptions<
   V extends ValidatorAdapter = ValidatorAdapter,
@@ -268,6 +471,28 @@ export interface WebSocketRouterOptions<
 
   /** Message payload constraints */
   limits?: LimitsConfig;
+
+  /**
+   * Logger adapter for structured logging (optional).
+   *
+   * If not provided, router will use default console logging.
+   * Allows integration with Winston, Pino, structured logging services, etc.
+   *
+   * @example
+   * ```typescript
+   * import { createRouter, createLogger } from "@ws-kit/zod";
+   *
+   * const logger = createLogger({
+   *   minLevel: "info",
+   *   log: (level, context, message, data) => {
+   *     // Send to logging service
+   *   },
+   * });
+   *
+   * const router = createRouter({ logger });
+   * ```
+   */
+  logger?: any; // LoggerAdapter - use 'any' to avoid circular dependency
 }
 
 /**

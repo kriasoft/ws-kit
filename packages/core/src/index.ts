@@ -25,6 +25,7 @@
 // ============================================================================
 
 export type {
+  AppDataDefault,
   ServerWebSocket,
   WebSocketData,
   MessageMeta,
@@ -37,6 +38,7 @@ export type {
   MessageHandler,
   AuthHandler,
   ErrorHandler,
+  Middleware,
   RouterHooks,
   HeartbeatConfig,
   LimitsConfig,
@@ -80,13 +82,71 @@ export type { ReservedMetaKey } from "./constants";
  *
  * Use platform-specific adapters for production deployments.
  */
-export { MemoryPubSub } from "./pubsub";
+export { MemoryPubSub, publish } from "./pubsub";
 
 // ============================================================================
 // Message Normalization & Validation
 // ============================================================================
 
 export { validateMetaSchema, normalizeInboundMessage } from "./normalize";
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+/**
+ * Throttled broadcast utilities for efficiently publishing rapid state changes.
+ *
+ * Coalesces multiple rapid messages into fewer broadcasts, reducing bandwidth
+ * and processing overhead. Useful for real-time collaboration features like
+ * live cursors, presence, or frequent state updates.
+ *
+ * @example
+ * ```typescript
+ * import { createRouter } from "@ws-kit/zod";
+ * import { createThrottledPublish } from "@ws-kit/core";
+ *
+ * const router = createRouter();
+ * const throttledPublish = createThrottledPublish(
+ *   router.publish.bind(router),
+ *   50 // milliseconds
+ * );
+ *
+ * // Fast updates coalesced into single broadcast
+ * throttledPublish("room", { cursor: { x: 10, y: 20 } });
+ * throttledPublish("room", { cursor: { x: 11, y: 21 } });
+ * ```
+ */
+export {
+  createThrottledPublish,
+  createAdvancedThrottledPublish,
+} from "./throttle";
+export type { ThrottledBroadcastConfig } from "./throttle";
+
+/**
+ * Logger adapter interface for structured logging.
+ *
+ * Allows integration with Winston, Pino, or other logging services instead of
+ * relying on console.log. Useful for production deployments with centralized
+ * logging and monitoring.
+ *
+ * @example
+ * ```typescript
+ * import { createRouter, createLogger } from "@ws-kit/zod";
+ *
+ * const logger = createLogger({
+ *   minLevel: "info",
+ *   log: (level, context, message, data) => {
+ *     // Send to logging service
+ *     logService.send({ level, context, message, data });
+ *   },
+ * });
+ *
+ * const router = createRouter({ logger });
+ * ```
+ */
+export { createLogger, DefaultLoggerAdapter, LOG_CONTEXT } from "./logger";
+export type { LoggerAdapter, LoggerOptions } from "./logger";
 
 // ============================================================================
 // Router Implementation

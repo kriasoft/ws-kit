@@ -16,18 +16,15 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-import { z } from "zod";
+import { z, message } from "@ws-kit/zod";
 import { StateError } from "../../src/errors";
 import { createClient } from "../../src/index";
 import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
-const { messageSchema } = createMessageSchema(z);
-
-const TestMsg = messageSchema("TEST", { id: z.number() });
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+const TestMsg = message("TEST", { id: z.number() });
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
 
 describe("Client: onError Hook", () => {
   let mockWs: ReturnType<typeof createMockWebSocket>;

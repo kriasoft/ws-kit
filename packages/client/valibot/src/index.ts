@@ -140,21 +140,23 @@ export interface ValibotWebSocketClient
 }
 
 /**
- * Create typed WebSocket client with Valibot schema inference.
+ * Create a typed WebSocket client with Valibot schema inference.
  *
  * Pure type cast - zero runtime overhead compared to generic client.
  * All type safety is compile-time only via TypeScript inference.
  *
+ * This is the recommended function name, emphasizing that this creates
+ * a WebSocket client (vs other factory patterns).
+ *
  * @example
  * ```typescript
+ * import { message } from "@ws-kit/valibot";
+ * import { wsClient } from "@ws-kit/client/valibot";
  * import * as v from "valibot";
- * import { createMessageSchema } from "@ws-kit/valibot";
- * import { createClient } from "@ws-kit/client/valibot";
  *
- * const { messageSchema } = createMessageSchema(v);
- * const HelloOk = messageSchema("HELLO_OK", { text: v.string() });
+ * const HelloOk = message("HELLO_OK", { text: v.string() });
  *
- * const client = createClient({ url: "wss://api.example.com" });
+ * const client = wsClient({ url: "wss://api.example.com" });
  *
  * client.on(HelloOk, (msg) => {
  *   // ✅ msg fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
@@ -162,6 +164,26 @@ export interface ValibotWebSocketClient
  * });
  * ```
  */
-export function createClient(opts: ClientOptions): ValibotWebSocketClient {
+export function wsClient(opts: ClientOptions): ValibotWebSocketClient {
   return createGenericClient(opts) as ValibotWebSocketClient;
+}
+
+/**
+ * @deprecated Use `wsClient()` instead.
+ *
+ * The new `wsClient()` name emphasizes that this creates a WebSocket client
+ * and is more consistent with the export-with-helpers pattern.
+ *
+ * ```typescript
+ * // ❌ Old way
+ * import { createClient } from "@ws-kit/client/valibot";
+ * const client = createClient({ url: "..." });
+ *
+ * // ✅ New way
+ * import { wsClient } from "@ws-kit/client/valibot";
+ * const client = wsClient({ url: "..." });
+ * ```
+ */
+export function createClient(opts: ClientOptions): ValibotWebSocketClient {
+  return wsClient(opts);
 }

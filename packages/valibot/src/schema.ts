@@ -312,7 +312,7 @@ export function createMessageSchema(valibot: ValibotLike) {
   const ErrorMessage = messageSchema("ERROR", {
     code: ErrorCode,
     message: valibot.optional(valibot.string()),
-    context: valibot.optional(valibot.record(valibot.string(), valibot.any())),
+    details: valibot.optional(valibot.record(valibot.string(), valibot.any())),
   });
 
   // Client-side helper: validates and creates messages for sending

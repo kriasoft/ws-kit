@@ -1,15 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
 
 /**
  * Authentication message with JWT token
  */
-export const AuthenticateMessage = messageSchema("AUTHENTICATE", {
+export const AuthenticateMessage = message("AUTHENTICATE", {
   token: z.jwt(),
   apiVersion: z
     .string()
@@ -20,7 +17,7 @@ export const AuthenticateMessage = messageSchema("AUTHENTICATE", {
 /**
  * Session creation response
  */
-export const SessionCreatedMessage = messageSchema("SESSION_CREATED", {
+export const SessionCreatedMessage = message("SESSION_CREATED", {
   sessionId: z.ulid(),
   userId: z.uuid(), // UUID v7 in practice, validated as generic UUID
   expiresAt: z.coerce.date(),
@@ -29,7 +26,7 @@ export const SessionCreatedMessage = messageSchema("SESSION_CREATED", {
 /**
  * Request with nanoid for lightweight IDs
  */
-export const CreateResourceMessage = messageSchema("CREATE_RESOURCE", {
+export const CreateResourceMessage = message("CREATE_RESOURCE", {
   resourceId: z.nanoid(),
   name: z.string().min(1).max(100),
   metadata: z.record(z.string(), z.any()).optional(),
@@ -38,7 +35,7 @@ export const CreateResourceMessage = messageSchema("CREATE_RESOURCE", {
 /**
  * Email verification request
  */
-export const VerifyEmailMessage = messageSchema("VERIFY_EMAIL", {
+export const VerifyEmailMessage = message("VERIFY_EMAIL", {
   email: z.email(),
   code: z.string().length(6),
 });
@@ -46,7 +43,7 @@ export const VerifyEmailMessage = messageSchema("VERIFY_EMAIL", {
 /**
  * IP-based rate limiting message
  */
-export const RateLimitMessage = messageSchema("RATE_LIMIT", {
+export const RateLimitMessage = message("RATE_LIMIT", {
   clientIp: z.ipv4(),
   requests: z.number().int().positive(),
   windowMs: z.number().int().positive(),
@@ -55,7 +52,7 @@ export const RateLimitMessage = messageSchema("RATE_LIMIT", {
 /**
  * Webhook configuration with URL validation
  */
-export const ConfigureWebhookMessage = messageSchema("CONFIGURE_WEBHOOK", {
+export const ConfigureWebhookMessage = message("CONFIGURE_WEBHOOK", {
   url: z.url(),
   events: z.array(z.string()).min(1),
   secret: z.string().min(32),

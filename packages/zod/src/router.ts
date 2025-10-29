@@ -12,23 +12,18 @@
  * @see packages/core - Core WebSocketRouter for non-typed usage
  * @example
  * ```typescript
- * import { createZodRouter } from "@ws-kit/zod";
- * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
- * import { z } from "zod";
+ * import { z, message, createRouter } from "@ws-kit/zod";
+ * import { createBunHandler } from "@ws-kit/bun";
  *
- * const { messageSchema } = createMessageSchema(z);
- * const LoginSchema = messageSchema("LOGIN", { username: z.string() });
- *
- * const router = createZodRouter({
- *   platform: createBunAdapter(),
- * });
+ * const LoginSchema = message("LOGIN", { username: z.string() });
+ * const router = createRouter();
  *
  * // Full type inference - no need for (ctx.payload as any)!
  * router.onMessage(LoginSchema, (ctx) => {
  *   const username = ctx.payload.username; // ← string (inferred)
  * });
  *
- * const { fetch, websocket } = createBunHandler(router._core);
+ * const { fetch, websocket } = createBunHandler(router);
  * ```
  */
 
@@ -36,21 +31,15 @@ import { WebSocketRouter } from "@ws-kit/core";
 import type {
   AuthHandler,
   CloseHandler,
-  CloseHandlerContext,
   ErrorHandler,
+  Middleware,
   OpenHandler,
-  OpenHandlerContext,
   WebSocketData,
   WebSocketRouterOptions,
-  ServerWebSocket,
 } from "@ws-kit/core";
 
 import zodValidator from "./validator";
-import type {
-  MessageContext,
-  MessageHandler,
-  MessageSchemaType,
-} from "./types";
+import type { MessageHandler, MessageSchemaType } from "./types";
 
 /**
  * Type-safe WebSocket router interface with Zod validation.
@@ -58,6 +47,10 @@ import type {
  * Provides the same API as WebSocketRouter but with proper TypeScript
  * type inference for message handlers. Message payloads are automatically
  * typed based on the schema, eliminating the need for type assertions.
+ *
+ * The router is implemented as a plain object facade that forwards to the
+ * underlying core router. The `Symbol.for("ws-kit.core")` escape hatch provides
+ * access to the core for advanced introspection (rarely needed).
  *
  * @typeParam TData - Application-specific data attached to connections
  */
@@ -143,6 +136,36 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
   onError(handler: ErrorHandler<TData>): this;
 
   /**
+   * Register global middleware for all messages.
+   *
+   * Middleware executes before message handlers in registration order.
+   * Each middleware receives a `next()` function to proceed to the next
+   * middleware or handler. Middleware can return early to skip the handler.
+   *
+   * @param middleware - Middleware function
+   * @returns This router for method chaining
+   */
+  use(middleware: Middleware<TData>): this;
+
+  /**
+   * Register per-route middleware for a specific message type.
+   *
+   * Per-route middleware runs only for the specified message schema and has
+   * full type inference on the context, including payload typing.
+   *
+   * @param schema - Message schema this middleware applies to
+   * @param middleware - Middleware function with typed context
+   * @returns This router for method chaining
+   */
+  use<TSchema extends MessageSchemaType>(
+    schema: TSchema,
+    middleware: (
+      ctx: MessageContext<TSchema, TData>,
+      next: () => void | Promise<void>,
+    ) => void | Promise<void>,
+  ): this;
+
+  /**
    * Merge message handlers from another router into this one.
    *
    * Useful for composing routers from different modules/features.
@@ -153,7 +176,9 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
    * @param router - Another router to merge
    * @returns This router for method chaining
    */
-  addRoutes(router: { _core: WebSocketRouter<TData> }): this;
+  addRoutes(
+    router: TypedZodRouter<TData> | { _core?: WebSocketRouter<TData> },
+  ): this;
 
   /**
    * Publish a message to all subscribers on a channel.
@@ -176,51 +201,61 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
   publish(channel: string, message: unknown): Promise<void>;
 
   /**
-   * Access the underlying core router.
+   * Access the underlying core router for advanced introspection.
    *
-   * Use this when you need to integrate with non-typed code or access
-   * core router functionality not exposed by the typed wrapper.
+   * This is a stable escape hatch following the React convention
+   * (Symbol.for("react.element")). Use this only when router.debug()
+   * or other public APIs are insufficient.
    *
    * @example
    * ```typescript
-   * const { fetch, websocket } = createBunHandler(router._core);
+   * const core = (router as any)[Symbol.for("ws-kit.core")];
+   * // For advanced introspection only
    * ```
    */
-  readonly _core: WebSocketRouter<TData>;
+  readonly [key: symbol]: any;
+
+  /**
+   * @deprecated Use `router[Symbol.for("ws-kit.core")]` instead.
+   *
+   * The `_core` property is deprecated and will be removed in v2.0.
+   * Platform handlers now accept the router directly—no need to access `_core`.
+   *
+   * @example
+   * ```typescript
+   * // ❌ Old (deprecated)
+   * const { fetch, websocket } = createBunHandler(router._core);
+   *
+   * // ✅ New (recommended)
+   * const { fetch, websocket } = createBunHandler(router);
+   * ```
+   */
+  readonly _core?: WebSocketRouter<TData>;
 }
 
 /**
  * Create a type-safe WebSocket router using Zod validation.
  *
- * This is the recommended way to create a WebSocket router when using Zod.
- * It provides full TypeScript inference for message schemas without any
- * runtime overhead - all type checking happens at compile time.
+ * @deprecated Use `createRouter()` instead (shorter name, same functionality).
+ *
+ * This function is fully backwards compatible. The new `createRouter()` name
+ * aligns with the export-with-helpers pattern and is the recommended API.
+ *
+ * ```typescript
+ * // ❌ Old name
+ * import { createZodRouter } from "@ws-kit/zod";
+ * const router = createZodRouter<AppData>();
+ *
+ * // ✅ New name (recommended)
+ * import { createRouter } from "@ws-kit/zod";
+ * const router = createRouter<AppData>();
+ * ```
  *
  * @typeParam TData - Application-specific data stored on connections
  * @param options - Router options (platform adapter, hooks, etc.)
  * @returns A type-safe router with proper payload inference
  *
- * @example
- * ```typescript
- * import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
- * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
- * import { z } from "zod";
- *
- * const { messageSchema } = createMessageSchema(z);
- * const LoginSchema = messageSchema("LOGIN", { username: z.string() });
- *
- * type AppData = { userId?: string };
- * const router = createZodRouter<AppData>({
- *   platform: createBunAdapter(),
- * });
- *
- * router.onMessage(LoginSchema, (ctx) => {
- *   // No type assertion needed - fully typed!
- *   ctx.payload.username; // ← string (inferred)
- * });
- *
- * const { fetch, websocket } = createBunHandler(router._core);
- * ```
+ * @see createRouter - New recommended function name
  */
 export function createZodRouter<TData extends WebSocketData = WebSocketData>(
   options?: Omit<WebSocketRouterOptions<TData>, "validator">,
@@ -260,9 +295,17 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
       return router;
     },
 
+    // Middleware
+    use(middleware) {
+      coreRouter.use(middleware);
+      return router;
+    },
+
     // Router composition
     addRoutes(sourceRouter) {
-      coreRouter.addRoutes(sourceRouter._core);
+      const coreToAdd =
+        (sourceRouter as any)[Symbol.for("ws-kit.core")] ?? sourceRouter._core;
+      coreRouter.addRoutes(coreToAdd);
       return router;
     },
 
@@ -271,11 +314,22 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
       return coreRouter.publish(channel, message);
     },
 
-    // Access to core router for advanced usage
-    get _core() {
+    // Stable escape hatch for advanced introspection (following React convention)
+    [Symbol.for("ws-kit.core")]: coreRouter,
+  };
+
+  // Deprecation getter for backwards compatibility (v1.x only)
+  Object.defineProperty(router, "_core", {
+    get() {
+      console.warn(
+        "router._core is deprecated and will be removed in v2.0. " +
+          "Platform handlers now accept the router directly. " +
+          'For advanced introspection, use router[Symbol.for("ws-kit.core")] instead.',
+      );
       return coreRouter;
     },
-  };
+    configurable: true,
+  });
 
   return router;
 }

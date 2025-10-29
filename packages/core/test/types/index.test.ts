@@ -88,7 +88,7 @@ describe("MessageContext<TSchema, TData>", () => {
 
   it("should type ws as ServerWebSocket with generic data", () => {
     type CustomData = WebSocketData<{ userId: string }>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     type Context = MessageContext<any, CustomData>;
 
     expectTypeOf<Context["ws"]>().toMatchTypeOf<ServerWebSocket<CustomData>>();
@@ -187,7 +187,6 @@ describe("PubSub", () => {
 
 describe("MemoryPubSub", () => {
   it("should implement PubSub interface", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const pubsub = new MemoryPubSub();
 
     expectTypeOf<typeof pubsub>().toMatchTypeOf<PubSub>();
@@ -201,14 +200,12 @@ describe("MemoryPubSub", () => {
   });
 
   it("should have subscribe method with handler", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const pubsub = new MemoryPubSub();
 
     expectTypeOf<typeof pubsub.subscribe>().toBeFunction();
   });
 
   it("should have additional methods for testing", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const pubsub = new MemoryPubSub();
 
     expectTypeOf<typeof pubsub>().toHaveProperty("clear");
@@ -250,7 +247,6 @@ describe("WebSocketError", () => {
   });
 
   it("should have toPayload method", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const error = new WebSocketError(
       ErrorCode.VALIDATION_FAILED,
       "Invalid payload",
@@ -280,7 +276,7 @@ describe("RouterHooks", () => {
     type Hooks = RouterHooks<CustomData>;
 
     // Hooks should be assignable with handlers that accept CustomData
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     const hooks: Hooks = {
       onOpen: (ctx) => {
         expectTypeOf(ctx.ws.data.clientId).toBeString();

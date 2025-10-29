@@ -10,149 +10,120 @@ Broadcasting enables multicast messaging to multiple WebSocket clients via topic
 
 - **Unicast**: `ctx.send()` sends to single connection (see @router.md#Type-Safe-Sending)
 - **Multicast**: `publish()` broadcasts to topic subscribers (this spec)
+- **Throttled Broadcast**: Coalesce rapid publishes to reduce bandwidth 80-95% (see @patterns.md#Throttled-Broadcast-Pattern, ADR-010)
 
-## Bun Native WebSocket PubSub
+## Type-Safe Publishing with `router.publish()`
 
-Bun provides built-in PubSub via `subscribe()`, `publish()`, `unsubscribe()`:
+The router provides a type-safe `publish()` method for broadcasting validated messages:
 
 ```typescript
+import { createRouter, message } from "@ws-kit/zod";
+
+const UserJoined = message("USER_JOINED", { roomId: z.string() });
+const router = createRouter<AppData>();
+
 router.onMessage(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
 
-  // Subscribe to topic
-  ctx.ws.subscribe(roomId);
+  // Subscribe to topic (adapter-dependent)
+  ctx.subscribe(roomId);
 
-  // Publish to topic (raw string)
-  ctx.ws.publish(
+  // Publish type-safe message to topic
+  router.publish(roomId, UserJoined, {
     roomId,
-    JSON.stringify({
-      type: "USER_JOINED",
-      meta: { timestamp: Date.now() }, // Producer time (UI display); server logic uses ctx.receivedAt
-      payload: { roomId, userId: ctx.ws.data.userId },
-    }),
-  );
+  });
 });
 
 router.onClose((ctx) => {
   const roomId = ctx.ws.data.roomId;
   if (roomId) {
-    ctx.ws.unsubscribe(roomId);
+    // Unsubscribe from topic
+    ctx.unsubscribe(roomId);
   }
 });
 ```
 
-## Type-Safe Publish Helper
+## Context Methods: Subscribe / Unsubscribe
+
+Use `ctx.subscribe()` and `ctx.unsubscribe()` for topic management:
 
 ```typescript
-import { publish } from "@ws-kit/zod/publish";
+router.onMessage(JoinRoom, (ctx) => {
+  const roomId = ctx.payload.roomId;
 
-publish(ws, topic, schema, payload, metaOrOpts?);
-// Validates message against schema before publishing
+  // Subscribe to room updates
+  ctx.subscribe(`room:${roomId}`);
+
+  // Store for cleanup (optional, depends on adapter)
+  ctx.assignData({ roomId });
+});
+
+router.onClose((ctx) => {
+  // Clean up subscriptions
+  if (ctx.ws.data.roomId) {
+    ctx.unsubscribe(`room:${ctx.ws.data.roomId}`);
+  }
+});
 ```
 
-**Signature**:
+**Semantics:**
+
+- `ctx.subscribe(topic)` - Subscribe connection to a topic (adapter-dependent)
+- `ctx.unsubscribe(topic)` - Unsubscribe connection from a topic
+- Subscriptions are per-connection, not per-router
+- Adapter support varies (Bun: in-process, Cloudflare DO: scoped to instance, Redis: full pub/sub)
+
+## Origin Option: Sender Tracking {#Origin-Option}
+
+Include sender identity in broadcasts via extended meta schemas:
 
 ```typescript
-// zod/publish.ts
-export function publish<Schema extends MessageSchemaType>(
-  ws: ServerWebSocket,
-  topic: string,
-  schema: Schema,
-  payload: z.infer<Schema["shape"]["payload"]>,
-  metaOrOpts?:
-    | Partial<z.infer<Schema["shape"]["meta"]>>
-    | {
-        origin?: string; // Field name in ws.data (e.g., "userId")
-        key?: string; // Meta field name, defaults to "senderId"
-      },
+// Define extended meta to include sender ID
+const ChatMessage = message(
+  "CHAT",
+  { text: z.string() },
+  { senderId: z.string().optional() }, // Extended meta
 );
+
+router.onMessage(SendChat, (ctx) => {
+  router.publish(
+    `room:${ctx.ws.data.roomId}`,
+    ChatMessage,
+    { text: ctx.payload.text },
+    // Add sender ID to meta
+    { senderId: ctx.ws.data.userId },
+  );
+});
 ```
 
-**Implementation**:
+Or use connection data directly when sender identity is always available:
 
 ```typescript
-// zod/publish.ts
-export function publish<Schema extends MessageSchemaType>(
-  ws: ServerWebSocket,
-  topic: string,
-  schema: Schema,
-  payload: z.infer<Schema["shape"]["payload"]>,
-  metaOrOpts?:
-    | Partial<z.infer<Schema["shape"]["meta"]>>
-    | { origin?: string; key?: string },
-): boolean {
-  let meta: Record<string, any> = { timestamp: Date.now() }; // Producer time (UI display); server logic uses ctx.receivedAt
+const ChatMessage = message(
+  "CHAT",
+  { text: z.string(), userId: z.string() }, // Include in payload
+);
 
-  // Handle origin option for sender tracking
-  if (metaOrOpts && "origin" in metaOrOpts) {
-    const { origin, key = "senderId", ...rest } = metaOrOpts;
-    if (origin && ws.data[origin] !== undefined) {
-      meta[key] = ws.data[origin];
-    }
-    Object.assign(meta, rest);
-  } else {
-    Object.assign(meta, metaOrOpts);
-  }
-
-  const message = {
-    type: schema.shape.type.value,
-    meta,
-    payload,
-  };
-
-  const result = schema.safeParse(message);
-  if (!result.success) {
-    console.error("Publish validation failed", result.error);
-    return false;
-  }
-
-  ws.publish(topic, JSON.stringify(result.data));
-  return true;
-}
+router.onMessage(SendChat, (ctx) => {
+  router.publish(`room:${ctx.ws.data.roomId}`, ChatMessage, {
+    text: ctx.payload.text,
+    userId: ctx.ws.data.userId, // Include sender
+  });
+});
 ```
+
+**Pattern**:
+
+- **Include in extended meta** — For optional metadata about the message source
+- **Include in payload** — For data that's essential to the message semantics
+- **Never broadcast `clientId`** — It's transport-layer identity, not application identity
 
 **Broadcast metadata**:
 
-- `timestamp`: Automatically added by `publish()` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use)
-- `clientId`: **MUST NOT be injected** (connection identity, not broadcast metadata)
+- `timestamp`: Automatically added by `router.publish()` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use)
+- `clientId`: **MUST NOT be included** (connection identity, not broadcast metadata)
 - Custom meta: Merge via optional `meta` parameter
-- Origin tracking: Use `origin` option to inject sender identity
-
-## Origin Option: Sender Tracking
-
-The `origin` option injects sender identity from `ws.data` into broadcast `meta`:
-
-```typescript
-// Without origin (manual):
-publish(
-  ctx.ws,
-  "room:123",
-  ChatMessage,
-  { text: "hi" },
-  { senderId: ctx.ws.data.userId },
-);
-
-// With origin (automatic):
-publish(ctx.ws, "room:123", ChatMessage, { text: "hi" }, { origin: "userId" }); // Injects meta.senderId = ws.data.userId
-
-// Custom meta field:
-publish(
-  ctx.ws,
-  "room:123",
-  ChatMessage,
-  { text: "hi" },
-  { origin: "userId", key: "authorId" },
-); // Injects meta.authorId
-```
-
-**Behavior:**
-
-- `origin`: Field name in `ws.data` (string); injects as `meta[key ?? "senderId"]`
-- `key`: Meta field name (defaults to `"senderId"`)
-- **If `ws.data[origin]` is `undefined`, no injection occurs (no-op)**
-- `clientId` is **never** injected (use `origin` for application-level identity)
-
-**Performance:** Derived identity MUST be computed during `upgrade()` and stored in `ws.data`. Function extractors are NOT supported (hot-path performance). See @test-requirements.md#Runtime-Testing for no-op behavior validation.
+- Origin tracking: Include sender identity in extended meta or payload
 
 ## When to Track Message Origin
 
@@ -173,35 +144,42 @@ publish(
 ### Room Management
 
 ```typescript
+import { createRouter, message } from "@ws-kit/zod";
+
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const UserJoined = message("USER_JOINED", {
+  roomId: z.string(),
+  userId: z.string(),
+});
+const JoinedAck = message("JOINED", { roomId: z.string() });
+
+const router = createRouter<{ roomId?: string; userId?: string }>();
+
 router.onMessage(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
-  ctx.ws.data.roomId = roomId;
-  ctx.ws.subscribe(roomId);
+
+  // Update connection data
+  ctx.assignData({ roomId });
+
+  // Subscribe to room updates
+  ctx.subscribe(`room:${roomId}`);
 
   // Direct reply to sender (unicast)
-  ctx.send(JoinedRoom, { roomId });
+  ctx.send(JoinedAck, { roomId });
 
-  // Broadcast to room (multicast, including sender)
-  publish(
-    ctx.ws,
+  // Broadcast to room (multicast)
+  router.publish(`room:${roomId}`, UserJoined, {
     roomId,
-    UserJoined,
-    { roomId },
-    { origin: "userId" }, // ✅ Canonical pattern: DX sugar for origin
-  );
+    userId: ctx.ws.data.userId || "anon",
+  });
 });
 ```
 
 **Key distinction**:
 
 - `ctx.send()`: Sends to single connection (unicast)
-- `publish()`: Broadcasts to topic subscribers (multicast)
+- `router.publish()`: Broadcasts to topic subscribers (multicast)
 - Both add `timestamp` to `meta` automatically
-
-**Origin tracking pattern**:
-
-- **Prefer**: `meta.senderId` for message origin (keeps payload focused on business data)
-- **Alternative**: Including origin in payload (e.g., `{ userId }`) is acceptable but less uniform across messages
 
 ### Topic Naming
 
@@ -213,24 +191,67 @@ router.onMessage(JoinRoom, (ctx) => {
 
 ```typescript
 router.onClose((ctx) => {
-  const { roomId, userId } = ctx.ws.data;
+  const roomId = ctx.ws.data.roomId;
 
   if (roomId) {
     // Unsubscribe from room
-    ctx.ws.unsubscribe(roomId);
+    ctx.unsubscribe(`room:${roomId}`);
 
-    // Notify others
-    publish(ctx.ws, roomId, UserLeft, { roomId }, { origin: "userId" });
+    // Notify others (if needed)
+    router.publish(`room:${roomId}`, UserLeft, {
+      roomId,
+      userId: ctx.ws.data.userId || "anon",
+    });
   }
 });
 ```
+
+## Throttled Broadcasting
+
+For applications with rapid updates (live cursors, presence, frequent state changes), use throttled publishing to coalesce messages and reduce bandwidth overhead:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+import { createThrottledPublish } from "@ws-kit/core";
+
+const router = createRouter();
+
+// Wrap router.publish() with throttle (50ms window)
+const throttledPublish = createThrottledPublish(
+  router.publish.bind(router),
+  50, // milliseconds
+);
+
+router.onMessage(CursorMove, (ctx) => {
+  // Instead of router.publish(), use throttled version
+  throttledPublish(`room:${ctx.ws.data.roomId}`, {
+    clientId: ctx.ws.data.clientId,
+    x: ctx.payload.x,
+    y: ctx.payload.y,
+  });
+});
+```
+
+**Benefits**:
+
+- **Bandwidth reduction**: Typically 80-95% fewer messages in rapid update scenarios (depends on throttle window and update frequency)
+- **Lower latency**: Single coalesced broadcast instead of many small ones
+- **Fair**: Slower networks naturally handle smaller batches
+
+**Trade-offs**:
+
+- **Latency**: Up to 50ms delay for updates (acceptable for cursor/presence UX)
+- **Batch handling**: Clients must handle `{ batch: [...] }` wrapper for multiple messages
+
+For detailed guidance, implementation examples, and detailed trade-off analysis, see @patterns.md#Throttled-Broadcast-Pattern (ADR-010).
 
 ## Key Constraints
 
 > See @rules.md for complete rules. Critical for pubsub:
 
-1. **Validate before broadcast** — Use `publish()` helper, not raw `ws.publish()` (see @rules.md#messaging)
-2. **Origin tracking** — Use `{ origin: "userId" }` option for sender identity; NEVER broadcast `clientId` (see @broadcasting.md#Origin-Option)
-3. **Unicast vs multicast** — `ctx.send()` = single connection; `publish()` = topic subscribers (see @broadcasting.md#Patterns)
+1. **Validate before broadcast** — Use `router.publish()`, not raw `ctx.ws.publish()` (see @rules.md#messaging)
+2. **Origin tracking** — Include sender identity in extended meta or payload; NEVER broadcast `clientId` (see @broadcasting.md#Origin-Option)
+3. **Unicast vs multicast** — `ctx.send()` = single connection; `router.publish()` = topic subscribers (see @broadcasting.md#Patterns)
 4. **Auto-timestamp** — Both inject `timestamp` to `meta` automatically (see @router.md#Type-Safe-Sending)
-5. **Cleanup required** — Unsubscribe in `onClose()` handler; store topic IDs in `ctx.ws.data` (see @rules.md#lifecycle)
+5. **Cleanup required** — Unsubscribe in `onClose()` handler; store topic IDs in `ctx.ws.data` via `ctx.assignData()` (see @rules.md#lifecycle)
+6. **Subscription context** — `ctx.subscribe()` and `ctx.unsubscribe()` manage connection subscriptions (adapter-dependent behavior)

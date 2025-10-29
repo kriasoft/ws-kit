@@ -10,8 +10,8 @@ Generic WebSocket clients infer message handlers as `unknown`, breaking type saf
 
 Use type overrides (not separate implementations) for validator-specific clients:
 
-- `/zod/client` exports `createClient()` returning `ZodWebSocketClient` (narrowed types)
-- `/valibot/client` exports `createClient()` returning `ValibotWebSocketClient` (narrowed types)
+- `/zod/client` exports `wsClient()` returning `ZodWebSocketClient` (narrowed types)
+- `/valibot/client` exports `wsClient()` returning `ValibotWebSocketClient` (narrowed types)
 - Generic client remains at `/client` (unchanged runtime, `unknown` handler types)
 
 ## Rationale
@@ -68,8 +68,11 @@ export interface ZodWebSocketClient
   ): Promise<z.infer<R>>;
 }
 
-export function createClient(opts: ClientOptions): ZodWebSocketClient {
-  return createGenericClient(opts) as ZodWebSocketClient;
+export function wsClient(
+  url: string,
+  opts?: ClientOptions,
+): ZodWebSocketClient {
+  return createGenericClient(url, opts) as ZodWebSocketClient;
 }
 ```
 
@@ -104,39 +107,46 @@ send<S extends ZodMessageSchema & { shape: { payload?: never } }>(
 
 ## Migration Path
 
-**Before**:
+**Before (v1.0-1.1)**:
 
 ```typescript
 import { createClient } from "@ws-kit/client";
+const client = createClient({ url: "wss://..." });
 ```
 
-**After**:
+**After (v1.2+)**:
 
 ```typescript
 // Zod users
-import { createClient } from "@ws-kit/client/zod";
+import { wsClient } from "@ws-kit/client/zod";
+const client = wsClient({ url: "wss://..." });
 
 // Valibot users
-import { createClient } from "@ws-kit/client/valibot";
+import { wsClient } from "@ws-kit/client/valibot";
+const client = wsClient({ url: "wss://..." });
 
 // Custom validators (explicit opt-in)
-import { createClient } from "@ws-kit/client";
+import { wsClient as createClient } from "@ws-kit/client"; // Can alias if needed
+const client = createClient({ url: "wss://..." });
 ```
 
-**No other changes required** - runtime behavior identical, types now infer automatically.
+**Why the rename?**
+
+- `wsClient` follows the verb-style naming convention (matches `message()`, `createRouter()`)
+- More consistent with industry patterns (e.g., Hono's `hc.client`)
+- Clearer intent (creates a WebSocket client)
+
+**Backwards Compatibility:** `createClient` remains available (deprecated, will be removed in v2.0).
 
 ## Example: Full Type Inference
 
 ```typescript
 // With typed client (after)
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createClient } from "@ws-kit/client/zod";
+import { z, message, wsClient } from "@ws-kit/client/zod";
 
-const { messageSchema } = createMessageSchema(z);
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
 
-const client = createClient({ url: "wss://api.example.com" });
+const client = wsClient("wss://api.example.com");
 
 client.on(HelloOk, (msg) => {
   // ✅ msg fully typed: { type: "HELLO_OK", meta: MessageMeta, payload: { text: string } }
@@ -153,7 +163,8 @@ console.log(reply.payload.text); // ✅ string
 
 ## Constraints
 
-1. **ALWAYS** use typed clients (`/zod/client`, `/valibot/client`) for Zod/Valibot schemas
-2. **NEVER** use generic client (`/client`) unless implementing custom validator
-3. **ALWAYS** test inference with `expectTypeOf`
-4. **ALWAYS** use overloads for payload conditional typing (not `undefined` parameter)
+1. **ALWAYS** use typed clients (`@ws-kit/client/zod`, `@ws-kit/client/valibot`) for Zod/Valibot schemas
+2. **ALWAYS** import `wsClient` (not `createClient`) from validator-specific packages (v1.2+)
+3. **NEVER** use generic client (`@ws-kit/client`) unless implementing custom validator
+4. **ALWAYS** test inference with `expectTypeOf`
+5. **ALWAYS** use overloads for payload conditional typing (not `undefined` parameter)

@@ -13,10 +13,9 @@
  * Messages from one instance will be visible to all connected clients across all instances.
  */
 
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
+import { createBunHandler } from "@ws-kit/bun";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
-import { z } from "zod";
+import { createRouter, message, z } from "@ws-kit/zod";
 
 // Configuration
 const INSTANCE_ID = process.env.INSTANCE_ID || "1";
@@ -27,19 +26,17 @@ console.log(`🚀 Starting instance #${INSTANCE_ID} on port ${PORT}`);
 console.log(`📡 Using Redis: ${REDIS_URL}`);
 
 // Create validator and message schemas
-const { messageSchema } = createMessageSchema(z);
-
-const JoinMessage = messageSchema("JOIN", {
+const JoinMessage = message("JOIN", {
   username: z.string(),
 });
 
-const ChatMessage = messageSchema("CHAT", {
+const ChatMessage = message("CHAT", {
   username: z.string(),
   text: z.string(),
   timestamp: z.number(),
 });
 
-const LeaveMessage = messageSchema("LEAVE", {
+const LeaveMessage = message("LEAVE", {
   username: z.string(),
 });
 
@@ -83,30 +80,28 @@ const pubsub = createRedisPubSub({
   },
 });
 
-const router = createZodRouter<WebSocketData>({
-  platform: createBunAdapter(),
+const router = createRouter<WebSocketData>({
   pubsub,
-  hooks: {
-    onClose: (ctx) => {
-      const clientId = ctx.ws.data?.clientId;
-      if (!clientId) return;
+});
 
-      const user = connectedUsers.get(clientId);
-      if (user) {
-        connectedUsers.delete(clientId);
+router.onClose((ctx) => {
+  const clientId = ctx.ws.data?.clientId;
+  if (!clientId) return;
 
-        // Broadcast leave message
-        router.publish("chat:users", {
-          type: "USER_LEFT",
-          username: user.username,
-          timestamp: Date.now(),
-          instance: INSTANCE_ID,
-        });
+  const user = connectedUsers.get(clientId);
+  if (user) {
+    connectedUsers.delete(clientId);
 
-        console.log(`👋 ${user.username} left (instance #${INSTANCE_ID})`);
-      }
-    },
-  },
+    // Broadcast leave message
+    router.publish("chat:users", {
+      type: "USER_LEFT",
+      username: user.username,
+      timestamp: Date.now(),
+      instance: INSTANCE_ID,
+    });
+
+    console.log(`👋 ${user.username} left (instance #${INSTANCE_ID})`);
+  }
 });
 
 // Join handler - new user connects
@@ -185,7 +180,7 @@ pubsub.subscribe("chat:users", (message: unknown) => {
 });
 
 // Create handler with authentication for client ID initialization
-const { fetch: handleWebSocket, websocket } = createBunHandler(router._core, {
+const { fetch: handleWebSocket, websocket } = createBunHandler(router, {
   authenticate() {
     // Generate unique client ID for this connection
     return { clientId: crypto.randomUUID() };

@@ -9,7 +9,7 @@ describe("BunPubSub", () => {
 
   beforeEach(() => {
     // Create a mock Bun Server with publish method
-    const publishCalls: Array<[string, string | ArrayBuffer]> = [];
+    const publishCalls: [string, string | ArrayBuffer][] = [];
 
     mockServer = {
       publish: mock((topic: string, data: string | ArrayBuffer) => {

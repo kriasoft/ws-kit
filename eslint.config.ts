@@ -9,7 +9,14 @@ import tslint from "typescript-eslint";
 export default defineConfig([
   {
     name: "global-ignores",
-    ignores: ["node_modules", ".bun/", "dist/", "docs/"],
+    ignores: [
+      "node_modules",
+      ".bun/",
+      "dist/",
+      ".vitepress/dist",
+      ".vitepress/cache",
+      "docs/",
+    ],
   },
   {
     name: "eslint-recommended",

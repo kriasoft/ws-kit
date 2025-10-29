@@ -13,31 +13,35 @@ import type { BunHandler, BunHandlerOptions, BunWebSocketData } from "./types";
 /**
  * Create Bun WebSocket handlers for use with Bun.serve.
  *
- * Returns a `{ fetch, websocket }` object that can be passed directly to Bun.serve:
+ * Returns a `{ fetch, websocket }` object that can be passed directly to Bun.serve.
+ * Accepts both typed routers and core routers.
  *
- * **Usage**:
+ * **Recommended Usage** (Phase 1+):
  * ```typescript
+ * import { createRouter } from "@ws-kit/zod";
  * import { createBunHandler } from "@ws-kit/bun";
- * import { createZodRouter } from "@ws-kit/zod";
  *
- * const router = createZodRouter({ platform: createBunAdapter() });
- * const { fetch, websocket } = createBunHandler(router._core);
+ * const router = createRouter<AppData>();
+ * // Pass router directly (no ._core needed)
+ * const { fetch, websocket } = createBunHandler(router);
  *
- * Bun.serve({
- *   fetch,
- *   websocket,
- * });
+ * Bun.serve({ fetch, websocket, port: 3000 });
  * ```
  *
- * **Flow**:
- * 1. HTTP request arrives at your Bun.serve fetch handler
+ * **Legacy Usage** (deprecated):
+ * ```typescript
+ * const { fetch, websocket } = createBunHandler(router._core);
+ * ```
+ *
+ * **Connection Flow**:
+ * 1. HTTP request arrives at Bun.serve fetch handler
  * 2. Your code calls `router.upgrade(req, { server })` or similar
  * 3. Bun upgrades the connection to WebSocket
- * 4. `websocket.open(ws)` → calls `router.handleOpen(ws)`
- * 5. `websocket.message(ws, msg)` → calls `router.handleMessage(ws, msg)`
- * 6. `websocket.close(ws, code, reason)` → calls `router.handleClose(ws, code, reason)`
+ * 4. `websocket.open(ws)` → router handles the connection
+ * 5. `websocket.message(ws, msg)` → router routes the message
+ * 6. `websocket.close(ws, code, reason)` → router handles cleanup
  *
- * @param router - WebSocketRouter instance to handle connections
+ * @param router - TypedRouter or WebSocketRouter instance
  * @param options - Optional handler configuration
  * @returns Object with `fetch` and `websocket` handlers for Bun.serve
  */
@@ -46,6 +50,9 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
   router: WebSocketRouter<any, TData>,
   options?: BunHandlerOptions<TData>,
 ): BunHandler<TData> {
+  // Extract core router if a typed router wrapper is passed
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
   const clientIdHeader = options?.clientIdHeader ?? "x-client-id";
 
   return {
@@ -147,7 +154,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
           }
 
           // Call router's open handler
-          await router.handleOpen(ws);
+          await coreRouter.handleOpen(ws);
         } catch (error) {
           console.error("[ws] Error in open handler:", error);
           try {
@@ -167,7 +174,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       ): Promise<void> {
         try {
           // Call router's message handler
-          await router.handleMessage(ws, message);
+          await coreRouter.handleMessage(ws, message);
         } catch (error) {
           console.error("[ws] Error in message handler:", error);
           // Don't close the connection on message errors unless critical
@@ -184,7 +191,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       ): Promise<void> {
         try {
           // Call router's close handler
-          await router.handleClose(ws, code, reason);
+          await coreRouter.handleClose(ws, code, reason);
         } catch (error) {
           console.error("[ws] Error in close handler:", error);
         }

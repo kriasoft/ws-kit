@@ -25,172 +25,264 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 - **Platform Adapters**: `@ws-kit/bun`, `@ws-kit/cloudflare-do`, more platforms can be added without core changes
 - **Validator Adapters**: `@ws-kit/zod`, `@ws-kit/valibot`, custom validators welcome via `ValidatorAdapter` interface
 
-## Critical: Use Factory Pattern
+## API Design Principles
 
-The factory pattern is used in two places for type safety:
-
-### 1. Message Schema Factory
-
-**Required** to avoid dual package hazard with discriminated unions:
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-// ✅ Correct - use factory with your validator instance
-const { messageSchema } = createMessageSchema(z);
-
-// ✅ Also correct - use simplified default export
-import { zodValidator } from "@ws-kit/zod";
-const validator = zodValidator(); // Uses default Zod config
-```
-
-### 2. Typed Router Factory
-
-**Recommended** for full type inference in message handlers:
-
-```typescript
-import { createZodRouter } from "@ws-kit/zod"; // Zod router
-// OR
-import { createValibotRouter } from "@ws-kit/valibot"; // Valibot router
-
-// ✅ Correct - creates a type-safe router
-const router = createZodRouter();
-
-// ❌ Avoid - loses type inference in handlers
-const router = new WebSocketRouter({ validator: zodValidator() });
-```
-
-The typed router factory preserves payload types through handler invocation, eliminating the need for `as any` type assertions. See ADR-004 for details.
+- **Single canonical import source**: Import validator and helpers from one place (`@ws-kit/zod` or `@ws-kit/valibot`) to avoid dual package hazards
+- **Plain functions**: `message()` and `createRouter()` are plain functions, not factories
+- **Full type inference**: TypeScript generics preserve types from schema through handlers without assertions
+- **Runtime identity**: Functions preserve `instanceof` checks and runtime behavior
 
 ## Quick Start
 
 ```typescript
-import { z } from "zod";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
 
-// Create message schemas with full type inference
-const { messageSchema } = createMessageSchema(z);
-const PingMessage = messageSchema("PING", { text: z.string() });
-const PongMessage = messageSchema("PONG", { reply: z.string() });
+type AppData = { userId?: string };
 
-// Create type-safe router with Zod validation
-const router = createZodRouter({
-  platform: createBunAdapter(),
-});
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
 
-// Register handlers - payload types are fully inferred!
+const router = createRouter<AppData>();
+
 router.onMessage(PingMessage, (ctx) => {
-  // ✅ ctx.payload.text is automatically typed as string!
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
-// Create Bun handler and serve
-const { fetch, websocket } = createBunHandler(router._core);
-
-Bun.serve({
-  fetch,
-  websocket,
+serve(router, {
+  port: 3000,
+  authenticate(req) {
+    return { userId: "anonymous" };
+  },
 });
 ```
-
-**Note on `router._core`**: The typed router wrapper (`createZodRouter()`) provides type-safe handler registration. Platform handlers like `createBunHandler()` require the underlying core router via the `._core` property. This is a thin wrapper layer—no performance overhead.
 
 ## Key Patterns
 
 ### Route Composition
 
 ```typescript
-import { createZodRouter } from "@ws-kit/zod";
-import { createBunAdapter } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
 
-// Compose modules separately - each with type-safe handlers
-const authRouter = createZodRouter();
-authRouter.onMessage(LoginMessage, handleLogin); // ✅ Fully typed
+type AppData = { userId?: string };
 
-const chatRouter = createZodRouter();
-chatRouter.onMessage(SendMessage, handleChat); // ✅ Fully typed
+const authRouter = createRouter<AppData>();
+authRouter.onMessage(LoginMessage, handleLogin);
 
-// Merge into main router with platform adapter
-const mainRouter = createZodRouter({
-  platform: createBunAdapter(),
-});
+const chatRouter = createRouter<AppData>();
+chatRouter.onMessage(SendMessage, handleChat);
+
+const mainRouter = createRouter<AppData>();
 mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
 ```
 
-### Authentication
+### Middleware
+
+Middleware runs before handlers—use it for authorization, validation, logging, rate limiting:
 
 ```typescript
-import { createBunHandler } from "@ws-kit/bun";
-import { createZodRouter } from "@ws-kit/zod";
+import { createRouter } from "@ws-kit/zod";
 
 type AppData = { userId?: string; roles?: string[] };
+const router = createRouter<AppData>();
 
-const router = createZodRouter<AppData>({
-  platform: createBunAdapter(),
+// Global middleware: authentication check
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+    ctx.error("AUTH_ERROR", "Not authenticated");
+    return;
+  }
+  return next();
 });
 
-// Create handler with custom authentication
-const { fetch, websocket } = createBunHandler(router._core, {
+// Per-route middleware: rate limiting
+const rateLimiter = new Map<string, number>();
+router.use(SendMessage, (ctx, next) => {
+  const userId = ctx.ws.data?.userId || "anon";
+  const count = (rateLimiter.get(userId) || 0) + 1;
+  if (count > 10) {
+    ctx.error("RATE_LIMIT", "Too many messages");
+    return;
+  }
+  rateLimiter.set(userId, count);
+  return next();
+});
+
+router.onMessage(SendMessage, (ctx) => {
+  console.log(`Message from ${ctx.ws.data?.userId}: ${ctx.payload.text}`);
+});
+```
+
+**Semantics:**
+
+- `router.use(middleware)` registers global middleware (runs for all messages)
+- `router.use(schema, middleware)` registers per-route middleware (runs only for that message)
+- Middleware can call `ctx.error()` to reject, or skip calling `next()` to prevent handler execution
+- Middleware can modify `ctx.ws.data` for handlers to access
+- Both sync and async middleware supported
+
+### Authentication
+
+Initialize connection data in `serve()`, validate in middleware:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
+
+type AppData = { userId?: string; roles?: string[] };
+const router = createRouter<AppData>();
+
+// Middleware: require auth for protected messages
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+    ctx.error("AUTH_ERROR", "Not authenticated");
+    return;
+  }
+  return next();
+});
+
+router.onMessage(SecureMessage, (ctx) => {
+  const userId = ctx.ws.data?.userId;
+  const roles = ctx.ws.data?.roles;
+});
+
+serve(router, {
+  port: 3000,
   authenticate(req) {
-    // Extract token from request
     const token = req.headers.get("authorization")?.replace("Bearer ", "");
-    if (token) {
-      return { userId: "123", roles: ["admin"] };
-    }
+    return token ? { userId: "123", roles: ["admin"] } : undefined;
   },
 });
+```
 
-// Access in handlers via ctx.ws.data - fully typed!
+### Broadcasting
+
+Type-safe publish/subscribe for rooms, channels, or topics:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+
+type AppData = { roomId?: string; userId?: string };
+
+const SendMessage = message("SEND_MESSAGE", { text: z.string() });
+const RoomUpdate = message("ROOM_UPDATE", {
+  text: z.string(),
+  userId: z.string(),
+});
+
+const router = createRouter<AppData>();
+
+router.onMessage(JoinRoom, (ctx) => {
+  ctx.subscribe(`room:${ctx.payload.roomId}`);
+});
+
+router.onMessage(SendMessage, (ctx) => {
+  router.publish(`room:${ctx.ws.data?.roomId}`, RoomUpdate, {
+    text: ctx.payload.text,
+    userId: ctx.ws.data?.userId || "anon",
+  });
+});
+```
+
+### Client-Side
+
+Create a type-safe WebSocket client using the same schemas:
+
+```typescript
+import { z, message } from "@ws-kit/zod";
+import { wsClient } from "@ws-kit/client/zod";
+
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const RoomUpdated = message("ROOM_UPDATED", {
+  roomId: z.string(),
+  users: z.number(),
+});
+
+type AppRouter = typeof router;
+const client = wsClient<AppRouter>("ws://localhost:3000");
+
+client.send(JoinRoom, { roomId: "general" });
+
+client.on(RoomUpdated, (payload) => {
+  console.log(`Room ${payload.roomId} has ${payload.users} users`);
+});
+```
+
+### Error Handling
+
+Use `ctx.error()` for type-safe error responses with predefined error codes:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+import type { ErrorCode } from "@ws-kit/zod";
+
+const router = createRouter();
+
+router.onMessage(LoginMessage, (ctx) => {
+  try {
+    const user = authenticate(ctx.payload);
+    ctx.send(LoginSuccess, { userId: user.id });
+  } catch (err) {
+    // ✅ Type-safe error code
+    ctx.error("AUTH_ERROR", "Invalid credentials", {
+      hint: "Check your password",
+    });
+  }
+});
+
+router.onMessage(QueryMessage, (ctx) => {
+  try {
+    const result = queryDatabase(ctx.payload);
+    // ✅ reply() alias for semantic clarity in request/response pattern
+    ctx.reply(QueryResponse, result);
+  } catch (err) {
+    ctx.error("INTERNAL_ERROR", "Database query failed");
+  }
+});
+```
+
+**Standard error codes:**
+
+- `VALIDATION_ERROR` — Invalid payload or schema mismatch
+- `AUTH_ERROR` — Authentication failed
+- `INTERNAL_ERROR` — Server error
+- `NOT_FOUND` — Resource not found
+- `RATE_LIMIT` — Rate limit exceeded
+
+### Connection Data Type Safety
+
+For large applications, declare your default connection data type once using TypeScript declaration merging:
+
+```typescript
+// types/app-data.d.ts
+declare module "@ws-kit/core" {
+  interface AppDataDefault {
+    userId?: string;
+    roles?: string[];
+    tenant?: string;
+  }
+}
+```
+
+Now throughout your app, omit the generic type:
+
+```typescript
+// ✅ No generic needed - automatically uses AppDataDefault
+const router = createRouter();
+
 router.onMessage(SecureMessage, (ctx) => {
-  const userId = ctx.ws.data?.userId; // ✅ string | undefined
-  const roles = ctx.ws.data?.roles; // ✅ string[] | undefined
+  // ✅ ctx.ws.data is properly typed with all default fields
+  const userId = ctx.ws.data?.userId; // string | undefined
+  const roles = ctx.ws.data?.roles; // string[] | undefined
 });
 ```
 
-### Broadcasting with Validation
+Alternatively, specify the type explicitly for custom data:
 
 ```typescript
-import { createZodRouter } from "@ws-kit/zod";
-
-const router = createZodRouter();
-
-// Publish to all listeners on a channel (scope depends on platform)
-router.onMessage(SendMessageSchema, async (ctx) => {
-  // ctx.payload is fully typed from the schema!
-  const message = {
-    type: "MESSAGE",
-    payload: ctx.payload, // ✅ Automatically typed
-    userId: ctx.ws.data?.userId,
-  };
-
-  // Bun: broadcasts to all listeners in this process
-  // Cloudflare DO: broadcasts only within this DO instance
-  await router.publish("room:123", message);
-});
-```
-
-### Client-Side Message Creation
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-// Create schema factory with your Zod instance
-const { messageSchema } = createMessageSchema(z);
-const JoinRoomMessage = messageSchema("JOIN_ROOM", { roomId: z.string() });
-
-// Type-safe client message
-type JoinRoomMsg = typeof JoinRoomMessage;
-
-// Send to server with full type inference
-ws.send(
-  JSON.stringify({
-    type: "JOIN_ROOM",
-    payload: { roomId: "general" },
-  }),
-);
+// ✅ Still supported - explicit type for custom routers
+type CustomData = { feature: string; version: number };
+const featureRouter = createRouter<CustomData>();
 ```
 
 ## Development
@@ -210,7 +302,7 @@ bun test --watch    # Watch mode
 
 Tests are organized by package. Each package owns its test directory:
 
-```
+```text
 packages/
 ├── core/test/              # Core router tests + features/
 ├── zod/test/               # Zod validator tests + features/

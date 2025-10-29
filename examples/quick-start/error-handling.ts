@@ -1,13 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { createZodRouter } from "@ws-kit/zod";
-import { AuthenticateMessage } from "./auth-schema";
-
-const router = createZodRouter({
-  platform: createBunAdapter(),
-});
+import { createRouter, message, z } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
 
 /**
  * Example of enhanced validation with Zod v4's string validators
@@ -16,6 +11,24 @@ const router = createZodRouter({
  * - Valid JWT tokens (validated by z.jwt())
  * - Valid semver pattern (validated by regex)
  */
+const AuthenticateMessage = message("AUTHENTICATE", {
+  token: z.jwt(),
+  apiVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+(-[\w.]+)?$/)
+    .optional(), // Semver pattern
+});
+
+type AppData = { clientId?: string };
+
+const router = createRouter<AppData>();
+
+// Example middleware for additional validation
+router.use((ctx, next) => {
+  console.log(`Message: ${ctx.type}`);
+  return next();
+});
+
 router.onMessage(AuthenticateMessage, (context) => {
   // Type-safe payload access - fully typed without assertions!
   const { token, apiVersion } = context.payload;
@@ -30,23 +43,14 @@ router.onMessage(AuthenticateMessage, (context) => {
   });
 });
 
-// Example server setup
-const { fetch: wsHandler, websocket } = createBunHandler(router);
-
-const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-
-Bun.serve({
-  port,
-  fetch(req, server) {
-    if (req.headers.get("upgrade") === "websocket") {
-      return wsHandler(req, server);
-    }
-    return new Response("WebSocket server with enhanced error handling");
+// Serve with Bun using the unified serve() helper
+serve(router, {
+  port: parseInt(process.env.PORT || "3000"),
+  authenticate() {
+    return { clientId: crypto.randomUUID() };
   },
-  websocket,
 });
 
-console.log(`Server running on port ${port}`);
 console.log("Try sending invalid messages to see prettified errors!");
 
 /**

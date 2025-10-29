@@ -43,7 +43,7 @@ const mockValidator: ValidatorAdapter = {
  * Mock WebSocket for testing.
  */
 function createMockWebSocket(
-  clientId: string = "test-client-123",
+  clientId = "test-client-123",
 ): ServerWebSocket<WebSocketData> {
   const messages: string[] = [];
   let isClosed = false;

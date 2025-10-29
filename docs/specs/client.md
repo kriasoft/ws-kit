@@ -27,19 +27,21 @@ Quick navigation for AI tools:
 
 - **Runtime:** Modern browsers (standard `WebSocket`), works under bundlers.
 - **Validator choice:** Valibot recommended for browser clients (smaller bundle); Zod acceptable for larger apps.
-- **Imports:** See @schema.md#Canonical-Import-Patterns for canonical import examples.
-  - **Client (Typed):** ✅ **Recommended for type safety**
-    - Zod: `import { createClient } from "@ws-kit/client/zod"`
-    - Valibot: `import { createClient } from "@ws-kit/client/valibot"`
-  - **Client (Generic):** `import { createClient } from "@ws-kit/client"` (custom validators only; handlers infer as `unknown`)
-  - **Shared schemas:** Portable between client and server; use factory pattern (see @schema.md#Factory-Pattern).
+- **Imports:** Use export-with-helpers pattern (ADR-007) for canonical imports.
+  - **Typed Client (Primary):** ✅ **Strongly recommended**
+    - Zod: `import { wsClient } from "@ws-kit/client/zod"`
+    - Valibot: `import { wsClient } from "@ws-kit/client/valibot"`
+    - Schemas also available from same entry: `import { z, message } from "@ws-kit/client/zod"`
+  - **Generic Client (Advanced):** `import { wsClient } from "@ws-kit/client"` (custom validators only; handlers infer as `unknown`)
+  - **Shared schemas:** Portable between client and server; import from typed client packages with export-with-helpers pattern.
 
 ## Public API (Stable v1)
 
-**Use typed clients** (`/zod/client` or `/valibot/client`) for full type inference. Generic client (`/client`) remains available but provides `unknown` in handlers—use only for custom validators. **See ADR-002 for type override rationale.**
+**Primary:** Use typed clients (`@ws-kit/client/zod` or `@ws-kit/client/valibot`) for full type inference and safe defaults. Generic client (`@ws-kit/client`) available for advanced use with custom validators. See ADR-002 for type override rationale.
 
 ````ts
-// @ws-kit/client/zod (similar interface for valibot/client)
+// Primary: @ws-kit/client/zod or @ws-kit/client/valibot
+// (Typed clients provide full type inference; see below for generic client)
 
 export type ClientOptions = {
   url: string | URL;
@@ -121,7 +123,7 @@ When `auth.attach === "protocol"` AND `protocols` is provided:
 
 ```typescript
 // Default: append token after user protocols
-createClient({
+wsClient({
   url: "wss://api.example.com",
   protocols: "chat-v2", // User protocol
   auth: {
@@ -134,7 +136,7 @@ createClient({
 // WebSocket constructor receives: ["chat-v2", "bearer.abc123"]
 
 // Prepend: token before user protocols (some servers require auth first)
-createClient({
+wsClient({
   url: "wss://api.example.com",
   protocols: "chat-v2",
   auth: {
@@ -250,7 +252,7 @@ onError(cb: (error: Error, context: { type: "parse" | "validation" | "overflow" 
 // - Invalid messages (parse/validation failures) trigger onError() then dropped (never reach onUnhandled())
 }
 
-export function createClient(opts: ClientOptions): WebSocketClient;
+export function wsClient(opts: ClientOptions): WebSocketClient;
 
 // Error classes for client-side error handling
 export {
@@ -267,9 +269,9 @@ export {
 
 ```typescript
 // Zod typed client
-import { createClient } from "@ws-kit/client/zod";
+import { wsClient } from "@ws-kit/client/zod";
 
-const client = createClient({ url: "wss://api.example.com" });
+const client = wsClient({ url: "wss://api.example.com" });
 
 client.on(HelloOk, (msg) => {
   // ✅ msg fully typed: { type: "HELLO_OK", meta: MessageMeta, payload: { text: string } }
@@ -283,8 +285,8 @@ client.on(HelloOk, (msg) => {
 
 ```typescript
 // Define schemas
-const Hello = messageSchema("HELLO", { name: z.string() });
-const Logout = messageSchema("LOGOUT"); // No payload
+const Hello = message("HELLO", { name: z.string() });
+const Logout = message("LOGOUT"); // No payload
 
 // ✅ Payload required (schema has payload)
 client.send(Hello, { name: "Alice" });
@@ -301,17 +303,21 @@ client.send(Logout, {});
 // Error: Expected 1-2 arguments, but got 2-3
 ```
 
-**Generic client** (`/client`) remains available for custom validators but handlers receive `unknown`:
+### Advanced: Generic Client (Custom Validators Only)
+
+For custom validators not supported by typed clients, the generic client is available but handlers receive `unknown`:
 
 ```typescript
-// Generic client (custom validators only)
-import { createClient } from "@ws-kit/client";
+// Generic client (advanced; custom validators only)
+import { wsClient } from "@ws-kit/client";
 
 client.on(HelloOk, (msg) => {
   // ⚠️ msg is unknown - requires manual type assertion
   const typed = msg as InferMessage<typeof HelloOk>;
 });
 ```
+
+**When to use:** Only if your validator is not supported by `@ws-kit/client/zod` or `@ws-kit/client/valibot`. For standard use, always prefer typed clients.
 
 ### Multiple Handlers
 
@@ -792,7 +798,7 @@ try {
 
 Only during setup or preflight validation:
 
-- `createClient()` --- Invalid options (e.g., illegal `protocolPrefix` with spaces/commas)
+- `wsClient()` --- Invalid options (e.g., illegal `protocolPrefix` with spaces/commas)
 - `connect()` --- Preflight validation failures (e.g., malformed URL)
 
 **Fire-and-forget (`send()`):**
@@ -985,26 +991,23 @@ Client MUST use Map-based schema lookup (same pattern as server):
 
 ### Sharing Schemas Between Client and Server
 
-Schemas are portable TypeScript values. See @schema.md#Factory-Pattern for the factory pattern and @schema.md#Canonical-Import-Patterns for imports.
+Schemas are portable TypeScript values using the export-with-helpers pattern (ADR-007).
 
 Define schemas once in a shared module, import in both client and server:
 
 ```ts
 // shared/schemas.ts (imported by both client and server)
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
+import { z, message } from "@ws-kit/zod"; // Single canonical import source
 
-const { messageSchema } = createMessageSchema(z);
-
-export const Hello = messageSchema("HELLO", { name: z.string() });
-export const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
-export const ChatMessage = messageSchema("CHAT", { text: z.string() });
+export const Hello = message("HELLO", { name: z.string() });
+export const HelloOk = message("HELLO_OK", { text: z.string() });
+export const ChatMessage = message("CHAT", { text: z.string() });
 
 // client.ts
-import { createClient } from "@ws-kit/client/zod"; // Typed client
+import { wsClient } from "@ws-kit/client/zod"; // Typed client
 import { Hello, HelloOk } from "./shared/schemas";
 
-const client = createClient({ url: "wss://api.example.com/ws" });
+const client = wsClient({ url: "wss://api.example.com/ws" });
 await client.connect();
 client.send(Hello, { name: "Anna" });
 
@@ -1014,106 +1017,133 @@ client.on(HelloOk, (msg) => {
 });
 
 // server.ts
-import { WebSocketRouter } from "@ws-kit/zod";
+import { createRouter } from "@ws-kit/zod";
 import { Hello, HelloOk } from "./shared/schemas";
 
-const router = new WebSocketRouter();
+const router = createRouter();
 router.onMessage(Hello, (ctx) => {
-  ctx.send(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
+  ctx.reply(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
 });
 ```
 
 **Tree-shaking:** Bundlers eliminate server-only code when building client bundles. Schemas are pure data structures with no server dependencies.
 
-### 1) Basic client
+### 1) Basic Client with Typed Request/Response
 
 ```ts
 // client.ts
-import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
+import { wsClient } from "@ws-kit/client/zod"; // ✅ Typed client
 import { Hello, HelloOk } from "./shared/schemas"; // Shared schemas
 
-// Option 1: Explicit connection (default)
-const client1 = createClient({ url: "wss://example.com/ws" });
-await client1.connect();
-client1.send(Hello, { name: "Anna" });
+// Explicit connection (default for production)
+const client = wsClient({ url: "wss://example.com/ws" });
+await client.connect();
 
-// Option 2: Auto-connection (opt-in)
-const client2 = createClient({
-  url: "wss://example.com/ws",
-  autoConnect: true,
-});
-client2.send(Hello, { name: "Anna" }); // Auto-connects if closed (never connected)
+// Fire-and-forget (one-way)
+client.send(Hello, { name: "Anna" });
 
-client2.on(HelloOk, (msg) => {
-  // ✅ msg fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
+// Listen for inbound messages (fully typed)
+client.on(HelloOk, (msg) => {
+  // ✅ msg.payload fully typed: { text: string }
   console.log("Server says:", msg.payload.text);
 });
 
-// Request/response with correlation
-const reply = await client2.request(Hello, { name: "Bob" }, HelloOk, {
-  timeoutMs: 5000,
+// Request/response (typed reply, auto-timeout, auto-correlationId)
+try {
+  const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
+    timeoutMs: 5000, // Default: 30000ms
+  });
+  // ✅ reply fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
+  console.log("Reply:", reply.payload.text);
+} catch (err) {
+  if (err instanceof TimeoutError) {
+    console.error("Server did not reply in time");
+  }
+}
+
+// Option: Auto-connection (lazy init on first operation)
+const client2 = wsClient({
+  url: "wss://example.com/ws",
+  autoConnect: true, // Lazy connect on first send/request
 });
-console.log(reply.payload.text); // ✅ Typed as string
+client2.send(Hello, { name: "Alice" }); // Auto-connects if closed
 ```
 
-### 2) Auth with token refresh + reconnect
+### 2) Auth with Token Refresh & Reconnect
 
 ```ts
 // client.ts
-import { createClient } from "@ws-kit/client/valibot"; // ✅ Typed client
+import { wsClient, TimeoutError, ServerError } from "@ws-kit/client/valibot"; // ✅ Typed client
 import { Hello, HelloOk, Chat } from "./shared/schemas";
 
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   autoConnect: true,
-  reconnect: { enabled: true, jitter: "full" },
-  queue: "drop-newest",
-  queueSize: 1000,
+
+  // Reconnect (exponential backoff: 300ms → 600ms → 1.2s → ... → 10s cap)
+  reconnect: {
+    enabled: true,
+    initialDelayMs: 300, // default
+    maxDelayMs: 10_000, // default (10 seconds)
+    jitter: "full", // default: randomize within delay
+  },
+
+  // Queue behavior while offline (drop-newest is default)
+  queue: "drop-newest", // Keep oldest messages, drop newest on overflow
+  queueSize: 1000, // default
+
+  // Auth: refresh token on each (re)connect
   auth: {
-    getToken: () => localStorage.getItem("access_token"),
+    getToken: () => localStorage.getItem("access_token"), // Called once per (re)connect
     attach: "protocol",
     protocolPrefix: "bearer.",
-    protocolPosition: "append",
   },
 });
 
-client.onState((s) => console.debug("state:", s));
+// Connection lifecycle
+client.onState((state) => console.debug("Connection:", state));
 await client.onceOpen();
 
+// Listen for typed inbound messages
 client.on(HelloOk, (msg) => {
   // ✅ msg fully typed via Valibot inference
   console.log("Server:", msg.payload.text);
 });
 
+// Fire-and-forget with extended meta
 client.send(Chat, { text: "Hi there!" }, { meta: { roomId: "general" } });
 
-// Request/response with timeout
+// Request/response with typed reply (auto-correlationId, 30s default timeout)
 try {
   const reply = await client.request(Hello, { name: "Anna" }, HelloOk, {
-    timeoutMs: 5000,
+    timeoutMs: 5000, // Override default 30s
   });
-  console.log("Reply:", reply.payload.text); // ✅ Typed
+  // ✅ reply fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
+  console.log("Reply:", reply.payload.text);
 } catch (err) {
-  // handle TimeoutError, ServerError, ValidationError, ConnectionClosedError
+  if (err instanceof TimeoutError) {
+    console.error(`Timed out after ${err.timeoutMs}ms`);
+  } else if (err instanceof ServerError) {
+    console.error(`Server error: ${err.code}`, err.context);
+  }
 }
 
-// Request with AbortSignal (cancellable)
+// Request with AbortSignal (cancellable, e.g., component unmount)
 const controller = new AbortController();
-
 const replyPromise = client.request(Hello, { name: "Bob" }, HelloOk, {
   signal: controller.signal,
   timeoutMs: 30000,
 });
 
-// Cancel request if component unmounts or condition changes
-// controller.abort();
+// Cancel if needed
+controller.abort();
 
 try {
   const reply = await replyPromise;
   console.log("Reply:", reply.payload.text); // ✅ Typed
 } catch (err) {
-  if (err instanceof StateError) {
-    console.log("Request aborted");
+  if (err instanceof StateError && err.message.includes("aborted")) {
+    console.log("Request was cancelled");
   }
 }
 
@@ -1124,10 +1154,10 @@ await client.close({ code: 1000, reason: "Done" });
 
 ```ts
 // client.test.ts
-import { createClient } from "@ws-kit/client";
+import { wsClient } from "@ws-kit/client";
 import { createFakeWS } from "@ws-kit/testing";
 
-const client = createClient({
+const client = wsClient({
   url: "ws://test",
   wsFactory: (url) => createFakeWS(url),
   reconnect: { enabled: false },
@@ -1139,7 +1169,7 @@ const client = createClient({
 By default, client requires explicit `connect()` before sending messages. Opt-in to lazy initialization:
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com",
   autoConnect: true, // Auto-connect on first operation
 });

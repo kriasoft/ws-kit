@@ -1,15 +1,18 @@
 # Error Handling
 
-**Status**: ✅ Implemented (ErrorCode enum and patterns)
+**Status**: ✅ Implemented (ADR-009: Error Handling and Lifecycle Hooks)
 
-**Core Requirements**:
+**Core Requirements** (see ADR-009 for design rationale):
 
-- Use ErrorCode enum values (not arbitrary strings)
-- Provide context in errors (e.g., `{ roomId, userId }`)
+- Use type-safe `ctx.error()` helper with discriminated union error codes
+- Provide context in error details (e.g., `{ roomId, userId }`)
 - Log errors with `clientId` for traceability
 - Connections stay open unless handler explicitly closes
+- Unhandled errors trigger `onError` lifecycle hook (if registered in serve options)
 
-See @rules.md#error-handling for complete rules.
+See @rules.md#error-handling and ADR-009 for complete rules.
+
+**Note**: Error semantics are **identical across all adapters** (Bun, Cloudflare DO, Deno). For adapter-specific behavior, see `docs/specs/adapters.md`.
 
 ## Error Message Direction {#Error-Message-Direction}
 
@@ -33,7 +36,20 @@ Clients MUST NOT send `ERROR` type messages. Use instead:
 ## Standard Error Schema
 
 ```typescript
-const { ErrorMessage, ErrorCode } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
+// or: import { v, message } from "@ws-kit/valibot";
+
+const ErrorMessage = message("ERROR", {
+  code: z.enum([
+    "VALIDATION_ERROR",
+    "AUTH_ERROR",
+    "INTERNAL_ERROR",
+    "NOT_FOUND",
+    "RATE_LIMIT",
+  ]),
+  message: z.string(),
+  details: z.record(z.any()).optional(),
+});
 
 // Schema structure:
 // {
@@ -41,47 +57,79 @@ const { ErrorMessage, ErrorCode } = createMessageSchema(z);
 //   meta: { timestamp?, correlationId? },
 //   payload: {
 //     code: ErrorCode,
-//     message?: string,
-//     context?: Record<string, any>
+//     message: string,
+//     details?: Record<string, any>
 //   }
 // }
 ```
 
-## ErrorCode Enum {#error-code-enum}
+## Standard Error Codes {#error-code-enum}
 
-**CANONICAL DEFINITION** (reference this for error handling):
+**Base error codes for common scenarios:**
 
 ```typescript
 type ErrorCode =
-  | "INVALID_MESSAGE_FORMAT" // Message isn't valid JSON or lacks required structure
-  | "VALIDATION_FAILED" // Message failed schema validation
-  | "UNSUPPORTED_MESSAGE_TYPE" // No handler registered for this message type
-  | "AUTHENTICATION_FAILED" // Client isn't authenticated or has invalid credentials
-  | "AUTHORIZATION_FAILED" // Client lacks permission for the requested action
-  | "RESOURCE_NOT_FOUND" // Requested resource doesn't exist
-  | "RATE_LIMIT_EXCEEDED" // Client is sending messages too frequently
-  | "INTERNAL_SERVER_ERROR"; // Unexpected server error occurred
+  | "VALIDATION_ERROR" // Invalid payload or schema mismatch
+  | "AUTH_ERROR" // Authentication failed
+  | "INTERNAL_ERROR" // Server error
+  | "NOT_FOUND" // Resource not found
+  | "RATE_LIMIT"; // Rate limit exceeded
 ```
 
-**Usage Guidelines:**
+Use `ctx.error(code, message, details)` for type-safe error responses. The framework logs all errors with connection identity for traceability.
 
-- **Use enum values, not arbitrary strings** — Ensures consistency across handlers
-- **Provide context** — Include debugging information in the `context` field (e.g., `{ roomId, userId }`)
-- **Log with clientId** — Always include `ctx.ws.data.clientId` in error logs for traceability
+### Extending Error Codes
+
+Add domain-specific error codes by extending the base enum:
+
+```typescript
+type AppErrorCode =
+  | ErrorCode
+  | "INVALID_ROOM_NAME"
+  | "DUPLICATE_USER"
+  | "SUBSCRIPTION_EXPIRED";
+
+// Type-safe helper for custom codes
+declare global {
+  interface ErrorCodeMap {
+    INVALID_ROOM_NAME: true;
+    DUPLICATE_USER: true;
+    SUBSCRIPTION_EXPIRED: true;
+  }
+}
+
+// Use extended codes with ctx.error()
+router.onMessage(CreateRoom, (ctx) => {
+  if (!isValidRoomName(ctx.payload.name)) {
+    ctx.error("INVALID_ROOM_NAME", "Room name must be 3-50 characters", {
+      name: ctx.payload.name,
+    });
+    return;
+  }
+});
+```
+
+**Guidelines:**
+
+- Extend with domain-specific, actionable codes
+- Provide context in `details` (e.g., `{ roomId, field, reason }`)
+- Keep error messages human-readable and helpful
+- Errors are automatically logged with `clientId` for debugging
 
 ## Sending Errors
 
-**Note**: Error messages include a producer `meta.timestamp`; **never** base server actions on it — use `ctx.receivedAt` for server logic (see @schema.md#Which-timestamp-to-use).
+### Using ctx.error() (Recommended)
+
+Use the `ctx.error()` helper for type-safe error sending:
 
 ```typescript
 router.onMessage(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
 
   if (!roomExists(roomId)) {
-    ctx.send(ErrorMessage, {
-      code: ErrorCode.RESOURCE_NOT_FOUND,
-      message: `Room ${roomId} does not exist`,
-      context: { roomId },
+    // ✅ Type-safe: code is validated against ErrorCode enum
+    ctx.error("NOT_FOUND", `Room ${roomId} does not exist`, {
+      roomId,
     });
     return;
   }
@@ -90,6 +138,8 @@ router.onMessage(JoinRoom, (ctx) => {
 });
 ```
 
+**Note**: Error messages include a producer `meta.timestamp`; **never** base server actions on it — use `ctx.receivedAt` for server logic (see @schema.md#Which-timestamp-to-use).
+
 ## Error Handling in Handlers
 
 ```typescript
@@ -97,39 +147,75 @@ router.onMessage(SomeMessage, async (ctx) => {
   try {
     await riskyOperation();
   } catch (error) {
-    ctx.send(ErrorMessage, {
-      code: ErrorCode.INTERNAL_SERVER_ERROR,
-      message: error.message,
+    ctx.error("INTERNAL_ERROR", "Operation failed", {
+      reason: String(error),
     });
+    // onError hook will be called with this error
   }
+});
+```
+
+### Async Error Handling
+
+Unhandled promise rejections in handlers are caught and trigger the `onError` lifecycle hook:
+
+```typescript
+router.onMessage(AsyncMessage, async (ctx) => {
+  // This error will be caught by the router
+  // and onError(error, { type: "ASYNC_MESSAGE", userId: "..." }) will be called
+  const result = await unstableAPI();
+  ctx.reply(AsyncResponse, result);
 });
 ```
 
 ## Broadcasting Errors
 
+Send domain-specific error notifications to rooms or channels:
+
 ```typescript
-// Notify all users in a room
-publish(ctx.ws, roomId, ErrorMessage, {
-  code: ErrorCode.RESOURCE_NOT_FOUND,
-  message: "This room is being deleted",
-  context: { roomId },
+const RoomDeletedMessage = message("ROOM_DELETED", { roomId: z.string() });
+
+router.onMessage(DeleteRoomMessage, (ctx) => {
+  const { roomId } = ctx.payload;
+
+  // Notify all users in the room of deletion
+  router.publish(`room:${roomId}`, RoomDeletedMessage, {
+    roomId,
+  });
+});
+
+// For cross-connection validation errors
+router.onMessage(ValidateFileMessage, (ctx) => {
+  try {
+    const result = await validateFile(ctx.payload.fileId);
+    router.publish(`validation:${ctx.payload.fileId}`, FileValidated, result);
+  } catch (error) {
+    // Send error to all listeners
+    ctx.error("INTERNAL_ERROR", "File validation failed", {
+      fileId: ctx.payload.fileId,
+      reason: String(error),
+    });
+  }
 });
 ```
+
+**Note**: Use domain-specific message types (e.g., `ROOM_DELETED`, `FILE_VALIDATION_FAILED`) for broadcast errors. The ERROR message type is for point-to-point responses.
 
 ## Explicit Connection Close
 
 Handlers must explicitly close connections when needed. The library never closes connections automatically.
 
 ```typescript
-router.onMessage(RateLimitExceeded, (ctx) => {
-  // Send error message first
-  ctx.send(ErrorMessage, {
-    code: ErrorCode.RATE_LIMIT_EXCEEDED,
-    message: "Too many requests",
-  });
+router.use(SendMessage, (ctx, next) => {
+  if (isRateLimited(ctx.ws.data?.userId)) {
+    // Send error message first
+    ctx.error("RATE_LIMIT", "Too many requests");
 
-  // Then close connection
-  ctx.ws.close(1008, "Rate limit exceeded");
+    // Then close connection
+    ctx.ws.close(1008, "Rate limit exceeded");
+    return; // Skip handler
+  }
+  return next();
 });
 ```
 
@@ -140,6 +226,12 @@ router.onMessage(RateLimitExceeded, (ctx) => {
 - Resource exhaustion (client exceeds quota)
 
 **Normal errors** (business logic failures, not found, validation errors) should **not** close the connection.
+
+**Connection Close Codes**:
+
+- `1008` — Policy Violation (rate limit, security policy)
+- `1009` — Message Too Big (payload exceeds limit)
+- `1011` — Server Error (unexpected server failure)
 
 ## Error Behavior
 

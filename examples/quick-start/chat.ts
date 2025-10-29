@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { createZodRouter } from "@ws-kit/zod";
+import { createRouter } from "@ws-kit/zod";
 import {
   JoinRoom,
   NewMessage,
@@ -16,7 +16,7 @@ type WebSocketData = { roomId?: string; clientId?: string } & Record<
   unknown
 >;
 
-const chatRouter = createZodRouter<WebSocketData>();
+const chatRouter = createRouter<WebSocketData>();
 
 chatRouter.onMessage(JoinRoom, async (c) => {
   const { roomId } = c.payload; // ✅ Fully typed, no assertion needed
@@ -29,6 +29,9 @@ chatRouter.onMessage(JoinRoom, async (c) => {
 
   console.log(`Client ${clientId} joined room: ${roomId}`);
 
+  // Subscribe to room broadcasts
+  c.ws.subscribe(`room:${roomId}`);
+
   // Send confirmation back to the user who joined
   c.send(UserJoined, {
     roomId,
@@ -36,13 +39,9 @@ chatRouter.onMessage(JoinRoom, async (c) => {
   });
 
   // Broadcast to other users in the room that someone joined
-  await chatRouter.publish(roomId, {
-    type: "USER_JOINED",
-    meta: {},
-    payload: {
-      roomId,
-      userId: clientId,
-    },
+  await chatRouter.publish(`room:${roomId}`, UserJoined, {
+    roomId,
+    userId: clientId,
   });
 });
 
@@ -51,16 +50,12 @@ chatRouter.onMessage(SendMessage, async (c) => {
   const clientId = c.ws.data?.clientId; // Connection identity (not in meta)
   console.log(`Message from ${clientId} in room ${roomId}: ${text}`);
 
-  // Broadcast message to all subscribers, validating with schema
-  await chatRouter.publish(roomId, {
-    type: "NEW_MESSAGE",
-    meta: {},
-    payload: {
-      roomId,
-      userId: clientId,
-      text,
-      timestamp: Date.now(),
-    },
+  // Broadcast message to all subscribers using typed message
+  await chatRouter.publish(`room:${roomId}`, NewMessage, {
+    roomId,
+    userId: clientId,
+    text,
+    timestamp: Date.now(),
   });
 });
 
@@ -72,14 +67,10 @@ chatRouter.onClose((c) => {
 
   // If user was in a room, notify others they left
   if (roomId && clientId) {
-    // Broadcast user left notification
-    void chatRouter.publish(roomId, {
-      type: "USER_LEFT",
-      meta: {},
-      payload: {
-        roomId,
-        userId: clientId,
-      },
+    // Broadcast user left notification using typed message
+    void chatRouter.publish(`room:${roomId}`, UserLeft, {
+      roomId,
+      userId: clientId,
     });
 
     console.log(`User ${clientId} left room: ${roomId}`);

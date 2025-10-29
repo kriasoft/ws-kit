@@ -4,25 +4,95 @@
 /**
  * @ws-kit/valibot - Valibot validator adapter
  *
- * Valibot-based validator adapter providing:
- * - valibotValidator() for setting up Valibot validation
- * - createMessageSchema() factory for defining typed message schemas
- * - Type-safe message handlers with discriminated union support
- * - Full TypeScript inference from schema to handler context
+ * Type-safe WebSocket router with Valibot validation.
+ *
+ * Core exports (export-with-helpers pattern):
+ * - v: Re-exported Valibot instance (canonical import source)
+ * - message(): Helper to create type-safe message schemas
+ * - createRouter(): Create a type-safe router
+ *
+ * Additional exports:
+ * - valibotValidator(): Validator adapter for core router
+ * - wsClient(): Type-safe WebSocket client
+ *
+ * Legacy exports (deprecated, backwards compatible):
+ * - createMessageSchema(): Old factory pattern (use message() instead)
+ * - createValibotRouter(): Old function name (use createRouter() instead)
+ *
+ * @example Modern API (recommended)
+ * ```typescript
+ * import { v, message, createRouter } from "@ws-kit/valibot";
+ *
+ * const LoginMessage = message("LOGIN", {
+ *   username: v.string(),
+ *   password: v.string(),
+ * });
+ *
+ * type AppData = { userId?: string };
+ * const router = createRouter<AppData>();
+ *
+ * router.onMessage(LoginMessage, (ctx) => {
+ *   // ctx.payload.username is typed as string
+ * });
+ * ```
  */
 
-// Main exports
+// Import Valibot as canonical instance
+import * as v from "valibot";
+import { createMessageSchema } from "./schema";
+
+// Create message helper using canonical Valibot instance
+// (This creates the messageSchema function without requiring a factory)
+const { messageSchema: message, ErrorMessage } = createMessageSchema(v as any);
+
+// Main exports: export-with-helpers pattern
+export { v, message, ErrorMessage };
 export { default as valibotValidator } from "./validator";
-export { createMessageSchema } from "./schema";
 export { createValibotRouter } from "./router";
+
+// Convenience: export createRouter as alias for createValibotRouter
+/**
+ * Create a type-safe WebSocket router using Valibot validation.
+ *
+ * This is the recommended function name. Use this instead of createValibotRouter().
+ *
+ * @example
+ * ```typescript
+ * import { createRouter } from "@ws-kit/valibot";
+ *
+ * type AppData = { userId?: string };
+ * const router = createRouter<AppData>();
+ * ```
+ *
+ * @see createValibotRouter - Deprecated name, same functionality
+ */
+export { createValibotRouter as createRouter } from "./router";
 
 // Utility exports for advanced use cases
 export { ValibotValidatorAdapter } from "./adapter";
+
+// Backwards compatibility: re-export old factory (deprecated)
+/**
+ * @deprecated Use `message()` helper instead.
+ *
+ * ```typescript
+ * // ❌ Old way (factory pattern)
+ * import { createMessageSchema } from "@ws-kit/valibot";
+ * const { messageSchema } = createMessageSchema(v);
+ * const LoginSchema = messageSchema("LOGIN", { username: v.string() });
+ *
+ * // ✅ New way (export-with-helpers)
+ * import { message } from "@ws-kit/valibot";
+ * const LoginSchema = message("LOGIN", { username: v.string() });
+ * ```
+ */
+export { createMessageSchema } from "./schema";
 
 // Type exports
 export type { AnyMessageSchema, MessageSchema } from "./schema";
 export type { TypedValibotRouter } from "./router";
 export type {
+  ErrorCode,
   InferMeta,
   InferMessage,
   InferPayload,

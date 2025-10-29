@@ -5,6 +5,27 @@ import type { ServerWebSocket } from "@ws-kit/core";
 import type { InferOutput, ObjectSchema } from "valibot";
 
 /**
+ * Standard error codes for type-safe error handling.
+ * These codes represent common error scenarios in WebSocket applications.
+ *
+ * Reference: @ws-kit/core/error.ts#ErrorCode for internal error definitions.
+ * Use these codes in ctx.error() for consistent error handling.
+ *
+ * @example
+ * ```typescript
+ * ctx.error("AUTH_ERROR", "Invalid credentials", { hint: "Check your password" });
+ * ctx.error("RATE_LIMIT", "Too many requests");
+ * ctx.error("INTERNAL_ERROR", "Database query failed");
+ * ```
+ */
+export type ErrorCode =
+  | "VALIDATION_ERROR" // Message failed schema validation
+  | "AUTH_ERROR" // Authentication failed
+  | "INTERNAL_ERROR" // Server-side error occurred
+  | "NOT_FOUND" // Requested resource not found
+  | "RATE_LIMIT"; // Rate limit exceeded
+
+/**
  * Type-safe function for sending validated messages through WebSocket.
  * Uses nested conditionals to extract payload/meta types from Valibot's ObjectSchema entries.
  */
@@ -35,6 +56,8 @@ export type SendFunction = <Schema extends MessageSchemaType>(
  * Uses intersection types to add payload only when schema defines it, avoiding
  * optional payload field that would require runtime checks.
  *
+ * Includes helper methods for error handling and request/response patterns.
+ *
  * @see ADR-001 - keyof check for discriminated unions
  */
 export type MessageContext<Schema extends MessageSchemaType, Data> = {
@@ -64,6 +87,62 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
   receivedAt: number;
   /** Type-safe send function for validated messages */
   send: SendFunction;
+  /**
+   * Send a type-safe error response to the client.
+   *
+   * Creates and sends an ERROR message with standard error structure.
+   * Error code is enforced as a union of standard codes.
+   *
+   * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
+   * @param message - Human-readable error description
+   * @param details - Optional error context/details
+   *
+   * @example
+   * ```typescript
+   * ctx.error("AUTH_ERROR", "Invalid credentials", { hint: "Check your password" });
+   * ctx.error("RATE_LIMIT", "Too many requests");
+   * ctx.error("INTERNAL_ERROR", "Database error");
+   * ```
+   */
+  error(
+    code: ErrorCode,
+    message: string,
+    details?: Record<string, unknown>,
+  ): void;
+  /**
+   * Send a response message to the client.
+   *
+   * Semantic alias for send() with identical type signature.
+   * Use this in request/response patterns to clarify intent.
+   * Functionally equivalent to ctx.send().
+   *
+   * @example
+   * ```typescript
+   * router.onMessage(QueryMessage, (ctx) => {
+   *   const result = await db.query(ctx.payload.id);
+   *   ctx.reply(QueryResponse, result);  // Clearer than ctx.send()
+   * });
+   * ```
+   */
+  reply: SendFunction;
+  /**
+   * Merge partial data into the connection's custom data object.
+   *
+   * Safe way to update connection data without replacing it entirely.
+   * Calls Object.assign(ctx.ws.data, partial) internally.
+   *
+   * @param partial - Partial object to merge into ctx.ws.data
+   *
+   * @example
+   * ```typescript
+   * router.use((ctx, next) => {
+   *   const user = await authenticate(ctx.payload);
+   *   ctx.assignData({ userId: user.id, roles: user.roles });
+   *   return next();
+   * });
+   * ```
+   */
+  assignData(partial: Partial<Data>): void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } & (Schema extends ObjectSchema<infer TEntries, any>
   ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
