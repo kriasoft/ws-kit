@@ -159,20 +159,15 @@ Both provide identical developer experience, just with validator-specific types.
 
 ### Trade-offs
 
-⚠️ **Two patterns exist** - Developers may be confused by `WebSocketRouter` vs `createZodRouter`
+⚠️ **Two patterns exist** - Developers may be confused by core `WebSocketRouter` vs validator-specific `createRouter()`
 ⚠️ **Documentation needed** - Must clearly explain when to use each approach
 ⚠️ **Type test coverage** - Requires comprehensive tests to validate type inference
 
 ### Migration Path
 
-**For existing code**:
-
-- No changes required, core router continues to work
-- Developers can migrate incrementally: change `new WebSocketRouter()` to `createZodRouter()`
-
 **For new code**:
 
-- Use `createRouter()` (from `@ws-kit/zod` or `@ws-kit/valibot`) for full type safety
+- Use `createRouter()` from validator packages (`@ws-kit/zod` or `@ws-kit/valibot`) for full type safety
 
 **Example migration** (zero breaking changes):
 

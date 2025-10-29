@@ -93,19 +93,6 @@ export function message(type, payload) {
 
 ## New API
 
-Before:
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema, createZodRouter } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
-const LoginMessage = messageSchema("LOGIN", { username: z.string() });
-const router = createZodRouter<AppData>();
-```
-
-After:
-
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
 
@@ -191,55 +178,9 @@ import { message } from "@ws-kit/zod"; // Uses @ws-kit/zod's z
 
 This ensures all code imports the canonical `z` from `@ws-kit/zod`, preventing accidental validator instance mismatches that could cause silent failures in discriminated unions.
 
-## Migration Guide: From Factory to Export-with-Helpers
-
-**Deprecation timeline:**
-
-- **v1.2+**: Both patterns work; factory pattern shows deprecation warning
-- **v2.0**: Factory pattern removed; only export-with-helpers available
-
-### Before and After: Complete Examples
-
-#### Single Message Schema
+## Complete Example
 
 ```typescript
-// ✅ RECOMMENDED: Export-with-helpers pattern
-import { z, message, createRouter } from "@ws-kit/zod";
-
-const LoginMessage = message("LOGIN", {
-  username: z.string(),
-  password: z.string(),
-});
-
-type AppData = { userId?: string };
-const router = createRouter<AppData>();
-```
-
-#### Full Application Migration
-
-```typescript
-// ❌ BEFORE
-import { z } from "zod";
-import { createMessageSchema, createZodRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
-
-type AppData = { userId?: string };
-
-const { messageSchema } = createMessageSchema(z);
-const LoginMessage = messageSchema("LOGIN", { username: z.string() });
-const SendMessage = messageSchema("SEND", { text: z.string() });
-
-const router = createZodRouter<AppData>();
-router.on(LoginMessage, (ctx) => {
-  ctx.assignData({ userId: "123" });
-});
-router.on(SendMessage, (ctx) => {
-  console.log(ctx.payload.text);
-});
-
-serve(router, { port: 3000 });
-
-// ✅ AFTER
 import { z, message, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/serve/bun";
 
@@ -259,19 +200,9 @@ router.on(SendMessage, (ctx) => {
 serve(router, { port: 3000 });
 ```
 
-## Backwards Compatibility
+## Implementation Status
 
-**Old factory pattern still works (deprecated):**
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
-const schema = messageSchema("LOGIN", { ... }); // Still works with deprecation warning
-```
-
-No code changes required to function; deprecation warning guides migration. See [Migration Guide](#migration-guide-from-factory-to-export-with-helpers) above for step-by-step examples.
+The export-with-helpers pattern is the canonical API. Since the library has not been published, there is no backwards compatibility requirement for legacy factory patterns.
 
 ## Package Exports
 
