@@ -1,6 +1,6 @@
-# Bun WebSocket Router
+# ws-kit
 
-Type-safe WebSocket router for Bun with Zod or Valibot validation.
+Type-safe WebSocket router with pluggable validators (Zod/Valibot) and platform adapters (Bun/Cloudflare DO).
 
 ## Specifications and ADRs
 
@@ -16,9 +16,12 @@ Type-safe WebSocket router for Bun with Zod or Valibot validation.
 
 ## Architecture
 
-- **Adapter Pattern**: Core router logic with pluggable validators (Zod/Valibot)
+- **Modular Packages**: `@ws-kit/core` router with pluggable validator and platform adapters
+- **Composition Over Inheritance**: Single `WebSocketRouter<V>` class, any validator + platform combo works
 - **Message-Based Routing**: Routes by message `type` field to registered handlers
-- **Type Safety**: Full TypeScript inference from schema to handler
+- **Type Safety**: Full TypeScript inference from schema to handler via generics and overloads
+- **Platform Adapters**: `@ws-kit/bun`, `@ws-kit/cloudflare-do`, more platforms can be added without core changes
+- **Validator Adapters**: `@ws-kit/zod`, `@ws-kit/valibot`, custom validators welcome via `ValidatorAdapter` interface
 
 ## Critical: Use Factory Pattern
 
@@ -26,40 +29,46 @@ The factory pattern is **required** to avoid dual package hazard with discrimina
 
 ```typescript
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 // ✅ Correct - use factory with your validator instance
-const { messageSchema, createMessage } = createMessageSchema(z);
+const { messageSchema } = createMessageSchema(z);
 
-// ❌ Wrong - deprecated exports will break discriminated unions
-import { messageSchema } from "bun-ws-router";
+// ✅ Also correct - use simplified default export
+import { zodValidator } from "@ws-kit/zod";
+const validator = zodValidator(); // Uses default Zod config
 ```
 
 ## Quick Start
 
 ```typescript
 import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { WebSocketRouter } from "@ws-kit/core";
+import { zodValidator, createMessageSchema } from "@ws-kit/zod";
+import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
 
-// Create factory and router
+// Create message schema factory
 const { messageSchema } = createMessageSchema(z);
-const router = new WebSocketRouter();
-
-// Define message schemas
 const PingMessage = messageSchema("PING", { text: z.string() });
 const PongMessage = messageSchema("PONG", { reply: z.string() });
+
+// Compose router with Zod validator and Bun platform adapter
+const router = new WebSocketRouter({
+  validator: zodValidator(),
+  platform: createBunAdapter(),
+});
 
 // Register handlers
 router.onMessage(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
-// Use with Bun.serve
+// Create Bun handler and serve
+const { fetch, websocket } = createBunHandler(router);
+
 Bun.serve({
-  fetch(req, server) {
-    return router.upgrade(req, { server });
-  },
-  websocket: router.websocket,
+  fetch,
+  websocket,
 });
 ```
 
@@ -68,55 +77,85 @@ Bun.serve({
 ### Route Composition
 
 ```typescript
-// Compose routers from different modules
-const authRouter = new WebSocketRouter();
-const chatRouter = new WebSocketRouter();
+import { WebSocketRouter } from "@ws-kit/core";
+import { zodValidator } from "@ws-kit/zod";
+import { createBunAdapter } from "@ws-kit/bun";
 
-// Define routes separately
+// Compose modules separately
+const authRouter = new WebSocketRouter({ validator: zodValidator() });
+const chatRouter = new WebSocketRouter({ validator: zodValidator() });
+
+// Define routes in modules
 authRouter.onMessage(LoginMessage, handleLogin);
 chatRouter.onMessage(SendMessage, handleChat);
 
-// Merge into main router
-const mainRouter = new WebSocketRouter();
+// Merge into main router with platform adapter
+const mainRouter = new WebSocketRouter({
+  validator: zodValidator(),
+  platform: createBunAdapter(),
+});
 mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
 ```
 
 ### Authentication
 
 ```typescript
-// Pass user data during WebSocket upgrade
-router.upgrade(req, {
-  server,
-  data: { userId: "123", roles: ["admin"] },
+import { createBunHandler } from "@ws-kit/bun";
+
+// Create handler with custom upgrade logic
+const { fetch, websocket } = createBunHandler(router, {
+  onUpgrade(req, ws) {
+    // Extract token from request and attach to ws.data
+    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    if (token) {
+      ws.data = { userId: "123", roles: ["admin"] };
+    }
+  },
 });
 
 // Access in handlers via ctx.ws.data
 router.onMessage(SecureMessage, (ctx) => {
-  const { userId, roles } = ctx.ws.data;
+  const { userId, roles } = ctx.ws.data || {};
 });
 ```
 
 ### Broadcasting with Validation
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
+// Publish to all listeners on a channel (scope depends on platform)
+router.onMessage(SendMessageSchema, async (ctx) => {
+  const message = {
+    type: "MESSAGE",
+    payload: ctx.payload,
+    userId: ctx.ws.data?.userId,
+  };
 
-// Publish validates message before sending
-publish(ws, "room:123", NotificationSchema, {
-  text: "New message",
+  // Bun: broadcasts to all listeners in this process
+  // Cloudflare DO: broadcasts only within this DO instance
+  await router.publish("room:123", message);
 });
 ```
 
 ### Client-Side Message Creation
 
 ```typescript
-const { createMessage } = createMessageSchema(z);
+import { z } from "zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
-// Type-safe message creation with validation
-const msg = createMessage(JoinRoomMessage, { roomId: "general" });
-if (msg.success) {
-  ws.send(JSON.stringify(msg.data));
-}
+// Create schema factory with your Zod instance
+const { messageSchema } = createMessageSchema(z);
+const JoinRoomMessage = messageSchema("JOIN_ROOM", { roomId: z.string() });
+
+// Type-safe client message
+type JoinRoomMsg = typeof JoinRoomMessage;
+
+// Send to server with full type inference
+ws.send(
+  JSON.stringify({
+    type: "JOIN_ROOM",
+    payload: { roomId: "general" },
+  }),
+);
 ```
 
 ## Development

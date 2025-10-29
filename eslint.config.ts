@@ -26,7 +26,7 @@ export default defineConfig([
   },
   {
     name: "test-files-relaxed",
-    files: ["test/**/*.ts", "test/**/*.test.ts"],
+    files: ["packages/**/test/**/*.ts", "packages/**/test/**/*.test.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",
