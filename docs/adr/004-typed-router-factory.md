@@ -105,10 +105,10 @@ This allows TypeScript to infer `ctx.payload` type correctly, even though the un
 
 ### Validation-Specific Routers
 
-Each validator adapter gets its own factory and typed wrapper:
+Each validator adapter exports a factory (internally named `createZodRouter` or `createValibotRouter`) as `createRouter` for consistency:
 
-- `@ws-kit/zod`: `createZodRouter()` → `TypedZodRouter<TData>`
-- `@ws-kit/valibot`: `createValibotRouter()` → `TypedValibotRouter<TData>`
+- `@ws-kit/zod`: `createRouter()` → `TypedZodRouter<TData>`
+- `@ws-kit/valibot`: `createRouter()` → `TypedValibotRouter<TData>`
 
 Both provide identical developer experience, just with validator-specific types.
 
@@ -172,7 +172,7 @@ Both provide identical developer experience, just with validator-specific types.
 
 **For new code**:
 
-- Use `createZodRouter()` or `createValibotRouter()` directly for full type safety
+- Use `createRouter()` (from `@ws-kit/zod` or `@ws-kit/valibot`) for full type safety
 
 **Example migration** (zero breaking changes):
 
@@ -183,7 +183,8 @@ const router = new WebSocketRouter({
 });
 
 // After - recommended for new code
-const router = createZodRouter();
+import { createRouter } from "@ws-kit/zod";
+const router = createRouter();
 ```
 
 ## References
