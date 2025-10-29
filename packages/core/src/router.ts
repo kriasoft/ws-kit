@@ -66,7 +66,8 @@ export class WebSocketRouter<
   private readonly validator?: V;
   private readonly validatorId?: unknown; // Store validator identity for compatibility checks
   private readonly platform?: PlatformAdapter;
-  private readonly pubsub: PubSub;
+  private pubsubInstance?: PubSub;
+  private readonly pubsubProvider?: () => PubSub; // Optional provider for platform/custom pubsub
 
   // Handler registries
   private readonly messageHandlers = new Map<
@@ -97,20 +98,31 @@ export class WebSocketRouter<
     // Uses the constructor function as identity marker (works for both Zod and Valibot adapters)
     this.validatorId = this.validator?.constructor;
     this.platform = options.platform;
-    this.pubsub =
-      options.pubsub || options.platform?.pubsub || new MemoryPubSub();
+
+    // Store provided pubsub or set up lazy provider
+    if (options.pubsub) {
+      this.pubsubInstance = options.pubsub;
+    } else if (options.platform?.pubsub) {
+      this.pubsubInstance = options.platform.pubsub;
+    } else {
+      // Lazy provider: create MemoryPubSub only on first access
+      this.pubsubProvider = () => new MemoryPubSub();
+    }
+
     this.maxPayloadBytes =
       options.limits?.maxPayloadBytes ?? DEFAULT_CONFIG.MAX_PAYLOAD_BYTES;
 
-    // Store heartbeat config with defaults
-    // Heartbeat is always enabled; can be configured or use defaults
-    this.heartbeatConfig = {
-      intervalMs:
-        options.heartbeat?.intervalMs ?? DEFAULT_CONFIG.HEARTBEAT_INTERVAL_MS,
-      timeoutMs:
-        options.heartbeat?.timeoutMs ?? DEFAULT_CONFIG.HEARTBEAT_TIMEOUT_MS,
-      onStaleConnection: options.heartbeat?.onStaleConnection,
-    };
+    // Store heartbeat config only if explicitly provided
+    // Heartbeat is opt-in: only initialize if options.heartbeat is set
+    if (options.heartbeat) {
+      this.heartbeatConfig = {
+        intervalMs:
+          options.heartbeat.intervalMs ?? DEFAULT_CONFIG.HEARTBEAT_INTERVAL_MS,
+        timeoutMs:
+          options.heartbeat.timeoutMs ?? DEFAULT_CONFIG.HEARTBEAT_TIMEOUT_MS,
+        onStaleConnection: options.heartbeat.onStaleConnection,
+      };
+    }
 
     // Register hooks if provided
     if (options.hooks) {
@@ -145,10 +157,11 @@ export class WebSocketRouter<
     handler: MessageHandler<Schema, TData>,
   ): this {
     if (!this.validator) {
-      console.warn(
-        "[ws] No validator configured. Messages of this type will not be routed.",
+      throw new Error(
+        "Cannot register message handler: no validator configured. " +
+          "Create router with a validator adapter, e.g., " +
+          "createRouter({ validator: new ZodAdapter() }) or use the factory from @ws-kit/zod.",
       );
-      return this;
     }
 
     const messageType = this.validator.getMessageType(schema);
@@ -184,10 +197,10 @@ export class WebSocketRouter<
    */
   off<Schema extends MessageSchemaType>(schema: Schema): this {
     if (!this.validator) {
-      console.warn(
-        "[ws] No validator configured. Cannot unregister message handler.",
+      throw new Error(
+        "Cannot unregister message handler: no validator configured. " +
+          "Router must be created with a validator adapter.",
       );
-      return this;
     }
 
     const messageType = this.validator.getMessageType(schema);
@@ -337,10 +350,10 @@ export class WebSocketRouter<
 
     // If two arguments, it's per-route middleware
     if (!this.validator) {
-      console.warn(
-        "[ws] No validator configured. Per-route middleware will not be registered.",
+      throw new Error(
+        "Cannot register per-route middleware: no validator configured. " +
+          "Router must be created with a validator adapter.",
       );
-      return this;
     }
 
     // Validate schema compatibility (runtime validator check)
@@ -503,6 +516,27 @@ export class WebSocketRouter<
     }
 
     return this;
+  }
+
+  /**
+   * Get PubSub instance, lazily initializing if needed.
+   *
+   * If no pubsub was provided in options, creates a MemoryPubSub on first access.
+   * This allows zero overhead for apps that don't use broadcasting.
+   *
+   * @returns PubSub instance
+   * @private
+   */
+  private get pubsub(): PubSub {
+    if (!this.pubsubInstance) {
+      if (this.pubsubProvider) {
+        this.pubsubInstance = this.pubsubProvider();
+      } else {
+        // Fallback: should not happen with current implementation
+        this.pubsubInstance = new MemoryPubSub();
+      }
+    }
+    return this.pubsubInstance;
   }
 
   /**
@@ -811,8 +845,10 @@ export class WebSocketRouter<
       ) => {
         try {
           if (!this.validator) {
-            console.warn("[ws] No validator configured. Cannot send error.");
-            return;
+            throw new Error(
+              "Cannot send error: no validator configured. " +
+                "Router must be created with a validator adapter.",
+            );
           }
 
           // Create error message using the standard ERROR type
@@ -1070,8 +1106,10 @@ export class WebSocketRouter<
     ) => {
       try {
         if (!this.validator) {
-          console.warn("[ws] No validator configured. Cannot send message.");
-          return;
+          throw new Error(
+            "Cannot send message: no validator configured. " +
+              "Router must be created with a validator adapter.",
+          );
         }
 
         // Extract message type from schema

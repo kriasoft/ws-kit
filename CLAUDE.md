@@ -285,6 +285,42 @@ type CustomData = { feature: string; version: number };
 const featureRouter = createRouter<CustomData>();
 ```
 
+## Recent Changes & Breaking Updates
+
+### Validator Requirement (Breaking)
+
+Router now requires a validator to be configured. Methods `.on()`, `.off()`, `.use(schema, ...)`, and `.send()` throw immediately if no validator is set.
+
+**Migration**: Create router with validator:
+
+```typescript
+import { createRouter } from "@ws-kit/zod"; // Provides validator
+// or
+const router = new WebSocketRouter({ validator: new ZodAdapter() });
+```
+
+### Heartbeat is Now Opt-In (Breaking)
+
+Heartbeat is no longer initialized by default. Only enable when explicitly configured.
+
+**Migration**: Add heartbeat config if needed:
+
+```typescript
+createRouter({
+  heartbeat: {
+    intervalMs: 30_000, // Optional: defaults to 30s
+    timeoutMs: 5_000, // Optional: defaults to 5s
+    onStaleConnection: (clientId, ws) => {
+      /* cleanup */
+    },
+  },
+});
+```
+
+### PubSub is Lazily Initialized (Non-Breaking)
+
+PubSub instance is created only on first use. Apps without broadcasting get zero overhead.
+
 ## Development
 
 ```bash
