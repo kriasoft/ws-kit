@@ -84,13 +84,13 @@ router.on(LoginMessage, (ctx) => {
 
 This adapter works with any ws-kit platform:
 
-- **`@ws-kit/bun`** — Bun.serve WebSocket handler
-- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects
+- **`@ws-kit/serve/bun`** — Bun WebSocket server (recommended)
+- **`@ws-kit/serve/cloudflare-do`** — Cloudflare Durable Objects
 - Custom platforms via `@ws-kit/core`
 
 ## Dependencies
 
 - **`@ws-kit/core`** (required) — Core router
 - **`zod`** (peer) — Validation library
-- **`@ws-kit/serve`** (optional) — Pre-built server setup
+- **`@ws-kit/serve`** (optional) — Multi-runtime server setup
 - **`@ws-kit/client`** (optional) — Type-safe browser client

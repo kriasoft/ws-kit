@@ -17,6 +17,7 @@ Cloudflare Durable Objects platform adapter for WS-Kit with per-instance pub/sub
 - **`createDurableObjectHandler()`**: Factory returning fetch handler for DO integration
 - **`DurablePubSub`**: BroadcastChannel-based pub/sub for per-instance messaging
 - **`federate()` helpers**: Explicit multi-DO coordination functions
+- **Sharding helpers**: `scopeToDoName()`, `getShardedDoId()`, `getShardedStub()` for stable scope-to-shard routing
 - **UUID v7 client IDs**: Time-ordered unique identifiers per connection
 - **Resource tracking**: Automatic `resourceId` and `connectedAt` metadata
 - **Connection limits**: Per-DO instance connection quota enforcement
@@ -52,7 +53,35 @@ bun add valibot @ws-kit/valibot
 
 ## Quick Start
 
+### Recommended: With @ws-kit/serve
+
+Use the high-level API with `@ws-kit/serve` for the simplest integration:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/cloudflare-do";
+
+type AppData = { userId?: string };
+
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
+
+const router = createRouter<AppData>();
+
+router.on(PingMessage, (ctx) => {
+  ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
+});
+
+export default {
+  fetch(req: Request, state: DurableObjectState, env: Env) {
+    return serve(router, { req, state, env });
+  },
+};
+```
+
 ### Basic Setup (Single DO per Resource)
+
+For more control, you can use the lower-level API:
 
 ```typescript
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
@@ -197,6 +226,53 @@ await federateWithFilter(
 );
 ```
 
+### Sharding Helpers
+
+When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Use sharding helpers to distribute subscriptions across multiple DO instances by computing a stable shard from the scope name.
+
+**`scopeToDoName(scope, shards, prefix)`** - Compute shard name from scope
+
+```typescript
+import { scopeToDoName } from "@ws-kit/cloudflare-do";
+
+// Same scope always routes to same shard
+scopeToDoName("room:general", 10); // → "ws-router-2"
+scopeToDoName("room:general", 10); // → "ws-router-2" (consistent)
+scopeToDoName("room:random", 10); // → "ws-router-7"
+```
+
+**`getShardedDoId(env, scope, shards, prefix)`** - Get DO ID for a scope
+
+```typescript
+import { getShardedDoId } from "@ws-kit/cloudflare-do";
+
+const doId = getShardedDoId(env, `room:${roomId}`, 10);
+const stub = env.ROUTER.get(doId);
+```
+
+**`getShardedStub(env, scope, shards, prefix)`** - Get DO stub ready for fetch
+
+```typescript
+import { getShardedStub } from "@ws-kit/cloudflare-do";
+
+export default {
+  async fetch(req: Request, env: Env) {
+    const roomId = new URL(req.url).searchParams.get("room") ?? "general";
+    const stub = getShardedStub(env, `room:${roomId}`, 10);
+    return stub.fetch(req); // Routes to sharded DO
+  },
+};
+```
+
+**Benefits:**
+
+- ✅ **Linear scaling**: Add more DO instances to handle more concurrent connections
+- ✅ **Stable routing**: Same scope always routes to same DO instance
+- ✅ **No cross-shard coordination**: Each scope's subscribers live on one DO
+- ✅ **Deterministic**: Same shard map every time (no crypto, stable hash)
+
+**Important**: Changing the shard count will remap existing scopes. Plan accordingly and consider a migration period if using persistent storage.
+
 ## Examples
 
 ### Chat Application
@@ -242,10 +318,11 @@ Full TypeScript support with generic `TData` type parameter for custom connectio
 ## Related Packages
 
 - [`@ws-kit/core`](../core/README.md) — Core router and types
-- [`@ws-kit/bun`](../bun/README.md) — Bun adapter
+- [`@ws-kit/serve`](../serve/README.md) — Multi-runtime server with `/cloudflare-do` subpath (recommended)
 - [`@ws-kit/zod`](../zod/README.md) — Zod validator adapter
 - [`@ws-kit/valibot`](../valibot/README.md) — Valibot validator adapter
 - [`@ws-kit/client`](../client/README.md) — Browser/Node.js client
+- [`@ws-kit/bun`](../bun/README.md) — Bun adapter (for Bun deployments)
 
 ## License
 

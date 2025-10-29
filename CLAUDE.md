@@ -22,7 +22,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 - **Composition Over Inheritance**: Single `WebSocketRouter<V>` class, any validator + platform combo works
 - **Message-Based Routing**: Routes by message `type` field to registered handlers
 - **Type Safety**: Full TypeScript inference from schema to handler via generics and overloads
-- **Platform Adapters**: `@ws-kit/bun`, `@ws-kit/cloudflare-do`, more platforms can be added without core changes
+- **Platform Adapters**: Via `@ws-kit/serve` (`/bun`, `/cloudflare-do`, etc.), more platforms can be added without core changes
 - **Validator Adapters**: `@ws-kit/zod`, `@ws-kit/valibot`, custom validators welcome via `ValidatorAdapter` interface
 
 ## API Design Principles

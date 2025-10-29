@@ -36,7 +36,44 @@ Both `@ws-kit/redis-pubsub` and `redis` are required:
 
 ## Quick Start
 
-### Basic Setup
+### Recommended: With @ws-kit/serve
+
+Use the high-level API with `@ws-kit/serve` for the simplest integration:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
+import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+
+// Create router with Redis PubSub for multi-instance broadcasting
+const router = createRouter({
+  pubsub: createRedisPubSub({
+    url: process.env.REDIS_URL || "redis://localhost:6379",
+  }),
+});
+
+// Define message schemas
+const ChatMessage = message("CHAT", {
+  userId: z.string(),
+  text: z.string(),
+});
+
+// Register handler
+router.on(ChatMessage, async (ctx) => {
+  // This broadcasts to all instances
+  await router.publish("chat:general", ChatMessage, {
+    userId: ctx.payload.userId,
+    text: ctx.payload.text,
+  });
+});
+
+// Serve with type-safe handlers
+serve(router, { port: 3000 });
+```
+
+### Advanced: Direct Router Construction
+
+For lower-level control, you can construct the router directly:
 
 ```typescript
 import { WebSocketRouter } from "@ws-kit/core";
@@ -54,12 +91,11 @@ const router = new WebSocketRouter({
   }),
 });
 
-// Define message schemas
-const { messageSchema } = createMessageSchema(z);
-const ChatMessage = messageSchema("CHAT", {
-  userId: z.string(),
-  text: z.string(),
-});
+// Define message schemas (low-level)
+const ChatMessage = {
+  type: "CHAT",
+  schema: z.object({ userId: z.string(), text: z.string() }),
+};
 
 // Register handler
 router.on(ChatMessage, async (ctx) => {
@@ -442,11 +478,11 @@ await new Promise((resolve) => {
 ## Related Packages
 
 - **[@ws-kit/core](https://www.npmjs.com/package/@ws-kit/core)** - Core router and types
-- **[@ws-kit/bun](https://www.npmjs.com/package/@ws-kit/bun)** - Bun.serve platform adapter
+- **[@ws-kit/serve](https://www.npmjs.com/package/@ws-kit/serve)** - Multi-runtime server with `/bun` and `/cloudflare-do` subpaths (recommended)
 - **[@ws-kit/zod](https://www.npmjs.com/package/@ws-kit/zod)** - Zod validator
 - **[@ws-kit/valibot](https://www.npmjs.com/package/@ws-kit/valibot)** - Valibot validator
 - **[@ws-kit/client](https://www.npmjs.com/package/@ws-kit/client)** - Browser/Node.js client
-- **[@ws-kit/cloudflare-do](https://www.npmjs.com/package/@ws-kit/cloudflare-do)** - Cloudflare Durable Objects adapter
+- **[@ws-kit/bun](https://www.npmjs.com/package/@ws-kit/bun)** - Low-level Bun platform adapter (used internally by `@ws-kit/serve/bun`)
 
 ## License
 

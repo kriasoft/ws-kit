@@ -9,22 +9,21 @@ Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** va
 
 ## ⚠️ Environment Requirements
 
-**ws-kit is ESM-only** and requires a modern JavaScript environment:
+**ws-kit is ESM-only** and optimized for modern runtimes:
 
-- **Bun** (recommended) — native ESM support
-- **Node.js 14+** — with `"type": "module"` in package.json
+- **Bun** (recommended) — native ESM and WebSocket support
 - **Cloudflare Workers/Durable Objects** — native ESM support
-- **Modern bundlers** — Vite, esbuild, Rollup, etc.
+- **Node.js** (with bundler) — requires Node 18+ and a bundler like Vite, esbuild, or Rollup
+- **Browser** — works with modern bundlers
 
-**Not compatible** with CommonJS-only projects or legacy Node.js versions.
+**Not compatible** with CommonJS-only projects or legacy runtimes.
 
 ## Monorepo Structure
 
 ws-kit is organized as a modular monorepo with independent packages:
 
 - **`@ws-kit/core`** — Platform-agnostic router and type system (foundation)
-- **`@ws-kit/bun`** — Bun WebSocket server adapter
-- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
+- **`@ws-kit/serve`** — Multi-runtime server with platform-specific subpaths (`/bun`, `/cloudflare-do`, etc.)
 - **`@ws-kit/zod`** — Zod validator adapter
 - **`@ws-kit/valibot`** — Valibot validator adapter
 - **`@ws-kit/client`** — Universal browser/Node.js client
@@ -56,15 +55,15 @@ Combine any platform adapter with any validator adapter for your use case.
 
 ## Installation
 
-Choose your validation library and Bun as your runtime:
+Choose your validation library:
 
 ```bash
 # With Zod (recommended for most projects)
-bun add @ws-kit/zod @ws-kit/bun @ws-kit/serve
+bun add @ws-kit/zod @ws-kit/serve
 bun add zod bun @types/bun -D
 
 # With Valibot (lighter bundles)
-bun add @ws-kit/valibot @ws-kit/bun @ws-kit/serve
+bun add @ws-kit/valibot @ws-kit/serve
 bun add valibot bun @types/bun -D
 ```
 

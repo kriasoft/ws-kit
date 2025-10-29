@@ -1,11 +1,12 @@
 /**
- * Cloudflare Durable Objects Sharding Example
+ * Cloudflare Durable Object Handler
  *
- * Demonstrates scaling pub/sub across multiple DO instances
- * by sharding subscriptions based on scope/room name.
+ * Handles WebSocket connections for a shard in a sharded pub/sub system.
+ * The Worker entry point (`router.ts`) routes incoming requests to the appropriate
+ * shard using stable hashing on the room/scope name.
  *
- * Each room (scope) consistently routes to the same DO instance,
- * enabling linear scaling without cross-DO communication.
+ * Each DO instance is limited to 100 concurrent connections.
+ * Use `router.ts` with `getShardedStub()` to distribute rooms across multiple shards.
  */
 
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -21,25 +22,13 @@ const RoomUpdate = message("ROOM_UPDATE", {
   userId: z.string(),
 });
 
-// Hash function: consistent scope → DO instance mapping
-function scopeToDoId(scope: string): string {
-  let hash = 0;
-  for (let i = 0; i < scope.length; i++) {
-    const char = scope.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  const doCount = 10; // Configure based on expected load
-  return `router-${Math.abs(hash) % doCount}`;
-}
-
 // Type-safe app data
-type AppData = {
+interface AppData {
   userId?: string;
   roomId?: string;
-};
+}
 
-// Router instance
+// Create router for this DO instance
 const router = createRouter<AppData>();
 
 // Join room: subscribe to scoped channel
@@ -47,11 +36,11 @@ router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId || "anonymous";
 
-  // Subscribe to room-scoped updates
+  // Subscribe to room-scoped updates (broadcasts only within this DO instance)
   ctx.subscribe(`room:${roomId}`);
   ctx.assignData({ roomId });
 
-  // Notify room members
+  // Notify room members of join
   router.publish(`room:${roomId}`, RoomUpdate, {
     roomId,
     text: `${userId} joined`,
@@ -59,7 +48,7 @@ router.on(JoinRoom, (ctx) => {
   });
 });
 
-// Send message: broadcast to room
+// Send message: broadcast to room subscribers
 router.on(RoomMessage, (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   const userId = ctx.ws.data?.userId || "anonymous";
@@ -76,7 +65,7 @@ router.on(RoomMessage, (ctx) => {
   });
 });
 
-// Leave room
+// Leave room: cleanup subscription
 router.on(LeaveRoom, (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
@@ -84,16 +73,24 @@ router.on(LeaveRoom, (ctx) => {
   }
 });
 
-// Export Cloudflare Durable Object
-export default {
-  fetch: createDurableObjectHandler(router, {
-    authenticate(req) {
-      const token = req.headers.get("authorization");
-      return token ? { userId: token.replace("Bearer ", "") } : undefined;
-    },
-  }),
-} satisfies ExportedHandler;
+// Export Cloudflare Durable Object class
+export class WebSocketRouter {
+  private handler;
 
-// Type: export type DurableObjectNamespace = {
-//   get(id: DurableObjectId): DurableObjectStub;
-// };
+  constructor(
+    private state: unknown, // DurableObjectState - from @cloudflare/workers-types
+    private env: unknown, // DurableObjectEnv - from @cloudflare/workers-types
+  ) {
+    // Create handler with authentication
+    this.handler = createDurableObjectHandler(router, {
+      authenticate(req) {
+        const token = req.headers.get("authorization");
+        return token ? { userId: token.replace("Bearer ", "") } : undefined;
+      },
+    });
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    return this.handler.fetch(req);
+  }
+}

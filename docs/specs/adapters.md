@@ -285,50 +285,135 @@ All adapters follow **identical error semantics**. See `docs/specs/error-handlin
 
 ### Cloudflare DO Sharding for Pub/Sub
 
-When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Shard your subscriptions across multiple DO instances by deriving a DO ID from the scope name:
+When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Shard subscriptions across multiple DO instances by mapping scope names to stable shard IDs.
+
+**Worker entrypoint** (routes incoming requests to sharded DO instances):
 
 ```typescript
-import { createRouter } from "@ws-kit/zod";
+import { getShardedStub } from "@ws-kit/cloudflare-do/sharding";
+
+export default {
+  async fetch(req: Request, env: Env) {
+    // Extract room from URL query param or path
+    const url = new URL(req.url);
+    const roomId = url.searchParams.get("room") ?? "general";
+
+    // Route to sharded DO based on room ID (stable hash)
+    // Same room always goes to same DO instance
+    const stub = getShardedStub(env, `room:${roomId}`, 10);
+
+    // Forward HTTP upgrade to the sharded DO
+    return stub.fetch(req);
+  },
+};
+```
+
+**Durable Object handler** (WebSocket hub for a shard):
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
 
-// Hash scope to a stable DO ID
-function getScopeDoId(scope: string): string {
-  const hash = Array.from(new TextEncoder().encode(scope)).reduce(
-    (h, byte) => ((h << 5) - h + byte) >>> 0,
-    0,
-  );
-  const doCount = 10; // Number of DO instances for sharding
-  return `ws-router-${hash % doCount}`;
-}
-
-// Derive stable namespace and ID
-function getDurableObjectId(scope: string) {
-  const env = {
-    ROUTER: { idFromName: (name: string) => ({ toString: () => name }) },
-  };
-  const doId = getScopeDoId(scope);
-  return env.ROUTER.idFromName(doId);
-}
-
-// Server: route subscriptions to sharded DO instances
-const router = createRouter();
-router.on(JoinRoom, (ctx) => {
-  const { roomId } = ctx.payload;
-  const doId = getDurableObjectId(`room:${roomId}`);
-  // In production, fetch and upgrade to DO: env.ROUTER.get(doId).fetch(req)
-  ctx.subscribe(`room:${roomId}`);
+// Message schemas
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const SendMessage = message("SEND_MESSAGE", { text: z.string() });
+const RoomBroadcast = message("ROOM_BROADCAST", {
+  roomId: z.string(),
+  userId: z.string(),
+  text: z.string(),
 });
 
-// Client: same API, transparent sharding
-const client = wsClient("wss://api.example.com");
-client.send(JoinRoom, { roomId: "general" }); // Routed to sharded DO based on hash
+type AppData = { userId?: string };
+
+const router = createRouter<AppData>();
+
+// Join: subscribe to room updates
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  const userId = ctx.ws.data?.userId ?? "anonymous";
+
+  ctx.subscribe(`room:${roomId}`);
+  ctx.assignData({ userId });
+
+  // Notify room members of join
+  router.publish(`room:${roomId}`, RoomBroadcast, {
+    roomId,
+    userId,
+    text: `${userId} joined the room`,
+  });
+});
+
+// Send: broadcast to subscribers
+router.on(SendMessage, (ctx) => {
+  const userId = ctx.ws.data?.userId ?? "anonymous";
+  // Room ID comes from subscription context or connection data
+  const roomId = "general"; // In real app, track via ctx.ws.data
+
+  router.publish(`room:${roomId}`, RoomBroadcast, {
+    roomId,
+    userId,
+    text: ctx.payload.text,
+  });
+});
+
+// Export as Durable Object
+export class WebSocketRouter {
+  constructor(
+    private state: DurableObjectState,
+    private env: Env,
+  ) {}
+
+  async fetch(req: Request) {
+    const handler = createDurableObjectHandler({
+      router,
+      authenticate(req) {
+        // Extract user from auth header, query param, etc.
+        const token = req.headers.get("authorization");
+        return token ? { userId: token.replace("Bearer ", "") } : undefined;
+      },
+    });
+
+    return handler.fetch(req);
+  }
+}
+```
+
+**wrangler.toml configuration** (enable Durable Object binding):
+
+```toml
+[[durable_objects.bindings]]
+name = "ROUTER"
+class_name = "WebSocketRouter"
+# Optional: script_name = "ws-kit-example"  # for cross-service routing
+```
+
+**Optional: Inline hash without helper** (for reference or custom distribution logic):
+
+```typescript
+// Pure function for scope → shard name mapping
+function scopeToDoName(scope: string, shards: number): string {
+  let hash = 0;
+  for (let i = 0; i < scope.length; i++) {
+    hash = (hash << 5) - hash + scope.charCodeAt(i);
+    hash = hash | 0; // 32-bit signed integer
+  }
+  return `ws-router-${(hash >>> 0) % shards}`;
+}
+
+// Usage: compute shard, then get stub
+const shardName = scopeToDoName(`room:${roomId}`, 10);
+const doId = env.ROUTER.idFromName(shardName);
+const stub = env.ROUTER.get(doId);
 ```
 
 **Benefits:**
 
-- ✅ Linear scaling: Add more DO instances without code changes
-- ✅ Stable routing: Same scope always routes to same DO
-- ✅ No global bottleneck: Each scope's subscribers live on its DO instance
+- ✅ **Linear scaling**: Add more DO instances to handle more concurrent connections
+- ✅ **Stable routing**: Same scope always maps to same DO (deterministic hash)
+- ✅ **No cross-shard overhead**: Each scope's subscribers live on one DO; broadcasts are free (BroadcastChannel)
+- ✅ **Simple distribution**: No external router needed; client directly reaches correct shard
+
+**Important**: Changing shard count (`10` → `20`) remaps existing scopes. Plan a migration period if using persistent storage or want to preserve session state across deployments.
 
 ### PubSub Engine Interface
 

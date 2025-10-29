@@ -39,6 +39,7 @@ export {
   createDurableObjectHandlerWithState,
 } from "./handler";
 export { federate, federateWithErrors, federateWithFilter } from "./federate";
+export { scopeToDoName, getShardedDoId, getShardedStub } from "./sharding";
 
 // Export types
 export type {
