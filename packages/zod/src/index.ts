@@ -15,10 +15,6 @@
  * - zodValidator(): Validator adapter for core router
  * - wsClient(): Type-safe WebSocket client
  *
- * Legacy exports (deprecated, backwards compatible):
- * - createMessageSchema(): Old factory pattern (use message() instead)
- * - createZodRouter(): Old function name (use createRouter() instead)
- *
  * @example Modern API (recommended)
  * ```typescript
  * import { z, message, createRouter } from "@ws-kit/zod";
