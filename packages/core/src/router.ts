@@ -49,8 +49,8 @@ interface HeartbeatState {
  *
  * **Best Practice**: For full TypeScript type inference in message handlers, use the
  * typed factory functions from validator packages:
- * - `createZodRouter()` from `@ws-kit/zod`
- * - `createValibotRouter()` from `@ws-kit/valibot`
+ * - `createRouter()` from `@ws-kit/zod`
+ * - `createRouter()` from `@ws-kit/valibot`
  *
  * These factories provide type-safe method signatures that preserve payload types
  * from your schema throughout the routing pipeline, eliminating the need for manual
@@ -130,13 +130,13 @@ export class WebSocketRouter<
    *
    * @example
    * ```typescript
-   * const PingMessage = messageSchema("PING", { text: z.string() });
-   * router.onMessage(PingMessage, (ctx) => {
+   * const PingMessage = message("PING", { text: z.string() });
+   * router.on(PingMessage, (ctx) => {
    *   console.log("Ping received:", ctx.payload.text);
    * });
    * ```
    */
-  onMessage<Schema extends MessageSchemaType>(
+  on<Schema extends MessageSchemaType>(
     schema: Schema,
     handler: MessageHandler<Schema, TData>,
   ): this {
@@ -159,6 +159,35 @@ export class WebSocketRouter<
       schema,
       handler: handler as MessageHandler<MessageSchemaType, TData>,
     });
+
+    return this;
+  }
+
+  /**
+   * Unregister a handler for a specific message type.
+   *
+   * Removes the handler registered via `on()` for the given message schema.
+   * If no handler is registered for this message type, this is a no-op.
+   *
+   * @param schema - Message schema identifying the message type to unregister
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * const PingMessage = message("PING", { text: z.string() });
+   * router.off(PingMessage);
+   * ```
+   */
+  off<Schema extends MessageSchemaType>(schema: Schema): this {
+    if (!this.validator) {
+      console.warn(
+        "[ws] No validator configured. Cannot unregister message handler.",
+      );
+      return this;
+    }
+
+    const messageType = this.validator.getMessageType(schema);
+    this.messageHandlers.delete(messageType);
 
     return this;
   }
@@ -281,7 +310,7 @@ export class WebSocketRouter<
    *   return next();
    * });
    *
-   * router.onMessage(SendMessage, (ctx) => {
+   * router.on(SendMessage, (ctx) => {
    *   // This handler only runs if rate limit middleware calls next()
    *   console.log("Message:", ctx.payload);
    * });
@@ -334,15 +363,15 @@ export class WebSocketRouter<
    *
    * @example
    * ```typescript
-   * import { createZodRouter } from "@ws-kit/zod";
+   * import { createRouter } from "@ws-kit/zod";
    *
-   * const authRouter = createZodRouter();
-   * authRouter.onMessage(LoginSchema, handleLogin);
+   * const authRouter = createRouter();
+   * authRouter.on(LoginSchema, handleLogin);
    *
-   * const chatRouter = createZodRouter();
-   * chatRouter.onMessage(MessageSchema, handleMessage);
+   * const chatRouter = createRouter();
+   * chatRouter.on(MessageSchema, handleMessage);
    *
-   * const mainRouter = createZodRouter({
+   * const mainRouter = createRouter({
    *   platform: createBunAdapter(),
    * })
    *   .addRoutes(authRouter)

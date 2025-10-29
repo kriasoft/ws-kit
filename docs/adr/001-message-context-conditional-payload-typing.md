@@ -33,16 +33,16 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
 
 **Problem**: Base router uses generic types, so TypeScript resolves `ctx.payload` as `any` in inline handlers.
 
-**Solution**: Override `onMessage` in derived classes with validator-specific types:
+**Solution**: Override `on` in derived classes with validator-specific types:
 
 ```typescript
 // zod/router.ts
 // @ts-expect-error - Intentional override with more specific types for better DX
-onMessage<Schema extends ZodMessageSchemaType>(
+on<Schema extends ZodMessageSchemaType>(
   schema: Schema,
   handler: ZodMessageHandler<Schema, WebSocketData<T>>,
 ): this {
-  return super.onMessage(schema as any, handler as any);
+  return super.on(schema as any, handler as any);
 }
 ```
 

@@ -29,7 +29,7 @@ import { z } from "zod";
 const router = new WebSocketRouter({ validator: zodValidator() });
 const PingMessage = messageSchema("PING", { text: z.string() });
 
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   // ctx.payload is typed as { text: string }
 });
 ```

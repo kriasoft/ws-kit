@@ -53,7 +53,7 @@ const router = new WebSocketRouter()
     ctx.ws.data.authTimer = authTimer;
   })
 
-  .onMessage(AuthMessage, async (ctx) => {
+  .on(AuthMessage, async (ctx) => {
     try {
       // Verify token
       const decoded = jwt.verify(ctx.payload.token, config.jwtSecret, {
@@ -140,7 +140,7 @@ Bun.serve({
 import { publish } from "bun-ws-router/zod/publish";
 
 // Efficient broadcast using type-safe publish
-router.onMessage(BroadcastMessage, (ctx) => {
+router.on(BroadcastMessage, (ctx) => {
   // Type-safe publish validates message before sending
   publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
 });
@@ -201,7 +201,7 @@ router
     });
   })
 
-  .onMessage(AnyMessage, (ctx) => {
+  .on(AnyMessage, (ctx) => {
     // Update activity timestamp directly on ws.data
     ctx.ws.data.lastActivity = Date.now();
   })
@@ -238,7 +238,7 @@ router
     });
   })
 
-  .onMessage(AnyMessage, (ctx) => {
+  .on(AnyMessage, (ctx) => {
     logger.debug({
       event: "ws_message",
       clientId: ctx.ws.data.clientId,
@@ -292,7 +292,7 @@ const metrics = {
 router
   .onOpen(() => metrics.connections.inc())
   .onClose(() => metrics.connections.dec())
-  .onMessage(AnyMessage, (ctx) => {
+  .on(AnyMessage, (ctx) => {
     const size = JSON.stringify(ctx.payload).length;
     metrics.messages.inc({ type: ctx.type });
     metrics.messageSize.observe(size);
@@ -316,7 +316,7 @@ const redis = createClient({
 await redis.connect();
 
 // Pub/Sub across instances
-router.onMessage(BroadcastMessage, async (ctx) => {
+router.on(BroadcastMessage, async (ctx) => {
   // Publish to Redis for cross-instance communication
   await redis.publish(
     "broadcast",

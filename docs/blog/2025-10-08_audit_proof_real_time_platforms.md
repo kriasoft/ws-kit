@@ -46,7 +46,7 @@ The risky pattern looks deceptively harmless. Here is the same snippet that burn
 
 ```typescript
 // ❌ Vulnerable rate limiter: trusts the producer clock
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   const lastMessageTime = cache.get(ctx.ws.data.userId);
   const timeSinceLastMessage = ctx.meta.timestamp - lastMessageTime;
 
@@ -74,7 +74,7 @@ Here is what that looks like inside a router handler. The critical change is usi
 
 ```typescript
 // ✅ Defensive handler: server owns the enforcement clock
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // Modern frameworks capture receivedAt automatically at message ingress
   const receivedAt = ctx.receivedAt;
   const lastReceivedAt = cache.get(ctx.ws.data.userId);

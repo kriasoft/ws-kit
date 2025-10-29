@@ -167,28 +167,25 @@ export type { LoggerAdapter, LoggerOptions } from "./logger";
  *
  * **Recommended**: For full TypeScript type inference in message handlers,
  * use the typed factory functions:
- * - `createZodRouter()` from `@ws-kit/zod`
- * - `createValibotRouter()` from `@ws-kit/valibot`
+ * - `createRouter()` from `@ws-kit/zod`
+ * - `createRouter()` from `@ws-kit/valibot`
  *
  * @example
  * ```typescript
  * // Recommended: Use typed router factory for full type inference
- * import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
- * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
+ * import { createRouter } from "@ws-kit/zod";
+ * import { createBunHandler } from "@ws-kit/bun";
  * import { z } from "zod";
  *
- * const { messageSchema } = createMessageSchema(z);
- * const PingMessage = messageSchema("PING", { text: z.string() });
+ * const PingMessage = message("PING", { text: z.string() });
  *
- * const router = createZodRouter({
- *   platform: createBunAdapter(),
- * });
+ * const router = createRouter();
  *
- * router.onMessage(PingMessage, (ctx) => {
+ * router.on(PingMessage, (ctx) => {
  *   console.log("Ping:", ctx.payload.text);
  * });
  *
- * const { fetch, websocket } = createBunHandler(router._core);
+ * const { fetch, websocket } = createBunHandler(router);
  * ```
  */
 export { WebSocketRouter } from "./router";

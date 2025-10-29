@@ -62,7 +62,7 @@ const ChatMessage = messageSchema("CHAT", {
 });
 
 // Register handler
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   // This broadcasts to all instances
   await router.publish("chat:general", {
     userId: ctx.payload.userId,
@@ -213,7 +213,7 @@ const SendMessage = messageSchema("SEND", {
 // Track room memberships
 const roomMembers = new Map<string, Set<string>>();
 
-router.onMessage(JoinRoom, async (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const roomId = ctx.payload.roomId;
   const clientId = ctx.ws.clientId;
 
@@ -228,7 +228,7 @@ router.onMessage(JoinRoom, async (ctx) => {
   });
 });
 
-router.onMessage(SendMessage, async (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Broadcast to all instances

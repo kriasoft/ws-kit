@@ -43,12 +43,12 @@ router.onOpen((ctx) => {
 });
 ```
 
-#### `onMessage(schema, handler)`
+#### `on(schema, handler)`
 
 Register a handler for a specific message type.
 
 ```typescript
-onMessage<TPayload>(
+on<TPayload>(
   schema: MessageSchema<TPayload>,
   handler: (context: MessageContext<TPayload, TData>) => void | Promise<void>
 ): this
@@ -64,7 +64,7 @@ onMessage<TPayload>(
 ```typescript
 import { publish } from "bun-ws-router/zod/publish";
 
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   await saveMessage(ctx.payload);
 
   // publish() validates and auto-adds timestamp before broadcasting
@@ -354,7 +354,7 @@ publish<T>(
 import { publish } from "bun-ws-router/zod/publish";
 
 // Basic publish with type safety
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   publish(ctx.ws, "room:123", ChatMessage, {
     text: "Hello everyone!",
     roomId: "123",

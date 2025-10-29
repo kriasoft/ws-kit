@@ -29,7 +29,7 @@ router.use((ctx, next) => {
   return next();
 });
 
-router.onMessage(AuthenticateMessage, (context) => {
+router.on(AuthenticateMessage, (context) => {
   // Type-safe payload access - fully typed without assertions!
   const { token, apiVersion } = context.payload;
 

@@ -20,7 +20,7 @@ import type { PubSub } from "@ws-kit/core";
  * await pubsub.publish("notifications", { text: "Hello" });
  *
  * // In message handlers:
- * router.onMessage(SomeSchema, (ctx) => {
+ * router.on(SomeSchema, (ctx) => {
  *   ctx.ws.subscribe("room:123");  // Subscribe to channel
  *   await router.publish("room:123", response);  // Broadcast within this DO
  * });

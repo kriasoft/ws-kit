@@ -16,21 +16,15 @@ import type { BunHandler, BunHandlerOptions, BunWebSocketData } from "./types";
  * Returns a `{ fetch, websocket }` object that can be passed directly to Bun.serve.
  * Accepts both typed routers and core routers.
  *
- * **Recommended Usage** (Phase 1+):
+ * **Usage**:
  * ```typescript
  * import { createRouter } from "@ws-kit/zod";
  * import { createBunHandler } from "@ws-kit/bun";
  *
  * const router = createRouter<AppData>();
- * // Pass router directly (no ._core needed)
  * const { fetch, websocket } = createBunHandler(router);
  *
  * Bun.serve({ fetch, websocket, port: 3000 });
- * ```
- *
- * **Legacy Usage** (deprecated):
- * ```typescript
- * const { fetch, websocket } = createBunHandler(router._core);
  * ```
  *
  * **Connection Flow**:
@@ -88,50 +82,58 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
      * Or you can return the result of server.upgrade directly from this fetch handler.
      */
     fetch: async (req: Request, server: Server): Promise<Response> => {
-      // Generate unique client ID (UUID v7 - time-ordered)
-      const clientId = uuidv7();
+      try {
+        // Call onUpgrade hook (before authentication)
+        options?.onUpgrade?.(req);
 
-      // Call user's authentication function if provided
-      const customData: TData | undefined = options?.authenticate
-        ? await Promise.resolve(options.authenticate(req))
-        : undefined;
+        // Generate unique client ID (UUID v7 - time-ordered)
+        const clientId = uuidv7();
 
-      // Prepare connection data with clientId
-      const data: BunWebSocketData<TData> = {
-        clientId,
-        connectedAt: Date.now(),
-        ...(customData || {}),
-      } as BunWebSocketData<TData>;
+        // Call user's authentication function if provided
+        const customData: TData | undefined = options?.authenticate
+          ? await Promise.resolve(options.authenticate(req))
+          : undefined;
 
-      // Upgrade connection with initial data
-      // Returns true if successful, false if not a valid WebSocket request
-      const upgraded = server.upgrade<BunWebSocketData<TData>>(req, {
-        data,
-        headers: {
-          [clientIdHeader]: clientId,
-        },
-      });
+        // Prepare connection data with clientId
+        const data: BunWebSocketData<TData> = {
+          clientId,
+          connectedAt: Date.now(),
+          ...(customData || {}),
+        } as BunWebSocketData<TData>;
 
-      // Note on PubSub initialization:
-      // - If router was created with createBunAdapterWithServer(server), BunPubSub is already set
-      // - If router uses MemoryPubSub (default), broadcasts are scoped to this instance only
-      // - For multi-instance clusters, use RedisPubSub or pre-initialize with the server
-      //
-      // Example of pre-initialization:
-      // ```typescript
-      // const { fetch, websocket } = createBunHandler(router);
-      // const server = Bun.serve({ fetch, websocket });
-      // // Broadcasts now use the server-aware PubSub
-      // ```
+        // Upgrade connection with initial data
+        // Returns true if successful, false if not a valid WebSocket request
+        const upgraded = server.upgrade<BunWebSocketData<TData>>(req, {
+          data,
+          headers: {
+            [clientIdHeader]: clientId,
+          },
+        });
 
-      if (upgraded) {
-        // Upgrade successful, Bun has handled the response
-        // Return 200 OK (WebSocket upgrade is handled by Bun automatically)
-        return new Response(null, { status: 200 });
+        // Note on PubSub initialization:
+        // - If router was created with createBunAdapterWithServer(server), BunPubSub is already set
+        // - If router uses MemoryPubSub (default), broadcasts are scoped to this instance only
+        // - For multi-instance clusters, use RedisPubSub or pre-initialize with the server
+        //
+        // Example of pre-initialization:
+        // ```typescript
+        // const { fetch, websocket } = createBunHandler(router);
+        // const server = Bun.serve({ fetch, websocket });
+        // // Broadcasts now use the server-aware PubSub
+        // ```
+
+        if (upgraded) {
+          // Upgrade successful, Bun has handled the response
+          // Return 200 OK (WebSocket upgrade is handled by Bun automatically)
+          return new Response(null, { status: 200 });
+        }
+
+        // Upgrade failed (likely not a valid WebSocket request)
+        return new Response("Upgrade failed", { status: 500 });
+      } catch (error) {
+        console.error("[ws] Error in fetch handler:", error);
+        return new Response("Internal server error", { status: 500 });
       }
-
-      // Upgrade failed (likely not a valid WebSocket request)
-      return new Response("Upgrade failed", { status: 500 });
     },
 
     /**
@@ -155,6 +157,13 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
 
           // Call router's open handler
           await coreRouter.handleOpen(ws);
+
+          // Call onOpen hook (after connection is established and authenticated)
+          try {
+            options?.onOpen?.({ ws });
+          } catch (error) {
+            console.error("[ws] Error in onOpen hook:", error);
+          }
         } catch (error) {
           console.error("[ws] Error in open handler:", error);
           try {
@@ -192,6 +201,13 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
         try {
           // Call router's close handler
           await coreRouter.handleClose(ws, code, reason);
+
+          // Call onClose hook (after cleanup)
+          try {
+            options?.onClose?.({ ws });
+          } catch (error) {
+            console.error("[ws] Error in onClose hook:", error);
+          }
         } catch (error) {
           console.error("[ws] Error in close handler:", error);
         }

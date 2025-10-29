@@ -153,7 +153,7 @@ const PingMsg = message("PING", { value: z.number() });
 const PongMsg = message("PONG", { reply: z.number() });
 
 // 4. Handle messages (ctx.payload fully typed!)
-router.onMessage(PingMsg, (ctx) => {
+router.on(PingMsg, (ctx) => {
   console.log("Received at:", ctx.receivedAt); // Server time (authoritative)
   ctx.reply(PongMsg, { reply: ctx.payload.value * 2 }); // ✅ No type assertions needed
 });
@@ -167,7 +167,7 @@ router.use((ctx, next) => {
   return next();
 });
 
-router.onMessage(ChatMsg, (ctx) => {
+router.on(ChatMsg, (ctx) => {
   router.publish("room:123", RoomMsg, {
     text: ctx.payload.text,
     userId: ctx.ws.data?.userId || "anon",

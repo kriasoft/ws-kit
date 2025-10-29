@@ -18,7 +18,7 @@ describe("Middleware", () => {
         return next();
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         calls.push("handler");
       });
 
@@ -66,7 +66,7 @@ describe("Middleware", () => {
         return next();
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         calls.push("handler");
       });
 
@@ -112,7 +112,7 @@ describe("Middleware", () => {
         return;
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         calls.push("handler");
       });
 
@@ -161,7 +161,7 @@ describe("Middleware", () => {
         return next();
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         calls.push("handler");
       });
 
@@ -203,7 +203,7 @@ describe("Middleware", () => {
         calls.push("middleware_after");
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         calls.push("handler");
       });
 
@@ -246,7 +246,7 @@ describe("Middleware", () => {
         calls.push("middleware_after");
       });
 
-      router.onMessage(TestMessage, async (ctx) => {
+      router.on(TestMessage, async (ctx) => {
         calls.push("handler_before");
         await new Promise((resolve) => setTimeout(resolve, 1));
         calls.push("handler_after");
@@ -293,7 +293,7 @@ describe("Middleware", () => {
       });
 
       let handlerUserId: string | undefined;
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         handlerUserId = ctx.ws.data.userId;
       });
 
@@ -338,7 +338,7 @@ describe("Middleware", () => {
 
       let step1: boolean | undefined;
       let step2: boolean | undefined;
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         step1 = ctx.ws.data.step1;
         step2 = ctx.ws.data.step2;
       });
@@ -383,7 +383,7 @@ describe("Middleware", () => {
         throw new Error("Middleware error");
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         // Should not reach here
       });
 
@@ -425,7 +425,7 @@ describe("Middleware", () => {
         throw new Error("Async middleware error");
       });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         // Should not reach here
       });
 
@@ -471,7 +471,7 @@ describe("Middleware", () => {
         calls.push("router2_middleware");
         return next();
       });
-      router2.onMessage(TestMessage, (ctx) => {
+      router2.on(TestMessage, (ctx) => {
         calls.push("handler");
       });
 

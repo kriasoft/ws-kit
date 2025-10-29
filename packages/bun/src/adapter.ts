@@ -16,9 +16,9 @@ import { BunPubSub } from "./pubsub";
  * **Usage**:
  * ```typescript
  * import { createBunAdapter } from "@ws-kit/bun";
- * import { createZodRouter } from "@ws-kit/zod";
+ * import { createRouter } from "@ws-kit/zod";
  *
- * const router = createZodRouter({
+ * const router = createRouter({
  *   platform: createBunAdapter(),
  * });
  * ```
@@ -48,11 +48,11 @@ export function createBunAdapter(): PlatformAdapter {
  * **Usage**:
  * ```typescript
  * import { createBunAdapterWithServer } from "@ws-kit/bun";
- * import { createZodRouter } from "@ws-kit/zod";
+ * import { createRouter } from "@ws-kit/zod";
  *
  * const server = await Bun.serve({...});
  * const adapter = createBunAdapterWithServer(server);
- * const router = createZodRouter({ platform: adapter });
+ * const router = createRouter({ platform: adapter });
  * ```
  *
  * @param server - Bun Server instance for pub/sub

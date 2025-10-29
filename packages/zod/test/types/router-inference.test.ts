@@ -34,7 +34,7 @@ describe("Type inference in createRouter handlers", () => {
       const router = createRouter();
 
       // Register handler and verify types within the handler
-      router.onMessage(LoginSchema, (ctx) => {
+      router.on(LoginSchema, (ctx) => {
         // ctx.payload should be typed as { username: string; password: string }
         expectTypeOf(ctx.payload).toMatchTypeOf<{
           username: string;
@@ -63,7 +63,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(UserSchema, (ctx) => {
+      router.on(UserSchema, (ctx) => {
         expectTypeOf(ctx.payload).toMatchTypeOf<{
           id: string;
           name?: string;
@@ -96,7 +96,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(PostSchema, (ctx) => {
+      router.on(PostSchema, (ctx) => {
         expectTypeOf(ctx.payload).toMatchTypeOf<{
           title: string;
           content: string;
@@ -124,7 +124,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(ActionSchema, (ctx) => {
+      router.on(ActionSchema, (ctx) => {
         expectTypeOf(ctx.payload.action).toEqualTypeOf<
           "start" | "stop" | "pause"
         >();
@@ -147,7 +147,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(PingSchema, (ctx) => {
+      router.on(PingSchema, (ctx) => {
         // payload should not exist at all
         // @ts-expect-error - payload should not be available
         ctx.payload;
@@ -167,7 +167,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(PingEmptySchema, (ctx) => {
+      router.on(PingEmptySchema, (ctx) => {
         // @ts-expect-error - payload should not be available
         ctx.payload;
       });
@@ -186,7 +186,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(ConnectSchema, (ctx) => {
+      router.on(ConnectSchema, (ctx) => {
         // ctx.type should be literal "CONNECT", not string
         expectTypeOf(ctx.type).toEqualTypeOf<"CONNECT">();
 
@@ -209,11 +209,11 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(LoginSchema, (ctx) => {
+      router.on(LoginSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGIN">();
       });
 
-      router.onMessage(LogoutSchema, (ctx) => {
+      router.on(LogoutSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGOUT">();
       });
     });
@@ -231,7 +231,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(MessageSchema, (ctx) => {
+      router.on(MessageSchema, (ctx) => {
         // Should have base meta fields
         expectTypeOf(ctx.meta).toMatchTypeOf<{
           timestamp?: number;
@@ -255,7 +255,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(RoomMessageSchema, (ctx) => {
+      router.on(RoomMessageSchema, (ctx) => {
         // Should include extended meta fields
         expectTypeOf(ctx.meta).toMatchTypeOf<{
           timestamp?: number;
@@ -283,7 +283,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(InfoSchema, (ctx) => {
+      router.on(InfoSchema, (ctx) => {
         const AckSchema = message("ACK", { success: z.boolean() });
 
         // Should allow sending with payload
@@ -304,7 +304,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(DoneSchema, (ctx) => {
+      router.on(DoneSchema, (ctx) => {
         const AckSchema = message("ACK");
 
         // Should allow sending without payload
@@ -328,7 +328,7 @@ describe("Type inference in createRouter handlers", () => {
 
       const router = createRouter();
 
-      router.onMessage(ChatSchema, (ctx) => {
+      router.on(ChatSchema, (ctx) => {
         const ReplySchema = message(
           "REPLY",
           { text: z.string() },
@@ -367,12 +367,12 @@ describe("Type inference in createRouter handlers", () => {
       });
 
       const authRouter = createRouter();
-      authRouter.onMessage(AuthSchema, (ctx) => {
+      authRouter.on(AuthSchema, (ctx) => {
         expectTypeOf(ctx.payload.token).toBeString();
       });
 
       const chatRouter = createRouter();
-      chatRouter.onMessage(ChatSchema, (ctx) => {
+      chatRouter.on(ChatSchema, (ctx) => {
         expectTypeOf(ctx.payload.message).toBeString();
       });
 
@@ -382,7 +382,7 @@ describe("Type inference in createRouter handlers", () => {
       mainRouter.addRoutes(chatRouter);
 
       // Types should still work on the main router
-      expectTypeOf(mainRouter).toMatchTypeOf<{ _core: any }>();
+      expectTypeOf(mainRouter).toMatchTypeOf<{ [key: symbol]: any }>();
     });
   });
 
@@ -400,7 +400,7 @@ describe("Type inference in createRouter handlers", () => {
       const dataRouter = createRouter<UserData>();
       const AuthSchema = message("AUTH", { token: z.string() });
 
-      dataRouter.onMessage(AuthSchema, (ctx) => {
+      dataRouter.on(AuthSchema, (ctx) => {
         // ctx.ws.data should be typed as UserData
         expectTypeOf(ctx.ws.data).toMatchTypeOf<UserData>();
 

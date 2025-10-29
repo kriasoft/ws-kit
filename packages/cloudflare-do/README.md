@@ -56,11 +56,11 @@ bun add valibot @ws-kit/valibot
 
 ```typescript
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { createZodRouter } from "@ws-kit/zod";
+import { createRouter } from "@ws-kit/zod";
 
-const router = createZodRouter();
+const router = createRouter();
 
-const handler = createDurableObjectHandler({ router: router._core });
+const handler = createDurableObjectHandler({ router: router });
 
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -73,33 +73,33 @@ export default {
 
 ```typescript
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+import { createRouter, message } from "@ws-kit/zod";
 import { z } from "zod";
 
 // Create router with Zod validator
-const router = createZodRouter();
+const router = createRouter();
 
 // Define message schemas
-const { messageSchema } = createMessageSchema(z);
+const { messageSchema } = message(z);
 const JoinRoomMessage = messageSchema("ROOM:JOIN", { room: z.string() });
 const SendMessageMessage = messageSchema("ROOM:MESSAGE", { text: z.string() });
 
 // Type-safe handlers
-router.onMessage(JoinRoomMessage, (ctx) => {
+router.on(JoinRoomMessage, (ctx) => {
   // ctx.payload is { room: string }
   ctx.ws.subscribe(`room:${ctx.payload.room}`);
 });
 
-router.onMessage(SendMessageMessage, (ctx) => {
+router.on(SendMessageMessage, (ctx) => {
   // Broadcast within this DO instance
-  router._core.publish(`room:general`, {
+  router.publish(`room:general`, {
     type: "MESSAGE",
     user: ctx.ws.data.clientId,
     text: ctx.payload.text,
   });
 });
 
-const handler = createDurableObjectHandler({ router: router._core });
+const handler = createDurableObjectHandler({ router: router });
 
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -117,7 +117,7 @@ For multi-DO setups, use the `federate()` helper for explicit cross-DO coordinat
 ```typescript
 import { federate } from "@ws-kit/cloudflare-do";
 
-router.onMessage(AnnouncementSchema, async (ctx) => {
+router.on(AnnouncementSchema, async (ctx) => {
   const rooms = ["room:1", "room:2", "room:3"];
 
   // Explicitly broadcast to multiple shards
@@ -202,20 +202,20 @@ await federateWithFilter(
 ### Chat Application
 
 ```typescript
-const router = createZodRouter();
+const router = createRouter();
 
 const members = new Set<string>();
 
-router.onMessage(JoinRoom, async (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   members.add(ctx.ws.data.clientId);
-  await router._core.publish("room:updates", {
+  await router.publish("room:updates", {
     type: "ROOM:LIST",
     users: Array.from(members),
   });
 });
 
-router.onMessage(SendMessage, async (ctx) => {
-  await router._core.publish("room:messages", {
+router.on(SendMessage, async (ctx) => {
+  await router.publish("room:messages", {
     type: "ROOM:MESSAGE",
     user: ctx.ws.data.clientId,
     text: ctx.payload.text,
@@ -226,12 +226,12 @@ router.onMessage(SendMessage, async (ctx) => {
 ### Game Server with State
 
 ```typescript
-router.onMessage(GameActionSchema, async (ctx) => {
+router.on(GameActionSchema, async (ctx) => {
   // Save state
   await state.storage.put(`action:${Date.now()}`, ctx.payload);
 
   // Broadcast to all players in this game
-  await router._core.publish("game:state", ctx.payload);
+  await router.publish("game:state", ctx.payload);
 });
 ```
 

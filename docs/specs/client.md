@@ -60,16 +60,22 @@ export type ClientOptions = {
   //   Backoff multiplier fixed at 2 (exponential doubling)
   //   - Without jitter ("none"): use delay exactly
   //   - With full jitter ("full"): use random(0, delay)
-  // Example (defaults): attempt 1→0-300ms, 2→0-600ms, 3→0-1200ms, ..., 7+→0-10000ms
-  // Rationale for full jitter: prevents thundering herd on mass reconnects
+  // With defaults (300ms initial, 10s max, full jitter):
+  //   attempt 1: random(0, 300ms)
+  //   attempt 2: random(0, 600ms)
+  //   attempt 3: random(0, 1200ms)
+  //   attempt 4: random(0, 2400ms)
+  //   attempt 5: random(0, 4800ms)
+  //   attempt 6: random(0, 9600ms)
+  //   attempt 7+: random(0, 10000ms) [capped at maxDelayMs]
+  // Rationale: Full jitter prevents thundering herd on mass reconnects
 
-  queue?: "drop-oldest" | "drop-newest" | "off";
-  // default: "drop-newest"
-  // Controls outbound message queueing behavior when state !== "open" (i.e., while offline/disconnected):
+  queue?: "drop-oldest" | "drop-newest" | "off"; // default: "drop-newest"
+  // Controls outbound message queueing behavior when state !== "open" (disconnected):
   //   - "drop-oldest": Queue up to queueSize; evict oldest on overflow
   //   - "drop-newest": Queue up to queueSize; reject newest on overflow
   //   - "off": Drop immediately; send() returns false
-  queueSize?: number; // default: 1000 (applies to queue modes with buffer)
+  queueSize?: number; // default: 50 (maximum pending messages while offline)
 
   autoConnect?: boolean; // default: false
   // When true, client auto-connects on first send/request if state === "closed" and never connected.
@@ -1021,7 +1027,7 @@ import { createRouter } from "@ws-kit/zod";
 import { Hello, HelloOk } from "./shared/schemas";
 
 const router = createRouter();
-router.onMessage(Hello, (ctx) => {
+router.on(Hello, (ctx) => {
   ctx.reply(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
 });
 ```

@@ -69,7 +69,7 @@ const router = new WebSocketRouter<{ username?: string }>()
     });
   })
 
-  .onMessage(JoinRoomMessage, (ctx) => {
+  .on(JoinRoomMessage, (ctx) => {
     const { roomId, username } = ctx.payload;
 
     // Store username in custom data
@@ -93,7 +93,7 @@ const router = new WebSocketRouter<{ username?: string }>()
     });
   })
 
-  .onMessage(SendMessageMessage, (ctx) => {
+  .on(SendMessageMessage, (ctx) => {
     const { roomId, text } = ctx.payload;
 
     // Check if user is in room
@@ -112,7 +112,7 @@ const router = new WebSocketRouter<{ username?: string }>()
     });
   })
 
-  .onMessage(LeaveRoomMessage, (ctx) => {
+  .on(LeaveRoomMessage, (ctx) => {
     const { roomId } = ctx.payload;
 
     // Remove from room
@@ -212,7 +212,7 @@ const router = new WebSocketRouter<UserData>()
     }, 5000);
   })
 
-  .onMessage(AuthMessage, async (ctx) => {
+  .on(AuthMessage, async (ctx) => {
     try {
       // Verify JWT token
       const decoded = jwt.verify(
@@ -254,7 +254,7 @@ const router = new WebSocketRouter<UserData>()
     }
   })
 
-  .onMessage(AdminActionMessage, (ctx) => {
+  .on(AdminActionMessage, (ctx) => {
     // Check authentication
     if (!ctx.ws.data.authenticated) {
       ctx.send(ErrorMessage, {
@@ -348,7 +348,7 @@ const router = new WebSocketRouter()
     ctx.ws.subscribe(`user:${ctx.ws.data.clientId}`);
   })
 
-  .onMessage(SubscribeMessage, (ctx) => {
+  .on(SubscribeMessage, (ctx) => {
     const { topics } = ctx.payload;
     const subs = userSubscriptions.get(ctx.ws.data.clientId)!;
 
@@ -359,7 +359,7 @@ const router = new WebSocketRouter()
     }
   })
 
-  .onMessage(UnsubscribeMessage, (ctx) => {
+  .on(UnsubscribeMessage, (ctx) => {
     const { topics } = ctx.payload;
     const subs = userSubscriptions.get(ctx.ws.data.clientId)!;
 
@@ -497,7 +497,7 @@ const JoinChannelMessage = messageSchema("JOIN_CHANNEL", {
 
 // Router with rate limiting
 const router = new WebSocketRouter()
-  .onMessage(ChatMessage, (ctx) => {
+  .on(ChatMessage, (ctx) => {
     // Check rate limit
     if (!messageLimiter.check(ctx.ws.data.clientId)) {
       ctx.send(ErrorMessage, {
@@ -511,7 +511,7 @@ const router = new WebSocketRouter()
     publish(ctx.ws, "global", ChatMessage, ctx.payload);
   })
 
-  .onMessage(JoinChannelMessage, (ctx) => {
+  .on(JoinChannelMessage, (ctx) => {
     // Check join rate limit
     if (!joinLimiter.check(ctx.ws.data.clientId)) {
       ctx.send(ErrorMessage, {

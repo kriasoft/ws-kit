@@ -7,7 +7,7 @@ import type { ValidatorAdapter } from "@ws-kit/core";
 /**
  * Creates a Zod validator adapter for the WebSocket router.
  *
- * For most applications, use the typed router factory `createZodRouter()` instead,
+ * For most applications, use the typed router factory `createRouter()` instead,
  * which provides full TypeScript type inference in message handlers. The bare
  * validator adapter is useful only when building custom router wrappers or when
  * you specifically need to work with the core router directly.
@@ -17,22 +17,22 @@ import type { ValidatorAdapter } from "@ws-kit/core";
  * @example
  * ```typescript
  * // Recommended: Use typed router factory for full type inference
- * import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+ * import { createRouter, createMessageSchema } from "@ws-kit/zod";
  * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
  * import { z } from "zod";
  *
  * const { messageSchema } = createMessageSchema(z);
  * const PingSchema = messageSchema("PING", { text: z.string() });
  *
- * const router = createZodRouter({
+ * const router = createRouter({
  *   platform: createBunAdapter(),
  * });
  *
- * router.onMessage(PingSchema, (ctx) => {
+ * router.on(PingSchema, (ctx) => {
  *   console.log(ctx.payload.text); // ← type is inferred
  * });
  *
- * const { fetch, websocket } = createBunHandler(router._core);
+ * const { fetch, websocket } = createBunHandler(router);
  * ```
  *
  * @example

@@ -94,7 +94,7 @@ new WebSocketRouter<V, TData>(options?: WebSocketRouterOptions<V, TData>)
 
 **Handler Registration**:
 
-- `onMessage(schema, handler): this` — Register message handler
+- `on(schema, handler): this` — Register message handler
 - `onOpen(handler): this` — Register connection open handler
 - `onClose(handler): this` — Register connection close handler
 - `onAuth(handler): this` — Register authentication handler

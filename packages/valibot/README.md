@@ -29,7 +29,7 @@ import * as v from "valibot";
 const router = new WebSocketRouter({ validator: valibotValidator() });
 const PingMessage = messageSchema("PING", { text: v.string() });
 
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   // ctx.payload is typed as { text: string }
 });
 ```

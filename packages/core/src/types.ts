@@ -117,7 +117,7 @@ export interface MessageContext<
    *
    * @example
    * ```typescript
-   * router.onMessage(QueryMessage, (ctx) => {
+   * router.on(QueryMessage, (ctx) => {
    *   const result = await queryDatabase(ctx.payload);
    *   ctx.reply(QueryResponse, result);  // Clearer than ctx.send()
    * });
@@ -153,7 +153,7 @@ export interface MessageContext<
    *
    * @example
    * ```typescript
-   * router.onMessage(JoinRoom, (ctx) => {
+   * router.on(JoinRoom, (ctx) => {
    *   const { roomId } = ctx.payload;
    *   ctx.subscribe(`room:${roomId}`);
    * });
@@ -433,7 +433,7 @@ export interface LimitsConfig {
  * import { createRouter } from "@ws-kit/zod";
  * const router = createRouter(); // Automatically uses AppDataDefault
  *
- * router.onMessage(LoginSchema, (ctx) => {
+ * router.on(LoginSchema, (ctx) => {
  *   // ctx.ws.data is properly typed with userId, roles, tenant
  * });
  * ```

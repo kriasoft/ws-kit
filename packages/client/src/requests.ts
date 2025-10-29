@@ -48,8 +48,10 @@ export class RequestTracker {
 
     // Check limit before adding
     if (this.pending.size >= this.limit) {
-      throw new Error(
-        `Pending request limit exceeded (max: ${this.limit}). Consider adding application-level throttling.`,
+      return Promise.reject(
+        new StateError(
+          `Pending request limit exceeded (max: ${this.limit}). Consider adding application-level throttling.`,
+        ),
       );
     }
 
@@ -74,11 +76,17 @@ export class RequestTracker {
             if (req.timeoutHandle) {
               clearTimeout(req.timeoutHandle);
             }
+            // Remove this listener to prevent memory leak
+            if (signal) {
+              signal.removeEventListener("abort", abortHandler);
+            }
             reject(new StateError("Request aborted"));
           }
         };
         signal.addEventListener("abort", abortHandler);
         pending.abortHandler = abortHandler;
+        // Store signal reference for cleanup
+        (pending as any).signal = signal;
       }
 
       // Start timeout AFTER message is flushed on OPEN socket
@@ -150,11 +158,12 @@ export class RequestTracker {
       clearTimeout(pending.timeoutHandle);
     }
 
-    // Remove abort listener
-    if (pending.abortHandler) {
-      // Note: We don't have direct access to signal here, but the handler will be GC'd
-      // This is safe because we're settling the promise
-      pending.abortHandler = null;
+    // Remove abort listener to prevent memory leak
+    if (pending.abortHandler && (pending as any).signal) {
+      (pending as any).signal.removeEventListener(
+        "abort",
+        pending.abortHandler,
+      );
     }
 
     // 2. Type is ERROR → reject with ServerError

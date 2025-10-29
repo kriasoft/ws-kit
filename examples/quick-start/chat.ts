@@ -18,7 +18,7 @@ type WebSocketData = { roomId?: string; clientId?: string } & Record<
 
 const chatRouter = createRouter<WebSocketData>();
 
-chatRouter.onMessage(JoinRoom, async (c) => {
+chatRouter.on(JoinRoom, async (c) => {
   const { roomId } = c.payload; // ✅ Fully typed, no assertion needed
   const clientId = c.ws.data?.clientId; // Connection identity (not in meta)
 
@@ -45,7 +45,7 @@ chatRouter.onMessage(JoinRoom, async (c) => {
   });
 });
 
-chatRouter.onMessage(SendMessage, async (c) => {
+chatRouter.on(SendMessage, async (c) => {
   const { roomId, text } = c.payload; // ✅ Fully typed, no assertion needed
   const clientId = c.ws.data?.clientId; // Connection identity (not in meta)
   console.log(`Message from ${clientId} in room ${roomId}: ${text}`);

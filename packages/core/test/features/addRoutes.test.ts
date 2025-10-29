@@ -10,7 +10,7 @@ describe("addRoutes", () => {
     const router1 = createRouter();
     const PingMessage = message("PING", { text: z.string().optional() });
     let pingHandlerCalled = false;
-    router1.onMessage(PingMessage, () => {
+    router1.on(PingMessage, () => {
       pingHandlerCalled = true;
     });
 
@@ -21,7 +21,7 @@ describe("addRoutes", () => {
     let openHandlerCalled = false;
     let closeHandlerCalled = false;
 
-    router2.onMessage(PongMessage, () => {
+    router2.on(PongMessage, () => {
       pongHandlerCalled = true;
     });
 
@@ -85,15 +85,15 @@ describe("addRoutes", () => {
     let msg2Called = false;
     let msg3Called = false;
 
-    mainRouter.onMessage(Message1, () => {
+    mainRouter.on(Message1, () => {
       msg1Called = true;
     });
 
-    router1.onMessage(Message2, () => {
+    router1.on(Message2, () => {
       msg2Called = true;
     });
 
-    router2.onMessage(Message3, () => {
+    router2.on(Message3, () => {
       msg3Called = true;
     });
 

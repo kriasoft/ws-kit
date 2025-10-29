@@ -14,11 +14,11 @@
  * @example
  * ```typescript
  * import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
- * import { createZodRouter } from "@ws-kit/zod";
+ * import { createRouter } from "@ws-kit/zod";
  *
- * const router = createZodRouter();
+ * const router = createRouter();
  *
- * const handler = createDurableObjectHandler({ router: router._core });
+ * const handler = createDurableObjectHandler({ router });
  *
  * export default {
  *   fetch(req: Request, state: DurableObjectState, env: Env) {

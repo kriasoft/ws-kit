@@ -73,7 +73,7 @@ import { Hello, HelloOk } from "./shared/schemas";
 
 const router = new WebSocketRouter();
 
-router.onMessage(Hello, (ctx) => {
+router.on(Hello, (ctx) => {
   ctx.send(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
 });
 

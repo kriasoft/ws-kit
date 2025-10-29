@@ -40,6 +40,21 @@ export interface BunHandlerOptions<TData = unknown> {
 
   /** Custom header for returning client ID in upgrade response */
   clientIdHeader?: string;
+
+  /** Called when an unhandled error occurs in a handler or middleware */
+  onError?: (error: Error, ctx?: { type?: string; userId?: string }) => void;
+
+  /** Called when router.publish() is invoked (before actual send) */
+  onBroadcast?: (message: any, scope: string) => void;
+
+  /** Called during WebSocket upgrade (before authentication) */
+  onUpgrade?: (req: Request) => void;
+
+  /** Called after connection is established and authenticated */
+  onOpen?: (ctx: { ws: { data: BunWebSocketData<TData> } }) => void;
+
+  /** Called when connection closes (after cleanup) */
+  onClose?: (ctx: { ws: { data: BunWebSocketData<TData> } }) => void;
 }
 
 /**

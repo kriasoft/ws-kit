@@ -14,9 +14,9 @@ import { DurablePubSub } from "./pubsub";
  * **Usage**:
  * ```typescript
  * import { createDurableObjectAdapter } from "@ws-kit/cloudflare-do";
- * import { createZodRouter } from "@ws-kit/zod";
+ * import { createRouter } from "@ws-kit/zod";
  *
- * const router = createZodRouter({
+ * const router = createRouter({
  *   platform: createDurableObjectAdapter(),
  * });
  * ```

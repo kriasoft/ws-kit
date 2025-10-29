@@ -233,7 +233,7 @@ type JoinRoomType = z.infer<typeof JoinRoom>;
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   // ctx is fully typed by schema!
   // {
   //   ws: ServerWebSocket<AppData & { clientId: string }>,
@@ -258,11 +258,11 @@ router.onMessage(JoinRoom, (ctx) => {
 const WithPayload = message("WITH", { id: z.number() });
 const WithoutPayload = message("WITHOUT");
 
-router.onMessage(WithPayload, (ctx) => {
+router.on(WithPayload, (ctx) => {
   ctx.payload.id; // ✅ Typed as number
 });
 
-router.onMessage(WithoutPayload, (ctx) => {
+router.on(WithoutPayload, (ctx) => {
   ctx.payload; // ❌ Type error
 });
 ```
@@ -324,7 +324,7 @@ const ErrorMsg = message("ERROR", {
 });
 
 // Usage in handlers:
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   if (!authorized) {
     ctx.error("AUTHORIZATION_FAILED", "Not allowed");
   }

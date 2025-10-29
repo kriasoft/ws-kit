@@ -7,38 +7,33 @@
  * @canonical This enum defines all valid error codes. Use these values,
  * not arbitrary strings, for consistent error handling across handlers.
  *
- * Reference: @docs/specs/error-handling.md#error-code-enum
+ * Reference: docs/specs/error-handling.md#error-code-enum
+ *
+ * Standard codes are limited to the most common error scenarios:
+ * - VALIDATION_ERROR: Message format or schema validation failed
+ * - AUTH_ERROR: Authentication or authorization failed
+ * - INTERNAL_ERROR: Unexpected server error occurred
+ * - NOT_FOUND: Requested resource doesn't exist
+ * - RATE_LIMIT: Client exceeded rate limits
+ *
+ * Applications can use these codes for any relevant error condition.
+ * See docs/specs/error-handling.md for guidance on error code selection.
  */
 export enum ErrorCode {
-  /** Message isn't valid JSON or lacks required structure */
-  INVALID_MESSAGE_FORMAT = "INVALID_MESSAGE_FORMAT",
+  /** Message failed schema validation (JSON parse, type check, structure, field validation) */
+  VALIDATION_ERROR = "VALIDATION_ERROR",
 
-  /** Message failed schema validation */
-  VALIDATION_FAILED = "VALIDATION_FAILED",
+  /** Client authentication failed (invalid credentials, missing token, expired session) or authorization failed (insufficient permissions) */
+  AUTH_ERROR = "AUTH_ERROR",
 
-  /** No handler registered for this message type */
-  UNSUPPORTED_MESSAGE_TYPE = "UNSUPPORTED_MESSAGE_TYPE",
+  /** Unexpected server error (unhandled exception, database failure, external service error) */
+  INTERNAL_ERROR = "INTERNAL_ERROR",
 
-  /** Client isn't authenticated or has invalid credentials */
-  AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED",
+  /** Requested resource not found (invalid ID, deleted object, missing data) */
+  NOT_FOUND = "NOT_FOUND",
 
-  /** Client lacks permission for the requested action */
-  AUTHORIZATION_FAILED = "AUTHORIZATION_FAILED",
-
-  /** Requested resource doesn't exist */
-  RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND",
-
-  /** Client is sending messages too frequently */
-  RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED",
-
-  /** Unexpected server error occurred */
-  INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR",
-
-  /** Message payload exceeds maximum allowed size */
-  PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE",
-
-  /** Connection heartbeat timeout (no pong response) */
-  HEARTBEAT_TIMEOUT = "HEARTBEAT_TIMEOUT",
+  /** Client exceeded rate limits (too many messages, too frequent requests, quota exceeded) */
+  RATE_LIMIT = "RATE_LIMIT",
 }
 
 /**

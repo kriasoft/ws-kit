@@ -36,12 +36,12 @@ describe("Valibot router composition with addRoutes", () => {
       });
 
       const authRouter = createRouter();
-      authRouter.onMessage(AuthSchema, (ctx) => {
+      authRouter.on(AuthSchema, (ctx) => {
         expectTypeOf(ctx.payload.token).toBeString();
       });
 
       const chatRouter = createRouter();
-      chatRouter.onMessage(ChatSchema, (ctx) => {
+      chatRouter.on(ChatSchema, (ctx) => {
         expectTypeOf(ctx.payload.text).toBeString();
       });
 
@@ -51,7 +51,7 @@ describe("Valibot router composition with addRoutes", () => {
 
       // Main router should still have proper types when creating new handlers
       const PingSchema = message("PING");
-      mainRouter.onMessage(PingSchema, (ctx) => {
+      mainRouter.on(PingSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"PING">();
       });
     });
@@ -61,17 +61,17 @@ describe("Valibot router composition with addRoutes", () => {
       const LogoutSchema = message("LOGOUT");
 
       const authRouter = createRouter();
-      authRouter.onMessage(LoginSchema, (ctx) => {
+      authRouter.on(LoginSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGIN">();
         expectTypeOf(ctx.payload.username).toBeString();
       });
-      authRouter.onMessage(LogoutSchema, (ctx) => {
+      authRouter.on(LogoutSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGOUT">();
       });
 
       const SendSchema = message("SEND", { message: v.pipe(v.string()) });
       const chatRouter = createRouter();
-      chatRouter.onMessage(SendSchema, (ctx) => {
+      chatRouter.on(SendSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"SEND">();
         expectTypeOf(ctx.payload.message).toBeString();
       });
@@ -103,7 +103,7 @@ describe("Valibot router composition with addRoutes", () => {
         // Global middleware in router2
         return next();
       });
-      router2.onMessage(TestSchema, (ctx) => {
+      router2.on(TestSchema, (ctx) => {
         expectTypeOf(ctx.payload.value).toBeString();
       });
 
@@ -123,7 +123,7 @@ describe("Valibot router composition with addRoutes", () => {
       router1.use(MessageSchema, (ctx, next) => {
         return next();
       });
-      router1.onMessage(MessageSchema, (ctx) => {
+      router1.on(MessageSchema, (ctx) => {
         expectTypeOf(ctx.payload.text).toBeString();
       });
 
@@ -156,13 +156,13 @@ describe("Valibot router composition with addRoutes", () => {
       const ChatSchema = message("CHAT", { text: v.pipe(v.string()) });
 
       const authRouter = createRouter<AppData>();
-      authRouter.onMessage(AuthSchema, (ctx) => {
+      authRouter.on(AuthSchema, (ctx) => {
         expectTypeOf(ctx.ws.data.userId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.ws.data.roles).toEqualTypeOf<string[] | undefined>();
       });
 
       const chatRouter = createRouter<AppData>();
-      chatRouter.onMessage(ChatSchema, (ctx) => {
+      chatRouter.on(ChatSchema, (ctx) => {
         expectTypeOf(ctx.ws.data.userId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.ws.data.roles).toEqualTypeOf<string[] | undefined>();
       });
@@ -172,7 +172,7 @@ describe("Valibot router composition with addRoutes", () => {
 
       // Main router handlers should have same AppData type
       const StatusSchema = message("STATUS");
-      mainRouter.onMessage(StatusSchema, (ctx) => {
+      mainRouter.on(StatusSchema, (ctx) => {
         expectTypeOf(ctx.ws.data).toMatchTypeOf<AppData>();
       });
     });
@@ -220,14 +220,14 @@ describe("Valibot router composition with addRoutes", () => {
       });
 
       const router1 = createRouter();
-      router1.onMessage(RequestSchema, (ctx) => {
+      router1.on(RequestSchema, (ctx) => {
         // Should be able to send ResponseSchema from composed router
         ctx.send(ResponseSchema, { result: "done" });
       });
 
       const router2 = createRouter();
       const AckSchema = message("ACK");
-      router2.onMessage(AckSchema, (ctx) => {
+      router2.on(AckSchema, (ctx) => {
         // Should be able to send any message schema
         ctx.send(ResponseSchema, { result: "ack" });
       });
@@ -236,7 +236,7 @@ describe("Valibot router composition with addRoutes", () => {
       mainRouter.addRoutes(router1).addRoutes(router2);
 
       // Main router handlers can also send these schemas
-      mainRouter.onMessage(RequestSchema, (ctx) => {
+      mainRouter.on(RequestSchema, (ctx) => {
         ctx.send(ResponseSchema, { result: "composed" });
       });
     });
@@ -248,7 +248,7 @@ describe("Valibot router composition with addRoutes", () => {
       const NoPayloadSchema = message("NO_PAYLOAD");
 
       const router = createRouter();
-      router.onMessage(PayloadSchema, (ctx) => {
+      router.on(PayloadSchema, (ctx) => {
         const ReplySchema = message("REPLY", { status: v.pipe(v.string()) });
 
         // Should require payload
@@ -269,7 +269,7 @@ describe("Valibot router composition with addRoutes", () => {
       const mainRouter = createRouter();
       mainRouter.addRoutes(router);
 
-      expectTypeOf(mainRouter).toHaveProperty("onMessage");
+      expectTypeOf(mainRouter).toHaveProperty("on");
     });
   });
 
@@ -285,7 +285,7 @@ describe("Valibot router composition with addRoutes", () => {
       });
 
       const userRouter = createRouter();
-      userRouter.onMessage(UserSchema, (ctx) => {
+      userRouter.on(UserSchema, (ctx) => {
         expectTypeOf(ctx.payload).toMatchTypeOf<{
           id: string;
           name?: string;
@@ -304,7 +304,7 @@ describe("Valibot router composition with addRoutes", () => {
       mainRouter.addRoutes(userRouter);
 
       // Types should still be preserved after composition
-      mainRouter.onMessage(UserSchema, (ctx) => {
+      mainRouter.on(UserSchema, (ctx) => {
         expectTypeOf(ctx.payload.id).toBeString();
         expectTypeOf(ctx.payload.name).toEqualTypeOf<string | undefined>();
       });
@@ -319,7 +319,7 @@ describe("Valibot router composition with addRoutes", () => {
       });
 
       const complexRouter = createRouter();
-      complexRouter.onMessage(ComplexSchema, (ctx) => {
+      complexRouter.on(ComplexSchema, (ctx) => {
         const version = ctx.payload.metadata.version;
         expectTypeOf(version).toBeNumber();
 
@@ -330,7 +330,7 @@ describe("Valibot router composition with addRoutes", () => {
       const mainRouter = createRouter();
       mainRouter.addRoutes(complexRouter);
 
-      expectTypeOf(mainRouter).toHaveProperty("onMessage");
+      expectTypeOf(mainRouter).toHaveProperty("on");
     });
   });
 
@@ -345,17 +345,17 @@ describe("Valibot router composition with addRoutes", () => {
       const Schema3 = message("MSG3", { active: v.pipe(v.boolean()) });
 
       const router1 = createRouter();
-      router1.onMessage(Schema1, (ctx) => {
+      router1.on(Schema1, (ctx) => {
         expectTypeOf(ctx.payload.data).toBeString();
       });
 
       const router2 = createRouter();
-      router2.onMessage(Schema2, (ctx) => {
+      router2.on(Schema2, (ctx) => {
         expectTypeOf(ctx.payload.value).toBeNumber();
       });
 
       const router3 = createRouter();
-      router3.onMessage(Schema3, (ctx) => {
+      router3.on(Schema3, (ctx) => {
         expectTypeOf(ctx.payload.active).toBeBoolean();
       });
 
@@ -400,7 +400,7 @@ describe("Valibot router composition with addRoutes", () => {
         ctx.ws.data.requestId = Math.random().toString();
         return next();
       });
-      queryRouter.onMessage(QuerySchema, (ctx) => {
+      queryRouter.on(QuerySchema, (ctx) => {
         expectTypeOf(ctx.ws.data.requestId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.payload.sql).toBeString();
       });
@@ -411,7 +411,7 @@ describe("Valibot router composition with addRoutes", () => {
         console.log(ctx.ws.data.requestId);
         return next();
       });
-      resultRouter.onMessage(ResultSchema, (ctx) => {
+      resultRouter.on(ResultSchema, (ctx) => {
         expectTypeOf(ctx.ws.data.requestId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.payload.rows).toBeNumber();
       });
@@ -421,7 +421,7 @@ describe("Valibot router composition with addRoutes", () => {
       mainRouter.addRoutes(queryRouter).addRoutes(resultRouter);
 
       // Can use new handlers with inherited data type
-      mainRouter.onMessage(QuerySchema, (ctx) => {
+      mainRouter.on(QuerySchema, (ctx) => {
         expectTypeOf(ctx.ws.data.requestId).toEqualTypeOf<string | undefined>();
       });
     });

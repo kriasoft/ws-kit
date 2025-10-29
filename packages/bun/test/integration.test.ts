@@ -88,7 +88,7 @@ describe("@ws-kit/bun integration tests", () => {
       // Create a proper message schema using the message() helper
       const TestMessage = message("TEST", { text: z.string() });
 
-      router.onMessage(TestMessage, (ctx) => {
+      router.on(TestMessage, (ctx) => {
         events.push("message");
         expect(ctx.type).toBe("TEST");
         expect(ctx.payload.text).toBeDefined();

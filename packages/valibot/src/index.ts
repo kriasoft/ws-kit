@@ -31,7 +31,7 @@
  * type AppData = { userId?: string };
  * const router = createRouter<AppData>();
  *
- * router.onMessage(LoginMessage, (ctx) => {
+ * router.on(LoginMessage, (ctx) => {
  *   // ctx.payload.username is typed as string
  * });
  * ```
@@ -48,24 +48,6 @@ const { messageSchema: message, ErrorMessage } = createMessageSchema(v as any);
 // Main exports: export-with-helpers pattern
 export { v, message, ErrorMessage };
 export { default as valibotValidator } from "./validator";
-export { createValibotRouter } from "./router";
-
-// Convenience: export createRouter as alias for createValibotRouter
-/**
- * Create a type-safe WebSocket router using Valibot validation.
- *
- * This is the recommended function name. Use this instead of createValibotRouter().
- *
- * @example
- * ```typescript
- * import { createRouter } from "@ws-kit/valibot";
- *
- * type AppData = { userId?: string };
- * const router = createRouter<AppData>();
- * ```
- *
- * @see createValibotRouter - Deprecated name, same functionality
- */
 export { createValibotRouter as createRouter } from "./router";
 
 // Utility exports for advanced use cases

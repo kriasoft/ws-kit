@@ -274,7 +274,7 @@ const BadSchema = messageSchema(
 );
 
 // ✅ Correct access in handlers
-router.onMessage(GoodSchema, (ctx) => {
+router.on(GoodSchema, (ctx) => {
   const id = ctx.ws.data.clientId; // ✅ Connection identity
   const time = ctx.receivedAt; // ✅ Server timestamp (authoritative)
 });
@@ -327,7 +327,7 @@ type UserProfile = z.infer<typeof UserProfileMessage.schema>;
 //   tags: string[];
 // }
 
-router.onMessage(UserProfileMessage, (ctx) => {
+router.on(UserProfileMessage, (ctx) => {
   // ctx.payload is fully typed as UserProfile
   console.log(ctx.payload.name); // string
   console.log(ctx.payload.age); // number

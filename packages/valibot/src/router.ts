@@ -19,7 +19,7 @@
  * const router = createRouter();
  *
  * // Full type inference - no need for (ctx.payload as any)!
- * router.onMessage(LoginSchema, (ctx) => {
+ * router.on(LoginSchema, (ctx) => {
  *   const username = ctx.payload.username; // ← string (inferred)
  * });
  *
@@ -72,12 +72,12 @@ export interface TypedValibotRouter<
    *
    * @example
    * ```typescript
-   * const UserInfoSchema = messageSchema("USER:INFO", {
+   * const UserInfoSchema = message("USER:INFO", {
    *   id: v.string([v.uuid()]),
    *   name: v.string(),
    * });
    *
-   * router.onMessage(UserInfoSchema, (ctx) => {
+   * router.on(UserInfoSchema, (ctx) => {
    *   // All of these are properly typed:
    *   ctx.type;              // "USER:INFO" (literal)
    *   ctx.payload.id;        // string
@@ -88,10 +88,30 @@ export interface TypedValibotRouter<
    * });
    * ```
    */
-  onMessage<Schema extends MessageSchemaType>(
+  on<Schema extends MessageSchemaType>(
     schema: Schema,
     handler: MessageHandler<Schema, TData>,
   ): this;
+
+  /**
+   * Unregister a handler for a specific message type.
+   *
+   * Removes the handler registered via `on()` for the given message schema.
+   * If no handler is registered for this message type, this is a no-op.
+   *
+   * @param schema - Message schema identifying the message type to unregister
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * const UserInfoSchema = message("USER:INFO", {
+   *   id: v.string([v.uuid()]),
+   *   name: v.string(),
+   * });
+   * router.off(UserInfoSchema);
+   * ```
+   */
+  off<Schema extends MessageSchemaType>(schema: Schema): this;
 
   /**
    * Register a handler for WebSocket open events.
@@ -178,9 +198,7 @@ export interface TypedValibotRouter<
    * @param router - Another router to merge
    * @returns This router for method chaining
    */
-  addRoutes(
-    router: TypedValibotRouter<TData> | { _core?: WebSocketRouter<TData> },
-  ): this;
+  addRoutes(router: TypedValibotRouter<TData>): this;
 
   /**
    * Publish a message to all subscribers on a channel.
@@ -216,48 +234,26 @@ export interface TypedValibotRouter<
    * ```
    */
   readonly [key: symbol]: any;
-
-  /**
-   * @deprecated Use `router[Symbol.for("ws-kit.core")]` instead.
-   *
-   * The `_core` property is deprecated and will be removed in v2.0.
-   * Platform handlers now accept the router directly—no need to access `_core`.
-   *
-   * @example
-   * ```typescript
-   * // ❌ Old (deprecated)
-   * const { fetch, websocket } = createBunHandler(router._core);
-   *
-   * // ✅ New (recommended)
-   * const { fetch, websocket } = createBunHandler(router);
-   * ```
-   */
-  readonly _core?: WebSocketRouter<TData>;
 }
 
 /**
  * Create a type-safe WebSocket router using Valibot validation.
  *
- * @deprecated Use `createRouter()` instead (shorter name, same functionality).
- *
- * This function is fully backwards compatible. The new `createRouter()` name
- * aligns with the export-with-helpers pattern and is the recommended API.
- *
- * ```typescript
- * // ❌ Old name
- * import { createValibotRouter } from "@ws-kit/valibot";
- * const router = createValibotRouter<AppData>();
- *
- * // ✅ New name (recommended)
- * import { createRouter } from "@ws-kit/valibot";
- * const router = createRouter<AppData>();
- * ```
- *
  * @typeParam TData - Application-specific data stored on connections
  * @param options - Router options (platform adapter, hooks, etc.)
  * @returns A type-safe router with proper payload inference
  *
- * @see createRouter - New recommended function name
+ * @example
+ * ```typescript
+ * import { createRouter } from "@ws-kit/valibot";
+ *
+ * type AppData = { userId?: string };
+ * const router = createRouter<AppData>();
+ *
+ * router.on(PingMessage, (ctx) => {
+ *   ctx.send(PongMessage, { text: ctx.payload.text });
+ * });
+ * ```
  */
 export function createValibotRouter<
   TData extends WebSocketData = WebSocketData,
@@ -272,9 +268,15 @@ export function createValibotRouter<
 
   // Create type-safe wrapper
   const router: TypedValibotRouter<TData> = {
-    // Type-safe onMessage with proper payload inference
-    onMessage(schema, handler) {
-      coreRouter.onMessage(schema, handler as any);
+    // Type-safe on with proper payload inference
+    on(schema, handler) {
+      coreRouter.on(schema, handler as any);
+      return router;
+    },
+
+    // Unregister handler
+    off(schema) {
+      coreRouter.off(schema);
       return router;
     },
 
@@ -307,8 +309,7 @@ export function createValibotRouter<
 
     // Router composition
     addRoutes(sourceRouter) {
-      const coreToAdd =
-        (sourceRouter as any)[Symbol.for("ws-kit.core")] ?? sourceRouter._core;
+      const coreToAdd = (sourceRouter as any)[Symbol.for("ws-kit.core")];
       coreRouter.addRoutes(coreToAdd);
       return router;
     },
@@ -321,19 +322,6 @@ export function createValibotRouter<
     // Stable escape hatch for advanced introspection (following React convention)
     [Symbol.for("ws-kit.core")]: coreRouter,
   };
-
-  // Deprecation getter for backwards compatibility (v1.x only)
-  Object.defineProperty(router, "_core", {
-    get() {
-      console.warn(
-        "router._core is deprecated and will be removed in v2.0. " +
-          "Platform handlers now accept the router directly. " +
-          'For advanced introspection, use router[Symbol.for("ws-kit.core")] instead.',
-      );
-      return coreRouter;
-    },
-    configurable: true,
-  });
 
   return router;
 }

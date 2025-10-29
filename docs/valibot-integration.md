@@ -61,7 +61,7 @@ const RoomJoinedMessage = messageSchema("ROOM_JOINED", {
 });
 
 // Register handlers
-router.onMessage(JoinRoomMessage, (ctx) => {
+router.on(JoinRoomMessage, (ctx) => {
   console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
 
   // Type-safe response
@@ -99,7 +99,7 @@ const RoomJoinedMessage = messageSchema("ROOM_JOINED", {
 });
 
 // Register handlers
-router.onMessage(JoinRoomMessage, (ctx) => {
+router.on(JoinRoomMessage, (ctx) => {
   console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
 
   // Type-safe response

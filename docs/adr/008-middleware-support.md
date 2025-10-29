@@ -10,11 +10,11 @@ Current implementation only supports message handlers and lifecycle callbacks (`
 
 ```typescript
 // Current approach: Duplicated auth check in every handler
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   // No auth check needed
 });
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   if (!ctx.ws.data?.userId) {
     ctx.send(ErrorMessage, { code: "AUTH_ERROR" });
     return;
@@ -22,7 +22,7 @@ router.onMessage(SecureMessage, (ctx) => {
   // Handle secure message
 });
 
-router.onMessage(AnotherSecureMessage, (ctx) => {
+router.on(AnotherSecureMessage, (ctx) => {
   if (!ctx.ws.data?.userId) {
     ctx.send(ErrorMessage, { code: "AUTH_ERROR" });
     return;
@@ -138,12 +138,12 @@ router.use((ctx, next) => {
   return next();
 });
 
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   // Authenticate and set userId
   ctx.assignData({ userId: "123" });
 });
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   // Auth already checked by middleware
   // ctx.ws.data.userId is guaranteed to exist
   console.log(`Secure message from ${ctx.ws.data.userId}`);
@@ -194,7 +194,7 @@ router.use(SendMessage, (ctx, next) => {
   return next();
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   // Rate limit already checked
   processMessage(ctx.payload);
 });
@@ -216,7 +216,7 @@ router.use(QueryMessage, (ctx, next) => {
   return next();
 });
 
-router.onMessage(QueryMessage, (ctx) => {
+router.on(QueryMessage, (ctx) => {
   const query = (ctx.ws.data as any)?.query; // Pre-validated by middleware
   const results = database.search(query);
   ctx.reply(QueryResultsMessage, { results });
@@ -300,7 +300,7 @@ type Middleware<TData> = (
 ) => unknown | Promise<unknown>;
 ```
 
-**Why generic?** At middleware execution time, we don't know the specific handler's schema type. Per-route middleware gets `next()` routed to the specific handler, but the context type itself remains generic. Handlers get the specific type via their `onMessage` registration.
+**Why generic?** At middleware execution time, we don't know the specific handler's schema type. Per-route middleware gets `next()` routed to the specific handler, but the context type itself remains generic. Handlers get the specific type via their `on()` registration.
 
 ### Modifying Context
 
@@ -315,7 +315,7 @@ router.use((ctx, next) => {
   return next();
 });
 
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   const elapsed = Date.now() - (ctx.ws.data as any).startedAt;
   console.log(`Handler took ${elapsed}ms`);
 });
@@ -393,7 +393,7 @@ Use decorators (TypeScript experimental feature):
 ```typescript
 @Authenticated
 @RateLimited
-router.onMessage(SecureMessage, (ctx) => { ... });
+router.on(SecureMessage, (ctx) => { ... });
 ```
 
 **Why rejected:**
@@ -431,7 +431,7 @@ const withAuth = (handler) => (ctx) => {
   return handler(ctx);
 };
 
-router.onMessage(
+router.on(
   SecureMessage,
   withAuth((ctx) => {
     // Handle secure message

@@ -60,7 +60,7 @@ const router = new WebSocketRouter()
   .onOpen((ctx) => {
     console.log(`Client ${ctx.ws.data.clientId} connected`);
   })
-  .onMessage(ChatMessage, (ctx) => {
+  .on(ChatMessage, (ctx) => {
     console.log(`Message from ${ctx.ws.data.clientId}: ${ctx.payload.text}`);
 
     // Subscribe to room

@@ -19,7 +19,7 @@ The `WebSocketRouter` core implementation is validator-agnostic by design—it a
 
 ### The Type Erasure Problem
 
-When handlers are registered with `router.onMessage(schema, handler)`, the router stores them in a `Map<string, MessageHandlerEntry>`:
+When handlers are registered with `router.on(schema, handler)`, the router stores them in a `Map<string, MessageHandlerEntry>`:
 
 ```typescript
 this.messageHandlers.set(messageType, {
@@ -37,7 +37,7 @@ TypeScript cannot track the specific schema type through Map storage due to:
 This forces developers to use type assertions when accessing payloads:
 
 ```typescript
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   // Without factory pattern:
   const { text } = ctx.payload as any; // ← Type assertion required
 
@@ -58,7 +58,7 @@ Developers expect type inference to work naturally when using TypeScript. The ga
 
 ## Decision
 
-Provide **factory functions** (`createZodRouter`, `createValibotRouter`) that wrap the core router and preserve type information through overloaded method signatures. This approach:
+Provide **factory functions** (exported as `createRouter` from validator packages) that wrap the core router and preserve type information through overloaded method signatures. This approach:
 
 1. **Preserves types** through a thin wrapper facade
 2. **Maintains API compatibility** with the core router
@@ -78,24 +78,24 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
   });
 
   const typed: TypedZodRouter<TData> = {
-    onMessage(schema, handler) {
+    on(schema, handler) {
       // Type information preserved in wrapper's overloaded signature
-      core.onMessage(schema, handler as any); // Safe type cast internally
+      core.on(schema, handler as any); // Safe type cast internally
       return typed;
     },
     // ... other methods (onOpen, onClose, etc.) proxy to core
-    _core: core, // Advanced: access core router if needed
+    [Symbol.for("ws-kit.core")]: core, // Escape hatch for advanced introspection
   };
 
   return typed;
 }
 ```
 
-The wrapper's `onMessage` method is overloaded based on the schema:
+The wrapper's `on` method is overloaded based on the schema:
 
 ```typescript
 // Wrapper signature - preserves payload type
-onMessage<P extends Record<string, ZodTypeAny>>(
+on<P extends Record<string, ZodTypeAny>>(
   schema: MessageSchema<'TYPE_A', P>,
   handler: (ctx: MessageContext<{ type: 'TYPE_A'; payload: z.infer<ZodObject<P>> }, TData>) => void
 ): TypedZodRouter<TData>;

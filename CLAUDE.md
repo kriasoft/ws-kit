@@ -45,7 +45,7 @@ const PongMessage = message("PONG", { reply: z.string() });
 
 const router = createRouter<AppData>();
 
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
@@ -67,10 +67,10 @@ import { createRouter } from "@ws-kit/zod";
 type AppData = { userId?: string };
 
 const authRouter = createRouter<AppData>();
-authRouter.onMessage(LoginMessage, handleLogin);
+authRouter.on(LoginMessage, handleLogin);
 
 const chatRouter = createRouter<AppData>();
-chatRouter.onMessage(SendMessage, handleChat);
+chatRouter.on(SendMessage, handleChat);
 
 const mainRouter = createRouter<AppData>();
 mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
@@ -108,7 +108,7 @@ router.use(SendMessage, (ctx, next) => {
   return next();
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   console.log(`Message from ${ctx.ws.data?.userId}: ${ctx.payload.text}`);
 });
 ```
@@ -141,7 +141,7 @@ router.use((ctx, next) => {
   return next();
 });
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   const userId = ctx.ws.data?.userId;
   const roles = ctx.ws.data?.roles;
 });
@@ -172,11 +172,11 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 const router = createRouter<AppData>();
 
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   ctx.subscribe(`room:${ctx.payload.roomId}`);
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   router.publish(`room:${ctx.ws.data?.roomId}`, RoomUpdate, {
     text: ctx.payload.text,
     userId: ctx.ws.data?.userId || "anon",
@@ -218,7 +218,7 @@ import type { ErrorCode } from "@ws-kit/zod";
 
 const router = createRouter();
 
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   try {
     const user = authenticate(ctx.payload);
     ctx.send(LoginSuccess, { userId: user.id });
@@ -230,7 +230,7 @@ router.onMessage(LoginMessage, (ctx) => {
   }
 });
 
-router.onMessage(QueryMessage, (ctx) => {
+router.on(QueryMessage, (ctx) => {
   try {
     const result = queryDatabase(ctx.payload);
     // ✅ reply() alias for semantic clarity in request/response pattern
@@ -270,7 +270,7 @@ Now throughout your app, omit the generic type:
 // ✅ No generic needed - automatically uses AppDataDefault
 const router = createRouter();
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   // ✅ ctx.ws.data is properly typed with all default fields
   const userId = ctx.ws.data?.userId; // string | undefined
   const roles = ctx.ws.data?.roles; // string[] | undefined

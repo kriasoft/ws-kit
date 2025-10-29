@@ -93,7 +93,7 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
    *
    * @example
    * ```typescript
-   * router.onMessage(QueryMessage, (ctx) => {
+   * router.on(QueryMessage, (ctx) => {
    *   const result = await db.query(ctx.payload.id);
    *   ctx.reply(QueryResponse, result);  // Clearer than ctx.send()
    * });

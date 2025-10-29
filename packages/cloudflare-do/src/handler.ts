@@ -181,36 +181,52 @@ export function createDurableObjectHandler<
 }
 
 /**
- * Create a Durable Object handler with full state integration.
+ * @deprecated Use createDurableObjectHandler with state managed via closure or module-level variables.
  *
- * This variant accepts a DurableObjectState for advanced use cases where you need
- * explicit state access. The state is stored at the DO instance level.
+ * This function is deprecated because Durable Objects have a different request/response
+ * lifecycle than traditional servers. State and env should be managed at the module level
+ * or via your authenticate function.
  *
- * **Usage in Durable Object script**:
+ * **Recommended Pattern** (state via module-level variable):
+ * ```typescript
+ * let durableState: DurableObjectState;
+ *
+ * const handler = createDurableObjectHandler(router, {
+ *   authenticate: (req) => {
+ *     // Access durableState here via closure
+ *     return { userId: "123", state: durableState };
+ *   },
+ * });
+ *
+ * export default {
+ *   fetch(req: Request, state: DurableObjectState, env: Env) {
+ *     durableState = state; // Store for handler access
+ *     return handler.fetch(req);
+ *   },
+ * };
+ * ```
+ *
+ * **Alternative Pattern** (state via authenticate):
  * ```typescript
  * export default {
  *   fetch(req: Request, state: DurableObjectState, env: Env) {
- *     const handler = createDurableObjectHandlerWithState({
- *       router,
- *       authenticate,
- *       state, // Passed from DO fetch
- *       env,   // Environment bindings
+ *     const handler = createDurableObjectHandler(router, {
+ *       authenticate: async (req) => {
+ *         const user = await validateRequest(req);
+ *         return { ...user, state };  // Include state in connection data
+ *       },
  *     });
  *     return handler.fetch(req);
  *   },
  * };
  * ```
  *
- * Access state in handlers through the WebSocket data:
+ * Then in handlers:
  * ```typescript
- * router.onMessage(SaveGameSchema, async (ctx) => {
- *   // Your application code can access the state via closure
- *   // or extend ctx.ws.data with state reference
+ * router.on(MyMessage, (ctx) => {
+ *   const state = ctx.ws.data.state;  // Access via connection data
  * });
  * ```
- *
- * **Note**: To pass state to handlers, extend createDurableObjectHandler
- * or attach state to ws.data during the initial connection setup.
  */
 export function createDurableObjectHandlerWithState<
   TData extends WebSocketData = WebSocketData,
@@ -218,28 +234,18 @@ export function createDurableObjectHandlerWithState<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   router: WebSocketRouter<any, TData>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  state: any; // DurableObjectState
+  state: any; // DurableObjectState (deprecated, use closure instead)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  env?: any; // Env
+  env?: any; // Env (deprecated, use closure instead)
   authenticate?: (
     req: Request,
   ) => Promise<TData | undefined> | TData | undefined;
   maxConnections?: number;
 }): DurableObjectHandler {
-  // Store state at the handler instance level
-  const { ...rest } = options;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { state: _state, env: _env, router, ...rest } = options;
 
-  // Create the base handler
-  const handler = createDurableObjectHandler({
-    ...rest,
-    // Pass state info through authenticate for handlers to access if needed
-  });
-
-  // Note: To make state accessible to handlers, applications can:
-  // 1. Store state/env in a module-level variable
-  // 2. Extend the authenticate function to attach state to TData
-  // 3. Use context parameter to pass state references
-  // This function primarily documents the pattern for using state with DO
-
-  return handler;
+  // Ignore state/env since they should be managed via closure or authenticate function
+  // Create the base handler without the deprecated parameters
+  return createDurableObjectHandler(router, rest);
 }

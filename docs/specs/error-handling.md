@@ -31,7 +31,7 @@ Clients MUST NOT send `ERROR` type messages. Use instead:
 
 **Rationale**: Reserving `ERROR` for server responses simplifies protocol semantics and prevents clients from injecting error-handling logic into request/response flows.
 
-**Explicit handler registration**: If server registers `router.onMessage(ErrorMessage, handler)`, it WILL process inbound `ERROR` messages like any other type. This is **not recommended** but allowed for custom protocols.
+**Explicit handler registration**: If server registers `router.on(ErrorMessage, handler)`, it WILL process inbound `ERROR` messages like any other type. This is **not recommended** but allowed for custom protocols.
 
 ## Standard Error Schema
 
@@ -99,7 +99,7 @@ declare global {
 }
 
 // Use extended codes with ctx.error()
-router.onMessage(CreateRoom, (ctx) => {
+router.on(CreateRoom, (ctx) => {
   if (!isValidRoomName(ctx.payload.name)) {
     ctx.error("INVALID_ROOM_NAME", "Room name must be 3-50 characters", {
       name: ctx.payload.name,
@@ -123,7 +123,7 @@ router.onMessage(CreateRoom, (ctx) => {
 Use the `ctx.error()` helper for type-safe error sending:
 
 ```typescript
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
 
   if (!roomExists(roomId)) {
@@ -143,7 +143,7 @@ router.onMessage(JoinRoom, (ctx) => {
 ## Error Handling in Handlers
 
 ```typescript
-router.onMessage(SomeMessage, async (ctx) => {
+router.on(SomeMessage, async (ctx) => {
   try {
     await riskyOperation();
   } catch (error) {
@@ -160,7 +160,7 @@ router.onMessage(SomeMessage, async (ctx) => {
 Unhandled promise rejections in handlers are caught and trigger the `onError` lifecycle hook:
 
 ```typescript
-router.onMessage(AsyncMessage, async (ctx) => {
+router.on(AsyncMessage, async (ctx) => {
   // This error will be caught by the router
   // and onError(error, { type: "ASYNC_MESSAGE", userId: "..." }) will be called
   const result = await unstableAPI();
@@ -175,7 +175,7 @@ Send domain-specific error notifications to rooms or channels:
 ```typescript
 const RoomDeletedMessage = message("ROOM_DELETED", { roomId: z.string() });
 
-router.onMessage(DeleteRoomMessage, (ctx) => {
+router.on(DeleteRoomMessage, (ctx) => {
   const { roomId } = ctx.payload;
 
   // Notify all users in the room of deletion
@@ -185,7 +185,7 @@ router.onMessage(DeleteRoomMessage, (ctx) => {
 });
 
 // For cross-connection validation errors
-router.onMessage(ValidateFileMessage, (ctx) => {
+router.on(ValidateFileMessage, (ctx) => {
   try {
     const result = await validateFile(ctx.payload.fileId);
     router.publish(`validation:${ctx.payload.fileId}`, FileValidated, result);

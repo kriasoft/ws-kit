@@ -11,7 +11,7 @@ import {
   spyOn,
 } from "bun:test";
 import { createRouter, message, z } from "@ws-kit/zod";
-import { createBunAdapter, createBunHandler } from "../../../bun/src/index";
+import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;
@@ -53,7 +53,7 @@ const Error = message("ERROR", {
 
 describe("WebSocketServer E2E", () => {
   let server: ReturnType<typeof Bun.serve>;
-  let ws: ReturnType<typeof createZodRouter>;
+  let ws: ReturnType<typeof createRouter>;
   let port: number;
 
   beforeEach(() => {
@@ -61,12 +61,12 @@ describe("WebSocketServer E2E", () => {
     port = 50000 + Math.floor(Math.random() * 10000);
 
     // Create a new router with platform adapter and validator
-    ws = createZodRouter({
+    ws = createRouter({
       platform: createBunAdapter(),
     });
 
     // Set up message handlers
-    ws.onMessage(Ping, (ctx) => {
+    ws.on(Ping, (ctx) => {
       // Echo back a PONG with the same message and add a timestamp
       ctx.send(Pong, {
         message: ctx.payload.message,
@@ -75,7 +75,7 @@ describe("WebSocketServer E2E", () => {
     });
 
     // Add an error message handler
-    ws.onMessage(Error, () => {
+    ws.on(Error, () => {
       // Just for handling error messages in tests
     });
 
@@ -93,7 +93,9 @@ describe("WebSocketServer E2E", () => {
     ws.onClose(closeHandlerMock);
 
     // Create Bun handler from router
-    const { fetch, websocket } = createBunHandler(ws._core);
+    const { fetch, websocket } = createBunHandler(
+      (ws as any)[Symbol.for("ws-kit.core")],
+    );
 
     // Start the server
     server = Bun.serve({

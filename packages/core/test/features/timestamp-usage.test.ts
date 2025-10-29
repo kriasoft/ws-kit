@@ -44,7 +44,7 @@ describe("Timestamp Usage Patterns", () => {
         expect(typeof ctx.receivedAt).toBe("number");
       });
 
-      router.onMessage(TestMsg, handlerMock);
+      router.on(TestMsg, handlerMock);
 
       await router._core.handleOpen(ws as never);
 
@@ -69,7 +69,7 @@ describe("Timestamp Usage Patterns", () => {
       let capturedReceivedAt: number | undefined;
       const before = Date.now();
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         capturedReceivedAt = ctx.receivedAt;
       });
 
@@ -95,7 +95,7 @@ describe("Timestamp Usage Patterns", () => {
 
       const receivedTimes: number[] = [];
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         receivedTimes.push(ctx.receivedAt);
       });
 
@@ -132,7 +132,7 @@ describe("Timestamp Usage Patterns", () => {
       let serverTime: number | undefined;
       let clientTime: number | undefined;
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         serverTime = ctx.receivedAt;
         clientTime = ctx.meta.timestamp;
       });
@@ -162,7 +162,7 @@ describe("Timestamp Usage Patterns", () => {
       const TestMsg = message("TEST");
       const router = createRouter();
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         // Type check: timestamp is optional
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
       });
@@ -177,7 +177,7 @@ describe("Timestamp Usage Patterns", () => {
         expect(ctx.meta.timestamp).toBeUndefined();
       });
 
-      router.onMessage(TestMsg, handlerMock);
+      router.on(TestMsg, handlerMock);
 
       await router._core.handleOpen(ws as never);
 
@@ -202,7 +202,7 @@ describe("Timestamp Usage Patterns", () => {
         expect(ctx.meta.timestamp).toBe(clientTimestamp);
       });
 
-      router.onMessage(TestMsg, handlerMock);
+      router.on(TestMsg, handlerMock);
 
       await router._core.handleOpen(ws as never);
 
@@ -222,7 +222,7 @@ describe("Timestamp Usage Patterns", () => {
       const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
-      router.onMessage(ChatMsg, (ctx) => {
+      router.on(ChatMsg, (ctx) => {
         // UI: Show "sent at" time
         const sentAt = ctx.meta.timestamp;
         if (sentAt !== undefined) {
@@ -258,7 +258,7 @@ describe("Timestamp Usage Patterns", () => {
       // Rate limiter state
       const rateLimits = new Map<string, number[]>();
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         const clientId = ctx.ws.data.clientId as string;
         const history = rateLimits.get(clientId) || [];
 
@@ -292,7 +292,7 @@ describe("Timestamp Usage Patterns", () => {
 
       const events: { action: string; serverTime: number }[] = [];
 
-      router.onMessage(EventMsg, (ctx) => {
+      router.on(EventMsg, (ctx) => {
         // ✅ CORRECT: Use server time for authoritative ordering
         events.push({
           action: ctx.payload.action,
@@ -331,7 +331,7 @@ describe("Timestamp Usage Patterns", () => {
       const router = createRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         // ✅ CORRECT: Use both for lag calculation
         if (ctx.meta.timestamp !== undefined) {
           const lag = ctx.receivedAt - ctx.meta.timestamp;
@@ -360,7 +360,7 @@ describe("Timestamp Usage Patterns", () => {
 
       const TTL_MS = 5000; // 5 seconds
 
-      router.onMessage(RequestMsg, (ctx) => {
+      router.on(RequestMsg, (ctx) => {
         // ✅ CORRECT: Check TTL against server time
         const age = Date.now() - ctx.receivedAt;
 
@@ -391,7 +391,7 @@ describe("Timestamp Usage Patterns", () => {
       const TestMsg = message("TEST");
       const router = createRouter();
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         expectTypeOf(ctx.receivedAt).toBeNumber();
         expectTypeOf(ctx.receivedAt).not.toBeNullable();
       });
@@ -401,7 +401,7 @@ describe("Timestamp Usage Patterns", () => {
       const TestMsg = message("TEST");
       const router = createRouter();
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
       });
     });
@@ -410,7 +410,7 @@ describe("Timestamp Usage Patterns", () => {
       const TestMsg = message("TEST");
       const router = createRouter();
 
-      router.onMessage(TestMsg, (ctx) => {
+      router.on(TestMsg, (ctx) => {
         // Different types and semantics
         expectTypeOf(ctx.receivedAt).toBeNumber(); // Required
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>(); // Optional

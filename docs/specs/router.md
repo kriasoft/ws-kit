@@ -34,7 +34,7 @@ const router = createRouter<AppData>();
 const PingMessage = message("PING", { value: z.number() });
 const PongMessage = message("PONG", { reply: z.number() });
 
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   console.log("Ping from:", ctx.ws.data.clientId);
   console.log("Received at:", ctx.receivedAt);
   // ✅ ctx.payload is fully typed - no 'as any' needed!
@@ -90,7 +90,7 @@ const router = createRouter<AppData>();
 **Why explicit?** TypeScript cannot infer connection data types from handler assignments. The explicit generic ensures all handlers and lifecycle callbacks are fully typed:
 
 ```typescript
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   // ✅ ctx.ws.data is fully typed as AppData
   const userId = ctx.ws.data.userId; // string | undefined
   const roles = ctx.ws.data.roles; // string[] | undefined
@@ -200,7 +200,7 @@ const core = (router as any)[Symbol.for("ws-kit.core")];
 
 **When NOT to use:**
 
-- Regular message handling → Use `router.onMessage()`
+- Regular message handling → Use `router.on()`
 - Publishing messages → Use `router.publish()`
 - Debugging → Use `router.debug()`
 - Middleware registration → Use `router.use()`
@@ -226,8 +226,8 @@ const router = createRouter<AppData>({
 });
 
 // The Proxy catches common mistakes:
-router.onMesssage(schema, handler); // ❌ Throws: "Did you mean onMessage?"
-router.onMessage(schema, handler); // ✅ Works
+router.onn(schema, handler); // ❌ Throws: "Did you mean on?"
+router.on(schema, handler); // ✅ Works
 ```
 
 The debug Proxy **is never used in production** — code always uses a plain object with zero overhead. This provides development convenience without impacting performance. Assertions include typo detection for method names, missing handlers, and invalid message type registration. To disable assertions in development, omit `debug: true` or set it to `false`.
@@ -238,11 +238,11 @@ Always use static method calls on the router. Dynamic property access defeats ty
 
 ```typescript
 // ✅ SAFE: Static method calls
-router.onMessage(LoginSchema, handler);
+router.on(LoginSchema, handler);
 router.use(middleware);
 
 // ❌ UNSAFE: Dynamic property access
-const m = "onMessage";
+const m = "on";
 (router as any)[m](schema, handler); // Bypasses type safety
 ```
 
@@ -251,7 +251,7 @@ const m = "onMessage";
 ### Message Handlers
 
 ```typescript
-router.onMessage<Schema extends MessageSchemaType>(
+router.on<Schema extends MessageSchemaType>(
   schema: Schema,
   handler: MessageHandler<Schema, Data>
 ): WebSocketRouter<Data>
@@ -286,11 +286,11 @@ type MessageContext<Schema, Data> = {
 const WithPayload = messageSchema("WITH", { id: z.number() });
 const WithoutPayload = messageSchema("WITHOUT");
 
-router.onMessage(WithPayload, (ctx) => {
+router.on(WithPayload, (ctx) => {
   const id = ctx.payload.id; // ✅ Typed as number
 });
 
-router.onMessage(WithoutPayload, (ctx) => {
+router.on(WithoutPayload, (ctx) => {
   const p = ctx.payload; // ❌ Type error
 });
 ```
@@ -320,20 +320,54 @@ router.use(SendMessage, (ctx, next) => {
   return next();
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   // Handler runs if all middleware calls next()
   processMessage(ctx.payload);
 });
 ```
 
-**Middleware Semantics:**
+**Middleware Contract:**
+
+Middleware functions have the signature:
+
+```typescript
+(ctx: Context, next: () => void | Promise<void>) => void | Promise<void>
+```
+
+**Execution and Control Flow:**
 
 - **Execution Order**: Global middleware first, then per-route middleware, then handler
-- **Skipping Handlers**: If middleware doesn't call `next()` (or calls `ctx.error()`), the handler is skipped
+- **Must Call `next()`**: Middleware must explicitly call `await next()` to continue; omitting it skips the handler
+- **Async/Await Support**: Middleware can be async; use `await next()` to wait for downstream completion
+- **Skip Behavior**: If middleware doesn't call `next()`, the handler is skipped and the chain stops
+
+**Example: Async Middleware with Waiting**
+
+```typescript
+router.use(async (ctx, next) => {
+  // Acquire lock before continuing
+  const lock = await acquireLock(ctx.ws.data?.userId);
+  try {
+    await next(); // Wait for handler to complete
+    // Handle post-processing
+  } finally {
+    lock.release();
+  }
+});
+```
+
+**Context and Side Effects:**
+
 - **Context Mutation**: Middleware may mutate `ctx.ws.data` (via `ctx.assignData()`) and handlers see updates
-- **Asynchronous**: Both sync and async middleware are supported
-- **Error Handling**: Middleware can call `ctx.error()` to reject messages or throw to trigger `onError` hook
-- **Same Context**: Middleware sees the same context type and fields as handlers
+- **Error Handling**: Middleware can call `ctx.error()` to reject (connection closes) or throw to trigger `onError` hook
+- **Same Context Fields**: Middleware sees the same context type and fields as handlers
+
+**Guarantee: Linear Execution**
+
+- Global middleware always runs before per-route middleware
+- Per-route middleware always runs before handlers
+- If any middleware calls `ctx.error()` or throws, downstream middleware and handlers are skipped
+- The `onError` hook is called if an unhandled error occurs anywhere in the chain
 
 **Example: Authentication + Authorization Middleware**
 
@@ -359,7 +393,7 @@ router.use(DeleteMessage, (ctx, next) => {
   return next();
 });
 
-router.onMessage(DeleteMessage, (ctx) => {
+router.on(DeleteMessage, (ctx) => {
   // Only reached if both middleware called next()
   deleteItem(ctx.payload.id);
 });
@@ -413,10 +447,10 @@ import { createRouter } from "@ws-kit/zod";
 type AppData = { userId?: string };
 
 const authRouter = createRouter<AppData>();
-authRouter.onMessage(LoginMessage, handleLogin);
+authRouter.on(LoginMessage, handleLogin);
 
 const chatRouter = createRouter<AppData>();
-chatRouter.onMessage(SendMessage, handleChat);
+chatRouter.on(SendMessage, handleChat);
 
 const mainRouter = createRouter<AppData>()
   .addRoutes(authRouter)
@@ -432,8 +466,8 @@ const mainRouter = createRouter<AppData>()
 Messages route by `type` field. Last registered handler wins:
 
 ```typescript
-router.onMessage(TestMessage, handler1);
-router.onMessage(TestMessage, handler2); // ⚠️ Overwrites handler1
+router.on(TestMessage, handler1);
+router.on(TestMessage, handler2); // ⚠️ Overwrites handler1
 // Console: Handler for "TEST" is being overwritten
 ```
 
@@ -459,7 +493,7 @@ Client Message → JSON Parse → Type Check → Handler Lookup → Normalize �
 ```typescript
 const ResponseMsg = message("RESPONSE", { result: z.string() });
 
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   ctx.send(ResponseMsg, { result: "ok" }); // ✅ Broadcast/notify semantics
   ctx.send(ResponseMsg, { result: 123 }); // ❌ Type error
 });
@@ -473,7 +507,7 @@ Use `ctx.reply()` for semantic clarity when responding to a request:
 const QueryMessage = message("QUERY", { id: z.string() });
 const QueryResponse = message("QUERY_RESPONSE", { result: z.any() });
 
-router.onMessage(QueryMessage, (ctx) => {
+router.on(QueryMessage, (ctx) => {
   const result = database.query(ctx.payload.id);
   ctx.reply(QueryResponse, { result }); // ✅ Semantically clear: responding to a request
 });
@@ -500,14 +534,14 @@ const UserTyping = message("USER_TYPING", { userId: z.string() });
 const router = createRouter<AppData>();
 
 // Subscribe to a room when joining
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const roomId = ctx.payload.roomId;
   ctx.assignData({ roomId });
   ctx.subscribe(`room:${roomId}`); // Subscribe to room topic
 });
 
 // Publish to room when sending a message
-router.onMessage(RoomMessage, (ctx) => {
+router.on(RoomMessage, (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (!roomId) return;
 
@@ -518,7 +552,7 @@ router.onMessage(RoomMessage, (ctx) => {
 });
 
 // Unsubscribe when client leaves room
-router.onMessage(LeaveRoom, (ctx) => {
+router.on(LeaveRoom, (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
     ctx.unsubscribe(`room:${roomId}`);
@@ -566,7 +600,7 @@ type AppData = {
 
 const router = createRouter<AppData>();
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   const userId = ctx.ws.data.userId; // ✅ Typed (string)
   const roles = ctx.ws.data.roles; // ✅ Typed (string[])
   const clientId = ctx.ws.data.clientId; // ✅ Always present (auto-added)
@@ -599,13 +633,13 @@ Use `ctx.assignData()` to merge partial updates into connection state:
 type AppData = { userId?: string; roles?: string[] };
 const router = createRouter<AppData>();
 
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   const user = authenticate(ctx.payload);
   // Merge new fields into ctx.ws.data
   ctx.assignData({ userId: user.id, roles: user.roles });
 });
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   // Later handlers see the updated data
   const userId = ctx.ws.data.userId; // ✅ Now available
   const roles = ctx.ws.data.roles; // ✅ Now available
@@ -619,7 +653,7 @@ router.onMessage(SecureMessage, (ctx) => {
 Use `ctx.error()` for type-safe, discriminated error responses (see ADR-009 for design rationale):
 
 ```typescript
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   try {
     const user = authenticate(ctx.payload);
     if (!user) {
@@ -635,7 +669,7 @@ router.onMessage(LoginMessage, (ctx) => {
   }
 });
 
-router.onMessage(QueryMessage, (ctx) => {
+router.on(QueryMessage, (ctx) => {
   try {
     const result = queryDatabase(ctx.payload);
     ctx.reply(QueryResponse, result);
@@ -719,6 +753,27 @@ serve(router, {
 - `onError`, `onBroadcast` called after the action completes
 - `onUpgrade`, `onOpen`, `onClose` called after state change
 - Hooks can observe and trigger side effects, but cannot modify operations
+
+### Close Behavior
+
+When `ctx.error()` is called or a connection closes, the WebSocket close code is determined by the error type:
+
+| Error Code         | WS Close Code | Behavior                                   | Notes                                      |
+| ------------------ | ------------- | ------------------------------------------ | ------------------------------------------ |
+| `VALIDATION_ERROR` | 1008          | Invalid message payload or schema mismatch | Client should fix payload format           |
+| `AUTH_ERROR`       | 1008          | Authentication failed                      | Client should re-authenticate              |
+| `NOT_FOUND`        | 1008          | Resource referenced by message not found   | Client should verify resource exists       |
+| `RATE_LIMIT`       | 1008          | Rate limit exceeded                        | Client should implement backoff            |
+| `INTERNAL_ERROR`   | 1011          | Server error (unhandled exception)         | Server issue; client may retry after delay |
+| (normal close)     | 1000          | Clean shutdown                             | Graceful disconnect                        |
+
+**WebSocket Close Code Reference:**
+
+- **1000** — Normal closure
+- **1008** — Policy violation (semantic errors: validation, auth, not found, rate limit)
+- **1011** — Unexpected server condition (internal errors, exceptions)
+
+When using `ctx.error()`, the connection closes immediately with the appropriate code after the error message is sent.
 
 ## Production Runtime Selection
 

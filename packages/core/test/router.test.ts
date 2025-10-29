@@ -117,7 +117,7 @@ describe("WebSocketRouter", () => {
         /* no-op */
       };
 
-      expect(() => router.onMessage(schema, handler)).not.toThrow();
+      expect(() => router.on(schema, handler)).not.toThrow();
     });
 
     it("should warn when overwriting handler for same message type", () => {
@@ -137,8 +137,8 @@ describe("WebSocketRouter", () => {
         }
       };
 
-      router.onMessage(schema, handler1);
-      router.onMessage(schema, handler2);
+      router.on(schema, handler1);
+      router.on(schema, handler2);
 
       console.warn = originalWarn;
       expect(warnings).toBe(1);
@@ -151,9 +151,7 @@ describe("WebSocketRouter", () => {
         /* no-op */
       };
 
-      const result = router
-        .onMessage(schema1, handler)
-        .onMessage(schema2, handler);
+      const result = router.on(schema1, handler).on(schema2, handler);
       expect(result).toBe(router);
     });
 
@@ -190,8 +188,8 @@ describe("WebSocketRouter", () => {
         /* no-op */
       };
 
-      router1.onMessage(schema1, handler);
-      router2.onMessage(schema2, handler);
+      router1.on(schema1, handler);
+      router2.on(schema2, handler);
 
       const combined = new WebSocketRouter({ validator: mockValidator });
       combined.addRoutes(router1).addRoutes(router2);
@@ -223,8 +221,8 @@ describe("WebSocketRouter", () => {
         callCount = 2;
       };
 
-      router1.onMessage(schema, handler1);
-      router2.onMessage(schema, handler2);
+      router1.on(schema, handler1);
+      router2.on(schema, handler2);
 
       const combined = new WebSocketRouter({ validator: mockValidator });
       combined.addRoutes(router1).addRoutes(router2);
@@ -301,7 +299,7 @@ describe("WebSocketRouter", () => {
       let handled = false;
       const schema = { type: "PING" } as MessageSchemaType;
 
-      router.onMessage(schema, (ctx) => {
+      router.on(schema, (ctx) => {
         handled = true;
         expect(ctx.type).toBe("PING");
       });

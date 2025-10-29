@@ -181,7 +181,7 @@ router.onError((error, ctx) => {
 // Message Handlers
 // =======================
 
-router.onMessage(JoinRoomMessage, async (ctx) => {
+router.on(JoinRoomMessage, async (ctx) => {
   const clientId = ctx.ws.data?.clientId;
   const user = users.get(clientId || "");
   const { room } = ctx.payload;
@@ -220,7 +220,7 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
   }
 });
 
-router.onMessage(SendMessageMessage, async (ctx) => {
+router.on(SendMessageMessage, async (ctx) => {
   const clientId = ctx.ws.data?.clientId;
   const user = users.get(clientId || "");
   const { text } = ctx.payload;
@@ -246,7 +246,7 @@ router.onMessage(SendMessageMessage, async (ctx) => {
   console.log(`[${clientId}] Sent: ${text}`);
 });
 
-router.onMessage(LeaveRoomMessage, async (ctx) => {
+router.on(LeaveRoomMessage, async (ctx) => {
   const { clientId } = ctx.ws.data;
   const user = users.get(clientId);
 

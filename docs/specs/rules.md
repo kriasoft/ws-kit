@@ -26,9 +26,11 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
   - Client (Typed): `import { wsClient } from "@ws-kit/client/zod"` or `@ws-kit/client/valibot`
   - Multi-runtime: `import { serve } from "@ws-kit/serve"` with explicit `runtime`, or `import { serve } from "@ws-kit/serve/bun"` for single-target
 - **NEVER** mix imports from different sources (prevents dual package hazard) → ADR-007
-- **NEVER** import bare `zod` or `valibot` in app code (use `@ws-kit/zod` or `@ws-kit/valibot` instead)
+- **NEVER** import `z` directly from `zod` or `v` from `valibot`; always import from `@ws-kit/zod` or `@ws-kit/valibot`
+  - ❌ `import { z } from "zod"` — Creates dual package hazard; breaks type inference
+  - ✅ `import { z } from "@ws-kit/zod"` — Single source; full type safety
 
-**ESLint Enforcement** (suggested rule):
+**ESLint Enforcement:**
 
 ```json
 {
@@ -36,14 +38,35 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
     "no-restricted-imports": [
       "error",
       {
-        "patterns": [
-          { "group": ["zod"], "message": "Use @ws-kit/zod instead" },
-          { "group": ["valibot"], "message": "Use @ws-kit/valibot instead" }
-        ]
+        "name": "zod",
+        "message": "Import from @ws-kit/zod instead to avoid dual package hazard"
+      },
+      {
+        "name": "valibot",
+        "message": "Import from @ws-kit/valibot instead to avoid dual package hazard"
       }
     ]
   }
 }
+```
+
+**Add to ESLint config:**
+
+```javascript
+// .eslintrc.js
+module.exports = {
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          { group: ["zod"], message: "Use @ws-kit/zod instead" },
+          { group: ["valibot"], message: "Use @ws-kit/valibot instead" },
+        ],
+      },
+    ],
+  },
+};
 ```
 
 ### Runtime Selection (ADR-006)

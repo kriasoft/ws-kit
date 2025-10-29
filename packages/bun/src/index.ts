@@ -13,13 +13,13 @@
  * @example
  * ```typescript
  * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
- * import { createZodRouter } from "@ws-kit/zod";
+ * import { createRouter } from "@ws-kit/zod";
  *
- * const router = createZodRouter({
+ * const router = createRouter({
  *   platform: createBunAdapter(),
  * });
  *
- * const { fetch, websocket } = createBunHandler(router._core);
+ * const { fetch, websocket } = createBunHandler(router);
  *
  * Bun.serve({
  *   fetch(req, server) {

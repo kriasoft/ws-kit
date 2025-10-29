@@ -45,6 +45,11 @@ export async function serve<TData>(
 
   const { fetch, websocket } = createBunHandler(coreRouter, {
     authenticate: options.authenticate as any,
+    onError: options.onError,
+    onBroadcast: options.onBroadcast,
+    onUpgrade: options.onUpgrade,
+    onOpen: options.onOpen,
+    onClose: options.onClose,
   });
 
   // Return a promise that never resolves (server runs indefinitely)

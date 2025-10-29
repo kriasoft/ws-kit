@@ -1,4 +1,4 @@
-# ADR-005: Builder Pattern and Symbol Escape Hatch for `._core` Deprecation
+# ADR-005: Builder Pattern and Symbol Escape Hatch
 
 **Status**: Accepted
 **Date**: 2025-10-29
@@ -14,7 +14,7 @@ The typed router wrappers (from ADR-004) previously exposed an internal `._core`
 4. **Complicates mental model** — Users think they have "a router", but actually have a wrapper around a core
 5. **Non-standard naming** — Underscore prefix suggests private but is public; doesn't match ecosystem conventions
 
-**In v1.2+, `._core` is deprecated and removed in v2.0 in favor of the Symbol escape hatch.**
+**Solution: Use the Symbol escape hatch pattern instead of `._core`.**
 
 ## Decision
 
@@ -34,11 +34,11 @@ export function createRouter<TData = {}>(): Router<TData> {
 
   // Plain object with explicit forwarding—no Proxy traps needed
   return {
-    onMessage<S extends MessageSchema<any, any>>(
+    on<S extends MessageSchema<any, any>>(
       schema: S,
       handler: (ctx: MessageContext<S, TData>) => void,
     ) {
-      return core.onMessage(schema, handler as any);
+      return core.on(schema, handler as any);
     },
 
     onOpen(handler: (ctx: OpenContext<TData>) => void) {
@@ -95,40 +95,15 @@ import { CORE_SYMBOL } from "@ws-kit/core";
 const core = (router as any)[CORE_SYMBOL];
 ```
 
-### Deprecation of `._core` and Migration to Symbol
+### Symbol Escape Hatch (No `._core` Support)
 
-The `._core` property is **deprecated as of v1.2** and **removed in v2.0**. Only `Symbol.for("ws-kit.core")` is supported going forward.
-
-**v1.2+ Behavior:** `._core` still works via a deprecation getter that emits a warning:
+Only `Symbol.for("ws-kit.core")` is supported. The `._core` property is removed to maintain API cleanliness.
 
 ```typescript
-Object.defineProperty(router, "_core", {
-  get() {
-    console.warn(
-      'router._core is deprecated. Use router[Symbol.for("ws-kit.core")] for advanced introspection. ' +
-        "For most use cases, prefer router.debug() or pass the router directly to platform handlers.",
-    );
-    return core;
-  },
-  configurable: true,
-});
-```
-
-**Migration Timeline:**
-
-- **v1.2+**: `._core` works with deprecation warning; Symbol escape hatch available
-- **v2.0**: `._core` completely removed; only `Symbol.for("ws-kit.core")` available
-
-### Migration: From `._core` to Symbol
-
-```typescript
-// ❌ DEPRECATED (v1.2+): Uses private-like property name
-const core = router._core;
-
-// ✅ MODERN (v1.2+): Standard Symbol escape hatch
+// ✅ Access core for advanced introspection
 const core = (router as any)[Symbol.for("ws-kit.core")];
 
-// ✅ MODERN WITH CONSTANT: Avoid magic strings
+// ✅ Or use exported constant to avoid magic strings
 import { CORE_SYMBOL } from "@ws-kit/core";
 const core = (router as any)[CORE_SYMBOL];
 ```
@@ -142,7 +117,7 @@ In development (`NODE_ENV !== "production"`), the builder can be optionally wrap
 ```typescript
 if (process.env.NODE_ENV !== "production") {
   const KNOWN = new Set([
-    "onMessage",
+    "on",
     "onOpen",
     "onClose",
     "addRoutes",
@@ -214,7 +189,7 @@ if (process.env.NODE_ENV !== "production") {
 const router = createRouter<AppData>();
 
 // ✅ SAFE: Static method calls
-router.onMessage(LoginSchema, (ctx) => {
+router.on(LoginSchema, (ctx) => {
   /* ... */
 });
 router.use((ctx, next) => {
@@ -227,7 +202,7 @@ const debug = router.debug();
 const core = (router as any)[Symbol.for("ws-kit.core")];
 
 // ❌ UNSAFE: Dynamic property access (may route through Proxy in dev)
-const m = "onMessage";
+const m = "on";
 (router as any)[m](schema, handler); // Don't do this
 
 // ❌ UNSAFE: Bracket access with any expression
@@ -236,44 +211,32 @@ for (const method of methods) {
   // This defeats the optimization and might hit Proxy traps
 }
 
-// ❌ UNSAFE: `._core` is DEPRECATED (v1.x only with deprecation getter)
-const core = router._core; // ⚠️ Throws deprecation warning; use Symbol instead
+// ❌ UNSAFE: `._core` not supported
+const core = router._core; // ❌ Property doesn't exist
 ```
 
-## Platform Handlers: No More `._core` Extraction
+## Platform Handlers: Accept Router Directly
 
-Platform handlers no longer need `._core` access. They accept the typed router directly:
+Platform handlers accept the typed router directly without needing to extract `._core`:
 
 ```typescript
-// ✅ Old way (v1.1 and earlier)
-const { fetch, websocket } = createBunHandler(router._core, options);
-
-// ✅ New way (v1.2+)
 const { fetch, websocket } = createBunHandler(router, options);
 // Just pass the router directly—it's transparent!
 ```
 
-The handler implementation accepts both:
-
-- Typed router (builder pattern)
-- Core router (backwards compatibility)
-
-This is achieved via duck-typing in the handler:
+The handler implementation uses duck-typing to support both typed routers and core routers:
 
 ```typescript
 export function createBunHandler<TData>(
   router: Router<TData> | WebSocketRouter<TData>,
   options: BunHandlerOptions<TData>,
 ) {
-  // Handler works with either type
-  const core = isRouter(router)
-    ? (router as any)[Symbol.for("ws-kit.core")]
-    : router;
+  // Handler detects typed router via Symbol and extracts core
+  const core =
+    Symbol.for("ws-kit.core") in Object(router)
+      ? (router as any)[Symbol.for("ws-kit.core")]
+      : router;
   // ... proceed with core
-}
-
-function isRouter(obj: any): boolean {
-  return Symbol.for("ws-kit.core") in obj;
 }
 ```
 
@@ -281,18 +244,17 @@ function isRouter(obj: any): boolean {
 
 ### Benefits
 
-✅ **No abstraction leak** - `._core` is gone from public API
+✅ **No abstraction leak** - `._core` is not exposed
 ✅ **Transparent to users** - Builder pattern hides dual-router implementation
 ✅ **Platform handlers simplified** - Direct router acceptance, no property extraction
 ✅ **Clear escape hatch** - Symbol.for convention is standard and documented
 ✅ **Zero production overhead** - Always plain object, never Proxy
-✅ **Backwards compatible** - `._core` still works with deprecation warning
+✅ **Clean API** - No legacy property clutter
 
 ### Trade-offs
 
 ⚠️ **Development requires Proxy knowledge** - Optional enhancement requires understanding proxy traps
 ⚠️ **Symbol syntax is verbose** - `Symbol.for("ws-kit.core")` is longer than `._core`
-⚠️ **Deprecation period needed** - v1.2 to v2.0 transition time for users to migrate
 
 ## Alternatives Considered
 
@@ -318,15 +280,15 @@ Use TypeScript private fields to hide core access.
 - TypeScript-only solution (doesn't work in JavaScript)
 - Doesn't align with React/Vue industry conventions
 
-### 3. Deprecate Immediately (Remove `._core` in v1.2)
+### 3. Support Both Symbol and `._core` Indefinitely
 
-Stop supporting `._core` in v1.2 without deprecation period.
+Continue supporting `._core` as a stable public API.
 
 **Why rejected:**
 
-- Breaking change for existing code
-- No migration path
-- Violates semantic versioning (should be v2.0+)
+- Contradicts principle of no abstraction leak
+- Non-standard naming doesn't align with React/Vue conventions
+- Confuses developers about what's private vs. public
 
 ## References
 
@@ -364,20 +326,15 @@ This table compares Symbol-based escape hatches with alternative approaches used
 6. **No false positivity** — Typos in property access (e.g., `._core` vs `.core`) are impossible with Symbols
 7. **Follows TC39 conventions** — The pattern is recognized in TC39 proposals for well-known symbols
 
-### Migration Path
+### Using the Escape Hatch
 
-For projects currently using `._core`:
+To access the core router for advanced introspection:
 
 ```typescript
-// Old (v1.1 and earlier)
-const core = router._core;
-
-// New (v1.2+ recommended)
+// Direct Symbol access
 const core = (router as any)[Symbol.for("ws-kit.core")];
 
-// Alternative: Use exported constant (avoids magic string)
+// Or use exported constant (avoids magic string)
 import { CORE_SYMBOL } from "@ws-kit/core";
 const core = (router as any)[CORE_SYMBOL];
 ```
-
-Both forms work in v1.2+. Symbol becomes the only option in v2.0.

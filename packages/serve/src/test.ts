@@ -12,7 +12,7 @@
  *
  * it("handles messages", async () => {
  *   const router = createRouter();
- *   router.onMessage(TestSchema, (ctx) => {
+ *   router.on(TestSchema, (ctx) => {
  *     ctx.send(ResponseSchema, { ... });
  *   });
  *
@@ -53,7 +53,7 @@ export type { ServeOptions } from "./types.js";
  *
  * it("handles JOIN_ROOM messages", async () => {
  *   const router = createRouter<{ roomId?: string }>();
- *   router.onMessage(JoinRoom, (ctx) => {
+ *   router.on(JoinRoom, (ctx) => {
  *     ctx.assignData({ roomId: ctx.payload.roomId });
  *   });
  *

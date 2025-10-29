@@ -13,7 +13,7 @@ import {
   validateProtocolPrefix,
 } from "./auth.js";
 import { calculateBackoff } from "./backoff.js";
-import { StateError } from "./errors.js";
+import { StateError, ValidationError } from "./errors.js";
 import { HandlerRegistry } from "./handlers.js";
 import { normalizeOutboundMeta } from "./normalize.js";
 import { MessageQueue } from "./queue.js";
@@ -550,7 +550,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     const result = safeParse(schema, message);
     if (!result.success) {
       return Promise.reject(
-        new StateError(
+        new ValidationError(
           `Outbound validation failed: ${JSON.stringify(result.error)}`,
         ),
       );

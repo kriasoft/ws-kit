@@ -281,6 +281,85 @@ All adapters follow **identical error semantics**. See `docs/specs/error-handlin
 
 **Key principle**: Errors never auto-close connections. Handlers must explicitly call `ctx.ws.close()` when needed.
 
+## Advanced Patterns
+
+### Cloudflare DO Sharding for Pub/Sub
+
+When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Shard your subscriptions across multiple DO instances by deriving a DO ID from the scope name:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+
+// Hash scope to a stable DO ID
+function getScopeDoId(scope: string): string {
+  const hash = Array.from(new TextEncoder().encode(scope)).reduce(
+    (h, byte) => ((h << 5) - h + byte) >>> 0,
+    0,
+  );
+  const doCount = 10; // Number of DO instances for sharding
+  return `ws-router-${hash % doCount}`;
+}
+
+// Derive stable namespace and ID
+function getDurableObjectId(scope: string) {
+  const env = {
+    ROUTER: { idFromName: (name: string) => ({ toString: () => name }) },
+  };
+  const doId = getScopeDoId(scope);
+  return env.ROUTER.idFromName(doId);
+}
+
+// Server: route subscriptions to sharded DO instances
+const router = createRouter();
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  const doId = getDurableObjectId(`room:${roomId}`);
+  // In production, fetch and upgrade to DO: env.ROUTER.get(doId).fetch(req)
+  ctx.subscribe(`room:${roomId}`);
+});
+
+// Client: same API, transparent sharding
+const client = wsClient("wss://api.example.com");
+client.send(JoinRoom, { roomId: "general" }); // Routed to sharded DO based on hash
+```
+
+**Benefits:**
+
+- ✅ Linear scaling: Add more DO instances without code changes
+- ✅ Stable routing: Same scope always routes to same DO
+- ✅ No global bottleneck: Each scope's subscribers live on its DO instance
+
+### PubSub Engine Interface
+
+Adapters implement the `PubSub` interface for broadcasting:
+
+```typescript
+export interface PubSub {
+  publish(channel: string, message: unknown): Promise<void>;
+  subscribe(
+    channel: string,
+    handler: (message: unknown) => void | Promise<void>,
+  ): Promise<() => Promise<void>>;
+  unsubscribe(channel: string): Promise<void>;
+}
+```
+
+**Adapters:**
+
+- **Bun/Deno**: In-memory implementation (fast, request-scoped)
+- **Cloudflare DO**: Request-scoped within DO instance (distributed via DO routing)
+- **Redis PubSub** (optional): `@ws-kit/redis-pubsub` for multi-server scaling
+
+When `@ws-kit/redis-pubsub` is installed, adapters can delegate to Redis for cross-instance broadcasts:
+
+```typescript
+import { createRedisAdapter } from "@ws-kit/redis-pubsub";
+
+const pubsub = createRedisAdapter({ redis: redisClient });
+serve(router, { pubsub }); // Use Redis instead of in-memory
+```
+
 ## Future Considerations
 
 - **Redis Pub/Sub**: Additional adapter for distributed Redis-backed subscriptions

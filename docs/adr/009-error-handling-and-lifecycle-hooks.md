@@ -141,7 +141,7 @@ export function error(
 #### Authentication Error
 
 ```typescript
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   try {
     const user = authenticate(ctx.payload);
     if (!user) {
@@ -161,7 +161,7 @@ router.onMessage(LoginMessage, (ctx) => {
 #### Validation Error
 
 ```typescript
-router.onMessage(UpdateUserMessage, (ctx) => {
+router.on(UpdateUserMessage, (ctx) => {
   try {
     const validated = validateEmail(ctx.payload.email);
     ctx.assignData({ email: validated });
@@ -181,7 +181,7 @@ router.onMessage(UpdateUserMessage, (ctx) => {
 #### Not Found Error
 
 ```typescript
-router.onMessage(QueryUserMessage, (ctx) => {
+router.on(QueryUserMessage, (ctx) => {
   const user = findUserById(ctx.payload.userId);
   if (!user) {
     ctx.error("NOT_FOUND", "User not found", {
@@ -409,13 +409,13 @@ serve(router, {
 
 ```typescript
 // One-way message (broadcast, notification)
-router.onMessage(RoomUpdateMessage, (ctx) => {
+router.on(RoomUpdateMessage, (ctx) => {
   updateRoom(ctx.payload);
   ctx.send(RoomUpdatedMessage, { roomId: ctx.payload.roomId });
 });
 
 // Request/response pattern (query, update with response)
-router.onMessage(QueryUserMessage, (ctx) => {
+router.on(QueryUserMessage, (ctx) => {
   const user = findUserById(ctx.payload.userId);
   // ✅ reply() explicitly signals response to request
   ctx.reply(QueryUserResponseMessage, user);
@@ -448,7 +448,7 @@ const ctx = {
 ### In Handlers
 
 ```typescript
-router.onMessage(ProcessMessage, (ctx) => {
+router.on(ProcessMessage, (ctx) => {
   try {
     const result = processData(ctx.payload);
     ctx.reply(ProcessedMessage, result);
@@ -488,7 +488,7 @@ router.use((ctx, next) => {
 If an error escapes handlers or middleware:
 
 ```typescript
-router.onMessage(BadMessage, (ctx) => {
+router.on(BadMessage, (ctx) => {
   throw new Error("Unexpected error");
   // Router catches this error
   // Calls onError hook with error object
@@ -511,7 +511,7 @@ onError(error, ctx) {
 ### Handler Error
 
 ```typescript
-router.onMessage(QueryMessage, (ctx) => {
+router.on(QueryMessage, (ctx) => {
   // Throws error
   throw new Error("Database connection failed");
 });
@@ -600,7 +600,7 @@ const CustomError = message("CUSTOM_ERROR", {
   message: z.string(),
 });
 
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   ctx.send(CustomError, { code: "MY_ERROR", message: "..." });
 });
 ```
@@ -616,7 +616,7 @@ class ValidationError extends Error {
   code = "VALIDATION_ERROR";
 }
 
-router.onMessage(ValidateMessage, (ctx) => {
+router.on(ValidateMessage, (ctx) => {
   if (!isValid(ctx.payload)) {
     throw new ValidationError("Invalid input");
   }
@@ -634,7 +634,7 @@ Handler returns result or error:
 ```typescript
 type HandlerResult<T> = { ok: true; data: T } | { ok: false; error: ErrorCode };
 
-router.onMessage(SomeMessage, (ctx): HandlerResult<Response> => {
+router.on(SomeMessage, (ctx): HandlerResult<Response> => {
   if (!isValid(ctx.payload)) {
     return { ok: false, error: "VALIDATION_ERROR" };
   }

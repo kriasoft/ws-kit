@@ -308,7 +308,7 @@ describe("Lifecycle Hooks", () => {
         sequence.push("open");
       });
 
-      router.onMessage({ type: "TEST" } as any, () => {
+      router.on({ type: "TEST" } as any, () => {
         sequence.push("message");
       });
 

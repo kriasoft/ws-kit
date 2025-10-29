@@ -54,7 +54,7 @@ class DeltaSyncServer {
   createRouter() {
     const router = createRouter();
 
-    router.onMessage(JoinMessage, async (ctx) => {
+    router.on(JoinMessage, async (ctx) => {
       const { participantId, name } = ctx.payload;
 
       console.log(`[JOIN] ${participantId} (${name})`);
@@ -86,7 +86,7 @@ class DeltaSyncServer {
       }
     });
 
-    router.onMessage(UpdateMessage, async (ctx) => {
+    router.on(UpdateMessage, async (ctx) => {
       const { patch, clientReqId } = ctx.payload;
       const participantId = ctx.ws.data?.participantId as string;
 
@@ -106,7 +106,7 @@ class DeltaSyncServer {
       }
     });
 
-    router.onMessage(LeaveMessage, async (ctx) => {
+    router.on(LeaveMessage, async (ctx) => {
       const participantId = ctx.ws.data?.participantId as string;
 
       if (!participantId) return;
@@ -121,7 +121,7 @@ class DeltaSyncServer {
     });
 
     // Heartbeat to detect stale connections
-    router.onMessage(message("HEARTBEAT"), async (ctx) => {
+    router.on(message("HEARTBEAT"), async (ctx) => {
       const participantId = ctx.ws.data?.participantId as string | undefined;
       if (participantId) {
         const client = this.clients.get(participantId);

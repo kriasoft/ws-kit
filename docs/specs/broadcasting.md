@@ -22,7 +22,7 @@ import { createRouter, message } from "@ws-kit/zod";
 const UserJoined = message("USER_JOINED", { roomId: z.string() });
 const router = createRouter<AppData>();
 
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to topic (adapter-dependent)
@@ -48,7 +48,7 @@ router.onClose((ctx) => {
 Use `ctx.subscribe()` and `ctx.unsubscribe()` for topic management:
 
 ```typescript
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Subscribe to room updates
@@ -85,7 +85,7 @@ const ChatMessage = message(
   { senderId: z.string().optional() }, // Extended meta
 );
 
-router.onMessage(SendChat, (ctx) => {
+router.on(SendChat, (ctx) => {
   router.publish(
     `room:${ctx.ws.data.roomId}`,
     ChatMessage,
@@ -104,7 +104,7 @@ const ChatMessage = message(
   { text: z.string(), userId: z.string() }, // Include in payload
 );
 
-router.onMessage(SendChat, (ctx) => {
+router.on(SendChat, (ctx) => {
   router.publish(`room:${ctx.ws.data.roomId}`, ChatMessage, {
     text: ctx.payload.text,
     userId: ctx.ws.data.userId, // Include sender
@@ -155,7 +155,7 @@ const JoinedAck = message("JOINED", { roomId: z.string() });
 
 const router = createRouter<{ roomId?: string; userId?: string }>();
 
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
 
   // Update connection data
@@ -222,7 +222,7 @@ const throttledPublish = createThrottledPublish(
   50, // milliseconds
 );
 
-router.onMessage(CursorMove, (ctx) => {
+router.on(CursorMove, (ctx) => {
   // Instead of router.publish(), use throttled version
   throttledPublish(`room:${ctx.ws.data.roomId}`, {
     clientId: ctx.ws.data.clientId,

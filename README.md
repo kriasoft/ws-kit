@@ -85,7 +85,7 @@ type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
 // Register handlers—fully typed!
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   console.log(`Received: ${ctx.payload.text}`); // ✅ Fully typed
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
@@ -101,6 +101,41 @@ serve(router, {
 ```
 
 **That's it!** All tools—validator, router, messages—come from one place. Type-safe from server to client.
+
+### Typing Connection Data
+
+For large applications, declare your connection data type once using TypeScript declaration merging, then omit the generic throughout your app:
+
+```ts
+// types/app-data.d.ts
+declare module "@ws-kit/core" {
+  interface AppDataDefault {
+    userId?: string;
+    email?: string;
+    roles?: string[];
+  }
+}
+```
+
+Now all routers automatically use this type—no repetition:
+
+```ts
+// ✅ No generic needed—automatically uses AppDataDefault
+const router = createRouter();
+
+router.on(SecureMessage, (ctx) => {
+  // ✅ ctx.ws.data is properly typed with all default fields
+  const userId = ctx.ws.data?.userId; // string | undefined
+  const roles = ctx.ws.data?.roles; // string[] | undefined
+});
+```
+
+If you need custom data for a specific router, use an explicit generic:
+
+```ts
+type CustomData = { feature: string; version: number };
+const featureRouter = createRouter<CustomData>();
+```
 
 ### Do and Don't
 
@@ -132,9 +167,13 @@ import { serve } from "@ws-kit/serve/bun";
 | API Style   | Method chaining          | Functional               |
 | Best for    | Server-side, familiarity | Client-side, performance |
 
-## Runtime Selection
+## Serving Your Router
 
-Choose how to serve your ws-kit router. All adapters work with both Zod and Valibot:
+Configure how your router runs on your platform. All approaches support authentication, lifecycle hooks, and error handling.
+
+### Runtime Selection
+
+Choose your deployment target. All adapters work with both Zod and Valibot:
 
 **Recommended: Platform-Specific Entrypoint** (zero detection overhead)
 
@@ -184,11 +223,11 @@ export default {
 };
 ```
 
-⚠️ **Note:** In production, always explicitly specify your deployment target. Use platform-specific entrypoints (recommended) or explicit `runtime` option.
+⚠️ **Production Safety:** Always explicitly specify your deployment target in production. Use platform-specific entrypoints (recommended) or explicit `runtime` option to prevent silent misconfiguration.
 
-## Authentication
+### Authentication
 
-Pass authenticated user data via the `authenticate` hook in `serve()`. The router's context then has full access to this data:
+Secure your router by validating clients during the WebSocket upgrade. Pass authenticated user data via the `authenticate` hook—all handlers then have type-safe access to this data:
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -219,7 +258,7 @@ router.use((ctx, next) => {
 });
 
 // Handlers have full type safety
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   const userId = ctx.ws.data?.userId; // ✅ Type narrowed
   const email = ctx.ws.data?.email; // ✅ Type narrowed
   console.log(`${email} sent: ${ctx.payload.text}`);
@@ -311,7 +350,7 @@ router.onOpen((ctx) => {
 });
 
 // Handle specific message types (fully typed!)
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload; // ✅ Fully typed from schema
   const userId = ctx.ws.data?.userId;
 
@@ -328,7 +367,7 @@ router.onMessage(JoinRoom, (ctx) => {
   ctx.send(UserJoined, { roomId, userId: userId || "anonymous" });
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   const { text } = ctx.payload;
   const userId = ctx.ws.data?.userId;
   const roomId = ctx.ws.data?.roomId;
@@ -380,7 +419,7 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 const router = createRouter<{ roomId?: string }>();
 
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to room updates
@@ -397,7 +436,7 @@ router.onMessage(JoinRoom, (ctx) => {
   });
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   const roomId = ctx.ws.data?.roomId;
 
   // Broadcast message to room (fully typed, no JSON.stringify needed!)
@@ -448,7 +487,7 @@ const NewMessage = message("NEW_MESSAGE", {
 });
 const UserLeft = message("USER_LEFT", { userId: z.string() });
 
-router.onMessage(JoinRoom, (ctx) => {
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId || ctx.ws.data?.clientId;
 
@@ -463,7 +502,7 @@ router.onMessage(JoinRoom, (ctx) => {
   router.publish(roomId, UserJoined, { roomId, userId });
 });
 
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   const { roomId, message: msg } = ctx.payload;
   const userId = ctx.ws.data?.userId || ctx.ws.data?.clientId;
 
@@ -503,7 +542,7 @@ const router = createRouter<AppData>();
 
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
 
-router.onMessage(JoinRoom, async (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Check if room exists
@@ -556,7 +595,7 @@ router.use((ctx, next) => {
 
 // Error handling in message handlers
 const AuthenticateUser = message("AUTH", { token: z.string() });
-router.onMessage(AuthenticateUser, (ctx) => {
+router.on(AuthenticateUser, (ctx) => {
   try {
     const { token } = ctx.payload;
     const user = validateToken(token);

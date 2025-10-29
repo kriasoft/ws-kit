@@ -55,12 +55,12 @@ import { expectTypeOf } from "expect-type";
 const WithPayload = messageSchema("WITH", { id: z.number() });
 const WithoutPayload = messageSchema("WITHOUT");
 
-router.onMessage(WithPayload, (ctx) => {
+router.on(WithPayload, (ctx) => {
   expectTypeOf(ctx.payload).toEqualTypeOf<{ id: number }>();
   expectTypeOf(ctx.payload.id).toBeNumber();
 });
 
-router.onMessage(WithoutPayload, (ctx) => {
+router.on(WithoutPayload, (ctx) => {
   // @ts-expect-error - payload should not exist
   ctx.payload;
 });
@@ -70,7 +70,7 @@ router.onMessage(WithoutPayload, (ctx) => {
 
 ```typescript
 // Test inline handler type inference
-router.onMessage(TestMessage, (ctx) => {
+router.on(TestMessage, (ctx) => {
   expectTypeOf(ctx.type).toEqualTypeOf<"TEST">();
 
   // Server-provided timestamp is always present (server clock)
@@ -242,7 +242,7 @@ test("server logic uses ctx.receivedAt, not meta.timestamp", () => {
   const TestMsg = messageSchema("TEST", { id: z.number() });
   const before = Date.now();
 
-  router.onMessage(TestMsg, (ctx) => {
+  router.on(TestMsg, (ctx) => {
     // ctx.receivedAt is server ingress time (authoritative)
     expect(ctx.receivedAt).toBeGreaterThanOrEqual(before);
     expect(ctx.receivedAt).toBeLessThanOrEqual(Date.now());

@@ -105,7 +105,7 @@ router.onClose((ctx) => {
 });
 
 // Join handler - new user connects
-router.onMessage(JoinMessage, (ctx) => {
+router.on(JoinMessage, (ctx) => {
   const clientId = ctx.ws.data?.clientId;
   if (!clientId) return;
 
@@ -132,7 +132,7 @@ router.onMessage(JoinMessage, (ctx) => {
 });
 
 // Chat message handler
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   const clientId = ctx.ws.data?.clientId;
   if (!clientId) return;
 
@@ -159,7 +159,7 @@ pubsub.subscribe("chat:messages", (message: unknown) => {
   const msg = message as ChatMessageEvent;
 
   // Send to all connected users in this instance
-  router.onMessage(ChatMessage, (ctx) => {
+  router.on(ChatMessage, (ctx) => {
     ctx.send(ChatMessage, {
       username: msg.username,
       text: msg.text,

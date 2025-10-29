@@ -249,10 +249,10 @@ const LoginMessage = messageSchema("LOGIN", { username: z.string() });
 const SendMessage = messageSchema("SEND", { text: z.string() });
 
 const router = createZodRouter<AppData>();
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   ctx.assignData({ userId: "123" });
 });
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   console.log(ctx.payload.text);
 });
 
@@ -268,10 +268,10 @@ const LoginMessage = message("LOGIN", { username: z.string() });
 const SendMessage = message("SEND", { text: z.string() });
 
 const router = createRouter<AppData>();
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   ctx.assignData({ userId: "123" });
 });
-router.onMessage(SendMessage, (ctx) => {
+router.on(SendMessage, (ctx) => {
   console.log(ctx.payload.text);
 });
 
@@ -329,7 +329,7 @@ const LoginMessage = message("LOGIN", {
 //   meta: z.ZodObject<{ ... }>
 // }
 
-router.onMessage(LoginMessage, (ctx) => {
+router.on(LoginMessage, (ctx) => {
   // ✅ ctx.type is "LOGIN" (literal)
   // ✅ ctx.payload.username is string
   // ✅ ctx.payload.password is string
@@ -370,7 +370,7 @@ router.use((ctx, next) => {
   return next();
 });
 
-router.onMessage(SecureMessage, (ctx) => {
+router.on(SecureMessage, (ctx) => {
   // ✅ Full type safety without explicit <AppData> generic
   const username = ctx.ws.data?.username; // string | undefined
 });

@@ -31,7 +31,7 @@
  * type AppData = { userId?: string };
  * const router = createRouter<AppData>();
  *
- * router.onMessage(LoginMessage, (ctx) => {
+ * router.on(LoginMessage, (ctx) => {
  *   // ctx.payload.username is typed as string
  * });
  * ```
@@ -48,24 +48,6 @@ const { messageSchema: message, ErrorMessage } = createMessageSchema(z);
 // Main exports: export-with-helpers pattern
 export { z, message, ErrorMessage };
 export { default as zodValidator } from "./validator";
-export { createZodRouter } from "./router";
-
-// Convenience: export createRouter as alias for createZodRouter
-/**
- * Create a type-safe WebSocket router using Zod validation.
- *
- * This is the recommended function name. Use this instead of createZodRouter().
- *
- * @example
- * ```typescript
- * import { createRouter } from "@ws-kit/zod";
- *
- * type AppData = { userId?: string };
- * const router = createRouter<AppData>();
- * ```
- *
- * @see createZodRouter - Deprecated name, same functionality
- */
 export { createZodRouter as createRouter } from "./router";
 
 // Utility exports for advanced use cases

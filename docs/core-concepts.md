@@ -80,7 +80,7 @@ Normalization is a **security boundary** that prevents clients from spoofing ser
 ```typescript
 import { publish } from "bun-ws-router/zod/publish";
 
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // ctx provides everything you need:
   // - ctx.ws: The WebSocket instance
   // - ctx.ws.data.clientId: Client identifier (UUID v7, auto-generated)
@@ -122,7 +122,7 @@ const UpdateProfileMessage = messageSchema("UPDATE_PROFILE", {
   avatar: z.url().optional(),
 });
 
-router.onMessage(UpdateProfileMessage, (ctx) => {
+router.on(UpdateProfileMessage, (ctx) => {
   // TypeScript knows:
   // - ctx.payload.name is string
   // - ctx.payload.avatar is string | undefined
@@ -137,7 +137,7 @@ router.onMessage(UpdateProfileMessage, (ctx) => {
 All handlers are wrapped in error boundaries to prevent crashes:
 
 ```typescript
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   throw new Error("Something went wrong");
   // Router catches this and sends an error message to the client
 });
@@ -226,7 +226,7 @@ Leverage Bun's native PubSub for efficient broadcasting:
 ```typescript
 import { publish } from "bun-ws-router/zod/publish";
 
-router.onMessage(JoinRoomMessage, (ctx) => {
+router.on(JoinRoomMessage, (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Subscribe to room topic
@@ -238,7 +238,7 @@ router.onMessage(JoinRoomMessage, (ctx) => {
   });
 });
 
-router.onMessage(LeaveRoomMessage, (ctx) => {
+router.on(LeaveRoomMessage, (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Unsubscribe when leaving
@@ -267,7 +267,7 @@ The router provides two timestamps with different trust levels:
 **Rule:** Server logic MUST use `ctx.receivedAt` for all business logic (rate limiting, ordering, TTL, auditing).
 
 ```typescript
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // Rate limiting with server timestamp
   const lastMessageTime = messageLog.get(ctx.ws.data.clientId);
   if (lastMessageTime && ctx.receivedAt - lastMessageTime < 1000) {

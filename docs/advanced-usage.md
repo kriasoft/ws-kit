@@ -60,13 +60,13 @@ function handleMediaMessage(message: z.infer<typeof MediaMessage>) {
 
 // Use in router - register individual handlers
 router
-  .onMessage(TextMessage, (ctx) => {
+  .on(TextMessage, (ctx) => {
     // Handle text specifically
   })
-  .onMessage(ImageMessage, (ctx) => {
+  .on(ImageMessage, (ctx) => {
     // Handle images specifically
   })
-  .onMessage(VideoMessage, (ctx) => {
+  .on(VideoMessage, (ctx) => {
     // Handle videos specifically
   });
 ```
@@ -85,21 +85,21 @@ const { messageSchema } = createMessageSchema(z);
 
 // Authentication router
 const authRouter = new WebSocketRouter()
-  .onMessage(LoginMessage, handleLogin)
-  .onMessage(LogoutMessage, handleLogout)
-  .onMessage(RefreshTokenMessage, handleRefresh);
+  .on(LoginMessage, handleLogin)
+  .on(LogoutMessage, handleLogout)
+  .on(RefreshTokenMessage, handleRefresh);
 
 // Chat router
 const chatRouter = new WebSocketRouter()
-  .onMessage(SendMessageMessage, handleSendMessage)
-  .onMessage(EditMessageMessage, handleEditMessage)
-  .onMessage(DeleteMessageMessage, handleDeleteMessage);
+  .on(SendMessageMessage, handleSendMessage)
+  .on(EditMessageMessage, handleEditMessage)
+  .on(DeleteMessageMessage, handleDeleteMessage);
 
 // Admin router
 const adminRouter = new WebSocketRouter()
-  .onMessage(KickUserMessage, handleKickUser)
-  .onMessage(BanUserMessage, handleBanUser)
-  .onMessage(MuteUserMessage, handleMuteUser);
+  .on(KickUserMessage, handleKickUser)
+  .on(BanUserMessage, handleBanUser)
+  .on(MuteUserMessage, handleMuteUser);
 
 // Main router combining all
 const mainRouter = new WebSocketRouter()
@@ -138,7 +138,7 @@ function requireAuth<T>(
 }
 
 // Use with router
-router.onMessage(
+router.on(
   ProtectedMessage,
   requireAuth((ctx) => {
     // Handler only runs if authenticated
@@ -167,13 +167,13 @@ router
     ctx.ws.data.authenticated = false;
     ctx.ws.data.joinedRooms = new Set();
   })
-  .onMessage(AuthMessage, (ctx) => {
+  .on(AuthMessage, (ctx) => {
     // Set authenticated user data
     ctx.ws.data.userId = "user-123";
     ctx.ws.data.username = "Alice";
     ctx.ws.data.authenticated = true;
   })
-  .onMessage(JoinRoomMessage, (ctx) => {
+  .on(JoinRoomMessage, (ctx) => {
     // Track joined rooms
     ctx.ws.data.joinedRooms.add(ctx.payload.roomId);
     ctx.ws.subscribe(`room:${ctx.payload.roomId}`);
@@ -204,7 +204,7 @@ function checkRateLimit(clientId: string, maxPerMinute: number): boolean {
   return true;
 }
 
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   if (!checkRateLimit(ctx.ws.data.clientId, 10)) {
     ctx.send(ErrorMessage, {
       code: "RATE_LIMIT_EXCEEDED",

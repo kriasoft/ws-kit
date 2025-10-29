@@ -44,7 +44,7 @@ Watch how a clever attacker can speed-run your spam filter just by lying about t
 
 ```typescript
 // ❌ VULNERABLE: Rate limiting using client time
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   const lastMessageTime = cache.get(ctx.ws.data.userId);
   const timeSinceLastMessage = ctx.meta.timestamp - lastMessageTime;
 
@@ -66,7 +66,7 @@ It takes nothing more than a forged timestamp.
 
 ```typescript
 // ❌ VULNERABLE: Ordering by client time
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   await db.insert({
     roomId: ctx.payload.roomId,
     text: ctx.payload.text,
@@ -85,7 +85,7 @@ Negative latency makes for funny screenshots — right up until it explodes your
 
 ```typescript
 // ❌ VULNERABLE: Latency calculation using client time
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   const latency = Date.now() - ctx.meta.timestamp;
   metrics.recordLatency(latency);
 
@@ -145,7 +145,7 @@ If a client omits it, the SDK falls back to `Date.now()`. On the server side, ke
 
 ```typescript
 // Server code
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // ctx.receivedAt captured at message arrival (server clock)
   // ctx.meta.timestamp is client-provided (may be missing/skewed)
 
@@ -183,7 +183,7 @@ Martin Kleppmann summed it up neatly in _Designing Data-Intensive Applications_:
 // ✅ SECURE: Rate limiting with server time
 const rateLimits = new Map<string, number[]>();
 
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   const userId = ctx.ws.data.userId;
   const timestamps = rateLimits.get(userId) || [];
 
@@ -210,7 +210,7 @@ router.onMessage(ChatMessage, (ctx) => {
 
 ```typescript
 // ✅ SECURE: Database ordering by server time
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   await db.messages.insert({
     roomId: ctx.payload.roomId,
     text: ctx.payload.text,
@@ -239,7 +239,7 @@ Even for latency measurement — where client time seems necessary — you need 
 
 ```typescript
 // ✅ SECURE: Latency with validation
-router.onMessage(PingMessage, (ctx) => {
+router.on(PingMessage, (ctx) => {
   if (ctx.meta.timestamp) {
     const latency = ctx.receivedAt - ctx.meta.timestamp;
 
@@ -279,7 +279,7 @@ const ChatBroadcast = messageSchema("CHAT_BROADCAST", {
   text: z.string(),
 });
 
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   // Store with server time for authoritative ordering
   const messageId = await db.messages.insert({
     roomId: ctx.payload.roomId,
@@ -343,7 +343,7 @@ const ChatMessage = messageSchema(
   { timestamp: z.number().optional() }, // Client may omit
 );
 
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // Server logic uses receivedAt (always present)
   const now = ctx.receivedAt;
 
@@ -411,7 +411,7 @@ import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema, ErrorMessage, ErrorCode } = createMessageSchema(z);
 
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // Check for obviously suspicious timestamps
   if (ctx.meta.timestamp) {
     const drift = ctx.receivedAt - ctx.meta.timestamp;
@@ -502,7 +502,7 @@ Set up alerts for suspicious patterns:
 ```typescript
 import { metrics } from "./monitoring";
 
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   if (ctx.meta.timestamp) {
     const drift = ctx.receivedAt - ctx.meta.timestamp;
 
@@ -532,7 +532,7 @@ If you're storing messages in a database, pair server timestamps with UUID v7 fo
 ```typescript
 import { uuidv7 } from "uuidv7";
 
-router.onMessage(ChatMessage, async (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   // UUID v7 embeds timestamp in the ID itself
   const messageId = uuidv7();
 

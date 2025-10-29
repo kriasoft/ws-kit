@@ -221,7 +221,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
         username: v.string(),
       });
 
-      router.onMessage(LoginSchema, (ctx) => {
+      router.on(LoginSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGIN">();
         expectTypeOf(ctx.payload).toEqualTypeOf<{ username: string }>();
         expectTypeOf(ctx.meta).toMatchTypeOf<{
@@ -236,7 +236,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
       const RequestSchema = message("REQUEST", { id: v.number() });
 
-      router.onMessage(RequestSchema, (ctx) => {
+      router.on(RequestSchema, (ctx) => {
         // send should be type-safe
         expectTypeOf(ctx.send).toBeFunction();
       });
@@ -344,7 +344,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
       const SecureMessage = message("SECURE", { action: v.string() });
 
-      router.onMessage(SecureMessage, (ctx) => {
+      router.on(SecureMessage, (ctx) => {
         expectTypeOf(ctx.ws.data).toHaveProperty("userId");
         expectTypeOf(ctx.ws.data).toHaveProperty("roles");
       });
@@ -356,7 +356,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
       const LoginMessage = message("LOGIN", { id: v.string() });
 
-      router.onMessage(LoginMessage, (ctx) => {
+      router.on(LoginMessage, (ctx) => {
         ctx.assignData({ userId: ctx.payload.id });
       });
     });

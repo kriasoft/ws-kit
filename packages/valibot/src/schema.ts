@@ -156,15 +156,13 @@ export function createMessageSchema(valibot: ValibotLike) {
     correlationId: valibot.optional(valibot.string()),
   });
 
+  // Use canonical ErrorCode enum from core
   const ErrorCode = valibot.picklist([
-    "INVALID_MESSAGE_FORMAT",
-    "VALIDATION_FAILED",
-    "UNSUPPORTED_MESSAGE_TYPE",
-    "AUTHENTICATION_FAILED",
-    "AUTHORIZATION_FAILED",
-    "RESOURCE_NOT_FOUND",
-    "RATE_LIMIT_EXCEEDED",
-    "INTERNAL_SERVER_ERROR",
+    "VALIDATION_ERROR",
+    "AUTH_ERROR",
+    "INTERNAL_ERROR",
+    "NOT_FOUND",
+    "RATE_LIMIT",
   ]);
 
   /**

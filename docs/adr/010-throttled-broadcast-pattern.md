@@ -80,7 +80,7 @@ const throttledPublish = createThrottledPublish(
   50,
 );
 
-router.onMessage(CursorMove, (ctx) => {
+router.on(CursorMove, (ctx) => {
   // Instead of router.publish(), use throttled version
   throttledPublish("room", {
     clientId: ctx.ws.data.clientId,

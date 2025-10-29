@@ -27,7 +27,7 @@ import type { Server } from "bun";
  * await pubsub.publish("room:123", { text: "Hello" });
  *
  * // In message handlers:
- * router.onMessage(SomeSchema, (ctx) => {
+ * router.on(SomeSchema, (ctx) => {
  *   ctx.ws.subscribe("room:123");  // Connection subscribes
  *   await router.publish("room:123", response);  // Broadcast to all subscribers
  * });
@@ -80,7 +80,7 @@ export class BunPubSub implements PubSub {
    * 1. Server-side handlers are not supported by Bun's pub/sub
    * 2. Messages are only sent to WebSocket connections, not arbitrary callbacks
    *
-   * For server-side subscription logic, use the router's onMessage() method instead.
+   * For server-side subscription logic, use the router's on() method instead.
    *
    * @param channel - Channel name (ignored)
    * @param handler - Handler to call (ignored)
