@@ -203,34 +203,15 @@ This ensures all code imports the canonical `z` from `@ws-kit/zod`, preventing a
 #### Single Message Schema
 
 ```typescript
-// ❌ BEFORE (v1.0-1.1): Factory pattern
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
-const LoginMessage = messageSchema("LOGIN", {
-  username: z.string(),
-  password: z.string(),
-});
-
-// ✅ AFTER (v1.2+): Direct helpers
-import { z, message } from "@ws-kit/zod";
+// ✅ RECOMMENDED: Export-with-helpers pattern
+import { z, message, createRouter } from "@ws-kit/zod";
 
 const LoginMessage = message("LOGIN", {
   username: z.string(),
   password: z.string(),
 });
-```
 
-#### Router Setup
-
-```typescript
-// ❌ BEFORE: Factory router
-import { createZodRouter } from "@ws-kit/zod";
-const router = createZodRouter<AppData>();
-
-// ✅ AFTER: Direct helper
-import { createRouter } from "@ws-kit/zod";
+type AppData = { userId?: string };
 const router = createRouter<AppData>();
 ```
 
