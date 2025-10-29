@@ -7,7 +7,7 @@
  * @canonical This enum defines all valid error codes. Use these values,
  * not arbitrary strings, for consistent error handling across handlers.
  *
- * Reference: specs/error-handling.md#error-code-enum
+ * Reference: @docs/specs/error-handling.md#error-code-enum
  */
 export enum ErrorCode {
   /** Message isn't valid JSON or lacks required structure */

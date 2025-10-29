@@ -22,26 +22,86 @@ Quick navigation for AI tools:
 
 ```typescript
 import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+import { createBunHandler, createBunAdapter } from "@ws-kit/bun";
 
 const { messageSchema } = createMessageSchema(z);
-const router = new WebSocketRouter();
+const router = createZodRouter({
+  platform: createBunAdapter(),
+});
 
 const PingMessage = messageSchema("PING", { value: z.number() });
+const PongMessage = messageSchema("PONG", { reply: z.number() });
 
 router.onMessage(PingMessage, (ctx) => {
   console.log("Ping from:", ctx.ws.data.clientId);
   console.log("Received at:", ctx.receivedAt);
+  // ✅ ctx.payload is fully typed - no 'as any' needed!
   ctx.send(PongMessage, { reply: ctx.payload.value * 2 });
 });
 
+const { fetch, websocket } = createBunHandler(router._core);
+
 Bun.serve({
-  fetch(req, server) {
-    return router.upgrade(req, { server });
-  },
-  websocket: router.websocket,
+  fetch,
+  websocket,
 });
 ```
+
+## Typed Router Factories
+
+To ensure full type safety and prevent accidental payload type mismatches, **always use the typed router factories**: `createZodRouter()` or `createValibotRouter()`.
+
+### Why Typed Router Factories?
+
+The core `WebSocketRouter` is validator-agnostic (works with any validator), which means it uses generic types internally. This causes TypeScript to lose schema type information when handlers are stored. Without the factory wrapper, accessing `ctx.payload` would require type assertions:
+
+```typescript
+// ❌ Without typed router factory - type assertion needed
+const router = new WebSocketRouter({ validator: zodValidator() });
+router.onMessage(PingMessage, (ctx) => {
+  const value = (ctx.payload as any).value; // Loss of type safety
+});
+
+// ✅ With typed router factory - full type inference
+const router = createZodRouter();
+router.onMessage(PingMessage, (ctx) => {
+  const value = ctx.payload.value; // Fully typed, no assertion
+});
+```
+
+### Available Factories
+
+- **`createZodRouter()`** (@ws-kit/zod) — For Zod validators
+- **`createValibotRouter()`** (@ws-kit/valibot) — For Valibot validators
+- **Custom validator?** See @validation.md for using the core `WebSocketRouter` directly
+
+All factories return identical APIs—the difference is purely in type preservation. Choose based on your validator:
+
+```typescript
+// Zod
+import { createZodRouter } from "@ws-kit/zod";
+const router = createZodRouter();
+
+// Valibot
+import { createValibotRouter } from "@ws-kit/valibot";
+const router = createValibotRouter();
+```
+
+### Advanced: Accessing Core Router
+
+For platform-specific operations, the `._core` property exposes the underlying core router:
+
+```typescript
+import { createBunHandler } from "@ws-kit/bun";
+
+const router = createZodRouter();
+
+// Platform handlers need the core router
+const { fetch, websocket } = createBunHandler(router._core);
+```
+
+This is a rare pattern—use it only when the typed wrapper doesn't expose the functionality you need. See ADR-004 for the architectural rationale.
 
 ## Router API
 
@@ -130,18 +190,20 @@ type WebSocketData<T> = {
 ### Route Composition
 
 ```typescript
-const authRouter = new WebSocketRouter();
+import { createZodRouter } from "@ws-kit/zod";
+
+const authRouter = createZodRouter();
 authRouter.onMessage(LoginMessage, handleLogin);
 
-const chatRouter = new WebSocketRouter();
+const chatRouter = createZodRouter();
 chatRouter.onMessage(SendMessage, handleChat);
 
-const mainRouter = new WebSocketRouter()
+const mainRouter = createZodRouter()
   .addRoutes(authRouter)
   .addRoutes(chatRouter);
 ```
 
-**Type System Note**: `addRoutes()` accepts `WebSocketRouter<T> | any` to support derived router types with stricter handler signatures (see @adrs.md#ADR-001). This is an intentional LSP violation to enable better IDE inference for inline handlers.
+**Type System Note**: `addRoutes()` accepts `TypedZodRouter<T> | any` to support router composition. The typed router wrapper preserves handler types within each router, enabling proper type inference (see ADR-004).
 
 ## Message Routing
 
@@ -188,12 +250,15 @@ router.onMessage(SomeMessage, (ctx) => {
 ## Custom Connection Data
 
 ```typescript
+import { createZodRouter } from "@ws-kit/zod";
+import type { WebSocketData } from "@ws-kit/core";
+
 type UserData = WebSocketData<{
   userId: string;
   roles: string[];
 }>;
 
-const router = new WebSocketRouter<UserData>();
+const router = createZodRouter<UserData>();
 
 router.onMessage(SecureMessage, (ctx) => {
   const userId = ctx.ws.data.userId; // ✅ Typed (custom)
@@ -234,7 +299,7 @@ router.onMessage(RiskyMessage, async (ctx) => {
 
 1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see @rules.md#state-layering)
 2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)
-3. **Payload typing** — `ctx.payload` exists only when schema defines it (see @adrs.md#ADR-001)
+3. **Payload typing** — `ctx.payload` exists only when schema defines it (see ADR-001)
 4. **Error handling** — Connections stay open on errors; handlers MUST explicitly close (see @rules.md#error-handling)
 5. **Validation flow** — Trust schema validation; never re-validate in handlers (see @rules.md#validation-flow)
 6. **Broadcasting** — For multicast messaging, see @broadcasting.md (not covered in this spec)

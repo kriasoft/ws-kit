@@ -16,14 +16,15 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
 
 ### Type Safety
 
-- **NEVER** access `ctx.payload` without schema defining it → @adrs.md#ADR-001
-- **ALWAYS** use conditional types (omit `payload` when undefined) → @adrs.md#ADR-001
+- **NEVER** access `ctx.payload` without schema defining it → ADR-001
+- **ALWAYS** use conditional types (omit `payload` when undefined) → ADR-001
 
 ### Import Patterns
 
 - **NEVER** import from root `"bun-ws-router"` (use `/zod` or `/valibot`) → @schema.md#Canonical-Import-Patterns
-- **ALWAYS** use factory pattern (`createMessageSchema`) → @schema.md#Factory-Pattern
-- **ALWAYS** use typed clients (`/zod/client`, `/valibot/client`) → @adrs.md#ADR-002
+- **ALWAYS** use factory pattern for message schemas (`createMessageSchema`) → @schema.md#Factory-Pattern
+- **ALWAYS** use typed router factories (`createZodRouter`, `createValibotRouter`) for Zod/Valibot → ADR-004 & @router.md#Typed-Router-Factories
+- **ALWAYS** use typed clients (`/zod/client`, `/valibot/client`) → ADR-002
 - **NEVER** use generic client (`/client`) unless custom validator → @client.md#Public-API
 
 ### Security & Validation
@@ -50,7 +51,7 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
 
 ### Type System
 
-- **ALWAYS** use intersection types for conditional `payload` → @adrs.md#ADR-001
+- **ALWAYS** use intersection types for conditional `payload` → ADR-001
 
 ### Error Handling {#error-handling}
 
@@ -77,9 +78,9 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
 
 Accept these TypeScript violations for better DX:
 
-- **LSP variance in `addRoutes()`** → @adrs.md#ADR-001
-- **`| any` in `addRoutes()`** (allows derived router instances) → @adrs.md#ADR-001
-- **`@ts-expect-error` in type overrides** (enables IDE inference) → @adrs.md#ADR-001
+- **LSP variance in `addRoutes()`** → ADR-001
+- **`| any` in `addRoutes()`** (allows derived router instances) → ADR-001
+- **`@ts-expect-error` in type overrides** (enables IDE inference) → ADR-001
 
 ---
 

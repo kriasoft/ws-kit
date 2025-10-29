@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import { createMessageSchema } from "../zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 

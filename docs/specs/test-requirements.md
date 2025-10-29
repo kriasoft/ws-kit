@@ -1244,7 +1244,7 @@ test("onError does NOT fire for request() rejections", async () => {
 
 ## Client Type Inference Tests {#client-type-inference}
 
-**Requirement**: Typed clients (`/zod/client`, `/valibot/client`) MUST provide full inference via type overrides (see @adrs.md#ADR-002).
+**Requirement**: Typed clients (`/zod/client`, `/valibot/client`) MUST provide full inference via type overrides (see ADR-002).
 
 ```typescript
 // Client typed handler inference (Zod)
@@ -1377,8 +1377,8 @@ test("client: generic client handlers infer as unknown", () => {
 > See @rules.md for complete rules. Critical for testing:
 
 1. **Type-level tests** — Use `expectTypeOf` for compile-time validation (positive & negative cases)
-2. **Payload conditional typing** — Test that `ctx.payload` is type error when schema omits it (see @adrs.md#ADR-001)
-3. **Client type inference** — Test typed clients provide full inference; generic client uses `unknown` (see @adrs.md#ADR-002 and #client-type-inference)
+2. **Payload conditional typing** — Test that `ctx.payload` is type error when schema omits it (see ADR-001)
+3. **Client type inference** — Test typed clients provide full inference; generic client uses `unknown` (see ADR-002 and #client-type-inference)
 4. **Discriminated unions** — Verify factory pattern enables union support (see @schema.md#Discriminated-Unions)
 5. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see @schema.md#Strict-Schemas)
 6. **Normalization** — Test reserved key stripping before validation (see normalization test above)

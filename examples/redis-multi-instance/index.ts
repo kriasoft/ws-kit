@@ -13,10 +13,9 @@
  * Messages from one instance will be visible to all connected clients across all instances.
  */
 
-import { WebSocketRouter } from "@ws-kit/core";
-import { createBunAdapter } from "@ws-kit/bun";
+import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-import { zodValidator, createMessageSchema } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { z } from "zod";
 
 // Configuration
@@ -60,6 +59,9 @@ interface UserEvent {
   instance: string;
 }
 
+// Type definitions for WebSocket data
+type WebSocketData = { clientId?: string } & Record<string, unknown>;
+
 // Track connected users in this instance
 const connectedUsers = new Map<
   string,
@@ -81,13 +83,12 @@ const pubsub = createRedisPubSub({
   },
 });
 
-const router = new WebSocketRouter({
+const router = createZodRouter<WebSocketData>({
   platform: createBunAdapter(),
-  validator: zodValidator(),
   pubsub,
   hooks: {
     onClose: (ctx) => {
-      const clientId = ctx.ws.clientId;
+      const clientId = ctx.ws.data?.clientId;
       if (!clientId) return;
 
       const user = connectedUsers.get(clientId);
@@ -110,10 +111,10 @@ const router = new WebSocketRouter({
 
 // Join handler - new user connects
 router.onMessage(JoinMessage, (ctx) => {
-  const clientId = ctx.ws.clientId;
+  const clientId = ctx.ws.data?.clientId;
   if (!clientId) return;
 
-  const username = ctx.payload.username;
+  const { username } = ctx.payload; // ✅ Fully typed, no assertion needed
 
   connectedUsers.set(clientId, { username, clientId });
 
@@ -137,21 +138,22 @@ router.onMessage(JoinMessage, (ctx) => {
 
 // Chat message handler
 router.onMessage(ChatMessage, async (ctx) => {
-  const clientId = ctx.ws.clientId;
+  const clientId = ctx.ws.data?.clientId;
   if (!clientId) return;
 
   const user = connectedUsers.get(clientId);
   if (!user) return;
 
+  const { text } = ctx.payload; // ✅ Fully typed, no assertion needed
   const message = {
     type: "MESSAGE",
     username: user.username,
-    text: ctx.payload.text,
+    text,
     timestamp: Date.now(),
     instance: INSTANCE_ID,
   };
 
-  console.log(`💬 [${user.username}]: ${ctx.payload.text}`);
+  console.log(`💬 [${user.username}]: ${text}`);
 
   // Broadcast to all instances
   await router.publish("chat:messages", message);
@@ -182,6 +184,14 @@ pubsub.subscribe("chat:users", (message: unknown) => {
   }
 });
 
+// Create handler with authentication for client ID initialization
+const { fetch: handleWebSocket, websocket } = createBunHandler(router._core, {
+  authenticate() {
+    // Generate unique client ID for this connection
+    return { clientId: crypto.randomUUID() };
+  },
+});
+
 // Serve HTTP + WebSocket
 const server = Bun.serve({
   port: PORT,
@@ -190,7 +200,7 @@ const server = Bun.serve({
 
     // WebSocket upgrade
     if (url.pathname === "/ws") {
-      return router.upgrade(req, { server });
+      return handleWebSocket(req, server);
     }
 
     // HTTP endpoints
@@ -215,7 +225,7 @@ const server = Bun.serve({
 
     return new Response("Not found", { status: 404 });
   },
-  websocket: router.websocket,
+  websocket,
 });
 
 console.log(`🌐 Listening on http://localhost:${PORT}`);

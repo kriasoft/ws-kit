@@ -7,15 +7,13 @@
  * Validates correct usage of ctx.receivedAt (server authoritative time)
  * vs meta.timestamp (client producer time).
  *
- * Spec: @specs/schema.md#Which-timestamp-to-use
- * Spec: @specs/router.md#Server-provided-context-fields
+ * Spec: @docs/specs/schema.md#Which-timestamp-to-use
+ * Spec: @docs/specs/router.md#Server-provided-context-fields
  */
 
 import { describe, expect, expectTypeOf, it, mock } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../../src/router";
-import zodValidator from "../../../zod/src/validator";
-import { createMessageSchema } from "../../../zod/src/schema";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 
@@ -41,7 +39,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("ctx.receivedAt - Server Authoritative Time", () => {
     it("should provide receivedAt in message context", async () => {
       const TestMsg = messageSchema("TEST", { id: z.number() });
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const handlerMock = mock((ctx) => {
@@ -51,10 +49,10 @@ describe("Timestamp Usage Patterns", () => {
 
       router.onMessage(TestMsg, handlerMock);
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -68,7 +66,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should capture receivedAt before parsing (ingress time)", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       let capturedReceivedAt: number | undefined;
@@ -78,10 +76,10 @@ describe("Timestamp Usage Patterns", () => {
         capturedReceivedAt = ctx.receivedAt;
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {} }),
       );
@@ -95,7 +93,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use receivedAt for server-side ordering", async () => {
       const TestMsg = messageSchema("TEST", { data: z.string() });
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const receivedTimes: number[] = [];
@@ -104,21 +102,21 @@ describe("Timestamp Usage Patterns", () => {
         receivedTimes.push(ctx.receivedAt);
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
       // Send multiple messages
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {}, payload: { data: "1" } }),
       );
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {}, payload: { data: "2" } }),
       );
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {}, payload: { data: "3" } }),
       );
@@ -131,7 +129,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should be independent of client-provided meta.timestamp", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       let serverTime: number | undefined;
@@ -142,13 +140,13 @@ describe("Timestamp Usage Patterns", () => {
         clientTime = ctx.meta.timestamp;
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
       // Client sends message with future timestamp (clock skew)
       const futureTimestamp = Date.now() + 100000; // 100 seconds in future
 
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -165,7 +163,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("meta.timestamp - Client Producer Time", () => {
     it("should be optional in message context", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         // Type check: timestamp is optional
@@ -175,7 +173,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should accept messages without timestamp", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const handlerMock = mock((ctx) => {
@@ -184,9 +182,9 @@ describe("Timestamp Usage Patterns", () => {
 
       router.onMessage(TestMsg, handlerMock);
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -199,7 +197,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should preserve client-provided timestamp", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const clientTimestamp = 1234567890;
@@ -209,9 +207,9 @@ describe("Timestamp Usage Patterns", () => {
 
       router.onMessage(TestMsg, handlerMock);
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -224,7 +222,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should be used for UI display (not server logic)", async () => {
       const ChatMsg = messageSchema("CHAT", { text: z.string() });
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       router.onMessage(ChatMsg, (ctx) => {
@@ -241,9 +239,9 @@ describe("Timestamp Usage Patterns", () => {
         expect(serverTime).toBeGreaterThan(0);
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "CHAT",
@@ -257,7 +255,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("Timestamp Decision Matrix", () => {
     it("should use receivedAt for rate limiting", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       // Rate limiter state
@@ -276,10 +274,10 @@ describe("Timestamp Usage Patterns", () => {
         rateLimits.set(clientId, history);
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
       // Send messages - now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {} }),
       );
@@ -292,7 +290,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use receivedAt for event ordering", async () => {
       const EventMsg = messageSchema("EVENT", { action: z.string() });
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const events: { action: string; serverTime: number }[] = [];
@@ -305,10 +303,10 @@ describe("Timestamp Usage Patterns", () => {
         });
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
       // Client sends events with manipulated timestamps - now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "EVENT",
@@ -318,7 +316,7 @@ describe("Timestamp Usage Patterns", () => {
       );
 
       // Now handleMessage is public
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "EVENT",
@@ -333,7 +331,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use timestamp for UI lag display", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       router.onMessage(TestMsg, (ctx) => {
@@ -347,9 +345,9 @@ describe("Timestamp Usage Patterns", () => {
         }
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -360,7 +358,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should use receivedAt for TTL checks", async () => {
       const RequestMsg = messageSchema("REQUEST", { id: z.string() });
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
       const ws = new MockServerWebSocket({ clientId: "test-123" });
 
       const TTL_MS = 5000; // 5 seconds
@@ -378,9 +376,9 @@ describe("Timestamp Usage Patterns", () => {
         expect(age).toBeLessThanOrEqual(TTL_MS);
       });
 
-      await router.handleOpen(ws as never);
+      await router._core.handleOpen(ws as never);
 
-      await router.handleMessage(
+      await router._core.handleMessage(
         ws as never,
         JSON.stringify({
           type: "REQUEST",
@@ -394,7 +392,7 @@ describe("Timestamp Usage Patterns", () => {
   describe("Type Safety", () => {
     it("should require receivedAt to be number type", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         expectTypeOf(ctx.receivedAt).toBeNumber();
@@ -404,7 +402,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should make meta.timestamp optional number", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
@@ -413,7 +411,7 @@ describe("Timestamp Usage Patterns", () => {
 
     it("should distinguish between the two timestamps", async () => {
       const TestMsg = messageSchema("TEST");
-      const router = new WebSocketRouter({ validator: zodValidator() });
+      const router = createZodRouter();
 
       router.onMessage(TestMsg, (ctx) => {
         // Different types and semantics

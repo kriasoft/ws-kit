@@ -68,7 +68,7 @@ export interface MessageMeta {
  *
  * Generic parameter TSchema is used for type inference only (for IDE and TypeScript
  * type checking). The actual schema information comes from the router's ValidatorAdapter.
- * See ADR-001 in specs/adrs.md for the conditional payload typing strategy.
+ * See ADR-001 for the conditional payload typing strategy.
  */
 export interface MessageContext<
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

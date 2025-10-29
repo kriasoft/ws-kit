@@ -85,11 +85,11 @@ export default defineConfig({
         items: [
           {
             text: "Specifications",
-            link: "https://github.com/kriasoft/ws-kit/tree/main/specs",
+            link: "https://github.com/kriasoft/ws-kit/tree/main/docs/specs",
           },
           {
             text: "Architecture Decisions",
-            link: "https://github.com/kriasoft/ws-kit/blob/main/specs/adrs.md",
+            link: "https://github.com/kriasoft/ws-kit/blob/main/docs/adr",
           },
           {
             text: "Contributing",

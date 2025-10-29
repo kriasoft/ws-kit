@@ -11,14 +11,14 @@
  * - Reconnect cycle: closed → reconnecting → connecting → open
  * - Manual close prevents auto-reconnect
  *
- * See @specs/client.md#connection-state-machine
+ * See @docs/specs/client.md#connection-state-machine
  */
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createClient } from "../../src/index";
 import type { ClientState } from "../../src/types";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

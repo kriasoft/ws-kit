@@ -46,6 +46,15 @@ interface HeartbeatState {
  * - Connection heartbeat (ping/pong with configurable intervals)
  * - Payload size limits
  *
+ * **Best Practice**: For full TypeScript type inference in message handlers, use the
+ * typed factory functions from validator packages:
+ * - `createZodRouter()` from `@ws-kit/zod`
+ * - `createValibotRouter()` from `@ws-kit/valibot`
+ *
+ * These factories provide type-safe method signatures that preserve payload types
+ * from your schema throughout the routing pipeline, eliminating the need for manual
+ * type assertions in handlers.
+ *
  * @template V - Validator adapter type (Zod, Valibot, etc.)
  * @template TData - Application-specific data stored with each connection
  */
@@ -217,13 +226,17 @@ export class WebSocketRouter<
    *
    * @example
    * ```typescript
-   * const authRouter = new WebSocketRouter();
+   * import { createZodRouter } from "@ws-kit/zod";
+   *
+   * const authRouter = createZodRouter();
    * authRouter.onMessage(LoginSchema, handleLogin);
    *
-   * const chatRouter = new WebSocketRouter();
+   * const chatRouter = createZodRouter();
    * chatRouter.onMessage(MessageSchema, handleMessage);
    *
-   * const mainRouter = new WebSocketRouter()
+   * const mainRouter = createZodRouter({
+   *   platform: createBunAdapter(),
+   * })
    *   .addRoutes(authRouter)
    *   .addRoutes(chatRouter);
    * ```

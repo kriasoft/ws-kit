@@ -11,6 +11,12 @@
     "jsx": "react-jsx",
     "allowJs": false,
 
+    // Module resolution & path aliases
+    "baseUrl": ".",
+    "paths": {
+      "@ws-kit/*": ["packages/*/src"]
+    },
+
     // Bundler mode
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
@@ -30,6 +36,7 @@
   },
   "files": [],
   "references": [
+    { "path": "./examples" },
     { "path": "./packages/core" },
     { "path": "./packages/bun" },
     { "path": "./packages/zod" },

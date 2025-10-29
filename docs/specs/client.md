@@ -36,7 +36,7 @@ Quick navigation for AI tools:
 
 ## Public API (Stable v1)
 
-**Use typed clients** (`/zod/client` or `/valibot/client`) for full type inference. Generic client (`/client`) remains available but provides `unknown` in handlers—use only for custom validators. **See @adrs.md#ADR-002 for type override rationale.**
+**Use typed clients** (`/zod/client` or `/valibot/client`) for full type inference. Generic client (`/client`) remains available but provides `unknown` in handlers—use only for custom validators. **See ADR-002 for type override rationale.**
 
 ````ts
 // @ws-kit/client/zod (similar interface for valibot/client)
@@ -263,7 +263,7 @@ export {
 
 ````
 
-**Type Inference**: Typed clients (`/zod/client`, `/valibot/client`) provide full inference via type overrides (see @adrs.md#ADR-002):
+**Type Inference**: Typed clients (`/zod/client`, `/valibot/client`) provide full inference via type overrides (see ADR-002):
 
 ```typescript
 // Zod typed client

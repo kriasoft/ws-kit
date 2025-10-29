@@ -10,8 +10,8 @@
  * - Abort cancels timeout timer
  * - Pending map cleanup
  *
- * See @specs/client.md#request-timeout
- * See @specs/test-requirements.md#Runtime-Testing
+ * See @docs/specs/client.md#request-timeout
+ * See @docs/specs/test-requirements.md#Runtime-Testing
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
@@ -19,7 +19,7 @@ import { z } from "zod";
 import { StateError } from "../../src/errors";
 import { createClient } from "../../src/index";
 import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

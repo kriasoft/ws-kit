@@ -3,7 +3,7 @@
 Complete API documentation for the browser WebSocket client.
 
 ::: tip
-For complete type definitions and implementation details, see the [Client Specification](https://github.com/kriasoft/ws-kit/blob/main/specs/client.md).
+For complete type definitions and implementation details, see the [Client Specification](https://github.com/kriasoft/ws-kit/blob/main/docs/specs/client.md).
 :::
 
 ## Methods

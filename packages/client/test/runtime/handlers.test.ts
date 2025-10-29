@@ -9,16 +9,16 @@
  * 2. onUnhandled: fires ONLY for structurally valid messages with no schema
  * 3. Dispatch order: schema handlers → onUnhandled (invalid never reaches onUnhandled)
  *
- * See @specs/client.md#Multiple-Handlers
- * See @specs/client.md#message-processing-order
- * See @specs/rules.md#inbound-message-routing
+ * See @docs/specs/client.md#Multiple-Handlers
+ * See @docs/specs/client.md#message-processing-order
+ * See @docs/specs/rules.md#inbound-message-routing
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createClient } from "../../src/index";
 import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);
@@ -287,7 +287,7 @@ describe("Client: onUnhandled Hook", () => {
       // Send message with WRONG payload structure (id should be number)
       simulateReceive({ type: "TEST", meta: {}, payload: { id: "string" } });
 
-      // Per @specs/client.md#message-processing-order:
+      // Per @docs/specs/client.md#message-processing-order:
       // "Invalid messages (parse/validation failures) never reach onUnhandled()"
       //
       // Expected behavior: validation failures should be dropped (neither handler called)

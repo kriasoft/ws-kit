@@ -1633,7 +1633,7 @@ ws-kit/
 │   ├── cloudflare-do/
 │   └── browser-client/
 ├── docs/                             # Unified documentation
-├── specs/                            # Architecture specs (unchanged)
+├── docs/specs/                            # Architecture specs (unchanged)
 ├── .github/workflows/                # Multi-package workflows
 ├── package.json                      # Root monorepo config
 ├── tsconfig.json                     # Shared TS config

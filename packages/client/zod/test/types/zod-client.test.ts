@@ -19,10 +19,10 @@ import type {
   InferPayload,
   InferMeta,
   MessageSchemaType,
-} from "../../../../zod/src/types.js";
+} from "@ws-kit/zod";
 import { createClient } from "../../src/index.js";
 import type { ClientOptions, ZodWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "../../../../zod/src/index.js";
+import { createMessageSchema } from "@ws-kit/zod";
 
 test("Zod client: Type inference for message schemas", () => {
   const { messageSchema } = createMessageSchema(z);

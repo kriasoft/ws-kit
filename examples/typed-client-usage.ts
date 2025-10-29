@@ -10,13 +10,13 @@
  * - Extended meta field support
  * - Request/response patterns
  *
- * @see specs/adrs.md#ADR-002 - Type override implementation
- * @see specs/client.md - Full client API
+ * @see docs/adr/002-typed-client-adapters.md - Type override implementation
+ * @see docs/specs/client.md - Full client API
  */
 
 import { z } from "zod";
-import { createMessageSchema } from "../packages/zod/src/index.js";
-import { createClient } from "../packages/client/zod/src/index.js";
+import { createMessageSchema } from "@ws-kit/zod";
+import { createClient } from "@ws-kit/client/zod";
 
 // Create schema factory
 const { messageSchema } = createMessageSchema(z);
@@ -149,8 +149,8 @@ async function requestExamples() {
 // ============================================================================
 
 // For comparison: generic client requires manual type assertions
-import { createClient as createGenericClient } from "../packages/client/src/index.js";
-import type { InferMessage } from "../packages/zod/src/types.js";
+import { createClient as createGenericClient } from "@ws-kit/client";
+import type { InferMessage } from "@ws-kit/zod";
 
 const genericClient = createGenericClient({ url: "wss://api.example.com" });
 

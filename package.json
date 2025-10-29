@@ -18,6 +18,7 @@
     "url": "https://github.com/kriasoft/ws-kit.git"
   },
   "workspaces": [
+    "examples/*",
     "packages/*"
   ],
   "devDependencies": {
@@ -42,7 +43,7 @@
     "prepare": "husky",
     "build": "tsc --build && tsc --noEmit",
     "test": "bun test",
-    "test:types": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint --report-unused-disable-directives .",
     "lint:fix": "eslint --report-unused-disable-directives --fix .",
     "format": "prettier --write .",

@@ -14,12 +14,14 @@
 // Main exports
 export { default as zodValidator } from "./validator";
 export { createMessageSchema } from "./schema";
+export { createZodRouter } from "./router";
 
 // Utility exports for advanced use cases
 export { ZodValidatorAdapter } from "./adapter";
 
 // Type exports
 export type { AnyMessageSchema, MessageSchema } from "./schema";
+export type { TypedZodRouter } from "./router";
 export type {
   InferMeta,
   InferMessage,

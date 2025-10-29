@@ -11,9 +11,7 @@ import {
   spyOn,
 } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../../src/router";
-import zodValidator from "../../../zod/src/validator";
-import { createMessageSchema } from "../../../zod/src/schema";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { createBunAdapter, createBunHandler } from "../../../bun/src/index";
 
 const { messageSchema } = createMessageSchema(z);
@@ -58,7 +56,7 @@ const Error = messageSchema("ERROR", {
 
 describe("WebSocketServer E2E", () => {
   let server: ReturnType<typeof Bun.serve>;
-  let ws: WebSocketRouter;
+  let ws: ReturnType<typeof createZodRouter>;
   let port: number;
 
   beforeEach(() => {
@@ -66,9 +64,8 @@ describe("WebSocketServer E2E", () => {
     port = 50000 + Math.floor(Math.random() * 10000);
 
     // Create a new router with platform adapter and validator
-    ws = new WebSocketRouter({
+    ws = createZodRouter({
       platform: createBunAdapter(),
-      validator: zodValidator(),
     });
 
     // Set up message handlers
@@ -99,7 +96,7 @@ describe("WebSocketServer E2E", () => {
     ws.onClose(closeHandlerMock);
 
     // Create Bun handler from router
-    const { fetch, websocket } = createBunHandler(ws);
+    const { fetch, websocket } = createBunHandler(ws._core);
 
     // Start the server
     server = Bun.serve({

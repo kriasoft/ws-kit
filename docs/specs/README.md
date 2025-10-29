@@ -9,21 +9,22 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 1. **Implementing a feature?** → `rules.md` (rules) → linked detail specs
 2. **Debugging validation?** → `validation.md` (pipeline) → `schema.md` (structure)
 3. **Client integration?** → `client.md` (API) → `test-requirements.md` (patterns)
-4. **Understanding design?** → `adrs.md` (decisions) → linked specs
+4. **Understanding design?** → `docs/adr/` (decisions) → linked specs
 
 **Canonical Sources** (when specs conflict, these win):
 
 - Reserved keys: `validation.md#normalization-rules`
 - Timestamps: `schema.md#Which-timestamp-to-use`
 - Error codes: `error-handling.md#error-code-enum`
-- Type overrides: `adrs.md#ADR-001`, `adrs.md#ADR-002`
+- Type overrides: ADR-001, ADR-002
 
 ## Terminology {#Terminology}
 
 **Core Patterns:**
 
-- **Factory Pattern**: Use `createMessageSchema(validator)` to create schemas; avoids dual-package hazard with discriminated unions (@schema.md#Factory-Pattern)
-- **Typed Clients**: `/zod/client`, `/valibot/client` exports with full type inference; generic `/client` for custom validators only (@adrs.md#ADR-002)
+- **Message Schema Factory**: Use `createMessageSchema(validator)` to create schemas; avoids dual-package hazard with discriminated unions (@schema.md#Factory-Pattern)
+- **Typed Router Factories**: Use `createZodRouter()` or `createValibotRouter()` for full type inference in handlers (ADR-004, @router.md#Typed-Router-Factories)
+- **Typed Clients**: `/zod/client`, `/valibot/client` exports with full type inference; generic `/client` for custom validators only (ADR-002)
 - **Normalization**: Security boundary; strips reserved keys before validation (@validation.md#normalization-rules)
 - **Strict Mode**: Validation rejects unknown keys at root/meta/payload levels (@schema.md#Strict-Schemas)
 
@@ -56,21 +57,21 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 
 ## Supporting Documentation
 
-- **[adrs.md](./adrs.md)** - Architectural decisions with rationale
+- **Architectural decisions** - See `docs/adr/` for individual decisions
 - **[test-requirements.md](./test-requirements.md)** - Type-level and runtime test requirements
 - **[error-handling.md](./error-handling.md)** - Error codes and patterns
 
 ## Import Quick Reference
 
-| Context                 | Import Path                                   | Spec                                 |
-| ----------------------- | --------------------------------------------- | ------------------------------------ |
-| Server router (Zod)     | `@ws-kit/zod`                                 | @router.md                           |
-| Server router (Valibot) | `@ws-kit/valibot`                             | @router.md                           |
-| Client (Zod typed)      | `@ws-kit/client/zod`                          | @client.md, @adrs.md#ADR-002         |
-| Client (Valibot typed)  | `@ws-kit/client/valibot`                      | @client.md, @adrs.md#ADR-002         |
-| Client (generic)        | `@ws-kit/client`                              | @client.md                           |
-| Schema factory          | Same as router (`/zod` or `/valibot`)         | @schema.md#Canonical-Import-Patterns |
-| Broadcasting            | `@ws-kit/zod/publish` (or `/valibot/publish`) | @broadcasting.md                     |
+| Context                        | Import Path                                   | Spec                                       |
+| ------------------------------ | --------------------------------------------- | ------------------------------------------ |
+| Typed router factory (Zod)     | `createZodRouter` from `@ws-kit/zod`          | @router.md#Typed-Router-Factories, ADR-004 |
+| Typed router factory (Valibot) | `createValibotRouter` from `@ws-kit/valibot`  | @router.md#Typed-Router-Factories, ADR-004 |
+| Message schema factory         | `createMessageSchema` from `@ws-kit/zod`      | @schema.md#Factory-Pattern                 |
+| Client (Zod typed)             | `@ws-kit/client/zod`                          | @client.md, ADR-002                        |
+| Client (Valibot typed)         | `@ws-kit/client/valibot`                      | @client.md, ADR-002                        |
+| Client (generic)               | `@ws-kit/client`                              | @client.md                                 |
+| Broadcasting                   | `@ws-kit/zod/publish` (or `/valibot/publish`) | @broadcasting.md                           |
 
 See @schema.md#Canonical-Import-Patterns for complete import examples.
 
@@ -104,19 +105,20 @@ ctx = {
 ### Key Patterns
 
 ```typescript
-// 1. Factory pattern (required for discriminated unions)
+// 1. Create typed router (full type inference in handlers)
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
-const { messageSchema } = createMessageSchema(z);
+const router = createZodRouter();
 
 // 2. Define schemas
+const { messageSchema } = createMessageSchema(z);
 const PingMsg = messageSchema("PING", { value: z.number() });
 const PongMsg = messageSchema("PONG", { reply: z.number() });
 
-// 3. Handle messages
+// 3. Handle messages (ctx.payload fully typed!)
 router.onMessage(PingMsg, (ctx) => {
   console.log("Received at:", ctx.receivedAt); // Server time (authoritative)
-  ctx.send(PongMsg, { reply: ctx.payload.value * 2 });
+  ctx.send(PongMsg, { reply: ctx.payload.value * 2 }); // ✅ No type assertions needed
 });
 
 // 4. Broadcasting with origin tracking
@@ -136,9 +138,9 @@ publish(ctx.ws, "room:123", ChatMsg, { text: "hi" }, { origin: "userId" });
 
 | Rule               | Constraint                                                  | Detail                              |
 | ------------------ | ----------------------------------------------------------- | ----------------------------------- |
-| **Payload access** | NEVER access `ctx.payload` without schema                   | `adrs.md#ADR-001`                   |
+| **Payload access** | NEVER access `ctx.payload` without schema                   | ADR-001                             |
 | **Imports**        | ALWAYS use factory pattern                                  | `rules.md#import-patterns`          |
-| **Clients**        | ALWAYS use typed clients (`/zod/client`, `/valibot/client`) | `adrs.md#ADR-002`                   |
+| **Clients**        | ALWAYS use typed clients (`/zod/client`, `/valibot/client`) | ADR-002                             |
 | **Validation**     | NEVER re-validate in handlers                               | `rules.md#validation-flow`          |
 | **Identity**       | ALWAYS use `ctx.ws.data.clientId`, never `ctx.meta`         | `rules.md#state-layering`           |
 | **Timestamps**     | ALWAYS use `ctx.receivedAt` for server logic                | `schema.md#Which-timestamp-to-use`  |

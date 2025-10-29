@@ -18,11 +18,15 @@ const { messageSchema, createMessage } = createMessageSchema(z);
 **Single source of truth for all imports.** Reference this section from other specs instead of duplicating.
 
 ```typescript
-// Server (Zod)
-import { WebSocketRouter, createMessageSchema } from "@ws-kit/zod";
+// Server (Zod) - ✅ Recommended for type-safe routing
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 
-// Server (Valibot)
-import { WebSocketRouter, createMessageSchema } from "@ws-kit/valibot";
+// Server (Valibot) - ✅ Recommended for type-safe routing
+import { createValibotRouter, createMessageSchema } from "@ws-kit/valibot";
+
+// Server (Advanced - custom validators only)
+import { WebSocketRouter } from "@ws-kit/core";
+import { zodValidator } from "@ws-kit/zod"; // or valibotValidator
 
 // Client (Typed - ✅ Recommended for type safety)
 import { createClient } from "@ws-kit/client/zod"; // Zod
@@ -52,8 +56,9 @@ import type {
 **Key points:**
 
 - Schemas are **portable** — define once in shared module, import in both client and server
-- Use **typed clients** (`/zod/client`, `/valibot/client`) for automatic inference (see @adrs.md#ADR-002)
-- Generic client (`/client`) requires manual type assertions; use only for custom validators
+- Use **typed router factories** (`createZodRouter`, `createValibotRouter`) for full type inference in handlers (see ADR-004 for details)
+- Use **typed clients** (`/zod/client`, `/valibot/client`) for automatic inference (see ADR-002)
+- Generic client (`/client`) and core router require manual type assertions; use only for custom validators
 
 ## Strict Schemas (Required) {#Strict-Schemas}
 
@@ -175,7 +180,7 @@ throw new Error(
 
 TypeScript's `payload?: T` would allow `undefined` at runtime but wouldn't prevent access to `ctx.payload` in handlers. The conditional type approach (intersection with `Record<string, never>` when absent) provides compile-time safety by making `ctx.payload` a type error when the schema doesn't define it.
 
-See @specs/adrs.md#ADR-001 for implementation details.
+See ADR-001 for implementation details.
 
 ## Schema Patterns
 

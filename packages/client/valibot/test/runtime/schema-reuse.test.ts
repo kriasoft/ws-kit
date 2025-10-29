@@ -13,7 +13,7 @@
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
 import type { ValibotWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "../../../../valibot/src/index.js";
+import { createMessageSchema } from "@ws-kit/valibot";
 
 const { messageSchema } = createMessageSchema(v);
 

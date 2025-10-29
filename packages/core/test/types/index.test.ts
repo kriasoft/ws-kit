@@ -7,7 +7,7 @@
  * These tests are run via `tsc --noEmit` to verify type safety.
  * They use expectTypeOf from bun:test for compile-time assertions.
  *
- * Reference: specs/test-requirements.md
+ * Reference: @docs/specs/test-requirements.md
  */
 
 import { describe, it, expectTypeOf } from "bun:test";

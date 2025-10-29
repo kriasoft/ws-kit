@@ -7,15 +7,15 @@
  * Critical security boundary: client MUST strip reserved/managed keys
  * from user-provided opts.meta before sending.
  *
- * See @specs/client.md#client-normalization
- * See @specs/rules.md#client-side-constraints
+ * See @docs/specs/client.md#client-normalization
+ * See @docs/specs/rules.md#client-side-constraints
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createClient } from "../../src/index";
 import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

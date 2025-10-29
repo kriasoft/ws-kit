@@ -14,12 +14,10 @@ import { DurablePubSub } from "./pubsub";
  * **Usage**:
  * ```typescript
  * import { createDurableObjectAdapter } from "@ws-kit/cloudflare-do";
- * import { WebSocketRouter } from "@ws-kit/core";
+ * import { createZodRouter } from "@ws-kit/zod";
  *
- * const adapter = createDurableObjectAdapter();
- * const router = new WebSocketRouter({
- *   platform: adapter,
- *   // ... other options
+ * const router = createZodRouter({
+ *   platform: createDurableObjectAdapter(),
  * });
  * ```
  *

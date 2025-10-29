@@ -10,8 +10,8 @@
  * 3. Wrong type → reject with ValidationError
  * 4. Malformed reply → reject with ValidationError
  *
- * See @specs/client.md#Correlation
- * See @specs/test-requirements.md#Runtime-Testing
+ * See @docs/specs/client.md#Correlation
+ * See @docs/specs/test-requirements.md#Runtime-Testing
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
@@ -24,7 +24,7 @@ import {
 } from "../../src/errors";
 import { createClient } from "../../src/index";
 import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

@@ -2,17 +2,19 @@
 
 WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
-## Specifications and ADRs
+## Documentation
 
-- `specs/adrs.md`
-- `specs/broadcasting.md`
-- `specs/client.md`
-- `specs/rules.md`
-- `specs/error-handling.md`
-- `specs/router.md`
-- `specs/schema.md`
-- `specs/test-requirements.md`
-- `specs/validation.md`
+**ADRs** (`docs/adr/NNN-slug.md`): Architectural decisions (reference as ADR-NNN)
+**SPECs** (`docs/specs/slug.md`): Component specifications (reference as docs/specs/slug.md)
+
+- `docs/specs/broadcasting.md`
+- `docs/specs/client.md`
+- `docs/specs/rules.md`
+- `docs/specs/error-handling.md`
+- `docs/specs/router.md`
+- `docs/specs/schema.md`
+- `docs/specs/test-requirements.md`
+- `docs/specs/validation.md`
 
 ## Architecture
 
@@ -25,7 +27,11 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
 ## Critical: Use Factory Pattern
 
-The factory pattern is **required** to avoid dual package hazard with discriminated unions:
+The factory pattern is used in two places for type safety:
+
+### 1. Message Schema Factory
+
+**Required** to avoid dual package hazard with discriminated unions:
 
 ```typescript
 import { z } from "zod";
@@ -39,32 +45,49 @@ import { zodValidator } from "@ws-kit/zod";
 const validator = zodValidator(); // Uses default Zod config
 ```
 
+### 2. Typed Router Factory
+
+**Recommended** for full type inference in message handlers:
+
+```typescript
+import { createZodRouter } from "@ws-kit/zod"; // Zod router
+// OR
+import { createValibotRouter } from "@ws-kit/valibot"; // Valibot router
+
+// ✅ Correct - creates a type-safe router
+const router = createZodRouter();
+
+// ❌ Avoid - loses type inference in handlers
+const router = new WebSocketRouter({ validator: zodValidator() });
+```
+
+The typed router factory preserves payload types through handler invocation, eliminating the need for `as any` type assertions. See ADR-004 for details.
+
 ## Quick Start
 
 ```typescript
 import { z } from "zod";
-import { WebSocketRouter } from "@ws-kit/core";
-import { zodValidator, createMessageSchema } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
 
-// Create message schema factory
+// Create message schemas with full type inference
 const { messageSchema } = createMessageSchema(z);
 const PingMessage = messageSchema("PING", { text: z.string() });
 const PongMessage = messageSchema("PONG", { reply: z.string() });
 
-// Compose router with Zod validator and Bun platform adapter
-const router = new WebSocketRouter({
-  validator: zodValidator(),
+// Create type-safe router with Zod validation
+const router = createZodRouter({
   platform: createBunAdapter(),
 });
 
-// Register handlers
+// Register handlers - payload types are fully inferred!
 router.onMessage(PingMessage, (ctx) => {
+  // ✅ ctx.payload.text is automatically typed as string!
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
 // Create Bun handler and serve
-const { fetch, websocket } = createBunHandler(router);
+const { fetch, websocket } = createBunHandler(router._core);
 
 Bun.serve({
   fetch,
@@ -72,26 +95,25 @@ Bun.serve({
 });
 ```
 
+**Note on `router._core`**: The typed router wrapper (`createZodRouter()`) provides type-safe handler registration. Platform handlers like `createBunHandler()` require the underlying core router via the `._core` property. This is a thin wrapper layer—no performance overhead.
+
 ## Key Patterns
 
 ### Route Composition
 
 ```typescript
-import { WebSocketRouter } from "@ws-kit/core";
-import { zodValidator } from "@ws-kit/zod";
+import { createZodRouter } from "@ws-kit/zod";
 import { createBunAdapter } from "@ws-kit/bun";
 
-// Compose modules separately
-const authRouter = new WebSocketRouter({ validator: zodValidator() });
-const chatRouter = new WebSocketRouter({ validator: zodValidator() });
+// Compose modules separately - each with type-safe handlers
+const authRouter = createZodRouter();
+authRouter.onMessage(LoginMessage, handleLogin); // ✅ Fully typed
 
-// Define routes in modules
-authRouter.onMessage(LoginMessage, handleLogin);
-chatRouter.onMessage(SendMessage, handleChat);
+const chatRouter = createZodRouter();
+chatRouter.onMessage(SendMessage, handleChat); // ✅ Fully typed
 
 // Merge into main router with platform adapter
-const mainRouter = new WebSocketRouter({
-  validator: zodValidator(),
+const mainRouter = createZodRouter({
   platform: createBunAdapter(),
 });
 mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
@@ -101,32 +123,45 @@ mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
 
 ```typescript
 import { createBunHandler } from "@ws-kit/bun";
+import { createZodRouter } from "@ws-kit/zod";
 
-// Create handler with custom upgrade logic
-const { fetch, websocket } = createBunHandler(router, {
-  onUpgrade(req, ws) {
-    // Extract token from request and attach to ws.data
+type AppData = { userId?: string; roles?: string[] };
+
+const router = createZodRouter<AppData>({
+  platform: createBunAdapter(),
+});
+
+// Create handler with custom authentication
+const { fetch, websocket } = createBunHandler(router._core, {
+  authenticate(req) {
+    // Extract token from request
     const token = req.headers.get("authorization")?.replace("Bearer ", "");
     if (token) {
-      ws.data = { userId: "123", roles: ["admin"] };
+      return { userId: "123", roles: ["admin"] };
     }
   },
 });
 
-// Access in handlers via ctx.ws.data
+// Access in handlers via ctx.ws.data - fully typed!
 router.onMessage(SecureMessage, (ctx) => {
-  const { userId, roles } = ctx.ws.data || {};
+  const userId = ctx.ws.data?.userId; // ✅ string | undefined
+  const roles = ctx.ws.data?.roles; // ✅ string[] | undefined
 });
 ```
 
 ### Broadcasting with Validation
 
 ```typescript
+import { createZodRouter } from "@ws-kit/zod";
+
+const router = createZodRouter();
+
 // Publish to all listeners on a channel (scope depends on platform)
 router.onMessage(SendMessageSchema, async (ctx) => {
+  // ctx.payload is fully typed from the schema!
   const message = {
     type: "MESSAGE",
-    payload: ctx.payload,
+    payload: ctx.payload, // ✅ Automatically typed
     userId: ctx.ws.data?.userId,
   };
 

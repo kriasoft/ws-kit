@@ -7,14 +7,14 @@
  * Tests autoConnect behavior with different queue modes,
  * focusing on edge cases around connection failure.
  *
- * See @specs/client.md#queue-behavior
- * See @specs/test-requirements.md#L873
+ * See @docs/specs/client.md#queue-behavior
+ * See @docs/specs/test-requirements.md#L873
  */
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createClient, StateError } from "../../src/index";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

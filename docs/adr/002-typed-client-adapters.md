@@ -1,69 +1,12 @@
-# Architectural Decision Records
-
-## ADR-001: MessageContext Conditional Payload Typing
-
-**Status**: Implemented
-
-### Decision
-
-Use explicit `keyof` check to conditionally add `payload` to `MessageContext`:
-
-```typescript
-export type MessageContext<Schema extends MessageSchemaType, Data> = {
-  ws: ServerWebSocket<Data>;
-  type: Schema["shape"]["type"]["value"];
-  meta: z.infer<Schema["shape"]["meta"]>;
-  send: SendFunction;
-} & ("payload" extends keyof Schema["shape"]
-  ? Schema["shape"]["payload"] extends ZodType
-    ? { payload: z.infer<Schema["shape"]["payload"]> }
-    : Record<string, never>
-  : Record<string, never>);
-```
-
-### Rationale
-
-- Prevents `ctx.payload` access on messages without payload
-- Checks key existence, not structural compatibility
-- Applied to both Zod and Valibot adapters
-
-### Implementation: Type Override for IDE Inference
-
-**Problem**: Base router uses generic types, so TypeScript resolves `ctx.payload` as `any` in inline handlers.
-
-**Solution**: Override `onMessage` in derived classes with validator-specific types:
-
-```typescript
-// zod/router.ts
-// @ts-expect-error - Intentional override with more specific types for better DX
-onMessage<Schema extends ZodMessageSchemaType>(
-  schema: Schema,
-  handler: ZodMessageHandler<Schema, WebSocketData<T>>,
-): this {
-  return super.onMessage(schema as any, handler as any);
-}
-```
-
-**Trade-off**: This creates an LSP violation—derived routers are more restrictive than base. Consequence:
-
-```typescript
-// addRoutes requires | any to accept derived router instances
-addRoutes(router: WebSocketRouter<T> | any): this
-```
-
-Accepts weaker typing in route composition for excellent IDE experience in primary use case (handler registration).
-
-### Constraints for AI Code Generation
-
-1. **NEVER** access `ctx.payload` unless schema explicitly defines payload
-2. **ALWAYS** use `ctx.type` for message type
-3. Test inline handler inference with `expectTypeOf`
-
-## ADR-002: Typed Client Adapters via Type Overrides
+# ADR-002: Typed Client Adapters via Type Overrides
 
 **Status**: ✅ Implemented
 
-### Context
+## Context
+
+Generic WebSocket clients infer message handlers as `unknown`, breaking type safety. Users need full message type inference based on schema definitions.
+
+## Decision
 
 Use type overrides (not separate implementations) for validator-specific clients:
 
@@ -71,7 +14,7 @@ Use type overrides (not separate implementations) for validator-specific clients
 - `/valibot/client` exports `createClient()` returning `ValibotWebSocketClient` (narrowed types)
 - Generic client remains at `/client` (unchanged runtime, `unknown` handler types)
 
-### Analysis
+## Rationale
 
 **Problem**: Generic client handlers infer as `unknown`, breaking type safety:
 
@@ -91,7 +34,7 @@ client.on(HelloOk, (msg) => {
 - **Maintainability**: Single client implementation, typed facades per validator
 - **DX**: Full inference without manual type guards or assertions
 
-### Implementation
+## Implementation
 
 ```typescript
 // zod/client.ts
@@ -152,14 +95,14 @@ send<S extends ZodMessageSchema & { shape: { payload?: never } }>(
 ): boolean;
 ```
 
-### Trade-offs
+## Trade-offs
 
 - **Breaking change**: Import paths change (`/client` → `/zod/client` or `/valibot/client`)
 - **LSP variance**: Type override creates same variance as server (ADR-001)
 - **Generic client remains**: Users with custom validators opt in via `/client` import
 - **Semver**: Requires major version bump (breaking change)
 
-### Migration Path
+## Migration Path
 
 **Before**:
 
@@ -182,7 +125,7 @@ import { createClient } from "@ws-kit/client";
 
 **No other changes required** - runtime behavior identical, types now infer automatically.
 
-### Example: Full Type Inference
+## Example: Full Type Inference
 
 ```typescript
 // With typed client (after)
@@ -208,9 +151,9 @@ console.log(reply.type); // ✅ "HELLO_OK" (literal)
 console.log(reply.payload.text); // ✅ string
 ```
 
-### Constraints
+## Constraints
 
 1. **ALWAYS** use typed clients (`/zod/client`, `/valibot/client`) for Zod/Valibot schemas
 2. **NEVER** use generic client (`/client`) unless implementing custom validator
-3. **ALWAYS** test inference with `expectTypeOf` (see @test-requirements.md#client-type-inference)
+3. **ALWAYS** test inference with `expectTypeOf`
 4. **ALWAYS** use overloads for payload conditional typing (not `undefined` parameter)

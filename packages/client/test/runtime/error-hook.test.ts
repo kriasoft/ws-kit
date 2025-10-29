@@ -11,8 +11,8 @@
  * - Handler errors do NOT fire onError (logged only)
  * - Request rejections do NOT fire onError (caller handles)
  *
- * See @specs/client.md#error-handling
- * See @specs/client.md#centralized-error-reporting
+ * See @docs/specs/client.md#error-handling
+ * See @docs/specs/client.md#centralized-error-reporting
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
@@ -20,7 +20,7 @@ import { z } from "zod";
 import { StateError } from "../../src/errors";
 import { createClient } from "../../src/index";
 import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "../../../zod/src/index";
+import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
 const { messageSchema } = createMessageSchema(z);

@@ -19,10 +19,10 @@ import type {
   InferPayload,
   InferMeta,
   MessageSchemaType,
-} from "../../../../valibot/src/types.js";
+} from "@ws-kit/valibot";
 import { createClient } from "../../src/index.js";
 import type { ClientOptions, ValibotWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "../../../../valibot/src/index.js";
+import { createMessageSchema } from "@ws-kit/valibot";
 
 test("Valibot client: Type inference for message schemas", () => {
   const { messageSchema } = createMessageSchema(v);

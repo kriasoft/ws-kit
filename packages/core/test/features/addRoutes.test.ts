@@ -3,16 +3,14 @@
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { WebSocketRouter } from "../../src/router";
-import zodValidator from "../../../zod/src/validator";
-import { createMessageSchema } from "../../../zod/src/schema";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 
 describe("addRoutes", () => {
   it("should merge routes from another router", async () => {
     // Create first router with a message handler
-    const router1 = new WebSocketRouter({ validator: zodValidator() });
+    const router1 = createZodRouter();
     const PingMessage = messageSchema("PING", { text: z.string().optional() });
     let pingHandlerCalled = false;
     router1.onMessage(PingMessage, () => {
@@ -20,7 +18,7 @@ describe("addRoutes", () => {
     });
 
     // Create second router with different handlers
-    const router2 = new WebSocketRouter({ validator: zodValidator() });
+    const router2 = createZodRouter();
     const PongMessage = messageSchema("PONG", { reply: z.string().optional() });
     let pongHandlerCalled = false;
     let openHandlerCalled = false;
@@ -42,7 +40,7 @@ describe("addRoutes", () => {
     router1.addRoutes(router2);
 
     // Get the WebSocket handler
-    const wsHandler = router1.websocket;
+    const wsHandler = router1._core.websocket;
 
     // Create a mock WebSocket
     const mockWs = {
@@ -78,9 +76,9 @@ describe("addRoutes", () => {
   });
 
   it("should handle multiple route merges", async () => {
-    const mainRouter = new WebSocketRouter({ validator: zodValidator() });
-    const router1 = new WebSocketRouter({ validator: zodValidator() });
-    const router2 = new WebSocketRouter({ validator: zodValidator() });
+    const mainRouter = createZodRouter();
+    const router1 = createZodRouter();
+    const router2 = createZodRouter();
 
     const Message1 = messageSchema("MSG1", { value: z.string().optional() });
     const Message2 = messageSchema("MSG2", { value: z.string().optional() });
@@ -105,7 +103,7 @@ describe("addRoutes", () => {
     // Chain multiple addRoutes calls
     mainRouter.addRoutes(router1).addRoutes(router2);
 
-    const wsHandler = mainRouter.websocket;
+    const wsHandler = mainRouter._core.websocket;
     const mockWs = {
       data: { clientId: "test-123" },
       send: () => undefined,

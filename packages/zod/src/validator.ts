@@ -7,27 +7,44 @@ import type { ValidatorAdapter } from "@ws-kit/core";
 /**
  * Creates a Zod validator adapter for the WebSocket router.
  *
- * This is the recommended way to set up Zod validation. It uses the default
- * Zod instance imported by this package, making it suitable for most applications.
+ * For most applications, use the typed router factory `createZodRouter()` instead,
+ * which provides full TypeScript type inference in message handlers. The bare
+ * validator adapter is useful only when building custom router wrappers or when
+ * you specifically need to work with the core router directly.
  *
  * @returns A ValidatorAdapter configured with Zod
  *
  * @example
  * ```typescript
- * import { zodValidator, createMessageSchema } from "@ws-kit/zod";
- * import { WebSocketRouter } from "@ws-kit/core";
+ * // Recommended: Use typed router factory for full type inference
+ * import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+ * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
  * import { z } from "zod";
- *
- * const router = new WebSocketRouter({
- *   validator: zodValidator(),
- * });
  *
  * const { messageSchema } = createMessageSchema(z);
  * const PingSchema = messageSchema("PING", { text: z.string() });
  *
- * router.onMessage(PingSchema, (ctx) => {
- *   console.log(ctx.payload.text);
+ * const router = createZodRouter({
+ *   platform: createBunAdapter(),
  * });
+ *
+ * router.onMessage(PingSchema, (ctx) => {
+ *   console.log(ctx.payload.text); // ← type is inferred
+ * });
+ *
+ * const { fetch, websocket } = createBunHandler(router._core);
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Advanced: Direct validator usage (bare metal)
+ * import { zodValidator } from "@ws-kit/zod";
+ * import { WebSocketRouter } from "@ws-kit/core";
+ *
+ * const router = new WebSocketRouter({
+ *   validator: zodValidator(),
+ * });
+ * // Note: handler payloads are not type-safe without the factory wrapper
  * ```
  */
 export default function zodValidator(): ValidatorAdapter {

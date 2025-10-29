@@ -7,9 +7,9 @@
  * Validates that schema creation fails when extended meta attempts to
  * define reserved server-only keys.
  *
- * Spec: @specs/schema.md#Reserved-Server-Only-Meta-Keys
- * Spec: @specs/rules.md#reserved-keys
- * Spec: @specs/validation.md#normalization-rules
+ * Spec: @docs/specs/schema.md#Reserved-Server-Only-Meta-Keys
+ * Spec: @docs/specs/rules.md#reserved-keys
+ * Spec: @docs/specs/validation.md#normalization-rules
  */
 
 import { describe, expect, it } from "bun:test";

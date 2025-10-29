@@ -105,23 +105,30 @@ export { validateMetaSchema, normalizeInboundMessage } from "./normalize";
  * Platform-agnostic design allows composition with any platform adapter
  * (Bun, Cloudflare DO, Node.js, etc.) and any validator.
  *
+ * **Recommended**: For full TypeScript type inference in message handlers,
+ * use the typed factory functions:
+ * - `createZodRouter()` from `@ws-kit/zod`
+ * - `createValibotRouter()` from `@ws-kit/valibot`
+ *
  * @example
  * ```typescript
- * import { WebSocketRouter } from "@ws-kit/core";
- * import { zodValidator, messageSchema } from "@ws-kit/zod";
- * import { createBunAdapter } from "@ws-kit/bun";
+ * // Recommended: Use typed router factory for full type inference
+ * import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
+ * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
  * import { z } from "zod";
  *
- * const { messageSchema } = messageSchema(z);
- * const router = new WebSocketRouter({
- *   validator: zodValidator(),
+ * const { messageSchema } = createMessageSchema(z);
+ * const PingMessage = messageSchema("PING", { text: z.string() });
+ *
+ * const router = createZodRouter({
  *   platform: createBunAdapter(),
  * });
  *
- * const PingMessage = messageSchema("PING", { text: z.string() });
  * router.onMessage(PingMessage, (ctx) => {
  *   console.log("Ping:", ctx.payload.text);
  * });
+ *
+ * const { fetch, websocket } = createBunHandler(router._core);
  * ```
  */
 export { WebSocketRouter } from "./router";

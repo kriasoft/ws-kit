@@ -16,12 +16,10 @@ import { BunPubSub } from "./pubsub";
  * **Usage**:
  * ```typescript
  * import { createBunAdapter } from "@ws-kit/bun";
- * import { WebSocketRouter } from "@ws-kit/core";
+ * import { createZodRouter } from "@ws-kit/zod";
  *
- * const adapter = createBunAdapter();
- * const router = new WebSocketRouter({
- *   platform: adapter,
- *   // ... other options
+ * const router = createZodRouter({
+ *   platform: createBunAdapter(),
  * });
  * ```
  *
@@ -49,9 +47,12 @@ export function createBunAdapter(): PlatformAdapter {
  *
  * **Usage**:
  * ```typescript
+ * import { createBunAdapterWithServer } from "@ws-kit/bun";
+ * import { createZodRouter } from "@ws-kit/zod";
+ *
  * const server = await Bun.serve({...});
  * const adapter = createBunAdapterWithServer(server);
- * const router = new WebSocketRouter({ platform: adapter });
+ * const router = createZodRouter({ platform: adapter });
  * ```
  *
  * @param server - Bun Server instance for pub/sub

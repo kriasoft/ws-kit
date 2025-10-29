@@ -18,10 +18,10 @@ import type { BunHandler, BunHandlerOptions, BunWebSocketData } from "./types";
  * **Usage**:
  * ```typescript
  * import { createBunHandler } from "@ws-kit/bun";
- * import { WebSocketRouter } from "@ws-kit/core";
+ * import { createZodRouter } from "@ws-kit/zod";
  *
- * const router = new WebSocketRouter({...});
- * const { fetch, websocket } = createBunHandler(router);
+ * const router = createZodRouter({ platform: createBunAdapter() });
+ * const { fetch, websocket } = createBunHandler(router._core);
  *
  * Bun.serve({
  *   fetch,

@@ -1,49 +1,52 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { WebSocketRouter } from "../zod";
+import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
+import { createZodRouter } from "@ws-kit/zod";
 import { AuthenticateMessage } from "./auth-schema";
 
-const router = new WebSocketRouter();
+const router = createZodRouter({
+  platform: createBunAdapter(),
+});
 
 /**
  * Example of enhanced validation with Zod v4's string validators
+ *
+ * The handler only receives messages that pass validation:
+ * - Valid JWT tokens (validated by z.jwt())
+ * - Valid semver pattern (validated by regex)
  */
 router.onMessage(AuthenticateMessage, (context) => {
-  // This handler only receives messages with:
-  // - Valid JWT tokens (validated by z.jwt())
-  // - Valid semver pattern (validated by regex)
-  console.log("Valid JWT received:", context.payload.token);
-  console.log("API Version:", context.payload.apiVersion);
+  // Type-safe payload access - fully typed without assertions!
+  const { token, apiVersion } = context.payload;
+
+  console.log("Valid JWT received:", token);
+  console.log("API Version:", apiVersion);
 
   // Respond with success
-  context.ws.send(
-    JSON.stringify({
-      type: "AUTH_SUCCESS",
-      meta: {
-        timestamp: Date.now(),
-      },
-      payload: {
-        userId: "user-123", // In real app, decode from JWT
-        sessionId: crypto.randomUUID(),
-      },
-    }),
-  );
+  context.send(AuthenticateMessage, {
+    token: "response",
+    apiVersion: "1.0.0",
+  });
 });
 
 // Example server setup
-const server = Bun.serve({
-  port: 3000,
+const { fetch: wsHandler, websocket } = createBunHandler(router);
+
+const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+
+Bun.serve({
+  port,
   fetch(req, server) {
     if (req.headers.get("upgrade") === "websocket") {
-      return router.upgrade(req, { server });
+      return wsHandler(req, server);
     }
     return new Response("WebSocket server with enhanced error handling");
   },
-  websocket: router.websocket,
+  websocket,
 });
 
-console.log(`Server running on port ${server.port}`);
+console.log(`Server running on port ${port}`);
 console.log("Try sending invalid messages to see prettified errors!");
 
 /**

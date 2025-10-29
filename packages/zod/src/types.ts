@@ -24,7 +24,7 @@ export type SendFunction = <Schema extends MessageSchemaType>(
  * Uses intersection types to add payload only when schema defines it, avoiding
  * optional payload field that would require runtime checks.
  *
- * @see specs/adrs.md#ADR-001 - keyof check for discriminated unions
+ * @see ADR-001 - keyof check for discriminated unions
  */
 export type MessageContext<Schema extends MessageSchemaType, Data> = {
   /** WebSocket connection with custom data */

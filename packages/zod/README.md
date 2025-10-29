@@ -55,7 +55,3 @@ This adapter works with **any platform** (`@ws-kit/bun`, `@ws-kit/cloudflare-do`
 
 - `@ws-kit/core` (required)
 - `zod` (peer) — required in projects using this adapter
-
-## Implementation Status
-
-Phase 4 (coming soon): Complete Zod validator adapter implementation.

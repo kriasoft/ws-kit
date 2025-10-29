@@ -7,14 +7,14 @@
  * Validates that reserved server-only keys are stripped before validation
  * to prevent client spoofing attacks.
  *
- * Spec: @specs/validation.md#normalization-rules
+ * Spec: @docs/specs/validation.md#normalization-rules
  * Implementation: shared/normalize.ts
  */
 
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { normalizeInboundMessage } from "../../src/normalize";
-import { createMessageSchema } from "../../../zod/src/schema";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 

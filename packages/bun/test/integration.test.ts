@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import type { ServerWebSocket, WebSocketRouter } from "@ws-kit/core";
-import { WebSocketRouter } from "@ws-kit/core";
+import type { ServerWebSocket } from "@ws-kit/core";
+import { createZodRouter } from "@ws-kit/zod";
 import { createBunHandler, createBunAdapter } from "../src/index";
 
 describe("@ws-kit/bun integration tests", () => {
-  let router: WebSocketRouter;
+  let router: any;
   let mockServer: any;
 
   beforeEach(() => {
     // Create a router for testing
-    router = new WebSocketRouter({
+    router = createZodRouter({
       platform: createBunAdapter(),
     });
 
@@ -53,7 +53,7 @@ describe("@ws-kit/bun integration tests", () => {
 
   describe("basic connection flow", () => {
     it("should handle complete lifecycle: open -> message -> close", async () => {
-      const { fetch, websocket } = createBunHandler(router);
+      const { fetch, websocket } = createBunHandler(router._core);
       const events: string[] = [];
 
       // Track events
@@ -204,7 +204,7 @@ describe("@ws-kit/bun integration tests", () => {
 
   describe("pub/sub integration", () => {
     it("should support message broadcasting", async () => {
-      const { fetch } = createBunHandler(router);
+      const { fetch } = createBunHandler(router._core);
 
       const req = new Request("ws://localhost/ws");
       await fetch(req, mockServer);
@@ -232,7 +232,7 @@ describe("@ws-kit/bun integration tests", () => {
         },
       };
 
-      const { fetch } = createBunHandler(router);
+      const { fetch } = createBunHandler(router._core);
       const req = new Request("ws://localhost/ws");
       await fetch(req, mockServerWithHeaders as any);
 
@@ -253,7 +253,7 @@ describe("@ws-kit/bun integration tests", () => {
         },
       };
 
-      const { fetch } = createBunHandler(router, {
+      const { fetch } = createBunHandler(router._core, {
         clientIdHeader: "x-session-id",
       });
 
@@ -276,7 +276,9 @@ describe("@ws-kit/bun integration tests", () => {
         return { userId: "async-user" };
       };
 
-      const { fetch } = createBunHandler(router, { authenticate: asyncAuth });
+      const { fetch } = createBunHandler(router._core, {
+        authenticate: asyncAuth,
+      });
 
       const req = new Request("ws://localhost/ws");
       const result = await fetch(req, mockServer);
@@ -293,7 +295,9 @@ describe("@ws-kit/bun integration tests", () => {
         return { userId: "sync-user" };
       };
 
-      const { fetch } = createBunHandler(router, { authenticate: syncAuth });
+      const { fetch } = createBunHandler(router._core, {
+        authenticate: syncAuth,
+      });
 
       const req = new Request("ws://localhost/ws");
       const result = await fetch(req, mockServer);
@@ -311,7 +315,7 @@ describe("@ws-kit/bun integration tests", () => {
         upgrade: () => null,
       };
 
-      const { fetch } = createBunHandler(router);
+      const { fetch } = createBunHandler(router._core);
 
       const req = new Request("ws://localhost/ws");
       const response = await fetch(req, failingServer);
@@ -322,7 +326,7 @@ describe("@ws-kit/bun integration tests", () => {
 
   describe("multiple concurrent connections", () => {
     it("should handle multiple WebSocket connections without crashing", async () => {
-      const { fetch } = createBunHandler(router);
+      const { fetch } = createBunHandler(router._core);
 
       // Simulate multiple connections
       const connections = [];

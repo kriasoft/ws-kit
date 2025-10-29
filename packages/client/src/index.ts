@@ -3,7 +3,7 @@
 
 /**
  * Browser WebSocket client with type-safe messaging.
- * See @specs/client.md for full API documentation.
+ * See @docs/specs/client.md for full API documentation.
  */
 
 import {
@@ -31,7 +31,7 @@ export * from "./errors.js";
 export * from "./types.js";
 
 // Reserved + managed meta keys (MUST strip from user meta)
-// See @specs/client.md#client-normalization and @specs/rules.md#client-side-constraints
+// See @docs/specs/client.md#client-normalization and @docs/specs/rules.md#client-side-constraints
 const RESERVED_MANAGED_META_KEYS = new Set([
   "clientId", // Server-only
   "receivedAt", // Server-only

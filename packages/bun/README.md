@@ -54,10 +54,10 @@ bun add valibot @ws-kit/valibot
 
 ```typescript
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { WebSocketRouter } from "@ws-kit/core";
+import { createZodRouter } from "@ws-kit/zod";
 
 // Create router with Bun platform adapter
-const router = new WebSocketRouter({
+const router = createZodRouter({
   platform: createBunAdapter(),
 });
 
@@ -71,7 +71,7 @@ router.onClose((ctx) => {
 });
 
 // Create Bun handlers
-const { fetch, websocket } = createBunHandler(router);
+const { fetch, websocket } = createBunHandler(router._core);
 
 // Start server
 Bun.serve({
@@ -95,17 +95,16 @@ Bun.serve({
 
 ```typescript
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { WebSocketRouter } from "@ws-kit/core";
-import { zodValidator, messageSchema } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { z } from "zod";
 
-// Create router with validator
-const router = new WebSocketRouter({
+// Create router with Zod validator
+const router = createZodRouter({
   platform: createBunAdapter(),
-  validator: zodValidator(),
 });
 
 // Define message schemas
+const { messageSchema } = createMessageSchema(z);
 const PingMessage = messageSchema("PING", { text: z.string() });
 const PongMessage = messageSchema("PONG", { reply: z.string() });
 
@@ -115,7 +114,7 @@ router.onMessage(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: ctx.payload.text });
 });
 
-const { fetch, websocket } = createBunHandler(router);
+const { fetch, websocket } = createBunHandler(router._core);
 
 Bun.serve({ fetch, websocket });
 ```
@@ -124,11 +123,11 @@ Bun.serve({ fetch, websocket });
 
 ### `createBunAdapter()`
 
-Returns a `PlatformAdapter` for use with `WebSocketRouter`.
+Returns a `PlatformAdapter` for use with `createZodRouter()`.
 
 ```typescript
 const adapter = createBunAdapter();
-const router = new WebSocketRouter({ platform: adapter });
+const router = createZodRouter({ platform: adapter });
 ```
 
 ### `createBunAdapterWithServer(server)`
@@ -138,7 +137,7 @@ Pre-configure the adapter with a Bun Server instance for immediate PubSub setup.
 ```typescript
 const server = await Bun.serve({ fetch: ..., websocket: ... });
 const adapter = createBunAdapterWithServer(server);
-const router = new WebSocketRouter({ platform: adapter });
+const router = createZodRouter({ platform: adapter });
 ```
 
 ### `createBunHandler(router, options?)`
@@ -152,7 +151,7 @@ Returns `{ fetch, websocket }` handlers for `Bun.serve()`.
 - `context?: unknown` — Custom context passed to handlers
 
 ```typescript
-const { fetch, websocket } = createBunHandler(router, {
+const { fetch, websocket } = createBunHandler(router._core, {
   authenticate: async (req) => {
     const token = req.headers.get("authorization");
     const user = await validateToken(token);
@@ -186,7 +185,7 @@ router.onMessage(SomeSchema, (ctx) => {
 
 ```typescript
 // Publish to all subscribers on a channel
-await router.publish("room:123", { text: "Hello" });
+await router._core.publish("room:123", { text: "Hello" });
 
 // Subscribe in a handler
 router.onMessage(JoinSchema, (ctx) => {
@@ -200,11 +199,11 @@ router.onMessage(JoinSchema, (ctx) => {
 
 ### Single Bun Instance
 
-In Bun, `router.publish(channel)` broadcasts to **all WebSocket connections in the current process** subscribed to that channel.
+In Bun, `router._core.publish(channel)` broadcasts to **all WebSocket connections in the current process** subscribed to that channel.
 
 ```typescript
 // This broadcasts to connections in THIS process only
-await router.publish("notifications", { message: "Hello" });
+await router._core.publish("notifications", { message: "Hello" });
 ```
 
 ### Multi-Instance Cluster (Load Balanced)
@@ -214,13 +213,13 @@ For deployments with multiple Bun processes behind a load balancer, use `@ws-kit
 ```typescript
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
 
-const router = new WebSocketRouter({
+const router = createZodRouter({
   platform: createBunAdapter(),
   pubsub: createRedisPubSub({ host: "localhost", port: 6379 }),
 });
 
 // Now publishes across ALL instances
-await router.publish("notifications", { message: "Hello" });
+await router._core.publish("notifications", { message: "Hello" });
 ```
 
 ## Connection Lifecycle
@@ -306,25 +305,25 @@ router.onError((error, ctx) => {
 
 ```typescript
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { WebSocketRouter } from "@ws-kit/core";
-import { zodValidator, messageSchema } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { z } from "zod";
 
-const { messageSchema: msg } = messageSchema;
+const { messageSchema } = createMessageSchema(z);
 
 // Message schemas
-const JoinRoomMessage = msg("ROOM:JOIN", { room: z.string() });
-const SendMessageMessage = msg("ROOM:MESSAGE", { text: z.string() });
-const UserListMessage = msg("ROOM:LIST", { users: z.array(z.string()) });
-const BroadcastMessage = msg("ROOM:BROADCAST", {
+const JoinRoomMessage = messageSchema("ROOM:JOIN", { room: z.string() });
+const SendMessageMessage = messageSchema("ROOM:MESSAGE", { text: z.string() });
+const UserListMessage = messageSchema("ROOM:LIST", {
+  users: z.array(z.string()),
+});
+const BroadcastMessage = messageSchema("ROOM:BROADCAST", {
   user: z.string(),
   text: z.string(),
 });
 
 // Router
-const router = new WebSocketRouter({
+const router = createZodRouter({
   platform: createBunAdapter(),
-  validator: zodValidator(),
 });
 
 // Track rooms
@@ -343,7 +342,7 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
 
   // Broadcast user list
   const users = Array.from(rooms.get(room)!);
-  await router.publish(`room:${room}`, {
+  await router._core.publish(`room:${room}`, {
     type: "ROOM:LIST",
     users,
   });
@@ -354,14 +353,14 @@ router.onMessage(SendMessageMessage, async (ctx) => {
   const { clientId } = ctx.ws.data;
 
   // Broadcast to all in room
-  await router.publish("room:general", {
+  await router._core.publish("room:general", {
     type: "ROOM:BROADCAST",
     user: clientId,
     text,
   });
 });
 
-const { fetch, websocket } = createBunHandler(router);
+const { fetch, websocket } = createBunHandler(router._core);
 
 Bun.serve({
   fetch(req) {
@@ -397,14 +396,13 @@ Bun.serve({
 });
 
 // New pattern
-const router = new WebSocketRouter({
+const router = createZodRouter({
   platform: createBunAdapter(),
-  validator: zodValidator(),
 });
 router.onMessage(MessageSchema, (ctx) => {
   /* ... */
 });
-const { fetch, websocket } = createBunHandler(router);
+const { fetch, websocket } = createBunHandler(router._core);
 Bun.serve({
   fetch(req, server) {
     return fetch(req, server);
@@ -426,9 +424,8 @@ Full TypeScript support with:
 ```typescript
 type CustomData = { userId: string; role: "admin" | "user" };
 
-const router = new WebSocketRouter<any, CustomData>({
+const router = createZodRouter<CustomData>({
   platform: createBunAdapter(),
-  validator: zodValidator(),
 });
 
 // Handler context has typed ws.data

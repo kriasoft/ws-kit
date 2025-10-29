@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
-import { WebSocketRouter } from "@ws-kit/core";
+import { createZodRouter } from "@ws-kit/zod";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
 
 describe("RedisPubSub Integration with @ws-kit/core", () => {
@@ -9,7 +9,7 @@ describe("RedisPubSub Integration with @ws-kit/core", () => {
         url: "redis://localhost:6379",
       });
 
-      const router = new WebSocketRouter({
+      const router = createZodRouter({
         pubsub,
       });
 
@@ -21,7 +21,7 @@ describe("RedisPubSub Integration with @ws-kit/core", () => {
         namespace: "test",
       });
 
-      const router = new WebSocketRouter({ pubsub });
+      const router = createZodRouter();
 
       // publish() method would delegate to pubsub
       expect(router.publish).toBeDefined();
@@ -33,8 +33,8 @@ describe("RedisPubSub Integration with @ws-kit/core", () => {
         namespace: "shared",
       });
 
-      const router1 = new WebSocketRouter({ pubsub });
-      const router2 = new WebSocketRouter({ pubsub });
+      const router1 = createZodRouter({ pubsub });
+      const router2 = createZodRouter({ pubsub });
 
       expect(router1).toBeDefined();
       expect(router2).toBeDefined();
@@ -46,8 +46,8 @@ describe("RedisPubSub Integration with @ws-kit/core", () => {
       const pubsub1 = createRedisPubSub({ namespace: "app1" });
       const pubsub2 = createRedisPubSub({ namespace: "app2" });
 
-      const router1 = new WebSocketRouter({ pubsub: pubsub1 });
-      const router2 = new WebSocketRouter({ pubsub: pubsub2 });
+      const router1 = createZodRouter();
+      const router2 = createZodRouter();
 
       expect(router1).toBeDefined();
       expect(router2).toBeDefined();

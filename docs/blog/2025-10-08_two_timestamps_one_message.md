@@ -132,7 +132,7 @@ client.send(
 
 **Note**: In [WS-Kit](https://github.com/kriasoft/ws-kit), the client SDK auto-adds `meta.timestamp` if you don't provide one. This makes messages self-describing for UI purposes without requiring manual timestamp management.
 
-**Pro Tip:** The normalization step (see `specs/validation.md#normalization-rules`) strips any attempt to inject reserved fields like `receivedAt` or `clientId`. Treat `meta.timestamp` as optional sugar — the server will add what it truly needs.
+**Pro Tip:** The normalization step (see `docs/specs/validation.md#normalization-rules`) strips any attempt to inject reserved fields like `receivedAt` or `clientId`. Treat `meta.timestamp` as optional sugar — the server will add what it truly needs.
 
 If a client omits it, the SDK falls back to `Date.now()`. On the server side, keep validating so wild values (hours in the future) trigger the guardrails you saw earlier.
 
@@ -231,7 +231,7 @@ router.onMessage(ChatMessage, async (ctx) => {
 });
 ```
 
-Pair that with storage tuned for temporal queries: index on `(receivedAt DESC, userId)` or `(receivedAt DESC, clientId)` so recent events stream efficiently. UUID v7 connection IDs from `ctx.ws.data.clientId` already encode time bits, and combining them with `receivedAt` keeps hot paths cache-friendly (see `specs/rules.md#performance` for rationale).
+Pair that with storage tuned for temporal queries: index on `(receivedAt DESC, userId)` or `(receivedAt DESC, clientId)` so recent events stream efficiently. UUID v7 connection IDs from `ctx.ws.data.clientId` already encode time bits, and combining them with `receivedAt` keeps hot paths cache-friendly (see `docs/specs/rules.md#performance` for rationale).
 
 ### Latency Metrics (Defensive)
 
@@ -303,7 +303,7 @@ router.onMessage(ChatMessage, async (ctx) => {
 });
 ```
 
-When you fan out messages, order on `receivedAt` before calling `publish()` so downstream subscribers (AND your analytics pipeline) ingest events in a consistent order — `specs/router.md` calls this out in the context-building phase.
+When you fan out messages, order on `receivedAt` before calling `publish()` so downstream subscribers (AND your analytics pipeline) ingest events in a consistent order — `docs/specs/router.md` calls this out in the context-building phase.
 
 ```
 
@@ -438,7 +438,7 @@ router.onMessage(ChatMessage, (ctx) => {
 
 Don't reject messages too aggressively — some clock skew is normal. But logging anomalies helps you detect patterns of abuse.
 
-That response code lines up with `error-handling.md`: transport issues become `VALIDATION_FAILED`, leaving business logic free to return domain-specific errors.
+That response code lines up with `docs/specs/error-handling.md`: transport issues become `VALIDATION_FAILED`, leaving business logic free to return domain-specific errors.
 
 ## Testing and Monitoring
 

@@ -20,7 +20,7 @@ import type {
   InferMeta,
   InferPayload,
   MessageSchemaType as ValibotMessageSchema,
-} from "../../../valibot/src/types.js";
+} from "@ws-kit/valibot";
 
 // Re-export base types and error classes
 export * from "../../src/types.js";
@@ -30,7 +30,7 @@ export type {
   InferMeta,
   InferPayload,
   MessageSchemaType as ValibotMessageSchema,
-} from "../../../valibot/src/types.js";
+} from "@ws-kit/valibot";
 
 /**
  * Options for send() method with typed meta field inference.

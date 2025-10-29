@@ -13,7 +13,7 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import type { ZodWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "../../../../zod/src/index.js";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 

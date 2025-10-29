@@ -14,12 +14,14 @@
 // Main exports
 export { default as valibotValidator } from "./validator";
 export { createMessageSchema } from "./schema";
+export { createValibotRouter } from "./router";
 
 // Utility exports for advanced use cases
 export { ValibotValidatorAdapter } from "./adapter";
 
 // Type exports
 export type { AnyMessageSchema, MessageSchema } from "./schema";
+export type { TypedValibotRouter } from "./router";
 export type {
   InferMeta,
   InferMessage,

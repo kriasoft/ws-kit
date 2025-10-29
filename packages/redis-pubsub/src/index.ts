@@ -11,11 +11,11 @@
  * Example usage:
  *
  * ```typescript
- * import { WebSocketRouter } from "@ws-kit/core";
+ * import { createZodRouter } from "@ws-kit/zod";
  * import { createBunAdapter } from "@ws-kit/bun";
  * import { createRedisPubSub } from "@ws-kit/redis-pubsub";
  *
- * const router = new WebSocketRouter({
+ * const router = createZodRouter({
  *   platform: createBunAdapter(),
  *   pubsub: createRedisPubSub({ url: "redis://localhost:6379" }),
  * });

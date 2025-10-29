@@ -12,15 +12,14 @@
  */
 
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { WebSocketRouter } from "@ws-kit/core";
-import { messageSchema, zodValidator } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { z } from "zod";
 
 // =======================
 // Message Schemas
 // =======================
 
-const { messageSchema: msg } = messageSchema;
+const { messageSchema: msg } = createMessageSchema(z);
 
 // Client -> Server messages
 const JoinRoomMessage = msg("ROOM:JOIN", {
@@ -76,6 +75,8 @@ interface User {
   rooms: Set<string>;
 }
 
+type WebSocketData = { clientId?: string } & Record<string, unknown>;
+
 const users = new Map<string, User>();
 const rooms = new Map<string, Set<string>>();
 
@@ -83,9 +84,8 @@ const rooms = new Map<string, Set<string>>();
 // Router Setup
 // =======================
 
-const router = new WebSocketRouter({
+const router = createZodRouter<WebSocketData>({
   platform: createBunAdapter(),
-  validator: zodValidator(),
 });
 
 // =======================
@@ -93,7 +93,7 @@ const router = new WebSocketRouter({
 // =======================
 
 router.onOpen(async (ctx) => {
-  const { clientId } = ctx.ws.data;
+  const clientId = ctx.ws.data?.clientId || crypto.randomUUID();
 
   // Create user record
   users.set(clientId, {
@@ -112,12 +112,13 @@ router.onOpen(async (ctx) => {
 });
 
 router.onClose(async (ctx) => {
-  const { clientId } = ctx.ws.data;
+  const clientId = ctx.ws.data?.clientId || "";
   const user = users.get(clientId);
 
   if (user) {
     // Notify all rooms this user was in
-    for (const room of user.rooms) {
+    const roomsArray = Array.from(user.rooms);
+    for (const room of roomsArray) {
       const roomUsers = rooms.get(room);
       if (roomUsers) {
         roomUsers.delete(clientId);
@@ -163,8 +164,8 @@ router.onError((error, ctx) => {
 // =======================
 
 router.onMessage(JoinRoomMessage, async (ctx) => {
-  const { clientId } = ctx.ws.data;
-  const user = users.get(clientId);
+  const clientId = ctx.ws.data?.clientId;
+  const user = users.get(clientId || "");
   const { room } = ctx.payload;
 
   if (!user) return;
@@ -204,8 +205,8 @@ router.onMessage(JoinRoomMessage, async (ctx) => {
 });
 
 router.onMessage(SendMessageMessage, async (ctx) => {
-  const { clientId } = ctx.ws.data;
-  const user = users.get(clientId);
+  const clientId = ctx.ws.data?.clientId;
+  const user = users.get(clientId || "");
   const { text } = ctx.payload;
 
   if (!user || user.rooms.size === 0) {
@@ -216,7 +217,8 @@ router.onMessage(SendMessageMessage, async (ctx) => {
   }
 
   // Broadcast to all rooms user is in
-  for (const room of user.rooms) {
+  const roomsArray = Array.from(user.rooms);
+  for (const room of roomsArray) {
     await router.publish(`room:${room}`, {
       type: "MESSAGE:BROADCAST",
       user: user.name,
@@ -278,9 +280,15 @@ router.onMessage(LeaveRoomMessage, async (ctx) => {
 // Server Setup
 // =======================
 
-const { fetch, websocket } = createBunHandler(router);
-
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+
+// Create handler with authentication for client ID initialization
+const { fetch: handleWebSocket, websocket } = createBunHandler(router._core, {
+  authenticate() {
+    // Generate unique client ID for this connection
+    return { clientId: crypto.randomUUID() };
+  },
+});
 
 Bun.serve({
   port,
@@ -289,7 +297,7 @@ Bun.serve({
 
     // Route WebSocket requests
     if (url.pathname === "/ws") {
-      return fetch(req, server);
+      return handleWebSocket(req, server);
     }
 
     // Simple HTTP endpoint for stats

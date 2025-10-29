@@ -14,14 +14,11 @@
  * @example
  * ```typescript
  * import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
- * import { WebSocketRouter } from "@ws-kit/core";
- * import { zodValidator } from "@ws-kit/zod";
+ * import { createZodRouter } from "@ws-kit/zod";
  *
- * const router = new WebSocketRouter({
- *   validator: zodValidator(),
- * });
+ * const router = createZodRouter();
  *
- * const handler = createDurableObjectHandler({ router });
+ * const handler = createDurableObjectHandler({ router: router._core });
  *
  * export default {
  *   fetch(req: Request, state: DurableObjectState, env: Env) {

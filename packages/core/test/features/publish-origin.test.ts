@@ -7,14 +7,14 @@
  * Validates origin-based sender tracking in broadcast messages,
  * ensuring clientId is never injected and origin option works correctly.
  *
- * Spec: @specs/broadcasting.md#Origin-Option
+ * Spec: @docs/specs/broadcasting.md#Origin-Option
  */
 
 import type { ServerWebSocket } from "bun";
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { publish } from "../../src/pubsub";
-import { createMessageSchema } from "../../../zod/src/schema";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema } = createMessageSchema(z);
 

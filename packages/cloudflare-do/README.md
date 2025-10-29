@@ -56,11 +56,11 @@ bun add valibot @ws-kit/valibot
 
 ```typescript
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { WebSocketRouter } from "@ws-kit/core";
+import { createZodRouter } from "@ws-kit/zod";
 
-const router = new WebSocketRouter();
+const router = createZodRouter();
 
-const handler = createDurableObjectHandler({ router });
+const handler = createDurableObjectHandler({ router: router._core });
 
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -73,16 +73,14 @@ export default {
 
 ```typescript
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { WebSocketRouter } from "@ws-kit/core";
-import { zodValidator, messageSchema } from "@ws-kit/zod";
+import { createZodRouter, createMessageSchema } from "@ws-kit/zod";
 import { z } from "zod";
 
-// Create router with validator
-const router = new WebSocketRouter({
-  validator: zodValidator(),
-});
+// Create router with Zod validator
+const router = createZodRouter();
 
 // Define message schemas
+const { messageSchema } = createMessageSchema(z);
 const JoinRoomMessage = messageSchema("ROOM:JOIN", { room: z.string() });
 const SendMessageMessage = messageSchema("ROOM:MESSAGE", { text: z.string() });
 
@@ -94,14 +92,14 @@ router.onMessage(JoinRoomMessage, (ctx) => {
 
 router.onMessage(SendMessageMessage, (ctx) => {
   // Broadcast within this DO instance
-  router.publish(`room:general`, {
+  router._core.publish(`room:general`, {
     type: "MESSAGE",
     user: ctx.ws.data.clientId,
     text: ctx.payload.text,
   });
 });
 
-const handler = createDurableObjectHandler({ router });
+const handler = createDurableObjectHandler({ router: router._core });
 
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -204,22 +202,20 @@ await federateWithFilter(
 ### Chat Application
 
 ```typescript
-const router = new WebSocketRouter({
-  validator: zodValidator(),
-});
+const router = createZodRouter();
 
 const members = new Set<string>();
 
 router.onMessage(JoinRoom, async (ctx) => {
   members.add(ctx.ws.data.clientId);
-  await router.publish("room:updates", {
+  await router._core.publish("room:updates", {
     type: "ROOM:LIST",
     users: Array.from(members),
   });
 });
 
 router.onMessage(SendMessage, async (ctx) => {
-  await router.publish("room:messages", {
+  await router._core.publish("room:messages", {
     type: "ROOM:MESSAGE",
     user: ctx.ws.data.clientId,
     text: ctx.payload.text,
@@ -235,7 +231,7 @@ router.onMessage(GameActionSchema, async (ctx) => {
   await state.storage.put(`action:${Date.now()}`, ctx.payload);
 
   // Broadcast to all players in this game
-  await router.publish("game:state", ctx.payload);
+  await router._core.publish("game:state", ctx.payload);
 });
 ```
 
