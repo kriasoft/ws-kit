@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/core",
   "version": "0.0.0",
-  "description": "Type-safe WebSocket message router with pluggable runtime adapters and schema validation, designed for building real-time applications with maximum developer experience and zero vendor lock-in.",
+  "description": "WS-Kit — Type-safe WebSocket router for Bun and Cloudflare with pluggable validators and zero vendor lock-in",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

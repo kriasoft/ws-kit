@@ -1,6 +1,6 @@
 # WebSocket Router Specifications
 
-Technical specifications for `bun-ws-router` - type-safe WebSocket routing with Zod/Valibot validation.
+Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and Cloudflare with Zod/Valibot validation.
 
 ## Navigation for AI Tools
 

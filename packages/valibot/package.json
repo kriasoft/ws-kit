@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/valibot",
   "version": "0.0.0",
-  "description": "Lightweight Valibot validator adapter for @ws-kit/core that enables type-safe WebSocket message validation with runtime schema checking. Build modular, high-performance real-time applications with full TypeScript inference and minimal bundle size.",
+  "description": "Valibot validator adapter for WS-Kit with lightweight runtime validation and minimal bundle size",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

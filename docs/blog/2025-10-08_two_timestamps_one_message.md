@@ -2,7 +2,7 @@
 
 > **TL;DR**: Using client-provided timestamps (`meta.timestamp`) for server-side logic like rate limiting or message ordering is a silent security bug. Server systems need their own authoritative timestamp (`receivedAt`) captured at ingress.
 
-_This article uses examples from [**bun-ws-router**](https://kriasoft.com/bun-ws-router), a type-safe WebSocket router for Bun with Zod/Valibot validation, but the timestamp security principles apply to any real-time system._
+_This article uses examples from [**WS-Kit**](https://kriasoft.com/ws-kit), a type-safe WebSocket router for Bun and Cloudflare with Zod/Valibot validation, but the timestamp security principles apply to any real-time system._
 
 ## The Problem
 
@@ -130,7 +130,7 @@ client.send(
 );
 ```
 
-**Note**: In [bun-ws-router](https://github.com/kriasoft/bun-ws-router), the client SDK auto-adds `meta.timestamp` if you don't provide one. This makes messages self-describing for UI purposes without requiring manual timestamp management.
+**Note**: In [WS-Kit](https://github.com/kriasoft/ws-kit), the client SDK auto-adds `meta.timestamp` if you don't provide one. This makes messages self-describing for UI purposes without requiring manual timestamp management.
 
 **Pro Tip:** The normalization step (see `specs/validation.md#normalization-rules`) strips any attempt to inject reserved fields like `receivedAt` or `clientId`. Treat `meta.timestamp` as optional sugar — the server will add what it truly needs.
 
@@ -269,8 +269,9 @@ Why the validation? Without it, a client sending a future timestamp produces **n
 ```typescript
 // ✅ SECURE: Broadcasts use server time for persistence, client time for UI
 import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { publish } from "bun-ws-router/zod/publish";
+import { WebSocketRouter } from "@ws-kit/core";
+import { createMessageSchema, zodValidator } from "@ws-kit/zod";
+import { publish } from "@ws-kit/zod/publish";
 
 const { messageSchema } = createMessageSchema(z);
 const ChatBroadcast = messageSchema("CHAT_BROADCAST", {
@@ -398,7 +399,7 @@ function normalizeInboundMessage(raw: unknown): unknown {
 }
 ```
 
-**Security tip**: In [bun-ws-router](https://github.com/kriasoft/bun-ws-router), this normalization happens automatically before schema validation. If a malicious client tries to send `meta.receivedAt`, it's stripped before your handler sees it. This prevents clients from faking server timestamps.
+**Security tip**: In [WS-Kit](https://github.com/kriasoft/ws-kit), this normalization happens automatically before schema validation. If a malicious client tries to send `meta.receivedAt`, it's stripped before your handler sees it. This prevents clients from faking server timestamps.
 
 ### Error Handling for Suspicious Timestamps
 
@@ -406,7 +407,7 @@ When you detect timestamp manipulation, how should you respond?
 
 ```typescript
 import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createMessageSchema } from "@ws-kit/zod";
 
 const { messageSchema, ErrorMessage, ErrorCode } = createMessageSchema(z);
 

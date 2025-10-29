@@ -1,11 +1,11 @@
-# Bun WebSocket Router
+# WS-Kit — Type-Safe WebSocket Router
 
 [![npm version](https://img.shields.io/npm/v/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
 [![npm downloads](https://img.shields.io/npm/dm/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
 [![GitHub Actions](https://github.com/kriasoft/bun-ws-router/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/bun-ws-router/actions)
 [![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
-Type-safe WebSocket communication for Bun servers and browsers with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
+Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
 
 ## ⚠️ Environment Requirements
 

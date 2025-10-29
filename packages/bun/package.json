@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/bun",
   "version": "0.0.0",
-  "description": "Native Bun WebSocket server adapter leveraging Bun's high-performance WebSocket API with built-in pub/sub, low-latency message routing, and type-safe handler integration for real-time applications.",
+  "description": "Bun platform adapter for WS-Kit leveraging native WebSocket API with built-in pub/sub and low-latency message routing",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

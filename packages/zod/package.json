@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/zod",
   "version": "0.0.0",
-  "description": "Type-safe WebSocket message validation adapter that integrates Zod with @ws-kit/core, enabling runtime schema validation with full TypeScript inference for message routing and handling.",
+  "description": "Zod validator adapter for WS-Kit with runtime schema validation and full TypeScript inference",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

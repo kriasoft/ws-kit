@@ -1,10 +1,10 @@
 # @ws-kit/bun
 
-Bun.serve platform adapter leveraging Bun's native high-performance WebSocket features.
+Bun platform adapter for WS-Kit, leveraging Bun's native high-performance WebSocket features.
 
 ## Purpose
 
-`@ws-kit/bun` provides the platform-specific integration layer for Bun, enabling:
+`@ws-kit/bun` provides the platform-specific integration layer for WS-Kit on Bun, enabling:
 
 - Direct use of Bun's native `server.publish()` for zero-copy broadcasting
 - Seamless integration with `Bun.serve()`
@@ -385,7 +385,7 @@ Benchmarks based on typical payloads (~1KB JSON). Actual performance depends on 
 
 ## Migration from Old API
 
-If migrating from `bun-ws-router`:
+If migrating from the legacy `bun-ws-router`:
 
 ```typescript
 // Old pattern

@@ -1,10 +1,10 @@
 # @ws-kit/redis-pubsub
 
-Optional Redis-based PubSub adapter for [@ws-kit/core](https://www.npmjs.com/package/@ws-kit/core), enabling cross-process broadcasting for multi-server deployments.
+Redis-based PubSub adapter for WS-Kit, enabling cross-process broadcasting for multi-server deployments.
 
 ## Purpose
 
-Use this adapter when you need to broadcast messages across multiple server instances (e.g., Bun cluster, Node.js cluster, Kubernetes pods). Each instance connects to a shared Redis server and automatically receives and delivers messages to all subscribers.
+Use this adapter when you need to broadcast messages across multiple WS-Kit server instances (e.g., Bun clusters, load-balanced deployments, Kubernetes pods). Each instance connects to a shared Redis server and automatically receives and delivers messages to all subscribers.
 
 ## When to Use
 

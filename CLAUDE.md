@@ -1,6 +1,6 @@
 # ws-kit
 
-Type-safe WebSocket router with pluggable validators (Zod/Valibot) and platform adapters (Bun/Cloudflare DO).
+WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
 ## Specifications and ADRs
 

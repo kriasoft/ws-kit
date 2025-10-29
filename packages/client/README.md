@@ -1,10 +1,10 @@
 # @ws-kit/client
 
-Universal WebSocket client for browsers and Node.js.
+Universal WebSocket client for WS-Kit, compatible with browsers and Node.js.
 
 ## Purpose
 
-`@ws-kit/client` provides a modern, type-safe WebSocket client that works across all JavaScript environments with optional validator integration for schema-based type inference.
+`@ws-kit/client` provides a modern, type-safe WebSocket client for WS-Kit that works across all JavaScript environments with optional validator integration for schema-based type inference.
 
 ## What This Package Provides
 

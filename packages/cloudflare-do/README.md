@@ -1,10 +1,10 @@
 # @ws-kit/cloudflare-do
 
-Cloudflare Durable Objects platform adapter for @ws-kit/core with per-instance pub/sub and explicit multi-DO federation.
+Cloudflare Durable Objects platform adapter for WS-Kit with per-instance pub/sub and explicit multi-DO federation.
 
 ## Purpose
 
-`@ws-kit/cloudflare-do` provides the platform-specific integration layer for Cloudflare Durable Objects, enabling:
+`@ws-kit/cloudflare-do` provides the platform-specific integration layer for WS-Kit on Cloudflare Durable Objects, enabling:
 
 - Per-instance WebSocket broadcasting via BroadcastChannel
 - State management integration with durable storage

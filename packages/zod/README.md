@@ -4,7 +4,7 @@ Zod validator adapter for `@ws-kit/core`.
 
 ## Purpose
 
-`@ws-kit/zod` provides Zod-based schema validation and type inference for ws-kit, enabling full TypeScript support for message payloads with discriminated unions.
+`@ws-kit/zod` provides Zod-based schema validation and type inference for WS-Kit, enabling full TypeScript support for message payloads with discriminated unions.
 
 ## What This Package Provides
 

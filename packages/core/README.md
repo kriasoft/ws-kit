@@ -4,7 +4,7 @@ Platform-agnostic WebSocket router and type system with composition-based adapte
 
 ## Purpose
 
-`@ws-kit/core` provides the foundation for ws-kit: a single `WebSocketRouter<V>` class (generic over validator adapter), platform-agnostic lifecycle hooks, message routing, and pluggable adapter interfaces.
+`@ws-kit/core` provides the foundation for WS-Kit: a single `WebSocketRouter<V>` class (generic over validator adapter), platform-agnostic lifecycle hooks, message routing, and pluggable adapter interfaces.
 
 ## Scope (What Core IS)
 

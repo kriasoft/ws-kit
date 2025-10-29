@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/redis-pubsub",
   "version": "0.0.0",
-  "description": "Redis PubSub adapter for @ws-kit/core that enables distributed WebSocket message broadcasting across multiple server instances. Leverages Redis pub/sub to synchronize real-time messages in horizontally scaled deployments.",
+  "description": "Redis PubSub adapter for WS-Kit enabling distributed WebSocket broadcasting across multiple server instances",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
