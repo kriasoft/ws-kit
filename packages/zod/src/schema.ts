@@ -186,7 +186,9 @@ export function createMessageSchema(zod: ZodLike) {
     // Validate that extended meta doesn't use reserved keys (fail-fast at schema creation)
     validateMetaSchema(meta);
 
-    // Meta schema must be strict (reject unknown keys)
+    // Meta schema is strict to prevent client spoofing of server-controlled fields.
+    // The router injects clientId and receivedAt AFTER validation (not before),
+    // so the schema doesn't need to allow these fields.
     const metaSchema = (
       meta ? MessageMetadataSchema.extend(meta) : MessageMetadataSchema
     ).strict();

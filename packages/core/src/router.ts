@@ -288,6 +288,69 @@ export class WebSocketRouter<
     await this.pubsub.publish(channel, message);
   }
 
+  /**
+   * Get websocket handler object for testing and direct platform integration.
+   *
+   * Returns handlers that can be used with Bun.serve() websocket option.
+   * Primarily useful for testing and advanced platform integrations.
+   *
+   * @returns WebSocket handler object with message, open, close methods
+   * @internal - Primarily for testing and platform adapters
+   */
+  get websocket() {
+    return {
+      message: async (ws: ServerWebSocket<TData>, message: string | Buffer) => {
+        try {
+          await this.handleMessage(ws, message);
+        } catch (error) {
+          this.callErrorHandlers(
+            error instanceof Error ? error : new Error(String(error)),
+            {
+              ws,
+              type: "",
+              meta: { clientId: ws.data.clientId, receivedAt: Date.now() },
+              send: this.createSendFunction(ws),
+            },
+          );
+        }
+      },
+      open: async (ws: ServerWebSocket<TData>) => {
+        try {
+          await this.handleOpen(ws);
+        } catch (error) {
+          this.callErrorHandlers(
+            error instanceof Error ? error : new Error(String(error)),
+            {
+              ws,
+              type: "",
+              meta: { clientId: ws.data.clientId, receivedAt: Date.now() },
+              send: this.createSendFunction(ws),
+            },
+          );
+        }
+      },
+      close: async (
+        ws: ServerWebSocket<TData>,
+        code: number,
+        reason?: string,
+      ) => {
+        try {
+          await this.handleClose(ws, code, reason);
+        } catch (error) {
+          this.callErrorHandlers(
+            error instanceof Error ? error : new Error(String(error)),
+            {
+              ws,
+              type: "",
+              meta: { clientId: ws.data.clientId, receivedAt: Date.now() },
+              send: this.createSendFunction(ws),
+            },
+          );
+        }
+      },
+    };
+  }
+
   // ———————————————————————————————————————————————————————————————————————————
   // Platform Adapter Integration - These are called by platform adapters
   // ———————————————————————————————————————————————————————————————————————————
@@ -465,18 +528,8 @@ export class WebSocketRouter<
       // Step 5: Normalization (strip reserved keys)
       const normalized = normalizeInboundMessage(parsedMessage);
 
-      // Step 6: Inject server-controlled metadata
-      if (typeof normalized === "object" && normalized !== null) {
-        const msg = normalized as Record<string, unknown>;
-        if (!msg.meta || typeof msg.meta !== "object") {
-          msg.meta = {};
-        }
-        const meta = msg.meta as Record<string, unknown>;
-        meta.clientId = clientId;
-        meta.receivedAt = receivedAt;
-      }
-
-      // Step 7: Schema validation
+      // Step 6: Schema validation (BEFORE injecting server-controlled fields)
+      // This ensures the schema can be strict and reject client-provided reserved keys
       const handlerEntry = this.messageHandlers.get(messageType);
 
       if (!handlerEntry) {
@@ -506,12 +559,22 @@ export class WebSocketRouter<
         return;
       }
 
-      // Step 8: Handler dispatch
+      // Step 7: Inject server-controlled metadata (AFTER validation)
+      // This ensures the metadata is trusted and not subject to client spoofing
       const validatedData = validationResult.data;
+      if (!validatedData.meta || typeof validatedData.meta !== "object") {
+        validatedData.meta = {};
+      }
+      const meta = validatedData.meta as Record<string, unknown>;
+      meta.clientId = clientId;
+      meta.receivedAt = receivedAt;
+
+      // Step 8: Handler dispatch
       const context: MessageContext<MessageSchemaType, TData> = {
         ws,
         type: messageType,
         meta: validatedData.meta,
+        receivedAt: receivedAt,
         send,
         ...(validatedData.payload !== undefined && {
           payload: validatedData.payload,
@@ -599,10 +662,12 @@ export class WebSocketRouter<
 
     for (const handler of this.authHandlers) {
       try {
+        const meta = { clientId: ws.data.clientId, receivedAt };
         const context: MessageContext<MessageSchemaType, TData> = {
           ws,
           type: "",
-          meta: { clientId: ws.data.clientId, receivedAt },
+          meta,
+          receivedAt,
           send,
         };
 

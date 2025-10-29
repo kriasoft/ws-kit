@@ -10,10 +10,10 @@ import { createMessageSchema } from "../../../zod/src/schema";
 const { messageSchema } = createMessageSchema(z);
 
 describe("addRoutes", () => {
-  it("should merge routes from another router", () => {
+  it("should merge routes from another router", async () => {
     // Create first router with a message handler
     const router1 = new WebSocketRouter({ validator: zodValidator() });
-    const PingMessage = messageSchema("PING");
+    const PingMessage = messageSchema("PING", { text: z.string().optional() });
     let pingHandlerCalled = false;
     router1.onMessage(PingMessage, () => {
       pingHandlerCalled = true;
@@ -21,7 +21,7 @@ describe("addRoutes", () => {
 
     // Create second router with different handlers
     const router2 = new WebSocketRouter({ validator: zodValidator() });
-    const PongMessage = messageSchema("PONG");
+    const PongMessage = messageSchema("PONG", { reply: z.string().optional() });
     let pongHandlerCalled = false;
     let openHandlerCalled = false;
     let closeHandlerCalled = false;
@@ -51,38 +51,40 @@ describe("addRoutes", () => {
       publish: () => {},
       subscribe: () => {},
       unsubscribe: () => {},
+      close: () => {},
+      readyState: 1,
     };
 
     // Test that router1 still handles its original messages
-    wsHandler.message?.(
+    await wsHandler.message?.(
       mockWs as any,
-      JSON.stringify({ type: "PING", meta: {} }),
+      JSON.stringify({ type: "PING", meta: {}, payload: { text: "hello" } }),
     );
     expect(pingHandlerCalled).toBe(true);
 
     // Test that router1 now also handles router2's messages
-    wsHandler.message?.(
+    await wsHandler.message?.(
       mockWs as any,
-      JSON.stringify({ type: "PONG", meta: {} }),
+      JSON.stringify({ type: "PONG", meta: {}, payload: { reply: "world" } }),
     );
     expect(pongHandlerCalled).toBe(true);
 
     // Test that merged lifecycle handlers work
-    wsHandler.open?.(mockWs as any);
+    await wsHandler.open?.(mockWs as any);
     expect(openHandlerCalled).toBe(true);
 
-    wsHandler.close?.(mockWs as any, 1000, "test");
+    await wsHandler.close?.(mockWs as any, 1000, "test");
     expect(closeHandlerCalled).toBe(true);
   });
 
-  it("should handle multiple route merges", () => {
+  it("should handle multiple route merges", async () => {
     const mainRouter = new WebSocketRouter({ validator: zodValidator() });
     const router1 = new WebSocketRouter({ validator: zodValidator() });
     const router2 = new WebSocketRouter({ validator: zodValidator() });
 
-    const Message1 = messageSchema("MSG1");
-    const Message2 = messageSchema("MSG2");
-    const Message3 = messageSchema("MSG3");
+    const Message1 = messageSchema("MSG1", { value: z.string().optional() });
+    const Message2 = messageSchema("MSG2", { value: z.string().optional() });
+    const Message3 = messageSchema("MSG3", { value: z.string().optional() });
 
     let msg1Called = false;
     let msg2Called = false;
@@ -107,20 +109,24 @@ describe("addRoutes", () => {
     const mockWs = {
       data: { clientId: "test-123" },
       send: () => undefined,
+      close: () => {},
+      subscribe: () => {},
+      unsubscribe: () => {},
+      readyState: 1,
     };
 
     // Test all handlers work
-    wsHandler.message(
+    await wsHandler.message(
       mockWs as any,
-      JSON.stringify({ type: "MSG1", meta: {} }),
+      JSON.stringify({ type: "MSG1", meta: {}, payload: { value: "1" } }),
     );
-    wsHandler.message(
+    await wsHandler.message(
       mockWs as any,
-      JSON.stringify({ type: "MSG2", meta: {} }),
+      JSON.stringify({ type: "MSG2", meta: {}, payload: { value: "2" } }),
     );
-    wsHandler.message(
+    await wsHandler.message(
       mockWs as any,
-      JSON.stringify({ type: "MSG3", meta: {} }),
+      JSON.stringify({ type: "MSG3", meta: {}, payload: { value: "3" } }),
     );
 
     expect(msg1Called).toBe(true);

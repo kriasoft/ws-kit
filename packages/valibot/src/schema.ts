@@ -244,6 +244,9 @@ export function createMessageSchema(valibot: ValibotLike) {
     // Validate that extended meta doesn't use reserved keys (fail-fast at schema creation)
     validateMetaSchema(meta);
 
+    // Meta schema is strict to prevent client spoofing of server-controlled fields.
+    // The router injects clientId and receivedAt AFTER validation (not before),
+    // so the schema doesn't need to allow these fields.
     const metaSchema = meta
       ? valibot.strictObject({
           timestamp: valibot.optional(
@@ -256,7 +259,16 @@ export function createMessageSchema(valibot: ValibotLike) {
           correlationId: valibot.optional(valibot.string()),
           ...meta,
         })
-      : MessageMetadataSchema;
+      : valibot.strictObject({
+          timestamp: valibot.optional(
+            valibot.pipe(
+              valibot.number(),
+              valibot.integer(),
+              valibot.minValue(1),
+            ),
+          ),
+          correlationId: valibot.optional(valibot.string()),
+        });
 
     const baseSchema = {
       type: valibot.literal(messageType),

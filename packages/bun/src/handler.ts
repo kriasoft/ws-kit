@@ -97,6 +97,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       } as BunWebSocketData<TData>;
 
       // Upgrade connection with initial data
+      // Returns true if successful, false if not a valid WebSocket request
       const upgraded = server.upgrade<BunWebSocketData<TData>>(req, {
         data,
         headers: {
@@ -117,7 +118,9 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       // ```
 
       if (upgraded) {
-        return upgraded;
+        // Upgrade successful, Bun has handled the response
+        // Return 200 OK (WebSocket upgrade is handled by Bun automatically)
+        return new Response(null, { status: 200 });
       }
 
       // Upgrade failed (likely not a valid WebSocket request)
