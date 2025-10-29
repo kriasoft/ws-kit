@@ -53,6 +53,9 @@
   "peerDependencies": {
     "redis": "^5.9.0"
   },
+  "devDependencies": {
+    "redis": "^5.9.0"
+  },
   "engines": {
     "node": ">=22"
   }

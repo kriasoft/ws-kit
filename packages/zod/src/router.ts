@@ -32,14 +32,15 @@ import type {
   AuthHandler,
   CloseHandler,
   ErrorHandler,
+  MessageContext,
   Middleware,
   OpenHandler,
   WebSocketData,
   WebSocketRouterOptions,
 } from "@ws-kit/core";
 
-import zodValidator from "./validator";
-import type { MessageHandler, MessageSchemaType } from "./types";
+import zodValidator from "./validator.js";
+import type { MessageHandler, MessageSchemaType } from "./types.js";
 
 /**
  * Type-safe WebSocket router interface with Zod validation.
@@ -252,10 +253,10 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
  * ```
  */
 export function createZodRouter<TData extends WebSocketData = WebSocketData>(
-  options?: Omit<WebSocketRouterOptions<TData>, "validator">,
+  options?: Omit<WebSocketRouterOptions<any, TData>, "validator">,
 ): TypedZodRouter<TData> {
   // Create core router with Zod validator
-  const coreRouter = new WebSocketRouter<TData>({
+  const coreRouter = new WebSocketRouter<any, TData>({
     ...options,
     validator: zodValidator(),
   });
@@ -296,7 +297,7 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
     },
 
     // Middleware
-    use(middleware) {
+    use(middleware: any) {
       coreRouter.use(middleware);
       return router;
     },

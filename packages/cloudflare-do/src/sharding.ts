@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { DurableObjectNamespace, DurableObjectStub } from "./types";
+import type { DurableObjectNamespace, DurableObjectStub } from "./types.js";
 
 /**
  * Compute a stable shard name from a scope string.

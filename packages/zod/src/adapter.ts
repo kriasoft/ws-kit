@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 import type { ValidatorAdapter } from "@ws-kit/core";
-import type { MessageSchemaType } from "./types";
+import type { MessageSchemaType } from "./types.js";
 
 /**
  * Adapter that bridges Zod validation with the generic router implementation.

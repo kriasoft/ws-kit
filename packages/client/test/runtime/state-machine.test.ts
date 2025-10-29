@@ -15,14 +15,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { createClient } from "../../src/index";
-import type { ClientState } from "../../src/types";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createMockWebSocket } from "./helpers";
+import { createClient } from "../../src/index.js";
+import type { ClientState } from "../../src/types.js";
+import { z, message } from "@ws-kit/zod";
+import { createMockWebSocket } from "./helpers.js";
 
-const { messageSchema } = createMessageSchema(z);
-messageSchema("TEST", { id: z.number() });
+message("TEST", { id: z.number() });
 
 describe("Client: State Machine Transitions", () => {
   describe("Happy path: closed → connecting → open", () => {

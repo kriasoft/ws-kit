@@ -34,45 +34,29 @@
  */
 
 // Import Valibot as canonical instance
+// @ts-expect-error - valibot types not found by TypeScript, but they work at runtime
 import * as v from "valibot";
-import { createMessageSchema } from "./schema";
+import { createMessageSchema } from "./schema.js";
 
 // Create message helper using canonical Valibot instance
-// (This creates the messageSchema function without requiring a factory)
 const {
   messageSchema: message,
   ErrorMessage,
   rpc,
+  createMessage,
 } = createMessageSchema(v as any);
 
 // Main exports: export-with-helpers pattern
-export { v, message, rpc, ErrorMessage };
-export { default as valibotValidator } from "./validator";
-export { createValibotRouter as createRouter } from "./router";
+export { v, message, rpc, ErrorMessage, createMessage };
+export { default as valibotValidator } from "./validator.js";
+export { createValibotRouter as createRouter } from "./router.js";
 
 // Utility exports for advanced use cases
-export { ValibotValidatorAdapter } from "./adapter";
-
-// Backwards compatibility: re-export old factory (deprecated)
-/**
- * @deprecated Use `message()` helper instead.
- *
- * ```typescript
- * // ❌ Old way (factory pattern)
- * import { createMessageSchema } from "@ws-kit/valibot";
- * const { messageSchema } = createMessageSchema(v);
- * const LoginSchema = messageSchema("LOGIN", { username: v.string() });
- *
- * // ✅ New way (export-with-helpers)
- * import { message } from "@ws-kit/valibot";
- * const LoginSchema = message("LOGIN", { username: v.string() });
- * ```
- */
-export { createMessageSchema } from "./schema";
+export { ValibotValidatorAdapter } from "./adapter.js";
 
 // Type exports
-export type { AnyMessageSchema, MessageSchema } from "./schema";
-export type { TypedValibotRouter } from "./router";
+export type { AnyMessageSchema, MessageSchema } from "./schema.js";
+export type { TypedValibotRouter } from "./router.js";
 export type {
   ErrorCode,
   InferMeta,
@@ -83,7 +67,7 @@ export type {
   MessageHandlerEntry,
   MessageSchemaType,
   SendFunction,
-} from "./types";
+} from "./types.js";
 
 // Re-export core types for convenience
 export type {

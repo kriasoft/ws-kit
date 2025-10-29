@@ -5,7 +5,7 @@ import { describe, it, expect } from "bun:test";
 import {
   createDurableObjectAdapter,
   isDurableObjectServerWebSocket,
-} from "../src/adapter";
+} from "../src/adapter.js";
 import type { PlatformAdapter, PubSub } from "@ws-kit/core";
 
 describe("createDurableObjectAdapter", () => {

@@ -16,8 +16,8 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { createClient } from "../../src/index";
-import { createMockWebSocket } from "./helpers";
+import { createClient } from "../../src/index.js";
+import { createMockWebSocket } from "./helpers.js";
 
 describe("Client: Auth - Query Mode", () => {
   it("appends token to URL as query parameter", async () => {

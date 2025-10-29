@@ -182,7 +182,7 @@ This ensures all code imports the canonical `z` from `@ws-kit/zod`, preventing a
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 
@@ -312,7 +312,6 @@ Both patterns can coexist—AppDataDefault provides the base, explicit generics 
 ✅ **Zero setup friction** — No factory call before using `message()`
 ✅ **Tree-shakeable** — Unused helpers eliminated by bundlers
 ✅ **Runtime safe** — No prototype-chain tricks, Zod's `instanceof` checks work
-✅ **Backwards compatible** — Old factory pattern still works (with deprecation)
 
 ### Trade-offs
 

@@ -14,18 +14,14 @@
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { z } from "zod";
-import { createMessageSchema as createValibotSchema } from "../../../valibot/src/schema";
-import { createMessageSchema as createZodSchema } from "../../src/schema";
-
-const { messageSchema: zodMessageSchema } = createZodSchema(z);
-const { messageSchema: valibotMessageSchema } = createValibotSchema(v);
+import { z, message as zodMessage } from "@ws-kit/zod";
+import { message as valibotMessage } from "@ws-kit/valibot";
 
 describe("Reserved Key Schema Validation", () => {
   describe("Zod Adapter - Reserved Key Detection", () => {
     it("should reject schema with clientId in extended meta", () => {
       expect(() => {
-        zodMessageSchema(
+        zodMessage(
           "TEST",
           { id: z.number() },
           {
@@ -37,7 +33,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should reject schema with receivedAt in extended meta", () => {
       expect(() => {
-        zodMessageSchema(
+        zodMessage(
           "TEST",
           { id: z.number() },
           {
@@ -49,7 +45,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should reject schema with multiple reserved keys", () => {
       expect(() => {
-        zodMessageSchema(
+        zodMessage(
           "TEST",
           { id: z.number() },
           {
@@ -63,7 +59,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should accept schema with similar but non-reserved names", () => {
       expect(() => {
-        zodMessageSchema(
+        zodMessage(
           "TEST",
           { id: z.number() },
           {
@@ -78,7 +74,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should accept schema with application-level identity fields", () => {
       expect(() => {
-        zodMessageSchema(
+        zodMessage(
           "TEST",
           { text: z.string() },
           {
@@ -92,7 +88,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should provide clear error message with all reserved keys", () => {
       try {
-        zodMessageSchema("TEST", undefined, {
+        zodMessage("TEST", undefined, {
           clientId: z.string(),
         });
         expect.unreachable("Should have thrown");
@@ -113,7 +109,7 @@ describe("Reserved Key Schema Validation", () => {
   describe("Valibot Adapter - Reserved Key Detection", () => {
     it("should reject schema with clientId in extended meta", () => {
       expect(() => {
-        valibotMessageSchema(
+        valibotMessage(
           "TEST",
           { id: v.number() },
           {
@@ -125,7 +121,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should reject schema with receivedAt in extended meta", () => {
       expect(() => {
-        valibotMessageSchema(
+        valibotMessage(
           "TEST",
           { id: v.number() },
           {
@@ -137,7 +133,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should reject schema with multiple reserved keys", () => {
       expect(() => {
-        valibotMessageSchema(
+        valibotMessage(
           "TEST",
           { id: v.number() },
           {
@@ -151,7 +147,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should accept schema with valid application fields", () => {
       expect(() => {
-        valibotMessageSchema(
+        valibotMessage(
           "TEST",
           { text: v.string() },
           {
@@ -170,7 +166,7 @@ describe("Reserved Key Schema Validation", () => {
 
       for (const key of reservedKeys) {
         expect(() => {
-          zodMessageSchema("TEST", undefined, {
+          zodMessage("TEST", undefined, {
             [key]: z.string(),
           });
         }).toThrow(/Reserved meta keys not allowed/);
@@ -186,7 +182,7 @@ describe("Reserved Key Schema Validation", () => {
 
       for (const meta of combinations) {
         expect(() => {
-          zodMessageSchema("TEST", undefined, meta as never);
+          zodMessage("TEST", undefined, meta as never);
         }).toThrow(/Reserved meta keys not allowed/);
       }
     });
@@ -194,17 +190,17 @@ describe("Reserved Key Schema Validation", () => {
 
   describe("Schema Creation Success Cases", () => {
     it("should create schema without extended meta", () => {
-      const schema = zodMessageSchema("TEST");
+      const schema = zodMessage("TEST");
       expect(schema).toBeDefined();
     });
 
     it("should create schema with only payload", () => {
-      const schema = zodMessageSchema("TEST", { id: z.number() });
+      const schema = zodMessage("TEST", { id: z.number() });
       expect(schema).toBeDefined();
     });
 
     it("should create schema with valid extended meta", () => {
-      const schema = zodMessageSchema(
+      const schema = zodMessage(
         "TEST",
         { text: z.string() },
         {
@@ -217,7 +213,7 @@ describe("Reserved Key Schema Validation", () => {
     });
 
     it("should create complex schema with nested structures", () => {
-      const schema = zodMessageSchema(
+      const schema = zodMessage(
         "COMPLEX",
         {
           data: z.object({
@@ -237,7 +233,7 @@ describe("Reserved Key Schema Validation", () => {
   describe("Error Message Quality", () => {
     it("should provide actionable error message", () => {
       try {
-        zodMessageSchema("TEST", undefined, {
+        zodMessage("TEST", undefined, {
           clientId: z.string(),
           userId: z.string(),
         });
@@ -259,7 +255,7 @@ describe("Reserved Key Schema Validation", () => {
 
     it("should handle multiple violations in error message", () => {
       try {
-        zodMessageSchema("TEST", undefined, {
+        zodMessage("TEST", undefined, {
           clientId: z.string(),
           receivedAt: z.number(),
           userId: z.string(),
@@ -286,7 +282,7 @@ describe("Reserved Key Schema Validation", () => {
 
       // Design time: Schema creation fails immediately
       expect(() => {
-        zodMessageSchema("TEST", undefined, { clientId: z.string() });
+        zodMessage("TEST", undefined, { clientId: z.string() });
       }).toThrow();
 
       // Runtime: If we somehow got a schema with clientId,
@@ -303,7 +299,7 @@ describe("Reserved Key Schema Validation", () => {
       // By throwing at schema creation, we provide clear feedback.
 
       expect(() => {
-        zodMessageSchema("TEST", undefined, {
+        zodMessage("TEST", undefined, {
           clientId: z.string(), // Intended as required
         });
       }).toThrow(/Reserved meta keys not allowed/);
@@ -314,20 +310,20 @@ describe("Reserved Key Schema Validation", () => {
     it("should have identical behavior across Zod and Valibot", () => {
       // Test reserved key rejection
       expect(() => {
-        zodMessageSchema("TEST", undefined, { clientId: z.string() });
+        zodMessage("TEST", undefined, { clientId: z.string() });
       }).toThrow();
 
       expect(() => {
-        valibotMessageSchema("TEST", undefined, { clientId: v.string() });
+        valibotMessage("TEST", undefined, { clientId: v.string() });
       }).toThrow();
 
       // Test valid schema creation
       expect(() => {
-        zodMessageSchema("TEST", undefined, { userId: z.string() });
+        zodMessage("TEST", undefined, { userId: z.string() });
       }).not.toThrow();
 
       expect(() => {
-        valibotMessageSchema("TEST", undefined, { userId: v.string() });
+        valibotMessage("TEST", undefined, { userId: v.string() });
       }).not.toThrow();
     });
 
@@ -336,13 +332,13 @@ describe("Reserved Key Schema Validation", () => {
       let valibotError: string | undefined;
 
       try {
-        zodMessageSchema("TEST", undefined, { clientId: z.string() });
+        zodMessage("TEST", undefined, { clientId: z.string() });
       } catch (error) {
         zodError = (error as Error).message;
       }
 
       try {
-        valibotMessageSchema("TEST", undefined, { clientId: v.string() });
+        valibotMessage("TEST", undefined, { clientId: v.string() });
       } catch (error) {
         valibotError = (error as Error).message;
       }

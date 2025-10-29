@@ -8,7 +8,7 @@ The **export-with-helpers pattern** is the recommended way to use this package�
 
 ```typescript
 import { v, message, createRouter } from "@ws-kit/valibot";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 // Define message schemas with full type inference
 const PingMessage = message("PING", { text: v.string() });
@@ -100,13 +100,14 @@ Choose Valibot if you prioritize **bundle size and performance**:
 
 This adapter works with any ws-kit platform:
 
-- **`@ws-kit/serve/bun`** — Bun WebSocket server (recommended)
-- **`@ws-kit/serve/cloudflare-do`** — Cloudflare Durable Objects
+- **`@ws-kit/bun`** — Bun WebSocket server (recommended)
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects
 - Custom platforms via `@ws-kit/core`
 
 ## Dependencies
 
 - **`@ws-kit/core`** (required) — Core router
 - **`valibot`** (peer) — Validation library
-- **`@ws-kit/serve`** (optional) — Multi-runtime server setup
+- **`@ws-kit/bun`** (optional) — Bun platform adapter with `serve()` helper
+- **`@ws-kit/cloudflare-do`** (optional) — Cloudflare Durable Objects adapter
 - **`@ws-kit/client`** (optional) — Type-safe browser client

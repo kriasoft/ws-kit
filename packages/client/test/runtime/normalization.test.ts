@@ -12,17 +12,14 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { createClient } from "../../src/index";
-import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createMockWebSocket } from "./helpers";
-
-const { messageSchema } = createMessageSchema(z);
+import { createClient } from "../../src/index.js";
+import type { WebSocketClient } from "../../src/types.js";
+import { z, message } from "@ws-kit/zod";
+import { createMockWebSocket } from "./helpers.js";
 
 // Test schemas
-const TestMsg = messageSchema("TEST", { id: z.number() });
-const RoomMsg = messageSchema(
+const TestMsg = message("TEST", { id: z.number() });
+const RoomMsg = message(
   "CHAT",
   { text: z.string() },
   { roomId: z.string() }, // Required meta field

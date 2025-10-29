@@ -35,40 +35,27 @@
 
 // Import Zod as canonical instance
 import { z } from "zod";
-import { createMessageSchema } from "./schema";
+import { createMessageSchema } from "./schema.js";
 
 // Create message helper using canonical Zod instance
-// (This creates the messageSchema function without requiring a factory)
-const { messageSchema: message, ErrorMessage, rpc } = createMessageSchema(z);
+const {
+  messageSchema: message,
+  ErrorMessage,
+  rpc,
+  createMessage,
+} = createMessageSchema(z);
 
 // Main exports: export-with-helpers pattern
-export { z, message, rpc, ErrorMessage };
-export { default as zodValidator } from "./validator";
-export { createZodRouter as createRouter } from "./router";
+export { z, message, rpc, ErrorMessage, createMessage };
+export { default as zodValidator } from "./validator.js";
+export { createZodRouter as createRouter } from "./router.js";
 
 // Utility exports for advanced use cases
-export { ZodValidatorAdapter } from "./adapter";
-
-// Backwards compatibility: re-export old factory (deprecated)
-/**
- * @deprecated Use `message()` helper instead.
- *
- * ```typescript
- * // ❌ Old way (factory pattern)
- * import { createMessageSchema } from "@ws-kit/zod";
- * const { messageSchema } = createMessageSchema(z);
- * const LoginSchema = messageSchema("LOGIN", { username: z.string() });
- *
- * // ✅ New way (export-with-helpers)
- * import { message } from "@ws-kit/zod";
- * const LoginSchema = message("LOGIN", { username: z.string() });
- * ```
- */
-export { createMessageSchema } from "./schema";
+export { ZodValidatorAdapter } from "./adapter.js";
 
 // Type exports
-export type { AnyMessageSchema, MessageSchema } from "./schema";
-export type { TypedZodRouter } from "./router";
+export type { AnyMessageSchema, MessageSchema } from "./schema.js";
+export type { TypedZodRouter } from "./router.js";
 export type {
   ErrorCode,
   InferMeta,
@@ -79,7 +66,7 @@ export type {
   MessageHandlerEntry,
   MessageSchemaType,
   SendFunction,
-} from "./types";
+} from "./types.js";
 
 // Re-export core types for convenience
 export type {

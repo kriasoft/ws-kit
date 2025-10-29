@@ -22,11 +22,11 @@ Quick navigation for AI tools:
 
 ## Basic Setup
 
-**Recommended: Platform-Specific Entrypoint** (zero detection overhead)
+**Recommended: Platform-Specific Package** (zero detection overhead)
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
@@ -55,26 +55,33 @@ This pattern is recommended because:
 - ✅ Zero runtime detection overhead
 - ✅ Optimal tree-shaking (imports only your target platform)
 - ✅ Explicit deployment target (impossible to misconfigure)
-- ✅ Works for all platforms (Bun, Cloudflare, Deno, testing)
+- ✅ Single canonical location for platform APIs (validator + platform together)
 
-**Alternative: Explicit Runtime Selection** (multi-target code)
+**Alternative: Low-Level Control**
 
-For code that deploys to multiple runtimes, use explicit `runtime` option:
+For code that needs direct control over Bun server configuration:
 
 ```typescript
-import { serve } from "@ws-kit/serve";
+import { createBunHandler } from "@ws-kit/bun";
 
-serve(router, {
-  port: 3000,
-  runtime: "bun", // Required in production; optional in development for auto-detection
+const { fetch, websocket } = createBunHandler(router, {
   authenticate(req) {
     const token = req.headers.get("authorization");
     return token ? { userId: "user-123" } : undefined;
   },
 });
-```
 
-Or set the `WSKIT_RUNTIME` environment variable: `WSKIT_RUNTIME=bun bun start`
+Bun.serve({
+  port: 3000,
+  fetch(req, server) {
+    if (new URL(req.url).pathname === "/ws") {
+      return fetch(req, server);
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+  websocket,
+});
+```
 
 ## Creating a Router
 
@@ -283,8 +290,8 @@ type MessageContext<Schema, Data> = {
 **Type Safety**: `ctx.payload` exists only when schema defines it:
 
 ```typescript
-const WithPayload = messageSchema("WITH", { id: z.number() });
-const WithoutPayload = messageSchema("WITHOUT");
+const WithPayload = message("WITH", { id: z.number() });
+const WithoutPayload = message("WITHOUT");
 
 router.on(WithPayload, (ctx) => {
   const id = ctx.payload.id; // ✅ Typed as number
@@ -775,14 +782,12 @@ When using `ctx.error()`, the connection closes immediately with the appropriate
 
 ## Production Runtime Selection
 
-Always explicitly specify your deployment target in production. Two recommended approaches:
+Always use platform-specific imports in production. Each platform exports both high-level and low-level APIs:
 
-### Primary: Platform-Specific Entrypoint
+### Bun
 
 ```typescript
-import { serve } from "@ws-kit/serve/bun";
-// or: import { serve } from "@ws-kit/serve/cloudflare-do";
-// or: import { serve } from "@ws-kit/serve/deno";
+import { serve } from "@ws-kit/bun";
 
 serve(router, {
   port: 3000,
@@ -792,48 +797,43 @@ serve(router, {
 });
 ```
 
-**Benefits:**
+For low-level control:
+
+```typescript
+import { createBunHandler } from "@ws-kit/bun";
+
+const { fetch, websocket } = createBunHandler(router, {
+  /* ... */
+});
+Bun.serve({ port: 3000, fetch, websocket });
+```
+
+### Cloudflare Durable Objects
+
+```typescript
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+
+const handler = createDurableObjectHandler(router, {
+  /* ... */
+});
+
+export default {
+  fetch(req) {
+    return handler.fetch(req);
+  },
+};
+```
+
+**Benefits of platform-specific packages:**
 
 - ✅ Zero runtime detection — No capability checks, deterministic behavior
-- ✅ Optimal tree-shaking — Only imports your target platform handler
+- ✅ Optimal tree-shaking — Only imports your target platform code
 - ✅ Fast — No detection overhead or error handling
 - ✅ Explicit — Deployment target clear in source code
+- ✅ Type-safe — Options and APIs tailored to platform capabilities
 - ✅ Safe — Impossible to misconfigure
 
 This is the **recommended approach** for all production deployments.
-
-### Alternative: Explicit `runtime` Option
-
-For code that deploys to multiple targets from the same source:
-
-```typescript
-import { serve } from "@ws-kit/serve";
-
-serve(router, {
-  port: 3000,
-  runtime: "bun", // Explicit in production; optional in development for auto-detection
-  authenticate(req) {
-    /* ... */
-  },
-});
-```
-
-**Runtime options**: `"bun"` | `"cloudflare-do"` | `"deno"`
-
-You can also set `WSKIT_RUNTIME=bun` as an environment variable at deployment time.
-
-### Development: Auto-Detection (Optional)
-
-In development only, `serve()` can auto-detect via capability checks (disabled in production):
-
-```typescript
-import { serve } from "@ws-kit/serve";
-
-// Auto-detected in development only (convenience)
-serve(router, { port: 3000 });
-```
-
-**Recommendation**: Even in development, use an explicit approach to catch configuration errors early and ensure your deployment process is always correct.
 
 ## Key Constraints
 
@@ -847,4 +847,4 @@ serve(router, { port: 3000 });
 6. **Middleware execution** — Global runs first, then per-route, then handler (see ADR-008)
 7. **Validation flow** — Trust schema validation; never re-validate in handlers (see @rules.md#validation-flow)
 8. **Broadcasting** — For multicast messaging, see @broadcasting.md (not covered in this spec)
-9. **Runtime selection** — Use explicit `runtime` option or platform-specific entrypoint in production (see ADR-006)
+9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare-do`)

@@ -66,7 +66,7 @@ await client.disconnect();
 ```typescript
 // server.ts
 import { createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { Hello, HelloReply, Broadcast } from "./shared/schemas";
 
 const router = createRouter();
@@ -197,7 +197,7 @@ const client = wsClient({
 ### Server-Side Validation
 
 ```typescript
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 serve(router, {
   authenticate(req) {

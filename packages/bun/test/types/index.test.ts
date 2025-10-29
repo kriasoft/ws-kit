@@ -7,14 +7,14 @@ import type { PlatformAdapter, PubSub, ServerWebSocket } from "@ws-kit/core";
 import {
   createBunAdapter,
   createBunAdapterWithServer,
-} from "../../src/adapter";
-import { BunPubSub } from "../../src/pubsub";
-import { createBunHandler } from "../../src/handler";
+} from "../../src/adapter.js";
+import { BunPubSub } from "../../src/pubsub.js";
+import { createBunHandler } from "../../src/handler.js";
 import type {
   BunHandler,
   BunHandlerOptions,
   BunWebSocketData,
-} from "../../src/types";
+} from "../../src/types.js";
 
 describe("@ws-kit/bun type tests", () => {
   describe("createBunAdapter", () => {

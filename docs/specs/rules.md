@@ -24,7 +24,7 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
 - **ALWAYS** use single canonical import source → ADR-007, @schema.md#Canonical-Import-Patterns
   - Server: `import { z, message, createRouter } from "@ws-kit/zod"` or `@ws-kit/valibot`
   - Client (Typed): `import { wsClient } from "@ws-kit/client/zod"` or `@ws-kit/client/valibot`
-  - Multi-runtime: `import { serve } from "@ws-kit/serve"` with explicit `runtime`, or `import { serve } from "@ws-kit/serve/bun"` for single-target
+  - Platform-specific: `import { serve } from "@ws-kit/bun"` or `@ws-kit/cloudflare-do`
 - **NEVER** mix imports from different sources (prevents dual package hazard) → ADR-007
 - **NEVER** import `z` directly from `zod` or `v` from `valibot`; always import from `@ws-kit/zod` or `@ws-kit/valibot`
   - ❌ `import { z } from "zod"` — Creates dual package hazard; breaks type inference
@@ -71,27 +71,28 @@ module.exports = {
 
 ### Runtime Selection (ADR-006)
 
-**Production deployments MUST declare runtime explicitly:**
+**Production deployments MUST declare platform explicitly:**
 
-- **ALWAYS** specify explicit `runtime` or use platform-specific entrypoint → ADR-006
-  - Explicit: `serve(router, { runtime: "bun", ... })`
-  - Platform-specific: `import { serve } from "@ws-kit/serve/bun"`
-  - Environment variable: `serve(router, { runtime: process.env.WSKIT_RUNTIME as any, ... })`
-- **NEVER** rely on auto-detection in production → ADR-006
-- **ALWAYS** use one of: `"bun"` | `"cloudflare-do"` | `"deno"` → ADR-006
+- **ALWAYS** use platform-specific package and `serve()` function → ADR-006
+  - Bun: `import { serve } from "@ws-kit/bun"`
+  - Cloudflare DO: High-level `serve()` or low-level `createDurableObjectHandler()`
+- **NEVER** rely on auto-detection → ADR-006
 
 **Examples:**
 
 ```typescript
-// ✅ Platform-specific (recommended for single-target)
-import { serve } from "@ws-kit/serve/bun";
+// ✅ Bun (recommended for Bun deployments)
+import { serve } from "@ws-kit/bun";
 serve(router, { port: 3000 });
 
-// ✅ Explicit runtime (multi-runtime deployments)
-serve(router, { runtime: "bun", port: 3000 });
-
-// ✅ Environment-driven (CI/CD deployments)
-serve(router, { runtime: process.env.WSKIT_RUNTIME as any, port: 3000 });
+// ✅ Cloudflare Durable Objects
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+const handler = createDurableObjectHandler(router);
+export default {
+  fetch(req: Request, state: DurableObjectState, env: Env) {
+    return handler.fetch(req);
+  },
+};
 ```
 
 ### Security & Validation

@@ -147,19 +147,25 @@ export class RedisPubSub implements PubSub {
     const promises: Promise<unknown>[] = [];
 
     if (this.publishClient?.isOpen) {
-      promises.push(
-        this.publishClient.quit?.().catch(() => {
-          /* ignore */
-        }),
-      );
+      const quitPromise = this.publishClient.quit?.();
+      if (quitPromise) {
+        promises.push(
+          quitPromise.catch(() => {
+            /* ignore */
+          }),
+        );
+      }
     }
 
     if (this.subscribeClient?.isOpen) {
-      promises.push(
-        this.subscribeClient.quit?.().catch(() => {
-          /* ignore */
-        }),
-      );
+      const quitPromise = this.subscribeClient.quit?.();
+      if (quitPromise) {
+        promises.push(
+          quitPromise.catch(() => {
+            /* ignore */
+          }),
+        );
+      }
     }
 
     await Promise.allSettled(promises);
@@ -240,6 +246,7 @@ export class RedisPubSub implements PubSub {
     // Dynamically import redis module (peer dependency)
     let createClient;
     try {
+      // @ts-expect-error - redis types not found by TypeScript, but they work at runtime
       const redisModule = await import("redis");
       createClient = redisModule.createClient;
     } catch (error) {
@@ -280,27 +287,30 @@ export class RedisPubSub implements PubSub {
   private setupSubscriptionHandlers(): void {
     if (!this.subscribeClient) return;
 
-    this.subscribeClient.on?.("message", (channel: string, message: string) => {
-      const handlers = this.subscriptions.get(channel);
-      if (handlers) {
-        try {
-          const deserialized = this.deserialize(message);
-          handlers.forEach((handler) => {
-            try {
-              handler(deserialized);
-            } catch (err) {
-              this.options.onError?.(
-                err instanceof Error ? err : new Error(String(err)),
-              );
-            }
-          });
-        } catch (err) {
-          this.options.onError?.(
-            err instanceof Error ? err : new Error(String(err)),
-          );
+    this.subscribeClient.on?.(
+      "message" as any,
+      ((channel: string, message: string) => {
+        const handlers = this.subscriptions.get(channel);
+        if (handlers) {
+          try {
+            const deserialized = this.deserialize(message);
+            handlers.forEach((handler) => {
+              try {
+                handler(deserialized);
+              } catch (err) {
+                this.options.onError?.(
+                  err instanceof Error ? err : new Error(String(err)),
+                );
+              }
+            });
+          } catch (err) {
+            this.options.onError?.(
+              err instanceof Error ? err : new Error(String(err)),
+            );
+          }
         }
-      }
-    });
+      }) as any,
+    );
 
     this.subscribeClient.on?.("error", (error: unknown) => {
       const err = error instanceof Error ? error : new Error(String(error));

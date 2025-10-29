@@ -36,13 +36,13 @@ Both `@ws-kit/redis-pubsub` and `redis` are required:
 
 ## Quick Start
 
-### Recommended: With @ws-kit/serve
+### Recommended: With Bun
 
-Use the high-level API with `@ws-kit/serve` for the simplest integration:
+Use `@ws-kit/bun` with Redis PubSub for the simplest integration:
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
 
 // Create router with Redis PubSub for multi-instance broadcasting
@@ -228,20 +228,18 @@ class RedisPubSub implements PubSub {
 ### Multi-Instance Chat Application
 
 ```typescript
-import { WebSocketRouter } from "@ws-kit/core";
+import { z, message, createRouter } from "@ws-kit/zod";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-import { z } from "zod";
 
 const pubsub = createRedisPubSub({
   url: process.env.REDIS_URL || "redis://localhost:6379",
   namespace: "chat:app",
 });
 
-const router = new WebSocketRouter({ pubsub });
+const router = createRouter({ pubsub });
 
-const { messageSchema } = createMessageSchema(z);
-const JoinRoom = messageSchema("JOIN", { roomId: z.string() });
-const SendMessage = messageSchema("SEND", {
+const JoinRoom = message("JOIN", { roomId: z.string() });
+const SendMessage = message("SEND", {
   roomId: z.string(),
   text: z.string(),
 });
@@ -251,7 +249,7 @@ const roomMembers = new Map<string, Set<string>>();
 
 router.on(JoinRoom, async (ctx) => {
   const roomId = ctx.payload.roomId;
-  const clientId = ctx.ws.clientId;
+  const clientId = ctx.ws.data.clientId;
 
   if (!roomMembers.has(roomId)) {
     roomMembers.set(roomId, new Set());
@@ -259,8 +257,8 @@ router.on(JoinRoom, async (ctx) => {
   roomMembers.get(roomId)!.add(clientId);
 
   // Broadcast to all instances and all connections in this room
-  await router.publish(`room:${roomId}:join`, {
-    userId: clientId,
+  await router.publish(`room:${roomId}:join`, JoinRoom, {
+    roomId,
   });
 });
 
@@ -268,10 +266,9 @@ router.on(SendMessage, async (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Broadcast to all instances
-  await router.publish(`room:${roomId}:message`, {
-    userId: ctx.ws.clientId,
+  await router.publish(`room:${roomId}:message`, SendMessage, {
+    roomId: ctx.payload.roomId,
     text: ctx.payload.text,
-    timestamp: Date.now(),
   });
 });
 ```
@@ -478,11 +475,11 @@ await new Promise((resolve) => {
 ## Related Packages
 
 - **[@ws-kit/core](https://www.npmjs.com/package/@ws-kit/core)** - Core router and types
-- **[@ws-kit/serve](https://www.npmjs.com/package/@ws-kit/serve)** - Multi-runtime server with `/bun` and `/cloudflare-do` subpaths (recommended)
+- **[@ws-kit/bun](https://www.npmjs.com/package/@ws-kit/bun)** - Bun platform adapter with `serve()` helper
+- **[@ws-kit/cloudflare-do](https://www.npmjs.com/package/@ws-kit/cloudflare-do)** - Cloudflare Durable Objects adapter
 - **[@ws-kit/zod](https://www.npmjs.com/package/@ws-kit/zod)** - Zod validator
 - **[@ws-kit/valibot](https://www.npmjs.com/package/@ws-kit/valibot)** - Valibot validator
 - **[@ws-kit/client](https://www.npmjs.com/package/@ws-kit/client)** - Browser/Node.js client
-- **[@ws-kit/bun](https://www.npmjs.com/package/@ws-kit/bun)** - Low-level Bun platform adapter (used internally by `@ws-kit/serve/bun`)
 
 ## License
 

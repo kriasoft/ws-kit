@@ -13,14 +13,12 @@
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { createMessageSchema } from "../../src/schema";
-
-const { messageSchema } = createMessageSchema(v);
+import { message } from "@ws-kit/valibot";
 
 describe("Strict Schema Validation (Valibot)", () => {
   describe("Unknown Key Rejection - Root Level", () => {
     it("should reject unknown keys at message root", () => {
-      const TestMsg = messageSchema("TEST", { id: v.number() });
+      const TestMsg = message("TEST", { id: v.number() });
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -36,7 +34,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should reject extra field at root even with valid structure", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -50,7 +48,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Unknown Key Rejection - Meta Level", () => {
     it("should reject unknown keys in meta", () => {
-      const TestMsg = messageSchema("TEST", { id: v.number() });
+      const TestMsg = message("TEST", { id: v.number() });
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -68,7 +66,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should reject unknown meta keys even when extended meta present", () => {
-      const TestMsg = messageSchema(
+      const TestMsg = message(
         "TEST",
         { id: v.number() },
         { roomId: v.string() }, // Extended meta
@@ -89,7 +87,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Unknown Key Rejection - Payload Level", () => {
     it("should reject unknown keys in payload", () => {
-      const TestMsg = messageSchema("TEST", {
+      const TestMsg = message("TEST", {
         name: v.string(),
         count: v.number(),
       });
@@ -111,7 +109,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should reject deeply nested unknown keys", () => {
-      const TestMsg = messageSchema("TEST", {
+      const TestMsg = message("TEST", {
         nested: v.strictObject({
           allowed: v.string(),
         }),
@@ -134,7 +132,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Payload Presence Rules", () => {
     it("should reject unexpected payload key when schema defines none", () => {
-      const NoPayloadMsg = messageSchema("NO_PAYLOAD");
+      const NoPayloadMsg = message("NO_PAYLOAD");
 
       // payload key present with empty object
       const result1 = NoPayloadMsg.safeParse({
@@ -162,7 +160,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should accept message without payload key when schema defines none", () => {
-      const NoPayloadMsg = messageSchema("NO_PAYLOAD");
+      const NoPayloadMsg = message("NO_PAYLOAD");
 
       const result = NoPayloadMsg.safeParse({
         type: "NO_PAYLOAD",
@@ -174,7 +172,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should reject missing payload when schema requires it", () => {
-      const WithPayloadMsg = messageSchema("WITH_PAYLOAD", {
+      const WithPayloadMsg = message("WITH_PAYLOAD", {
         required: v.string(),
       });
 
@@ -191,7 +189,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should accept valid payload when schema requires it", () => {
-      const WithPayloadMsg = messageSchema("WITH_PAYLOAD", {
+      const WithPayloadMsg = message("WITH_PAYLOAD", {
         data: v.string(),
       });
 
@@ -207,7 +205,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Meta Presence Rules", () => {
     it("should accept empty meta when no extended meta required", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -218,7 +216,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should reject missing required extended meta fields", () => {
-      const TestMsg = messageSchema(
+      const TestMsg = message(
         "TEST",
         undefined,
         { roomId: v.string() }, // Required extended meta
@@ -233,7 +231,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should accept optional extended meta fields", () => {
-      const TestMsg = messageSchema("TEST", undefined, {
+      const TestMsg = message("TEST", undefined, {
         optional: v.optional(v.string()),
       });
 
@@ -255,7 +253,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Standard Meta Fields", () => {
     it("should accept standard timestamp field", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -266,7 +264,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should accept standard correlationId field", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -277,7 +275,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should accept both standard fields together", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -293,7 +291,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Client-Side Validation Symmetry", () => {
     it("should enable client-side validation (no server-only fields)", () => {
-      const TestMsg = messageSchema("TEST", { data: v.string() });
+      const TestMsg = message("TEST", { data: v.string() });
 
       // Client creates message
       const clientMessage = {
@@ -314,7 +312,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
   describe("Complex Validation Scenarios", () => {
     it("should reject combination of root and meta unknown keys", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -326,7 +324,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should reject combination of meta and payload unknown keys", () => {
-      const TestMsg = messageSchema("TEST", { id: v.number() });
+      const TestMsg = message("TEST", { id: v.number() });
 
       const result = TestMsg.safeParse({
         type: "TEST",
@@ -341,7 +339,7 @@ describe("Strict Schema Validation (Valibot)", () => {
     });
 
     it("should accept valid complex message with extended meta", () => {
-      const ComplexMsg = messageSchema(
+      const ComplexMsg = message(
         "COMPLEX",
         {
           nested: v.object({

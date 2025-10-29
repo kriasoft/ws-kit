@@ -12,14 +12,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { createClient, StateError } from "../../src/index";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createMockWebSocket } from "./helpers";
+import { createClient, StateError } from "../../src/index.js";
+import { z, message } from "@ws-kit/zod";
+import { createMockWebSocket } from "./helpers.js";
 
-const { messageSchema } = createMessageSchema(z);
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
 
 describe("Client: Auto-Connect Edge Cases", () => {
   describe("autoConnect + queue:off → connection error priority", () => {

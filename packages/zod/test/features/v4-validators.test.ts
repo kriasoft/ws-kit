@@ -9,15 +9,12 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { z } from "zod";
-import { createMessageSchema } from "../../src/schema";
-
-const { messageSchema } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
 
 describe("Zod v4 Built-in Validators", () => {
   describe("Email validation (z.email)", () => {
     it("should validate valid email addresses", () => {
-      const EmailMessage = messageSchema("EMAIL_VERIFY", {
+      const EmailMessage = message("EMAIL_VERIFY", {
         email: z.email(),
       });
 
@@ -30,7 +27,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject invalid email addresses", () => {
-      const EmailMessage = messageSchema("EMAIL_VERIFY", {
+      const EmailMessage = message("EMAIL_VERIFY", {
         email: z.email(),
       });
 
@@ -45,7 +42,7 @@ describe("Zod v4 Built-in Validators", () => {
 
   describe("URL validation (z.url)", () => {
     it("should validate valid URLs", () => {
-      const WebhookMessage = messageSchema("WEBHOOK", {
+      const WebhookMessage = message("WEBHOOK", {
         url: z.url(),
       });
 
@@ -58,7 +55,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject invalid URLs", () => {
-      const WebhookMessage = messageSchema("WEBHOOK", {
+      const WebhookMessage = message("WEBHOOK", {
         url: z.url(),
       });
 
@@ -73,7 +70,7 @@ describe("Zod v4 Built-in Validators", () => {
 
   describe("JWT validation (z.jwt)", () => {
     it("should validate valid JWT tokens", () => {
-      const JWTMessage = messageSchema("JWT_AUTH", {
+      const JWTMessage = message("JWT_AUTH", {
         token: z.string().jwt(),
       });
 
@@ -90,7 +87,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject invalid JWT tokens", () => {
-      const JWTMessage = messageSchema("JWT_AUTH", {
+      const JWTMessage = message("JWT_AUTH", {
         token: z.string().jwt(),
       });
 
@@ -105,7 +102,7 @@ describe("Zod v4 Built-in Validators", () => {
 
   describe("Date validation (z.date, z.coerce.date)", () => {
     it("should validate dates from ISO strings", () => {
-      const DateMessage = messageSchema("DATE_CHECK", {
+      const DateMessage = message("DATE_CHECK", {
         date: z.coerce.date(),
       });
 
@@ -118,7 +115,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject invalid date strings", () => {
-      const DateMessage = messageSchema("DATE_CHECK", {
+      const DateMessage = message("DATE_CHECK", {
         date: z.coerce.date(),
       });
 
@@ -133,7 +130,7 @@ describe("Zod v4 Built-in Validators", () => {
 
   describe("UUID validation (z.uuid)", () => {
     it("should validate valid UUIDs", () => {
-      const UUIDMessage = messageSchema("UUID_TEST", {
+      const UUIDMessage = message("UUID_TEST", {
         id: z.string().uuid(),
       });
 
@@ -146,7 +143,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject invalid UUIDs", () => {
-      const UUIDMessage = messageSchema("UUID_TEST", {
+      const UUIDMessage = message("UUID_TEST", {
         id: z.string().uuid(),
       });
 
@@ -161,7 +158,7 @@ describe("Zod v4 Built-in Validators", () => {
 
   describe("DateTime validation (z.string().datetime)", () => {
     it("should validate valid ISO datetime strings", () => {
-      const DateTimeMessage = messageSchema("DATETIME", {
+      const DateTimeMessage = message("DATETIME", {
         timestamp: z.string().datetime(),
       });
 
@@ -182,7 +179,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject invalid datetime strings", () => {
-      const DateTimeMessage = messageSchema("DATETIME", {
+      const DateTimeMessage = message("DATETIME", {
         timestamp: z.string().datetime(),
       });
 
@@ -197,7 +194,7 @@ describe("Zod v4 Built-in Validators", () => {
 
   describe("Complex nested validation", () => {
     it("should handle complex nested schemas with multiple v4 validators", () => {
-      const ComplexMessage = messageSchema("COMPLEX", {
+      const ComplexMessage = message("COMPLEX", {
         user: z.object({
           id: z.string().uuid(),
           email: z.email(),
@@ -230,7 +227,7 @@ describe("Zod v4 Built-in Validators", () => {
     });
 
     it("should reject complex schema with invalid nested values", () => {
-      const ComplexMessage = messageSchema("COMPLEX", {
+      const ComplexMessage = message("COMPLEX", {
         user: z.object({
           id: z.string().uuid(),
           email: z.email(),

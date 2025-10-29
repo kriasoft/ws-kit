@@ -433,7 +433,7 @@ When schemas define extended meta fields, provide them via `opts.meta`:
 
 ```typescript
 // Schema with extended meta (required field)
-const RoomMsg = messageSchema(
+const RoomMsg = message(
   "CHAT",
   { text: z.string() },
   { roomId: z.string() }, // Required meta field
@@ -458,7 +458,7 @@ client.request(RoomMsg, { text: "hello" }, RoomMsgOk, {
 client.send(RoomMsg, { text: "hello" }); // Compile error: roomId required
 
 // ✅ Optional extended meta
-const OptionalMetaMsg = messageSchema(
+const OptionalMetaMsg = message(
   "NOTIFY",
   { text: z.string() },
   { priority: z.enum(["low", "high"]).optional() },

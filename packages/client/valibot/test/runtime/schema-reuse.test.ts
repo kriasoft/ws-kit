@@ -13,13 +13,11 @@
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
 import type { ValibotWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "@ws-kit/valibot";
-
-const { messageSchema } = createMessageSchema(v);
+import { message } from "@ws-kit/valibot";
 
 describe("@ws-kit/client/valibot: Integration", () => {
   it("schema creation works correctly", () => {
-    const HelloMessage = messageSchema("HELLO", { text: v.string() });
+    const HelloMessage = message("HELLO", { text: v.string() });
 
     expect(HelloMessage).toBeDefined();
     expect(HelloMessage.type).toBe("strict_object");
@@ -27,9 +25,9 @@ describe("@ws-kit/client/valibot: Integration", () => {
 
   it("multiple schemas can be created", () => {
     const Messages = {
-      HELLO: messageSchema("HELLO", { text: v.string() }),
-      PING: messageSchema("PING"),
-      PONG: messageSchema("PONG", { latency: v.number() }),
+      HELLO: message("HELLO", { text: v.string() }),
+      PING: message("PING"),
+      PONG: message("PONG", { latency: v.number() }),
     };
 
     expect(Messages.HELLO).toBeDefined();
@@ -38,7 +36,7 @@ describe("@ws-kit/client/valibot: Integration", () => {
   });
 
   it("complex schemas with nested types work", () => {
-    const UserMessage = messageSchema("USER", {
+    const UserMessage = message("USER", {
       id: v.number(),
       name: v.string(),
       email: v.string([v.email()]),
@@ -52,7 +50,7 @@ describe("@ws-kit/client/valibot: Integration", () => {
   it("schemas can be shared across modules", () => {
     // Simulate server/messages.ts
     const ServerMessages = {
-      NOTIFICATION: messageSchema("NOTIFICATION", {
+      NOTIFICATION: message("NOTIFICATION", {
         title: v.string(),
         body: v.string(),
       }),
@@ -66,8 +64,8 @@ describe("@ws-kit/client/valibot: Integration", () => {
 
   it("discriminated union types are preserved", () => {
     const Messages = {
-      SUCCESS: messageSchema("SUCCESS", { result: v.string() }),
-      ERROR: messageSchema("ERROR", { message: v.string() }),
+      SUCCESS: message("SUCCESS", { result: v.string() }),
+      ERROR: message("ERROR", { message: v.string() }),
     };
 
     expect(Messages.SUCCESS).toBeDefined();
@@ -75,7 +73,7 @@ describe("@ws-kit/client/valibot: Integration", () => {
   });
 
   it("schema payloads can be validated", () => {
-    const UserMessage = messageSchema("USER", {
+    const UserMessage = message("USER", {
       id: v.number(),
       name: v.string(),
     });
@@ -92,7 +90,7 @@ describe("@ws-kit/client/valibot: Integration", () => {
   });
 
   it("invalid messages fail validation", () => {
-    const UserMessage = messageSchema("USER", {
+    const UserMessage = message("USER", {
       id: v.number(),
       name: v.string(),
     });

@@ -132,8 +132,7 @@ import { z, message, createRouter } from "@ws-kit/zod";
 import { v, message, createRouter } from "@ws-kit/valibot";
 
 // ✅ Platform-specific handlers
-import { createBunHandler } from "@ws-kit/bun";
-import { serve } from "@ws-kit/serve/bun";
+import { serve, createBunHandler } from "@ws-kit/bun";
 ```
 
 In development, these resolve to source files via TypeScript path aliases and Bun mappings. After publishing, npm's module resolution handles the imports identically. See [docs/adr/007-export-with-helpers-pattern.md](../docs/adr/007-export-with-helpers-pattern.md) for design details.

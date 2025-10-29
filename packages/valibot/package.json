@@ -54,6 +54,9 @@
   "peerDependencies": {
     "valibot": ">=1.0.0"
   },
+  "devDependencies": {
+    "valibot": "^1.1.0"
+  },
   "engines": {
     "node": ">=22"
   }

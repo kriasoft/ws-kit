@@ -12,7 +12,7 @@ A complete chat room implementation with authentication and message history.
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 type AppData = { username?: string };
 
@@ -136,7 +136,7 @@ Implementing JWT authentication with role-based access control.
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import jwt from "jsonwebtoken";
 
 enum Role {
@@ -291,7 +291,7 @@ Implement request/response messaging with timeouts.
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 const Calculate = message("CALCULATE", {
   operation: z.enum(["add", "multiply"]),

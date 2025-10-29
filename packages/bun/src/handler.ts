@@ -1,14 +1,20 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { v7 as uuidv7 } from "uuid";
+// @ts-expect-error - uuid types not found by TypeScript, but they work at runtime
+import * as uuid from "uuid";
+const { v7: uuidv7 } = uuid;
 import type {
   WebSocketRouter,
   ServerWebSocket,
   WebSocketData,
 } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
-import type { BunHandler, BunHandlerOptions, BunWebSocketData } from "./types";
+import type {
+  BunHandler,
+  BunHandlerOptions,
+  BunWebSocketData,
+} from "./types.js";
 
 /**
  * Create Bun WebSocket handlers for use with Bun.serve.
@@ -81,7 +87,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
      *
      * Or you can return the result of server.upgrade directly from this fetch handler.
      */
-    fetch: async (req: Request, server: Server): Promise<Response> => {
+    fetch: async (req: Request, server: Server<any>): Promise<Response> => {
       try {
         // Call onUpgrade hook (before authentication)
         options?.onUpgrade?.(req);
@@ -103,8 +109,8 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
 
         // Upgrade connection with initial data
         // Returns true if successful, false if not a valid WebSocket request
-        const upgraded = server.upgrade<BunWebSocketData<TData>>(req, {
-          data,
+        const upgraded = server.upgrade(req, {
+          data: data as any,
           headers: {
             [clientIdHeader]: clientId,
           },

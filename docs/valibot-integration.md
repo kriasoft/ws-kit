@@ -113,7 +113,7 @@ const schema = v.object({
 
 ```typescript
 import { v, message, createRouter } from "@ws-kit/valibot";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 // Define message schemas
 const JoinRoom = message("JOIN_ROOM", {

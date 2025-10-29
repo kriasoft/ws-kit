@@ -11,10 +11,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { createMessageSchema } from "../../src/schema";
-
-const { messageSchema, rpc } = createMessageSchema(z);
+import { z, message, rpc } from "@ws-kit/zod";
 
 describe("RPC Schema Helper", () => {
   describe("rpc() Creation", () => {
@@ -99,7 +96,7 @@ describe("RPC Schema Helper", () => {
         reply: z.string(),
       });
 
-      const explicitPong = messageSchema("PONG", { reply: z.string() });
+      const explicitPong = message("PONG", { reply: z.string() });
 
       // Should be usable as alternative response schema
       const result = explicitPong.safeParse({
@@ -328,7 +325,7 @@ describe("RPC Schema Helper", () => {
       const rpcMessage = rpc("RPC_MSG", { data: z.string() }, "RPC_REPLY", {
         result: z.string(),
       });
-      const standardMsg = messageSchema("STANDARD", { value: z.number() });
+      const standardMsg = message("STANDARD", { value: z.number() });
 
       const union = z.discriminatedUnion("type", [rpcMessage, standardMsg]);
 

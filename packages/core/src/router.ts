@@ -8,6 +8,7 @@ import type {
   ServerWebSocket,
   WebSocketData,
   MessageContext,
+  MessageMeta,
   SendFunction,
   OpenHandler,
   CloseHandler,
@@ -28,11 +29,11 @@ import type {
 /**
  * Heartbeat state tracking per connection.
  */
-interface HeartbeatState {
+interface HeartbeatState<TData extends WebSocketData = WebSocketData> {
   pingTimer: ReturnType<typeof setInterval> | null;
   pongTimer: ReturnType<typeof setTimeout> | null;
   lastPongTime: number;
-  ws: ServerWebSocket;
+  ws: ServerWebSocket<TData>;
   authenticated: boolean; // Track if connection has been authenticated
 }
 
@@ -48,7 +49,7 @@ interface TestingUtils<TData extends WebSocketData = WebSocketData> {
   /** Access to per-route middleware map for inspection */
   routeMiddleware: Map<string, Middleware<TData>[]>;
   /** Access to heartbeat states for inspection */
-  heartbeatStates: Map<string, HeartbeatState>;
+  heartbeatStates: Map<string, HeartbeatState<TData>>;
   /** Access to lifecycle handlers for inspection */
   openHandlers: OpenHandler<TData>[];
   closeHandlers: CloseHandler<TData>[];
@@ -83,9 +84,9 @@ export class WebSocketRouter<
   V extends ValidatorAdapter = ValidatorAdapter,
   TData extends WebSocketData = WebSocketData,
 > {
-  private readonly validator?: V;
-  private readonly validatorId?: unknown; // Store validator identity for compatibility checks
-  private readonly platform?: PlatformAdapter;
+  private readonly validator: V | undefined;
+  private readonly validatorId: unknown | undefined; // Store validator identity for compatibility checks
+  private readonly platform: PlatformAdapter | undefined;
   private pubsubInstance?: PubSub;
   private readonly pubsubProvider?: () => PubSub; // Optional provider for platform/custom pubsub
 
@@ -107,7 +108,7 @@ export class WebSocketRouter<
     timeoutMs: number;
     onStaleConnection?: (clientId: string, ws: ServerWebSocket<TData>) => void;
   };
-  private readonly heartbeatStates = new Map<string, HeartbeatState>();
+  private readonly heartbeatStates = new Map<string, HeartbeatState<TData>>();
 
   // Limits
   private readonly maxPayloadBytes: number;
@@ -138,13 +139,16 @@ export class WebSocketRouter<
     // Store heartbeat config only if explicitly provided
     // Heartbeat is opt-in: only initialize if options.heartbeat is set
     if (options.heartbeat) {
-      this.heartbeatConfig = {
+      const heartbeatConfig: typeof this.heartbeatConfig = {
         intervalMs:
           options.heartbeat.intervalMs ?? DEFAULT_CONFIG.HEARTBEAT_INTERVAL_MS,
         timeoutMs:
           options.heartbeat.timeoutMs ?? DEFAULT_CONFIG.HEARTBEAT_TIMEOUT_MS,
-        onStaleConnection: options.heartbeat.onStaleConnection,
       };
+      if (options.heartbeat.onStaleConnection) {
+        heartbeatConfig.onStaleConnection = options.heartbeat.onStaleConnection;
+      }
+      this.heartbeatConfig = heartbeatConfig;
     }
 
     // Register hooks if provided
@@ -497,9 +501,6 @@ export class WebSocketRouter<
    * Merges handlers, lifecycle hooks, global middleware, and per-route middleware.
    * Last-write-wins for duplicate message types.
    *
-   * This method provides the same functionality as `addRoutes()` with a clearer name
-   * that better expresses composition intent. Prefer `merge()` for new code.
-   *
    * @param router - Another WebSocketRouter to merge
    * @returns This router for method chaining
    *
@@ -521,20 +522,7 @@ export class WebSocketRouter<
    * ```
    */
   merge(router: WebSocketRouter<V, TData>): this {
-    return this.addRoutes(router);
-  }
-
-  /**
-   * Merge message handlers from another router into this one.
-   *
-   * @deprecated Use `merge()` instead for clearer intent.
-   * @param router - Another WebSocketRouter to merge
-   * @returns This router for method chaining
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  addRoutes(router: WebSocketRouter<V, TData> | any): this {
-    // Merge message handlers
-    // Access private member through type assertion for composability
+    // Access private members through type assertion for composability
     interface AccessibleRouter {
       messageHandlers: Map<string, MessageHandlerEntry<TData>>;
       openHandlers: OpenHandler<TData>[];
@@ -545,6 +533,7 @@ export class WebSocketRouter<
       routeMiddleware: Map<string, Middleware<TData>[]>;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const other = router as unknown as AccessibleRouter;
 
     // Merge message handlers
@@ -644,12 +633,13 @@ export class WebSocketRouter<
         } catch (error) {
           this.callErrorHandlers(
             error instanceof Error ? error : new Error(String(error)),
-            {
+            this.createMessageContext(
               ws,
-              type: "",
-              meta: { clientId: ws.data.clientId, receivedAt: Date.now() },
-              send: this.createSendFunction(ws),
-            },
+              "",
+              ws.data.clientId,
+              Date.now(),
+              this.createSendFunction(ws),
+            ),
           );
         }
       },
@@ -659,12 +649,13 @@ export class WebSocketRouter<
         } catch (error) {
           this.callErrorHandlers(
             error instanceof Error ? error : new Error(String(error)),
-            {
+            this.createMessageContext(
               ws,
-              type: "",
-              meta: { clientId: ws.data.clientId, receivedAt: Date.now() },
-              send: this.createSendFunction(ws),
-            },
+              "",
+              ws.data.clientId,
+              Date.now(),
+              this.createSendFunction(ws),
+            ),
           );
         }
       },
@@ -678,12 +669,13 @@ export class WebSocketRouter<
         } catch (error) {
           this.callErrorHandlers(
             error instanceof Error ? error : new Error(String(error)),
-            {
+            this.createMessageContext(
               ws,
-              type: "",
-              meta: { clientId: ws.data.clientId, receivedAt: Date.now() },
-              send: this.createSendFunction(ws),
-            },
+              "",
+              ws.data.clientId,
+              Date.now(),
+              this.createSendFunction(ws),
+            ),
           );
         }
       },
@@ -721,8 +713,9 @@ export class WebSocketRouter<
     const send = this.createSendFunction(ws);
 
     // Execute open handlers (after heartbeat initialized, before auth)
-    // NOTE: Open handlers run BEFORE auth, so clients can authenticate themselves
-    // TODO: Reconsider this order - should auth happen first?
+    // Open handlers run BEFORE auth by design - this allows clients to send
+    // authentication messages (e.g., via message handlers) rather than being forced
+    // to authenticate synchronously. Auth is enforced per-message via middleware.
     for (const handler of this.openHandlers) {
       try {
         const context: OpenHandlerContext<TData> = { ws, send };
@@ -733,7 +726,7 @@ export class WebSocketRouter<
       } catch (error) {
         this.callErrorHandlers(
           error instanceof Error ? error : new Error(String(error)),
-          { ws, type: "", meta: { clientId, receivedAt: Date.now() }, send },
+          this.createMessageContext(ws, "", clientId, Date.now(), send),
         );
       }
     }
@@ -771,7 +764,10 @@ export class WebSocketRouter<
     // Execute close handlers
     for (const handler of this.closeHandlers) {
       try {
-        const context: CloseHandlerContext<TData> = { ws, code, reason, send };
+        const context: CloseHandlerContext<TData> = { ws, code, send };
+        if (reason) {
+          context.reason = reason;
+        }
         const result = handler(context);
         if (result instanceof Promise) {
           await result;
@@ -1018,6 +1014,7 @@ export class WebSocketRouter<
           // Execute remaining middleware in order
           if (middlewareIndex < allMiddleware.length) {
             const middleware = allMiddleware[middlewareIndex++];
+            if (!middleware) return; // Safeguard (should not happen)
             const result = middleware(context, next);
             if (result instanceof Promise) {
               await result;
@@ -1047,7 +1044,7 @@ export class WebSocketRouter<
     } catch (error) {
       this.callErrorHandlers(
         error instanceof Error ? error : new Error(String(error)),
-        { ws, type: "", meta: { clientId, receivedAt }, send },
+        this.createMessageContext(ws, "", clientId, receivedAt, send),
       );
     }
   }
@@ -1114,14 +1111,13 @@ export class WebSocketRouter<
 
     for (const handler of this.authHandlers) {
       try {
-        const meta = { clientId: ws.data.clientId, receivedAt };
-        const context: MessageContext<MessageSchemaType, TData> = {
+        const context = this.createMessageContext(
           ws,
-          type: "",
-          meta,
+          "",
+          ws.data.clientId,
           receivedAt,
           send,
-        };
+        );
 
         const result = handler(context);
         const authenticated = result instanceof Promise ? await result : result;
@@ -1161,6 +1157,94 @@ export class WebSocketRouter<
         console.error("[ws] Error in error handler:", handlerError);
       }
     }
+  }
+
+  /**
+   * Create a complete MessageContext with all required methods.
+   *
+   * This factory ensures type-safe context construction with all required fields
+   * (error, reply, assignData, subscribe, unsubscribe) properly bound.
+   *
+   * @param ws - WebSocket connection
+   * @param type - Message type
+   * @param clientId - Client identifier
+   * @param receivedAt - Receive timestamp
+   * @param send - Send function
+   * @param meta - Message metadata (optional override)
+   * @returns Complete MessageContext
+   */
+  private createMessageContext<
+    TMsg extends MessageSchemaType = MessageSchemaType,
+  >(
+    ws: ServerWebSocket<TData>,
+    type: string,
+    clientId: string,
+    receivedAt: number,
+    send: SendFunction,
+    meta?: MessageMeta,
+  ): MessageContext<TMsg, TData> {
+    const contextMeta = meta || { clientId, receivedAt };
+
+    // Error sending function for type-safe error responses
+    const errorSend = (
+      code: string,
+      message: string,
+      details?: Record<string, unknown>,
+    ) => {
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "ERROR",
+            meta: { timestamp: Date.now() },
+            payload: { code, message, ...(details && { details }) },
+          }),
+        );
+      } catch (error) {
+        console.error("[ws] Error sending error message:", error);
+      }
+    };
+
+    // Helper to update connection data
+    const assignData = (partial: Partial<TData>): void => {
+      try {
+        if (ws.data && typeof ws.data === "object") {
+          Object.assign(ws.data, partial);
+        }
+      } catch (error) {
+        console.error("[ws] Error assigning data to connection:", error);
+      }
+    };
+
+    // Subscribe to channel
+    const subscribe = (channel: string): void => {
+      try {
+        ws.subscribe(channel);
+      } catch (error) {
+        console.error("[ws] Error subscribing to channel:", error);
+      }
+    };
+
+    // Unsubscribe from channel
+    const unsubscribe = (channel: string): void => {
+      try {
+        ws.unsubscribe(channel);
+      } catch (error) {
+        console.error("[ws] Error unsubscribing from channel:", error);
+      }
+    };
+
+    return {
+      ws,
+      type,
+      meta: contextMeta,
+      receivedAt,
+      send,
+      error: errorSend,
+      reply: send, // Semantic alias for send() in request/response patterns
+      assignData,
+      subscribe,
+      unsubscribe,
+    };
   }
 
   /**

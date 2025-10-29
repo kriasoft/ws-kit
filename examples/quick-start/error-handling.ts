@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createRouter, message, z } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 /**
  * Example of enhanced validation with Zod v4's string validators

@@ -19,7 +19,7 @@ Use the generic `serve()` approach when:
 Pass `runtime` to `serve()`:
 
 ```typescript
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
@@ -63,7 +63,7 @@ This is useful for:
 ## Example: Conditional Runtime Selection
 
 ```typescript
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
@@ -83,7 +83,7 @@ serve(router, {
 
 ```typescript
 import { describe, it } from "bun:test";
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 import { wsClient } from "@ws-kit/client/zod";
 
@@ -129,11 +129,11 @@ For production deployments, use [platform-specific entrypoints](../README.md#pla
 
 ```typescript
 // ✅ Production: platform-specific, type-safe
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 serve(router, { port: 3000 });
 
 // ❌ Avoid in production: limited type safety
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 serve(router, { runtime: "bun", port: 3000 });
 ```
 

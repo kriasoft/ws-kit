@@ -40,6 +40,7 @@ const RESERVED_MANAGED_META_KEYS = new Set([
 
 /**
  * Creates a type-safe WebSocket client.
+ * @internal For use by validator adapters only. Use wsClient() from @ws-kit/client/zod or @ws-kit/client/valibot.
  */
 export function createClient(opts: ClientOptions): WebSocketClient {
   // Validate options
@@ -559,6 +560,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
       // No 4th arg: third arg could be either response schema or options
       // If it's an options object (has at least one option key), treat as options
       const isOptionsObject =
+        replyOrOpts !== null &&
         typeof replyOrOpts === "object" &&
         ("timeoutMs" in replyOrOpts ||
           "meta" in replyOrOpts ||
@@ -633,9 +635,21 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     // Validate outbound message
     const result = safeParse(schema, message);
     if (!result.success) {
+      const issues = Array.isArray((result.error as any)?.issues)
+        ? (
+            (result.error as any).issues as Array<{
+              path?: string[];
+              message: string;
+            }>
+          ).map((issue) => ({
+            path: issue.path ?? [],
+            message: issue.message,
+          }))
+        : [];
       return Promise.reject(
         new ValidationError(
           `Outbound validation failed: ${JSON.stringify(result.error)}`,
+          issues,
         ),
       );
     }

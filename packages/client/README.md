@@ -8,7 +8,8 @@ Universal WebSocket client for WS-Kit, compatible with browsers and Node.js.
 
 ## What This Package Provides
 
-- **`createClient()`**: Universal WebSocket client factory
+- **`createClient()`**: Universal WebSocket client factory (base package)
+- **`wsClient()`**: Type-safe client with validator integration (zod/valibot sub-packages)
 - **Auto-reconnection**: Exponential backoff with configurable retry logic
 - **Message buffering**: Queues messages while connecting
 - **Request/response patterns**: Async APIs for paired message exchanges
@@ -16,47 +17,56 @@ Universal WebSocket client for WS-Kit, compatible with browsers and Node.js.
 - **Universal runtime support**: Browsers, Node.js, Bun, and more
 - **Zero dependencies**: Core package has no runtime dependencies
 
-## Optional Validator Integration (Phase 5.5+)
+## Recommended Usage: Validator-Specific Clients
 
 ### With Zod Schema Inference
 
 ```typescript
-import { createClient } from "@ws-kit/client/zod";
-import { PingMessage, PongMessage } from "./schemas";
+import { z, message, wsClient } from "@ws-kit/client/zod";
 
-const client = createClient({
-  url: "ws://localhost:3000",
-  schemas: [PingMessage, PongMessage],
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
+
+const client = wsClient({ url: "ws://localhost:3000" });
+
+client.on(PingMessage, (msg) => {
+  // ✅ msg fully typed with payload: { text: string }
+  console.log(msg.payload.text);
 });
 
-client.on("message", (msg) => {
-  // msg is typed as PingMessage | PongMessage
-  if (msg.type === "PING") {
-    // TypeScript narrows to PingMessage
-  }
+client.on(PongMessage, (msg) => {
+  // ✅ msg fully typed with payload: { reply: string }
+  console.log(msg.payload.reply);
 });
 ```
 
 ### With Valibot Schema Inference
 
 ```typescript
-import { createClient } from "@ws-kit/client/valibot";
-import { PingMessage, PongMessage } from "./schemas";
+import * as v from "valibot";
+import { message, wsClient } from "@ws-kit/client/valibot";
 
-const client = createClient({
-  url: "ws://localhost:3000",
-  schemas: [PingMessage, PongMessage],
+const PingMessage = message("PING", { text: v.string() });
+const PongMessage = message("PONG", { reply: v.string() });
+
+const client = wsClient({ url: "ws://localhost:3000" });
+
+client.on(PingMessage, (msg) => {
+  // ✅ msg fully typed with payload: { text: string }
+  console.log(msg.payload.text);
 });
 ```
 
-### Without Validator (Default)
+### Without Validator (Base Client)
 
 ```typescript
 import { createClient } from "@ws-kit/client";
 
 const client = createClient({ url: "ws://localhost:3000" });
-client.on("message", (msg: unknown) => {
-  // msg is typed as unknown; validate manually if needed
+
+// Messages typed as unknown without schema validation
+client.on(unknownSchema, (msg: unknown) => {
+  // Manual validation required
 });
 ```
 

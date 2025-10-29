@@ -5,9 +5,9 @@ The WebSocket client supports flexible token-based authentication with automatic
 ## Quick Start
 
 ```typescript
-import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
+import { wsClient } from "@ws-kit/client/zod"; // ✅ Typed client
 
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: () => localStorage.getItem("access_token"),
@@ -56,7 +56,7 @@ auth?: {
 Append token as URL query parameter.
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: () => "abc123",
@@ -79,7 +79,7 @@ const client = createClient({
 Send token via `Sec-WebSocket-Protocol` header.
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   protocols: "chat-v2", // Your app protocol
   auth: {
@@ -108,7 +108,7 @@ When using `attach: "protocol"` with user protocols, the client merges them inte
 Token protocol added after user protocols:
 
 ```typescript
-createClient({
+wsClient({
   url: "wss://api.example.com",
   protocols: "chat-v2",
   auth: {
@@ -126,7 +126,7 @@ createClient({
 Token protocol added before user protocols (some servers require auth first):
 
 ```typescript
-createClient({
+wsClient({
   url: "wss://api.example.com",
   protocols: "chat-v2",
   auth: {
@@ -154,7 +154,7 @@ The `getToken()` function is called on every connection attempt, enabling automa
 ```typescript
 let currentToken = "initial-token";
 
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: { enabled: true },
   auth: {
@@ -170,7 +170,7 @@ currentToken = "refreshed-token";
 ### Async Token Refresh
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: async () => {
@@ -187,7 +187,7 @@ const client = createClient({
 ### With Token Storage
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: () => {
@@ -248,7 +248,7 @@ The client validates `protocolPrefix` before connecting:
 
 ```typescript
 try {
-  createClient({
+  wsClient({
     url: "wss://api.example.com",
     auth: {
       getToken: () => "token",
@@ -331,13 +331,13 @@ Bun.serve({
 
 ```typescript
 // ✅ Secure
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: { getToken: () => token },
 });
 
 // ❌ Insecure (development only)
-const client = createClient({
+const client = wsClient({
   url: "ws://localhost:3000/ws",
   auth: { getToken: () => token },
 });
@@ -347,7 +347,7 @@ const client = createClient({
 
 ```typescript
 // ✅ Token expires in 15 minutes
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: { enabled: true },
   auth: {
@@ -378,7 +378,7 @@ For custom auth (cookies, headers via proxy):
 
 ```typescript
 // Use wsFactory for custom WebSocket creation
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   wsFactory: (url) => {
     const ws = new WebSocket(url);

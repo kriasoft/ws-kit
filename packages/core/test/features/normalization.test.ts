@@ -12,16 +12,13 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { normalizeInboundMessage } from "../../src/normalize";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
+import { normalizeInboundMessage } from "../../src/normalize.js";
 
 describe("Message Normalization (Security Boundary)", () => {
   describe("Reserved Key Stripping", () => {
     it("should strip clientId from meta before validation", () => {
-      const TestMsg = messageSchema("TEST", { id: z.number() });
+      const TestMsg = message("TEST", { id: z.number() });
 
       // Client attempts to inject clientId
       const malicious = {
@@ -43,7 +40,7 @@ describe("Message Normalization (Security Boundary)", () => {
     });
 
     it("should strip receivedAt from meta before validation", () => {
-      const TestMsg = messageSchema("TEST", { id: z.number() });
+      const TestMsg = message("TEST", { id: z.number() });
 
       // Client attempts to inject receivedAt
       const malicious = {
@@ -65,7 +62,7 @@ describe("Message Normalization (Security Boundary)", () => {
     });
 
     it("should strip multiple reserved keys simultaneously", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       // Client attempts to inject both reserved keys
       const malicious = {
@@ -93,7 +90,7 @@ describe("Message Normalization (Security Boundary)", () => {
 
   describe("Meta Defaulting", () => {
     it("should default missing meta to empty object", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       // Client omits meta entirely
       const message = {
@@ -113,7 +110,7 @@ describe("Message Normalization (Security Boundary)", () => {
     });
 
     it("should replace null meta with empty object", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       // Client sends null meta
       const message = {
@@ -132,7 +129,7 @@ describe("Message Normalization (Security Boundary)", () => {
     });
 
     it("should replace array meta with empty object", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       // Client sends array as meta (invalid structure)
       const message = {
@@ -153,7 +150,7 @@ describe("Message Normalization (Security Boundary)", () => {
 
   describe("Normalization Before Validation Flow", () => {
     it("should normalize THEN validate (correct order)", () => {
-      const TestMsg = messageSchema("TEST", { value: z.string() });
+      const TestMsg = message("TEST", { value: z.string() });
 
       // Message with reserved key and valid data
       const message = {
@@ -172,7 +169,7 @@ describe("Message Normalization (Security Boundary)", () => {
     });
 
     it("should fail validation if reserved key NOT stripped", () => {
-      const TestMsg = messageSchema("TEST");
+      const TestMsg = message("TEST");
 
       // Message with reserved key
       const message = {

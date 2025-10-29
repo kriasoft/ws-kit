@@ -5,8 +5,10 @@
       "name": "ws-kit",
       "devDependencies": {
         "@changesets/cli": "^2.29.7",
+        "@cloudflare/workers-types": "^4.20241218.0",
         "@eslint/js": "^9.38.0",
         "@types/bun": "^1.3.1",
+        "bun-types": "^1.3.1",
         "eslint": "^9.38.0",
         "eslint-config-prettier": "^10.1.8",
         "expect-type": "^1.1.6",
@@ -76,28 +78,21 @@
       "dependencies": {
         "@ws-kit/core": "workspace:*",
       },
+      "devDependencies": {
+        "redis": "^5.9.0",
+      },
       "peerDependencies": {
         "redis": "^5.9.0",
       },
-    },
-    "packages/serve": {
-      "name": "@ws-kit/serve",
-      "version": "0.0.0",
-      "dependencies": {
-        "@ws-kit/core": "workspace:*",
-      },
-      "peerDependencies": {
-        "@ws-kit/bun": "workspace:*",
-      },
-      "optionalPeers": [
-        "@ws-kit/bun",
-      ],
     },
     "packages/valibot": {
       "name": "@ws-kit/valibot",
       "version": "0.0.0",
       "dependencies": {
         "@ws-kit/core": "workspace:*",
+      },
+      "devDependencies": {
+        "valibot": "^1.1.0",
       },
       "peerDependencies": {
         "valibot": ">=1.0.0",
@@ -452,8 +447,6 @@
     "@ws-kit/core": ["@ws-kit/core@workspace:packages/core"],
 
     "@ws-kit/redis-pubsub": ["@ws-kit/redis-pubsub@workspace:packages/redis-pubsub"],
-
-    "@ws-kit/serve": ["@ws-kit/serve@workspace:packages/serve"],
 
     "@ws-kit/valibot": ["@ws-kit/valibot@workspace:packages/valibot"],
 

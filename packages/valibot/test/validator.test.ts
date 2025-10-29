@@ -3,7 +3,12 @@
 
 import { describe, it, expect } from "bun:test";
 import * as v from "valibot";
-import { valibotValidator, createMessageSchema } from "../src/index.js";
+import {
+  valibotValidator,
+  message,
+  createMessage,
+  ErrorMessage,
+} from "../src/index.js";
 import type { MessageSchemaType } from "@ws-kit/core";
 
 describe("@ws-kit/valibot Validator", () => {
@@ -24,28 +29,16 @@ describe("@ws-kit/valibot Validator", () => {
     });
   });
 
-  describe("createMessageSchema(v) factory", () => {
-    it("should create schema factory with messageSchema function", () => {
-      const { messageSchema } = createMessageSchema(v);
-      expect(messageSchema).toBeDefined();
-      expect(typeof messageSchema).toBe("function");
-    });
-
-    it("should return all utilities", () => {
-      const result = createMessageSchema(v);
-      expect(result.messageSchema).toBeDefined();
-      expect(result.MessageMetadataSchema).toBeDefined();
-      expect(result.ErrorCode).toBeDefined();
-      expect(result.ErrorMessage).toBeDefined();
-      expect(result.createMessage).toBeDefined();
+  describe("message() function", () => {
+    it("should be available as named export", () => {
+      expect(message).toBeDefined();
+      expect(typeof message).toBe("function");
     });
   });
 
-  describe("messageSchema() - Type-Only Schemas", () => {
-    const { messageSchema } = createMessageSchema(v);
-
+  describe("message() - Type-Only Schemas", () => {
     it("should create a schema with only type and meta", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
       expect(PingSchema).toBeDefined();
 
       // Should accept messages with type and meta
@@ -57,7 +50,7 @@ describe("@ws-kit/valibot Validator", () => {
     });
 
     it("should validate message type strictly", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       const wrongType = PingSchema.safeParse({
         type: "PONG",
@@ -67,7 +60,7 @@ describe("@ws-kit/valibot Validator", () => {
     });
 
     it("should reject unknown keys", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       const result = PingSchema.safeParse({
         type: "PING",
@@ -78,12 +71,10 @@ describe("@ws-kit/valibot Validator", () => {
     });
   });
 
-  describe("messageSchema() - With Payload", () => {
-    const { messageSchema } = createMessageSchema(v);
-
+  describe("message() - With Payload", () => {
     it("should create schema with payload", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -95,7 +86,7 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should validate payload against schema", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -107,7 +98,7 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should require payload fields when defined", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -122,7 +113,7 @@ describe("@ws-kit/valibot Validator", () => {
         text: v.string(),
         attachments: v.optional(v.array(v.string())),
       });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -133,11 +124,9 @@ describe("@ws-kit/valibot Validator", () => {
     });
   });
 
-  describe("messageSchema() - With Extended Meta", () => {
-    const { messageSchema } = createMessageSchema(v);
-
+  describe("message() - With Extended Meta", () => {
     it("should extend meta with additional fields", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: v.string(),
       });
 
@@ -149,7 +138,7 @@ describe("@ws-kit/valibot Validator", () => {
     });
 
     it("should validate extended meta fields", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: v.string(),
       });
 
@@ -161,7 +150,7 @@ describe("@ws-kit/valibot Validator", () => {
     });
 
     it("should reject unknown meta fields in strict mode", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: v.string(),
       });
 
@@ -177,12 +166,10 @@ describe("@ws-kit/valibot Validator", () => {
     });
   });
 
-  describe("messageSchema() - With Payload and Meta", () => {
-    const { messageSchema } = createMessageSchema(v);
-
+  describe("message() - With Payload and Meta", () => {
     it("should handle both payload and extended meta", () => {
       const RoomChatPayload = v.object({ text: v.string() });
-      const RoomChatSchema = messageSchema("ROOM_CHAT", RoomChatPayload, {
+      const RoomChatSchema = message("ROOM_CHAT", RoomChatPayload, {
         roomId: v.string(),
       });
 
@@ -196,7 +183,7 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should validate both payload and meta", () => {
       const RoomChatPayload = v.object({ text: v.string() });
-      const RoomChatSchema = messageSchema("ROOM_CHAT", RoomChatPayload, {
+      const RoomChatSchema = message("ROOM_CHAT", RoomChatPayload, {
         roomId: v.string(),
       });
 
@@ -219,11 +206,9 @@ describe("@ws-kit/valibot Validator", () => {
   });
 
   describe("createMessage() helper", () => {
-    const { messageSchema, createMessage } = createMessageSchema(v);
-
     it("should create valid message from schema and payload", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
       const result = createMessage(ChatSchema, { text: "Hello" });
 
       expect(result.success).toBe(true);
@@ -235,14 +220,14 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should validate payload in createMessage", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
       const result = createMessage(ChatSchema, { text: 123 } as any);
 
       expect(result.success).toBe(false);
     });
 
     it("should support optional meta in createMessage", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: v.string(),
       });
       const result = createMessage(RoomSchema, undefined, { roomId: "room-1" });
@@ -256,10 +241,9 @@ describe("@ws-kit/valibot Validator", () => {
 
   describe("Validator Adapter Methods", () => {
     const validator = valibotValidator();
-    const { messageSchema } = createMessageSchema(v);
 
     it("should extract message type from schema", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
       const type = validator.getMessageType(
         PingSchema as unknown as MessageSchemaType,
       );
@@ -267,8 +251,8 @@ describe("@ws-kit/valibot Validator", () => {
     });
 
     it("should validate messages with safeParse", () => {
-      const ChatSchema = messageSchema("CHAT", { text: v.string() });
-      const message = {
+      const ChatSchema = message("CHAT", { text: v.string() });
+      const msg = {
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: "test" },
@@ -276,14 +260,14 @@ describe("@ws-kit/valibot Validator", () => {
 
       const result = validator.safeParse(
         ChatSchema as unknown as MessageSchemaType,
-        message,
+        msg,
       );
       expect(result.success).toBe(true);
     });
 
     it("should reject invalid messages with safeParse", () => {
-      const ChatSchema = messageSchema("CHAT", { text: v.string() });
-      const message = {
+      const ChatSchema = message("CHAT", { text: v.string() });
+      const msg = {
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: 123 },
@@ -291,13 +275,13 @@ describe("@ws-kit/valibot Validator", () => {
 
       const result = validator.safeParse(
         ChatSchema as unknown as MessageSchemaType,
-        message,
+        msg,
       );
       expect(result.success).toBe(false);
     });
 
     it("should infer schema type", () => {
-      const ChatSchema = messageSchema("CHAT", { text: v.string() });
+      const ChatSchema = message("CHAT", { text: v.string() });
       const inferred = validator.infer(
         ChatSchema as unknown as MessageSchemaType,
       );
@@ -306,8 +290,6 @@ describe("@ws-kit/valibot Validator", () => {
   });
 
   describe("ErrorMessage schema", () => {
-    const { ErrorMessage } = createMessageSchema(v);
-
     it("should validate error messages", () => {
       const result = v.safeParse(ErrorMessage, {
         type: "ERROR",
@@ -355,11 +337,9 @@ describe("@ws-kit/valibot Validator", () => {
   });
 
   describe("Message metadata", () => {
-    const { messageSchema } = createMessageSchema(v);
-
     it("should accept optional timestamp", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
       const ts = Date.now();
 
       const result = ChatSchema.safeParse({
@@ -375,7 +355,7 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should accept optional correlationId", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -390,7 +370,7 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should allow empty meta object", () => {
       const ChatPayload = v.object({ text: v.string() });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",

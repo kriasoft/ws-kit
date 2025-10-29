@@ -43,7 +43,7 @@ import type {
 ```typescript
 // ✅ Server setup (Zod)
 import { z, message, rpc, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
@@ -169,7 +169,7 @@ These keys are stripped during message normalization before validation (security
 
 **Schema Constraint**: Extended meta schemas MUST NOT define reserved keys (`clientId`, `receivedAt`). Adapters MUST throw an error at schema creation if reserved keys are detected in the extended meta definition (design-time enforcement layer).
 
-**Enforcement**: The `messageSchema()` factory function validates extended meta keys and throws:
+**Enforcement**: The `message()` helper validates extended meta keys and throws:
 
 ```typescript
 throw new Error(

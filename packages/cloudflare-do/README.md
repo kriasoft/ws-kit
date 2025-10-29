@@ -53,13 +53,11 @@ bun add valibot @ws-kit/valibot
 
 ## Quick Start
 
-### Recommended: With @ws-kit/serve
-
-Use the high-level API with `@ws-kit/serve` for the simplest integration:
+Create a Durable Object handler for your WebSocket router:
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
 
 type AppData = { userId?: string };
 
@@ -72,24 +70,7 @@ router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
-export default {
-  fetch(req: Request, state: DurableObjectState, env: Env) {
-    return serve(router, { req, state, env });
-  },
-};
-```
-
-### Basic Setup (Single DO per Resource)
-
-For more control, you can use the lower-level API:
-
-```typescript
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { createRouter } from "@ws-kit/zod";
-
-const router = createRouter();
-
-const handler = createDurableObjectHandler({ router: router });
+const handler = createDurableObjectHandler(router);
 
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -98,35 +79,15 @@ export default {
 };
 ```
 
-### With Zod Validation
+### Advanced Configuration
+
+For custom authentication or options, you can pass them to the handler factory:
 
 ```typescript
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
-import { createRouter, message } from "@ws-kit/zod";
-import { z } from "zod";
+import { createRouter } from "@ws-kit/zod";
 
-// Create router with Zod validator
 const router = createRouter();
-
-// Define message schemas
-const { messageSchema } = message(z);
-const JoinRoomMessage = messageSchema("ROOM:JOIN", { room: z.string() });
-const SendMessageMessage = messageSchema("ROOM:MESSAGE", { text: z.string() });
-
-// Type-safe handlers
-router.on(JoinRoomMessage, (ctx) => {
-  // ctx.payload is { room: string }
-  ctx.ws.subscribe(`room:${ctx.payload.room}`);
-});
-
-router.on(SendMessageMessage, (ctx) => {
-  // Broadcast within this DO instance
-  router.publish(`room:general`, {
-    type: "MESSAGE",
-    user: ctx.ws.data.clientId,
-    text: ctx.payload.text,
-  });
-});
 
 const handler = createDurableObjectHandler({ router: router });
 
@@ -318,11 +279,10 @@ Full TypeScript support with generic `TData` type parameter for custom connectio
 ## Related Packages
 
 - [`@ws-kit/core`](../core/README.md) — Core router and types
-- [`@ws-kit/serve`](../serve/README.md) — Multi-runtime server with `/cloudflare-do` subpath (recommended)
 - [`@ws-kit/zod`](../zod/README.md) — Zod validator adapter
 - [`@ws-kit/valibot`](../valibot/README.md) — Valibot validator adapter
 - [`@ws-kit/client`](../client/README.md) — Browser/Node.js client
-- [`@ws-kit/bun`](../bun/README.md) — Bun adapter (for Bun deployments)
+- [`@ws-kit/bun`](../bun/README.md) — Bun platform adapter
 
 ## License
 

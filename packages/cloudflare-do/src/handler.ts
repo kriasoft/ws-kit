@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { v7 as uuidv7 } from "uuid";
+// @ts-expect-error - uuid types not found by TypeScript, but they work at runtime
+import * as uuid from "uuid";
+const { v7: uuidv7 } = uuid;
 import type {
   WebSocketRouter,
   ServerWebSocket,
   WebSocketData,
 } from "@ws-kit/core";
-import type { DurableObjectHandler, DurableObjectWebSocketData } from "./types";
+import type {
+  DurableObjectHandler,
+  DurableObjectWebSocketData,
+} from "./types.js";
 
 /**
  * Create a Cloudflare Durable Object WebSocket handler.
@@ -137,7 +142,7 @@ export function createDurableObjectHandler<
             console.error("[ws] WebSocket missing clientId in data, closing");
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (server as any).close(1008, "Missing client ID");
-            return;
+            return new Response("Missing client ID", { status: 400 });
           }
           await coreRouter.handleOpen(serverWs);
         } catch (error) {
@@ -178,74 +183,4 @@ export function createDurableObjectHandler<
       }
     },
   };
-}
-
-/**
- * @deprecated Use createDurableObjectHandler with state managed via closure or module-level variables.
- *
- * This function is deprecated because Durable Objects have a different request/response
- * lifecycle than traditional servers. State and env should be managed at the module level
- * or via your authenticate function.
- *
- * **Recommended Pattern** (state via module-level variable):
- * ```typescript
- * let durableState: DurableObjectState;
- *
- * const handler = createDurableObjectHandler(router, {
- *   authenticate: (req) => {
- *     // Access durableState here via closure
- *     return { userId: "123", state: durableState };
- *   },
- * });
- *
- * export default {
- *   fetch(req: Request, state: DurableObjectState, env: Env) {
- *     durableState = state; // Store for handler access
- *     return handler.fetch(req);
- *   },
- * };
- * ```
- *
- * **Alternative Pattern** (state via authenticate):
- * ```typescript
- * export default {
- *   fetch(req: Request, state: DurableObjectState, env: Env) {
- *     const handler = createDurableObjectHandler(router, {
- *       authenticate: async (req) => {
- *         const user = await validateRequest(req);
- *         return { ...user, state };  // Include state in connection data
- *       },
- *     });
- *     return handler.fetch(req);
- *   },
- * };
- * ```
- *
- * Then in handlers:
- * ```typescript
- * router.on(MyMessage, (ctx) => {
- *   const state = ctx.ws.data.state;  // Access via connection data
- * });
- * ```
- */
-export function createDurableObjectHandlerWithState<
-  TData extends WebSocketData = WebSocketData,
->(options: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  router: WebSocketRouter<any, TData>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  state: any; // DurableObjectState (deprecated, use closure instead)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  env?: any; // Env (deprecated, use closure instead)
-  authenticate?: (
-    req: Request,
-  ) => Promise<TData | undefined> | TData | undefined;
-  maxConnections?: number;
-}): DurableObjectHandler {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { state: _state, env: _env, router, ...rest } = options;
-
-  // Ignore state/env since they should be managed via closure or authenticate function
-  // Create the base handler without the deprecated parameters
-  return createDurableObjectHandler(router, rest);
 }

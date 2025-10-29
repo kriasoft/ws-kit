@@ -8,9 +8,19 @@
  * - `createBunAdapter()` factory for PlatformAdapter integration
  * - `BunPubSub` class implementing native server.publish() broadcasting
  * - `createBunHandler()` factory for Bun.serve integration
+ * - `serve()` high-level convenience function for starting a server
  * - Zero-copy message broadcasting and native backpressure handling
  *
- * @example
+ * @example High-level (quick start)
+ * ```typescript
+ * import { serve } from "@ws-kit/bun";
+ * import { createRouter } from "@ws-kit/zod";
+ *
+ * const router = createRouter();
+ * serve(router, { port: 3000 });
+ * ```
+ *
+ * @example Low-level (advanced usage)
  * ```typescript
  * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
  * import { createRouter } from "@ws-kit/zod";
@@ -33,10 +43,11 @@
  * ```
  */
 
-export { createBunAdapter, createBunAdapterWithServer } from "./adapter";
-export { BunPubSub } from "./pubsub";
-export { createBunHandler, createDefaultBunFetch } from "./handler";
-export { toBunServerWebSocket, isBunServerWebSocket } from "./websocket";
+export { createBunAdapter, createBunAdapterWithServer } from "./adapter.js";
+export { BunPubSub } from "./pubsub.js";
+export { createBunHandler, createDefaultBunFetch } from "./handler.js";
+export { toBunServerWebSocket, isBunServerWebSocket } from "./websocket.js";
+export { serve } from "./serve.js";
 
 // Export types
 export type {
@@ -45,4 +56,5 @@ export type {
   BunWebSocketData,
   BunWebSocket,
   BunHandler,
-} from "./types";
+} from "./types.js";
+export type { ServeOptions } from "./serve.js";

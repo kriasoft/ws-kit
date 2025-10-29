@@ -9,9 +9,9 @@ The client automatically reconnects on connection loss with exponential backoff.
 ### Basic Reconnection
 
 ```typescript
-import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
+import { wsClient } from "@ws-kit/client/zod"; // ✅ Typed client
 
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: {
     enabled: true, // default: true
@@ -70,7 +70,7 @@ client.onState((state) => {
 ### Disable Reconnection
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: { enabled: false }, // No auto-reconnect
 });
@@ -86,7 +86,7 @@ client.onState((state) => {
 ### Limited Reconnection Attempts
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: {
     enabled: true,
@@ -381,20 +381,17 @@ Use extended meta for additional message context.
 ### Define Schema with Extended Meta
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
 
 // Required meta field
-const RoomMessage = messageSchema(
+const RoomMessage = message(
   "CHAT",
   { text: z.string() },
   { roomId: z.string() }, // Extended meta
 );
 
 // Optional meta field
-const NotifyMessage = messageSchema(
+const NotifyMessage = message(
   "NOTIFY",
   { text: z.string() },
   { priority: z.enum(["low", "high"]).optional() },

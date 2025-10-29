@@ -48,21 +48,21 @@ export type {
   ValidatorAdapter,
   PlatformAdapter,
   PubSub,
-} from "./types";
+} from "./types.js";
 
 // ============================================================================
 // Error Handling
 // ============================================================================
 
-export { ErrorCode, WebSocketError } from "./error";
-export type { ErrorCodeValue, ErrorPayload, ErrorMessage } from "./error";
+export { ErrorCode, WebSocketError } from "./error.js";
+export type { ErrorCodeValue, ErrorPayload, ErrorMessage } from "./error.js";
 
 // ============================================================================
 // Constants & Defaults
 // ============================================================================
 
-export { RESERVED_META_KEYS, DEFAULT_CONFIG } from "./constants";
-export type { ReservedMetaKey } from "./constants";
+export { RESERVED_META_KEYS, DEFAULT_CONFIG } from "./constants.js";
+export type { ReservedMetaKey } from "./constants.js";
 
 // ============================================================================
 // PubSub Implementation
@@ -82,13 +82,13 @@ export type { ReservedMetaKey } from "./constants";
  *
  * Use platform-specific adapters for production deployments.
  */
-export { MemoryPubSub, publish } from "./pubsub";
+export { MemoryPubSub, publish } from "./pubsub.js";
 
 // ============================================================================
 // Message Normalization & Validation
 // ============================================================================
 
-export { validateMetaSchema, normalizeInboundMessage } from "./normalize";
+export { validateMetaSchema, normalizeInboundMessage } from "./normalize.js";
 
 // ============================================================================
 // Utilities
@@ -120,8 +120,8 @@ export { validateMetaSchema, normalizeInboundMessage } from "./normalize";
 export {
   createThrottledPublish,
   createAdvancedThrottledPublish,
-} from "./throttle";
-export type { ThrottledBroadcastConfig } from "./throttle";
+} from "./throttle.js";
+export type { ThrottledBroadcastConfig } from "./throttle.js";
 
 /**
  * Logger adapter interface for structured logging.
@@ -145,8 +145,8 @@ export type { ThrottledBroadcastConfig } from "./throttle";
  * const router = createRouter({ logger });
  * ```
  */
-export { createLogger, DefaultLoggerAdapter, LOG_CONTEXT } from "./logger";
-export type { LoggerAdapter, LoggerOptions } from "./logger";
+export { createLogger, DefaultLoggerAdapter, LOG_CONTEXT } from "./logger.js";
+export type { LoggerAdapter, LoggerOptions } from "./logger.js";
 
 // ============================================================================
 // Router Implementation
@@ -188,4 +188,4 @@ export type { LoggerAdapter, LoggerOptions } from "./logger";
  * const { fetch, websocket } = createBunHandler(router);
  * ```
  */
-export { WebSocketRouter } from "./router";
+export { WebSocketRouter } from "./router.js";

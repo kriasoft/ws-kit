@@ -15,17 +15,14 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { createClient } from "../../src/index";
-import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createMockWebSocket } from "./helpers";
-
-const { messageSchema } = createMessageSchema(z);
+import { createClient } from "../../src/index.js";
+import type { WebSocketClient } from "../../src/types.js";
+import { z, message } from "@ws-kit/zod";
+import { createMockWebSocket } from "./helpers.js";
 
 // Test schemas
-const TestMsg = messageSchema("TEST", { id: z.number() });
-const OtherMsg = messageSchema("OTHER", { value: z.string() });
+const TestMsg = message("TEST", { id: z.number() });
+const OtherMsg = message("OTHER", { value: z.string() });
 
 describe("Client: Multi-Handler Support", () => {
   let client: WebSocketClient;

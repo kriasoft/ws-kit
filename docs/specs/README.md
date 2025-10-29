@@ -101,9 +101,9 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 | ---------------------- | ------------------------------------------------------------ | --------------------------------------------- |
 | Server (Zod)           | `import { z, message, createRouter } from "@ws-kit/zod"`     | ADR-007, @schema.md#Canonical-Import-Patterns |
 | Server (Valibot)       | `import { z, message, createRouter } from "@ws-kit/valibot"` | ADR-007, @schema.md#Canonical-Import-Patterns |
+| Platform (Bun)         | `import { serve } from "@ws-kit/bun"`                        | ADR-006, @router.md#Basic-Setup               |
 | Utilities (Throttle)   | `import { createThrottledPublish } from "@ws-kit/core"`      | @patterns.md, ADR-010                         |
 | Utilities (Logger)     | `import { createLogger, LOG_CONTEXT } from "@ws-kit/core"`   | @router.md, ADR-011                           |
-| Multi-runtime serving  | `import { serve } from "@ws-kit/serve"`                      | @router.md#Basic-Setup                        |
 | Client (Zod typed)     | `import { wsClient } from "@ws-kit/client/zod"`              | @client.md, ADR-002                           |
 | Client (Valibot typed) | `import { wsClient } from "@ws-kit/client/valibot"`          | @client.md, ADR-002                           |
 | Client (generic)       | `import { wsClient } from "@ws-kit/client"`                  | @client.md                                    |
@@ -142,7 +142,7 @@ ctx = {
 ```typescript
 // 1. Import from single source (export-with-helpers)
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 
 // 2. Define connection data type
 type AppData = { userId?: string };

@@ -32,6 +32,9 @@ export type {
   MessageSchemaType as ZodMessageSchema,
 } from "@ws-kit/zod";
 
+// Re-export schema helpers for convenience
+export { z, message, rpc } from "@ws-kit/zod";
+
 /**
  * Options for send() method with typed meta field inference.
  */
@@ -165,24 +168,4 @@ export interface ZodWebSocketClient
  */
 export function wsClient(opts: ClientOptions): ZodWebSocketClient {
   return createGenericClient(opts) as ZodWebSocketClient;
-}
-
-/**
- * @deprecated Use `wsClient()` instead.
- *
- * The new `wsClient()` name emphasizes that this creates a WebSocket client
- * and is more consistent with the export-with-helpers pattern.
- *
- * ```typescript
- * // ❌ Old way
- * import { createClient } from "@ws-kit/client/zod";
- * const client = createClient({ url: "..." });
- *
- * // ✅ New way
- * import { wsClient } from "@ws-kit/client/zod";
- * const client = wsClient({ url: "..." });
- * ```
- */
-export function createClient(opts: ClientOptions): ZodWebSocketClient {
-  return wsClient(opts);
 }

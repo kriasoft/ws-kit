@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { chatRouter } from "./chat";
 
 // Create a WebSocket router and merge chat routes

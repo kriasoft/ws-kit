@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "bun:test";
-import { scopeToDoName, getShardedDoId, getShardedStub } from "../src/sharding";
+import {
+  scopeToDoName,
+  getShardedDoId,
+  getShardedStub,
+} from "../src/sharding.js";
 
 describe("scopeToDoName", () => {
   it("should compute consistent hash for same scope", () => {

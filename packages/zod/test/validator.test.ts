@@ -2,8 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "bun:test";
-import { z } from "zod";
-import { zodValidator, createMessageSchema } from "../src/index.js";
+import {
+  z,
+  message,
+  zodValidator,
+  createMessage,
+  ErrorMessage,
+  ErrorCode,
+} from "../src/index.js";
 import type { MessageSchemaType } from "@ws-kit/core";
 
 describe("@ws-kit/zod Validator", () => {
@@ -24,28 +30,16 @@ describe("@ws-kit/zod Validator", () => {
     });
   });
 
-  describe("createMessageSchema(z) factory", () => {
-    it("should create schema factory with messageSchema function", () => {
-      const { messageSchema } = createMessageSchema(z);
-      expect(messageSchema).toBeDefined();
-      expect(typeof messageSchema).toBe("function");
-    });
-
-    it("should return all utilities", () => {
-      const result = createMessageSchema(z);
-      expect(result.messageSchema).toBeDefined();
-      expect(result.MessageMetadataSchema).toBeDefined();
-      expect(result.ErrorCode).toBeDefined();
-      expect(result.ErrorMessage).toBeDefined();
-      expect(result.createMessage).toBeDefined();
+  describe("message() function", () => {
+    it("should be available as named export", () => {
+      expect(message).toBeDefined();
+      expect(typeof message).toBe("function");
     });
   });
 
-  describe("messageSchema() - Type-Only Schemas", () => {
-    const { messageSchema } = createMessageSchema(z);
-
+  describe("message() - Type-Only Schemas", () => {
     it("should create a schema with only type and meta", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
       expect(PingSchema).toBeDefined();
 
       // Should accept messages with type and meta
@@ -57,7 +51,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should validate message type strictly", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       const wrongType = PingSchema.safeParse({
         type: "PONG",
@@ -67,7 +61,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should reject unknown keys", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
 
       const result = PingSchema.safeParse({
         type: "PING",
@@ -78,11 +72,9 @@ describe("@ws-kit/zod Validator", () => {
     });
   });
 
-  describe("messageSchema() - With Payload", () => {
-    const { messageSchema } = createMessageSchema(z);
-
+  describe("message() - With Payload", () => {
     it("should create schema with payload", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -93,7 +85,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should validate payload against schema", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -104,7 +96,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should require payload fields when defined", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -119,7 +111,7 @@ describe("@ws-kit/zod Validator", () => {
         text: z.string(),
         attachments: z.array(z.string()).optional(),
       });
-      const ChatSchema = messageSchema("CHAT", ChatPayload);
+      const ChatSchema = message("CHAT", ChatPayload);
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -130,11 +122,9 @@ describe("@ws-kit/zod Validator", () => {
     });
   });
 
-  describe("messageSchema() - With Extended Meta", () => {
-    const { messageSchema } = createMessageSchema(z);
-
+  describe("message() - With Extended Meta", () => {
     it("should extend meta with additional fields", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: z.string(),
       });
 
@@ -146,7 +136,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should validate extended meta fields", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: z.string(),
       });
 
@@ -158,7 +148,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should reject unknown meta fields in strict mode", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: z.string(),
       });
 
@@ -174,11 +164,9 @@ describe("@ws-kit/zod Validator", () => {
     });
   });
 
-  describe("messageSchema() - With Payload and Meta", () => {
-    const { messageSchema } = createMessageSchema(z);
-
+  describe("message() - With Payload and Meta", () => {
     it("should handle both payload and extended meta", () => {
-      const RoomChatSchema = messageSchema(
+      const RoomChatSchema = message(
         "ROOM_CHAT",
         { text: z.string() },
         { roomId: z.string() },
@@ -193,7 +181,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should validate both payload and meta", () => {
-      const RoomChatSchema = messageSchema(
+      const RoomChatSchema = message(
         "ROOM_CHAT",
         { text: z.string() },
         { roomId: z.string() },
@@ -218,10 +206,8 @@ describe("@ws-kit/zod Validator", () => {
   });
 
   describe("createMessage() helper", () => {
-    const { messageSchema, createMessage } = createMessageSchema(z);
-
     it("should create valid message from schema and payload", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
       const result = createMessage(ChatSchema, { text: "Hello" });
 
       expect(result.success).toBe(true);
@@ -232,14 +218,14 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should validate payload in createMessage", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
       const result = createMessage(ChatSchema, { text: 123 } as any);
 
       expect(result.success).toBe(false);
     });
 
     it("should support optional meta in createMessage", () => {
-      const RoomSchema = messageSchema("ROOM", undefined, {
+      const RoomSchema = message("ROOM", undefined, {
         roomId: z.string(),
       });
       const result = createMessage(RoomSchema, undefined, { roomId: "room-1" });
@@ -253,10 +239,9 @@ describe("@ws-kit/zod Validator", () => {
 
   describe("Validator Adapter Methods", () => {
     const validator = zodValidator();
-    const { messageSchema } = createMessageSchema(z);
 
     it("should extract message type from schema", () => {
-      const PingSchema = messageSchema("PING");
+      const PingSchema = message("PING");
       const type = validator.getMessageType(
         PingSchema as unknown as MessageSchemaType,
       );
@@ -264,8 +249,8 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should validate messages with safeParse", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
-      const message = {
+      const ChatSchema = message("CHAT", { text: z.string() });
+      const msg = {
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: "test" },
@@ -273,14 +258,14 @@ describe("@ws-kit/zod Validator", () => {
 
       const result = validator.safeParse(
         ChatSchema as unknown as MessageSchemaType,
-        message,
+        msg,
       );
       expect(result.success).toBe(true);
     });
 
     it("should reject invalid messages with safeParse", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
-      const message = {
+      const ChatSchema = message("CHAT", { text: z.string() });
+      const msg = {
         type: "CHAT",
         meta: { timestamp: Date.now() },
         payload: { text: 123 },
@@ -288,13 +273,13 @@ describe("@ws-kit/zod Validator", () => {
 
       const result = validator.safeParse(
         ChatSchema as unknown as MessageSchemaType,
-        message,
+        msg,
       );
       expect(result.success).toBe(false);
     });
 
     it("should infer schema type", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
       const inferred = validator.infer(
         ChatSchema as unknown as MessageSchemaType,
       );
@@ -303,8 +288,6 @@ describe("@ws-kit/zod Validator", () => {
   });
 
   describe("ErrorMessage schema", () => {
-    const { ErrorMessage, ErrorCode } = createMessageSchema(z);
-
     it("should validate error messages", () => {
       const result = ErrorMessage.safeParse({
         type: "ERROR",
@@ -352,10 +335,8 @@ describe("@ws-kit/zod Validator", () => {
   });
 
   describe("Message metadata", () => {
-    const { messageSchema } = createMessageSchema(z);
-
     it("should accept optional timestamp", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
       const ts = Date.now();
 
       const result = ChatSchema.safeParse({
@@ -370,7 +351,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should accept optional correlationId", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
 
       const result = ChatSchema.safeParse({
         type: "CHAT",
@@ -384,7 +365,7 @@ describe("@ws-kit/zod Validator", () => {
     });
 
     it("should allow empty meta object", () => {
-      const ChatSchema = messageSchema("CHAT", { text: z.string() });
+      const ChatSchema = message("CHAT", { text: z.string() });
 
       const result = ChatSchema.safeParse({
         type: "CHAT",

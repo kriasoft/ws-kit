@@ -13,24 +13,21 @@
  */
 
 import { expectTypeOf, test } from "bun:test";
-import * as v from "valibot";
+import { v, message } from "@ws-kit/valibot";
 import type {
   InferMessage,
   InferPayload,
   InferMeta,
   MessageSchemaType,
 } from "@ws-kit/valibot";
-import { createClient } from "../../src/index.js";
+import { wsClient } from "../../src/index.js";
 import type { ClientOptions, ValibotWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "@ws-kit/valibot";
 
 test("Valibot client: Type inference for message schemas", () => {
-  const { messageSchema } = createMessageSchema(v);
-
   // Define test schemas
-  const HelloMessage = messageSchema("HELLO", { text: v.string() });
-  const GoodbyeMessage = messageSchema("GOODBYE", { reason: v.string() });
-  const PingMessage = messageSchema("PING"); // No payload
+  const HelloMessage = message("HELLO", { text: v.string() });
+  const GoodbyeMessage = message("GOODBYE", { reason: v.string() });
+  const PingMessage = message("PING"); // No payload
 
   // ✅ Assert InferPayload correctly identifies payload types
   expectTypeOf<InferPayload<typeof HelloMessage>>().toEqualTypeOf<{
@@ -55,16 +52,15 @@ test("Valibot client: Type inference for message schemas", () => {
 });
 
 test("Valibot client: ValibotWebSocketClient type shape", () => {
-  const { messageSchema } = createMessageSchema(v);
-  const HelloMessage = messageSchema("HELLO", { text: v.string() });
-  const PongMessage = messageSchema("PONG", { latency: v.number() });
+  const HelloMessage = message("HELLO", { text: v.string() });
+  const PongMessage = message("PONG", { latency: v.number() });
 
   // Create client (type-only, doesn't actually connect)
-  const client = createClient({
+  const client = wsClient({
     url: "wss://example.com",
   }) as ValibotWebSocketClient;
 
-  // ✅ Assert createClient returns ValibotWebSocketClient
+  // ✅ Assert wsClient returns ValibotWebSocketClient
   expectTypeOf(client).toMatchTypeOf<ValibotWebSocketClient>();
 
   // ✅ Assert on() method signature with schema
@@ -86,9 +82,8 @@ test("Valibot client: ValibotWebSocketClient type shape", () => {
 });
 
 test("Valibot client: Discriminated union narrowing", () => {
-  const { messageSchema } = createMessageSchema(v);
-  const PingMessage = messageSchema("PING");
-  const PongMessage = messageSchema("PONG", { latency: v.number() });
+  const PingMessage = message("PING");
+  const PongMessage = message("PONG", { latency: v.number() });
 
   type AllMessages =
     | InferMessage<typeof PingMessage>
@@ -115,9 +110,7 @@ test("Valibot client: Discriminated union narrowing", () => {
 });
 
 test("Valibot client: Complex schema types", () => {
-  const { messageSchema } = createMessageSchema(v);
-
-  const UserMessage = messageSchema("USER", {
+  const UserMessage = message("USER", {
     id: v.number(),
     name: v.string(),
     email: v.string([v.email()]),
@@ -136,12 +129,11 @@ test("Valibot client: Complex schema types", () => {
 });
 
 test("Valibot client: Request/response typing", () => {
-  const { messageSchema } = createMessageSchema(v);
-  const RequestMessage = messageSchema("REQUEST", { query: v.string() });
-  const ResponseMessage = messageSchema("RESPONSE", { result: v.string() });
+  const RequestMessage = message("REQUEST", { query: v.string() });
+  const ResponseMessage = message("RESPONSE", { result: v.string() });
 
   // This is a type-only test, no actual code execution
-  const client = createClient({
+  const client = wsClient({
     url: "wss://example.com",
   }) as ValibotWebSocketClient;
 

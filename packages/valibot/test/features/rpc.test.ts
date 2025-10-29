@@ -13,9 +13,7 @@
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { createMessageSchema } from "../../src/schema";
-
-const { messageSchema, rpc } = createMessageSchema(v);
+import { message, rpc } from "@ws-kit/valibot";
 
 describe("RPC Schema Helper (Valibot)", () => {
   describe("rpc() Creation", () => {
@@ -100,7 +98,7 @@ describe("RPC Schema Helper (Valibot)", () => {
         reply: v.string(),
       });
 
-      const explicitPong = messageSchema("PONG", { reply: v.string() });
+      const explicitPong = message("PONG", { reply: v.string() });
 
       // Should be usable as alternative response schema
       const result = explicitPong.safeParse({
@@ -297,7 +295,7 @@ describe("RPC Schema Helper (Valibot)", () => {
       const rpcMessage = rpc("RPC_MSG", { data: v.string() }, "RPC_REPLY", {
         result: v.string(),
       });
-      const standardMsg = messageSchema("STANDARD", { value: v.number() });
+      const standardMsg = message("STANDARD", { value: v.number() });
 
       // Both should be independently valid
       const rpcResult = rpcMessage.safeParse({

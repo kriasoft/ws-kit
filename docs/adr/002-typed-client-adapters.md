@@ -126,8 +126,8 @@ import { wsClient } from "@ws-kit/client/valibot";
 const client = wsClient({ url: "wss://..." });
 
 // Custom validators (explicit opt-in)
-import { wsClient as createClient } from "@ws-kit/client"; // Can alias if needed
-const client = createClient({ url: "wss://..." });
+import { createClient as wsClient } from "@ws-kit/client"; // Can alias if needed
+const client = wsClient({ url: "wss://..." });
 ```
 
 **Why the rename?**
@@ -135,8 +135,6 @@ const client = createClient({ url: "wss://..." });
 - `wsClient` follows the verb-style naming convention (matches `message()`, `createRouter()`)
 - More consistent with industry patterns (e.g., Hono's `hc.client`)
 - Clearer intent (creates a WebSocket client)
-
-**Backwards Compatibility:** `createClient` remains available (deprecated, will be removed in v2.0).
 
 ## Example: Full Type Inference
 

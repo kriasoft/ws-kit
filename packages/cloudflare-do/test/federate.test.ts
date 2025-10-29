@@ -6,7 +6,7 @@ import {
   federate,
   federateWithErrors,
   federateWithFilter,
-} from "../src/federate";
+} from "../src/federate.js";
 
 describe("federate", () => {
   it("should execute action for each shard", async () => {

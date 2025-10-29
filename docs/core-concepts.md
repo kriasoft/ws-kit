@@ -2,17 +2,17 @@
 
 Understanding these core concepts will help you build robust WebSocket applications with Bun WebSocket Router.
 
-::: tip Factory Pattern Required
-**Required since v0.4.0** to fix discriminated union support. Use `createMessageSchema()` to create schemas:
+::: tip Recommended: Export-with-Helpers Pattern
+Use the modern import pattern for optimal tree-shaking and simplicity:
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { z, message } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
+// Use message() directly - no factory setup needed
+const PingMessage = message("PING", { text: z.string() });
 ```
 
-The old direct `messageSchema` export is deprecated and will be removed in v1.0. See [Message Schemas](./message-schemas.md#factory-pattern-required) for migration details.
+See [Message Schemas](./message-schemas.md) (ADR-007) for details on the export-with-helpers pattern.
 :::
 
 ## Message-Based Architecture
@@ -117,10 +117,14 @@ router.onClose((ctx) => {
 The router provides full type inference from schema definition to handler:
 
 ```typescript
-const UpdateProfileMessage = messageSchema("UPDATE_PROFILE", {
+import { z, message, createRouter } from "@ws-kit/zod";
+
+const UpdateProfileMessage = message("UPDATE_PROFILE", {
   name: z.string(),
   avatar: z.url().optional(),
 });
+
+const router = createRouter();
 
 router.on(UpdateProfileMessage, (ctx) => {
   // TypeScript knows:
@@ -145,15 +149,12 @@ router.on(SomeMessage, (ctx) => {
 
 ### Standard Error Codes
 
-Use the built-in `ErrorCode` enum for consistent error handling:
+Use the built-in `ErrorMessage` and error codes for consistent error handling:
 
 ```typescript
-const { ErrorCode, ErrorMessage } = createMessageSchema(z);
+import { ErrorMessage } from "@ws-kit/zod";
 
-ctx.send(ErrorMessage, {
-  code: ErrorCode.VALIDATION_FAILED,
-  message: "Invalid room ID",
-});
+ctx.error("VALIDATION_ERROR", "Invalid room ID");
 ```
 
 Available error codes:

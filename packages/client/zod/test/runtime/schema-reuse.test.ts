@@ -11,15 +11,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
+import { z, message } from "@ws-kit/zod";
 import type { ZodWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
 
 describe("@ws-kit/client/zod: Integration", () => {
   it("schema creation works correctly", () => {
-    const HelloMessage = messageSchema("HELLO", { text: z.string() });
+    const HelloMessage = message("HELLO", { text: z.string() });
 
     expect(HelloMessage).toBeDefined();
     expect(HelloMessage.shape.type.value).toBe("HELLO");
@@ -28,9 +25,9 @@ describe("@ws-kit/client/zod: Integration", () => {
 
   it("multiple schemas can be created", () => {
     const Messages = {
-      HELLO: messageSchema("HELLO", { text: z.string() }),
-      PING: messageSchema("PING"),
-      PONG: messageSchema("PONG", { latency: z.number() }),
+      HELLO: message("HELLO", { text: z.string() }),
+      PING: message("PING"),
+      PONG: message("PONG", { latency: z.number() }),
     };
 
     expect(Messages.HELLO.shape.type.value).toBe("HELLO");
@@ -39,7 +36,7 @@ describe("@ws-kit/client/zod: Integration", () => {
   });
 
   it("complex schemas with nested types work", () => {
-    const UserMessage = messageSchema("USER", {
+    const UserMessage = message("USER", {
       id: z.number(),
       name: z.string(),
       email: z.string().email(),
@@ -54,7 +51,7 @@ describe("@ws-kit/client/zod: Integration", () => {
   it("schemas can be shared across modules", () => {
     // Simulate server/messages.ts
     const ServerMessages = {
-      NOTIFICATION: messageSchema("NOTIFICATION", {
+      NOTIFICATION: message("NOTIFICATION", {
         title: z.string(),
         body: z.string(),
       }),
@@ -68,8 +65,8 @@ describe("@ws-kit/client/zod: Integration", () => {
 
   it("discriminated union types are preserved", () => {
     const Messages = {
-      SUCCESS: messageSchema("SUCCESS", { result: z.string() }),
-      ERROR: messageSchema("ERROR", { message: z.string() }),
+      SUCCESS: message("SUCCESS", { result: z.string() }),
+      ERROR: message("ERROR", { message: z.string() }),
     };
 
     expect(Messages.SUCCESS.shape.type.value).toBe("SUCCESS");
@@ -77,7 +74,7 @@ describe("@ws-kit/client/zod: Integration", () => {
   });
 
   it("schema payloads can be validated", () => {
-    const UserMessage = messageSchema("USER", {
+    const UserMessage = message("USER", {
       id: z.number(),
       name: z.string(),
     });
@@ -94,7 +91,7 @@ describe("@ws-kit/client/zod: Integration", () => {
   });
 
   it("invalid messages fail validation", () => {
-    const UserMessage = messageSchema("USER", {
+    const UserMessage = message("USER", {
       id: z.number(),
       name: z.string(),
     });

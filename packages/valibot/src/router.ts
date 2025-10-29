@@ -32,14 +32,15 @@ import type {
   AuthHandler,
   CloseHandler,
   ErrorHandler,
+  MessageContext,
   Middleware,
   OpenHandler,
   WebSocketData,
   WebSocketRouterOptions,
 } from "@ws-kit/core";
 
-import valibotValidator from "./validator";
-import type { MessageHandler, MessageSchemaType } from "./types";
+import valibotValidator from "./validator.js";
+import type { MessageHandler, MessageSchemaType } from "./types.js";
 
 /**
  * Type-safe WebSocket router interface with Valibot validation.
@@ -256,10 +257,10 @@ export interface TypedValibotRouter<
 export function createValibotRouter<
   TData extends WebSocketData = WebSocketData,
 >(
-  options?: Omit<WebSocketRouterOptions<TData>, "validator">,
+  options?: Omit<WebSocketRouterOptions<any, TData>, "validator">,
 ): TypedValibotRouter<TData> {
   // Create core router with Valibot validator
-  const coreRouter = new WebSocketRouter<TData>({
+  const coreRouter = new WebSocketRouter<any, TData>({
     ...options,
     validator: valibotValidator(),
   });
@@ -300,7 +301,7 @@ export function createValibotRouter<
     },
 
     // Middleware
-    use(middleware) {
+    use(middleware: any) {
       coreRouter.use(middleware);
       return router;
     },

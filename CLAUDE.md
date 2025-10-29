@@ -22,7 +22,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 - **Composition Over Inheritance**: Single `WebSocketRouter<V>` class, any validator + platform combo works
 - **Message-Based Routing**: Routes by message `type` field to registered handlers
 - **Type Safety**: Full TypeScript inference from schema to handler via generics and overloads
-- **Platform Adapters**: Via `@ws-kit/serve` (`/bun`, `/cloudflare-do`, etc.), more platforms can be added without core changes
+- **Platform Adapters**: `@ws-kit/bun`, `@ws-kit/cloudflare-do`, etc. each with both high-level and low-level APIs
 - **Validator Adapters**: `@ws-kit/zod`, `@ws-kit/valibot`, custom validators welcome via `ValidatorAdapter` interface
 
 ## API Design Principles
@@ -36,7 +36,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 
@@ -127,7 +127,7 @@ Initialize connection data in `serve()`, validate in middleware:
 
 ```typescript
 import { createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string; roles?: string[] };
 const router = createRouter<AppData>();
@@ -161,7 +161,7 @@ Use `rpc()` to bind request and response schemas together for type-safe request-
 
 ```typescript
 import { z, rpc, createRouter } from "@ws-kit/zod";
-import { createClient } from "@ws-kit/client";
+import { wsClient } from "@ws-kit/client/zod";
 
 // Define RPC schema - binds request to response type
 const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
@@ -173,7 +173,7 @@ router.on(Ping, (ctx) => {
 });
 
 // Client side: response schema auto-detected
-const client = createClient({ url: "ws://localhost:3000" });
+const client = wsClient({ url: "ws://localhost:3000" });
 const response = await client.request(Ping, { text: "hello" });
 // response.type === "PONG"
 // response.payload.reply === "Got: hello"

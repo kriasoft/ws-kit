@@ -13,24 +13,21 @@
  */
 
 import { expectTypeOf, test } from "bun:test";
-import { z } from "zod";
+import { z, message } from "@ws-kit/zod";
 import type {
   InferMessage,
   InferPayload,
   InferMeta,
   MessageSchemaType,
 } from "@ws-kit/zod";
-import { createClient } from "../../src/index.js";
+import { wsClient } from "../../src/index.js";
 import type { ClientOptions, ZodWebSocketClient } from "../../src/index.js";
-import { createMessageSchema } from "@ws-kit/zod";
 
 test("Zod client: Type inference for message schemas", () => {
-  const { messageSchema } = createMessageSchema(z);
-
   // Define test schemas
-  const HelloMessage = messageSchema("HELLO", { text: z.string() });
-  const GoodbyeMessage = messageSchema("GOODBYE", { reason: z.string() });
-  const PingMessage = messageSchema("PING"); // No payload
+  const HelloMessage = message("HELLO", { text: z.string() });
+  const GoodbyeMessage = message("GOODBYE", { reason: z.string() });
+  const PingMessage = message("PING"); // No payload
 
   // ✅ Assert InferPayload correctly identifies payload types
   expectTypeOf<InferPayload<typeof HelloMessage>>().toEqualTypeOf<{
@@ -55,12 +52,11 @@ test("Zod client: Type inference for message schemas", () => {
 });
 
 test("Zod client: ZodWebSocketClient type shape", () => {
-  const { messageSchema } = createMessageSchema(z);
-  const HelloMessage = messageSchema("HELLO", { text: z.string() });
-  const PongMessage = messageSchema("PONG", { latency: z.number() });
+  const HelloMessage = message("HELLO", { text: z.string() });
+  const PongMessage = message("PONG", { latency: z.number() });
 
   // Create client (type-only, doesn't actually connect)
-  const client = createClient({
+  const client = wsClient({
     url: "wss://example.com",
   }) as ZodWebSocketClient;
 
@@ -86,9 +82,8 @@ test("Zod client: ZodWebSocketClient type shape", () => {
 });
 
 test("Zod client: Discriminated union narrowing", () => {
-  const { messageSchema } = createMessageSchema(z);
-  const PingMessage = messageSchema("PING");
-  const PongMessage = messageSchema("PONG", { latency: z.number() });
+  const PingMessage = message("PING");
+  const PongMessage = message("PONG", { latency: z.number() });
 
   type AllMessages =
     | InferMessage<typeof PingMessage>
@@ -115,9 +110,7 @@ test("Zod client: Discriminated union narrowing", () => {
 });
 
 test("Zod client: Complex schema types", () => {
-  const { messageSchema } = createMessageSchema(z);
-
-  const UserMessage = messageSchema("USER", {
+  const UserMessage = message("USER", {
     id: z.number(),
     name: z.string(),
     email: z.string().email(),
@@ -136,12 +129,11 @@ test("Zod client: Complex schema types", () => {
 });
 
 test("Zod client: Request/response typing", () => {
-  const { messageSchema } = createMessageSchema(z);
-  const RequestMessage = messageSchema("REQUEST", { query: z.string() });
-  const ResponseMessage = messageSchema("RESPONSE", { result: z.string() });
+  const RequestMessage = message("REQUEST", { query: z.string() });
+  const ResponseMessage = message("RESPONSE", { result: z.string() });
 
   // This is a type-only test, no actual code execution
-  const client = createClient({
+  const client = wsClient({
     url: "wss://example.com",
   }) as ZodWebSocketClient;
 

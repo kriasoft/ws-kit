@@ -14,15 +14,13 @@
 
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { createMessageSchema } from "../../src/schema";
-
-const { messageSchema } = createMessageSchema(v);
+import { message } from "@ws-kit/valibot";
 
 describe("Reserved Key Schema Validation (Valibot)", () => {
   describe("Reserved Key Detection", () => {
     it("should reject schema with clientId in extended meta", () => {
       expect(() => {
-        messageSchema(
+        message(
           "TEST",
           { id: v.number() },
           {
@@ -34,7 +32,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
     it("should reject schema with receivedAt in extended meta", () => {
       expect(() => {
-        messageSchema(
+        message(
           "TEST",
           { id: v.number() },
           {
@@ -46,7 +44,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
     it("should reject schema with multiple reserved keys", () => {
       expect(() => {
-        messageSchema(
+        message(
           "TEST",
           { id: v.number() },
           {
@@ -60,7 +58,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
     it("should accept schema with similar but non-reserved names", () => {
       expect(() => {
-        messageSchema(
+        message(
           "TEST",
           { id: v.number() },
           {
@@ -75,7 +73,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
     it("should accept schema with application-level identity fields", () => {
       expect(() => {
-        messageSchema(
+        message(
           "TEST",
           { text: v.string() },
           {
@@ -89,7 +87,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
     it("should provide clear error message with all reserved keys", () => {
       try {
-        messageSchema("TEST", undefined, {
+        message("TEST", undefined, {
           clientId: v.string(),
         });
         expect.unreachable("Should have thrown");
@@ -113,7 +111,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
       for (const key of reservedKeys) {
         expect(() => {
-          messageSchema("TEST", undefined, {
+          message("TEST", undefined, {
             [key]: v.string(),
           });
         }).toThrow(/Reserved meta keys not allowed/);
@@ -129,7 +127,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
       for (const meta of combinations) {
         expect(() => {
-          messageSchema("TEST", undefined, meta as never);
+          message("TEST", undefined, meta as never);
         }).toThrow(/Reserved meta keys not allowed/);
       }
     });
@@ -137,17 +135,17 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
   describe("Schema Creation Success Cases", () => {
     it("should create schema without extended meta", () => {
-      const schema = messageSchema("TEST");
+      const schema = message("TEST");
       expect(schema).toBeDefined();
     });
 
     it("should create schema with only payload", () => {
-      const schema = messageSchema("TEST", { id: v.number() });
+      const schema = message("TEST", { id: v.number() });
       expect(schema).toBeDefined();
     });
 
     it("should create schema with valid extended meta", () => {
-      const schema = messageSchema(
+      const schema = message(
         "TEST",
         { text: v.string() },
         {
@@ -160,7 +158,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
     });
 
     it("should create complex schema with nested structures", () => {
-      const schema = messageSchema(
+      const schema = message(
         "COMPLEX",
         {
           data: v.object({
@@ -180,7 +178,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
   describe("Error Message Quality", () => {
     it("should provide actionable error message", () => {
       try {
-        messageSchema("TEST", undefined, {
+        message("TEST", undefined, {
           clientId: v.string(),
           userId: v.string(),
         });
@@ -202,7 +200,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
     it("should handle multiple violations in error message", () => {
       try {
-        messageSchema("TEST", undefined, {
+        message("TEST", undefined, {
           clientId: v.string(),
           receivedAt: v.number(),
           userId: v.string(),
@@ -229,7 +227,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
 
       // Design time: Schema creation fails immediately
       expect(() => {
-        messageSchema("TEST", undefined, { clientId: v.string() });
+        message("TEST", undefined, { clientId: v.string() });
       }).toThrow();
 
       // Runtime: If we somehow got a schema with clientId,
@@ -246,7 +244,7 @@ describe("Reserved Key Schema Validation (Valibot)", () => {
       // By throwing at schema creation, we provide clear feedback.
 
       expect(() => {
-        messageSchema("TEST", undefined, {
+        message("TEST", undefined, {
           clientId: v.string(), // Intended as required
         });
       }).toThrow(/Reserved meta keys not allowed/);

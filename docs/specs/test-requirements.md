@@ -142,8 +142,8 @@ Use `expectTypeOf` from `expect-type` for compile-time validation:
 import { expectTypeOf } from "expect-type";
 
 // Test conditional payload typing
-const WithPayload = messageSchema("WITH", { id: z.number() });
-const WithoutPayload = messageSchema("WITHOUT");
+const WithPayload = message("WITH", { id: z.number() });
+const WithoutPayload = message("WITHOUT");
 
 router.on(WithPayload, (ctx) => {
   expectTypeOf(ctx.payload).toEqualTypeOf<{ id: number }>();
@@ -180,8 +180,8 @@ router.on(TestMessage, (ctx) => {
 ## Discriminated Union Testing
 
 ```typescript
-const PingMsg = messageSchema("PING");
-const PongMsg = messageSchema("PONG", { reply: z.string() });
+const PingMsg = message("PING");
+const PongMsg = message("PONG", { reply: z.string() });
 
 // Test discriminated union creation
 const MessageUnion = z.discriminatedUnion("type", [PingMsg, PongMsg]);
@@ -194,12 +194,10 @@ expectTypeOf(MessageUnion.parse({ type: "PING", meta: {} })).toMatchTypeOf<{
 ## Cross-Package Type Compatibility
 
 ```typescript
-// Test factory pattern preserves types across package boundaries
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
+// Test type inference preserves types across package boundaries
+import { z, message } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
-const TestSchema = messageSchema("TEST", { value: z.number() });
+const TestSchema = message("TEST", { value: z.number() });
 
 // Should work in discriminated unions
 const union = z.discriminatedUnion("type", [TestSchema]);
@@ -210,7 +208,7 @@ expectTypeOf(union).toMatchTypeOf<z.ZodDiscriminatedUnion<"type", any>>();
 
 ```typescript
 test("message validation", () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
 
   const valid = TestMsg.safeParse({
     type: "TEST",
@@ -230,7 +228,7 @@ test("message validation", () => {
 });
 
 test("server: inbound normalization strips reserved keys before validation", () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
 
   // Client tries to inject reserved keys
   const malicious = {
@@ -249,7 +247,7 @@ test("server: inbound normalization strips reserved keys before validation", () 
 
 // See @validation.md#Strict-Mode-Enforcement for strict validation requirements
 test("strict schema rejects unknown keys", () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
 
   // Unknown key at root
   expect(
@@ -282,8 +280,8 @@ test("strict schema rejects unknown keys", () => {
 
 // See @validation.md#Strict-Mode-Enforcement for validation behavior table
 test("strict schema rejects unexpected payload", () => {
-  const NoPayloadMsg = messageSchema("NO_PAYLOAD");
-  const WithPayloadMsg = messageSchema("WITH_PAYLOAD", { id: z.number() });
+  const NoPayloadMsg = message("NO_PAYLOAD");
+  const WithPayloadMsg = message("WITH_PAYLOAD", { id: z.number() });
 
   // Schema without payload - must reject if payload key present
   expect(
@@ -329,7 +327,7 @@ test("strict schema rejects unexpected payload", () => {
 });
 
 test("server logic uses ctx.receivedAt, not meta.timestamp", () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const before = Date.now();
 
   router.on(TestMsg, (ctx) => {
@@ -346,7 +344,7 @@ test("server logic uses ctx.receivedAt, not meta.timestamp", () => {
 });
 
 test("publish() never injects clientId", () => {
-  const ChatMsg = messageSchema("CHAT", { text: z.string() });
+  const ChatMsg = message("CHAT", { text: z.string() });
 
   // Without origin
   const msg1 = publish(ws, "room", ChatMsg, { text: "hi" });
@@ -434,7 +432,7 @@ test("client: handler error does not stop remaining handlers", async () => {
 
 test("schema creation rejects reserved meta keys", () => {
   expect(() => {
-    messageSchema(
+    message(
       "TEST",
       { id: z.number() },
       {
@@ -444,7 +442,7 @@ test("schema creation rejects reserved meta keys", () => {
   }).toThrow("Reserved meta keys not allowed in schema: clientId");
 
   expect(() => {
-    messageSchema(
+    message(
       "TEST",
       { id: z.number() },
       {
@@ -455,7 +453,7 @@ test("schema creation rejects reserved meta keys", () => {
 
   // Multiple reserved keys
   expect(() => {
-    messageSchema(
+    message(
       "TEST",
       { id: z.number() },
       {
@@ -581,9 +579,9 @@ test("request() cleans up pending map and cancels timeout on abort", async () =>
 
 test("request() rejects on wrong-type reply with matching correlationId", async () => {
   const client = createClient({ url: "ws://test" });
-  const Hello = messageSchema("HELLO", { name: z.string() });
-  const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
-  const Goodbye = messageSchema("GOODBYE", { message: z.string() });
+  const Hello = message("HELLO", { name: z.string() });
+  const HelloOk = message("HELLO_OK", { text: z.string() });
+  const Goodbye = message("GOODBYE", { message: z.string() });
 
   await client.connect();
 
@@ -607,8 +605,8 @@ test("request() rejects on wrong-type reply with matching correlationId", async 
 
 test("request() rejects on malformed reply with matching correlationId", async () => {
   const client = createClient({ url: "ws://test" });
-  const Hello = messageSchema("HELLO", { name: z.string() });
-  const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+  const Hello = message("HELLO", { name: z.string() });
+  const HelloOk = message("HELLO_OK", { text: z.string() });
 
   await client.connect();
 
@@ -637,8 +635,8 @@ test("request() rejects on malformed reply with matching correlationId", async (
 
 test("request() ignores duplicate replies with same correlationId", async () => {
   const client = createClient({ url: "ws://test" });
-  const Hello = messageSchema("HELLO", { name: z.string() });
-  const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+  const Hello = message("HELLO", { name: z.string() });
+  const HelloOk = message("HELLO_OK", { text: z.string() });
 
   await client.connect();
 
@@ -839,8 +837,8 @@ test("pending request limit enforced before timeout check", async () => {
 
 test("onUnhandled() receives valid messages with no schema handler", async () => {
   const client = createClient({ url: "ws://test" });
-  const TestMsg = messageSchema("TEST", { id: z.number() });
-  const UnknownMsg = messageSchema("UNKNOWN", { value: z.string() });
+  const TestMsg = message("TEST", { id: z.number() });
+  const UnknownMsg = message("UNKNOWN", { value: z.string() });
 
   const handledMessages: any[] = [];
   const unhandledMessages: any[] = [];
@@ -901,7 +899,7 @@ test("onUnhandled() never receives invalid messages", async () => {
 
 test("schema handlers execute before onUnhandled", async () => {
   const client = createClient({ url: "ws://test" });
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
 
   const executionOrder: string[] = [];
 
@@ -1071,7 +1069,7 @@ test("autoConnect does not trigger from closed state after manual close", async 
 
 test("send() with extended meta (required field)", async () => {
   const client = createClient({ url: "ws://test" });
-  const RoomMsg = messageSchema(
+  const RoomMsg = message(
     "CHAT",
     { text: z.string() },
     { roomId: z.string() }, // Required meta field
@@ -1093,7 +1091,7 @@ test("send() with extended meta (required field)", async () => {
 });
 
 test("send() with extended meta type error on missing required field", () => {
-  const RoomMsg = messageSchema(
+  const RoomMsg = message(
     "CHAT",
     { text: z.string() },
     { roomId: z.string() }, // Required
@@ -1104,7 +1102,7 @@ test("send() with extended meta type error on missing required field", () => {
 });
 
 test("send() with optional extended meta", async () => {
-  const OptionalMetaMsg = messageSchema(
+  const OptionalMetaMsg = message(
     "NOTIFY",
     { text: z.string() },
     { priority: z.enum(["low", "high"]).optional() },
@@ -1132,7 +1130,7 @@ test("send() with optional extended meta", async () => {
 // These tests verify client strips reserved/managed keys from OUTBOUND opts.meta
 
 test("client normalization preserves user-provided timestamp", async () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const capturedMessages: any[] = [];
 
   // Mock send to capture message
@@ -1152,7 +1150,7 @@ test("client normalization preserves user-provided timestamp", async () => {
 });
 
 test("client normalization auto-injects timestamp if missing", async () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const capturedMessages: any[] = [];
   const beforeSend = Date.now();
 
@@ -1176,7 +1174,7 @@ test("client normalization auto-injects timestamp if missing", async () => {
 });
 
 test("client normalization strips reserved keys from user meta", async () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const capturedMessages: any[] = [];
 
   const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
@@ -1204,7 +1202,7 @@ test("client normalization strips reserved keys from user meta", async () => {
 });
 
 test("client normalization strips correlationId from user meta", async () => {
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const capturedMessages: any[] = [];
 
   const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
@@ -1232,12 +1230,8 @@ test("client normalization strips correlationId from user meta", async () => {
 });
 
 test("request() with extended meta", async () => {
-  const RoomMsg = messageSchema(
-    "CHAT",
-    { text: z.string() },
-    { roomId: z.string() },
-  );
-  const RoomMsgOk = messageSchema("CHAT_OK", { success: z.boolean() });
+  const RoomMsg = message("CHAT", { text: z.string() }, { roomId: z.string() });
+  const RoomMsgOk = message("CHAT_OK", { success: z.boolean() });
 
   const client = createClient({ url: "ws://test" });
   await client.connect();
@@ -1296,7 +1290,7 @@ test("onError fires for parse failures", async () => {
 
 test("onError fires for validation failures", async () => {
   const client = createClient({ url: "ws://test" });
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const errors: Array<{ error: Error; context: any }> = [];
 
   client.on(TestMsg, (msg) => {});
@@ -1370,14 +1364,12 @@ test("onError does NOT fire for request() rejections", async () => {
 ```typescript
 // Client typed handler inference (Zod)
 test("client: typed handler inference with Zod adapter", () => {
-  import { createClient } from "@ws-kit/client/zod";
-  import { z } from "zod";
-  import { createMessageSchema } from "@ws-kit/zod";
+  import { wsClient } from "@ws-kit/client/zod";
+  import { z, message } from "@ws-kit/zod";
 
-  const { messageSchema } = createMessageSchema(z);
-  const JoinRoomOK = messageSchema("JOIN_ROOM_OK", { roomId: z.string() });
+  const JoinRoomOK = message("JOIN_ROOM_OK", { roomId: z.string() });
 
-  const client = createClient({ url: "ws://test" });
+  const client = wsClient({ url: "ws://test" });
 
   client.on(JoinRoomOK, (msg) => {
     // ✅ Positive: msg fully typed
@@ -1393,7 +1385,7 @@ test("client: typed handler inference with Zod adapter", () => {
 
 // Negative: no payload for no-payload schemas
 test("client: no payload access for no-payload schema", () => {
-  const NoPayload = messageSchema("NO_PAYLOAD");
+  const NoPayload = message("NO_PAYLOAD");
   const client = createClient({ url: "ws://test" });
 
   client.on(NoPayload, (msg) => {
@@ -1407,8 +1399,8 @@ test("client: no payload access for no-payload schema", () => {
 
 // Typed request inference
 test("client: typed request inference", async () => {
-  const RequestMsg = messageSchema("REQ", { id: z.number() });
-  const ReplyMsg = messageSchema("REPLY", { result: z.boolean() });
+  const RequestMsg = message("REQ", { id: z.number() });
+  const ReplyMsg = message("REPLY", { result: z.boolean() });
 
   const client = createClient({ url: "ws://test" });
 
@@ -1425,8 +1417,8 @@ test("client: typed request inference", async () => {
 
 // Payload conditional typing (overloads)
 test("client: send() overloads enforce payload absence", () => {
-  const NoPayload = messageSchema("NO_PAYLOAD");
-  const WithPayload = messageSchema("WITH_PAYLOAD", { id: z.number() });
+  const NoPayload = message("NO_PAYLOAD");
+  const WithPayload = message("WITH_PAYLOAD", { id: z.number() });
 
   const client = createClient({ url: "ws://test" });
 
@@ -1448,13 +1440,13 @@ test("client: send() overloads enforce payload absence", () => {
 
 // Extended meta inference
 test("client: extended meta type enforcement", () => {
-  const RoomMsg = messageSchema(
+  const RoomMsg = message(
     "CHAT",
     { text: z.string() },
     { roomId: z.string() }, // Required meta field
   );
 
-  const OptionalMetaMsg = messageSchema(
+  const OptionalMetaMsg = message(
     "NOTIFY",
     { text: z.string() },
     { priority: z.enum(["low", "high"]).optional() },
@@ -1479,7 +1471,7 @@ test("client: extended meta type enforcement", () => {
 test("client: generic client handlers infer as unknown", () => {
   import { createClient } from "@ws-kit/client"; // Generic client
 
-  const TestMsg = messageSchema("TEST", { id: z.number() });
+  const TestMsg = message("TEST", { id: z.number() });
   const client = createClient({ url: "ws://test" });
 
   client.on(TestMsg, (msg) => {

@@ -26,7 +26,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          key: bun-${{ runner.os }}-${{ matrix.bun-version }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - run: bun test
       - run: bun run tsc --noEmit

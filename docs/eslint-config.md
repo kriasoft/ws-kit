@@ -187,7 +187,7 @@ These imports will pass ESLint:
 ```typescript
 // Zod
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { wsClient } from "@ws-kit/client/zod";
 
 // Valibot

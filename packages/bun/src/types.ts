@@ -11,7 +11,7 @@ import type { WebSocketData } from "@ws-kit/core";
  */
 export interface UpgradeOptions<TData = unknown> {
   /** Bun server instance (required for upgrade) */
-  server: import("bun").Server;
+  server: import("bun").Server<any>;
 
   /** Custom application data attached to the connection */
   data?: TData;
@@ -81,7 +81,7 @@ export interface BunHandler<TData = unknown> {
   /** Fetch handler for HTTP upgrade requests */
   fetch: (
     req: Request,
-    server: import("bun").Server,
+    server: import("bun").Server<any>,
   ) => Response | Promise<Response>;
 
   /** WebSocket handler for Bun.serve */

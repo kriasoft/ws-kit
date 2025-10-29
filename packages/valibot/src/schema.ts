@@ -8,6 +8,7 @@ import type {
   ObjectSchema,
   OptionalSchema,
   StringSchema,
+  // @ts-expect-error - valibot types not found by TypeScript, but they work at runtime
 } from "valibot";
 import { validateMetaSchema } from "@ws-kit/core";
 
@@ -16,10 +17,13 @@ import { validateMetaSchema } from "@ws-kit/core";
  * Wraps Valibot's ObjectSchema to add a safeParse method that normalizes
  * the result format to match Zod's { success, data, issues } structure.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SchemaWithSafeParse<T extends ObjectSchema<any, undefined>> = T & {
   safeParse(data: unknown): {
     success: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     issues: any;
   };
 };
@@ -104,48 +108,10 @@ type MessageWithPayloadAndMetaEntries<
 };
 
 /**
- * Factory function to create messageSchema using the consumer's Valibot instance.
+ * @internal Internal implementation detail.
  *
- * CRITICAL: This factory pattern is required to fix discriminated union support.
- * Without it, the library and consumer use different Valibot instances, causing
- * instanceof checks to fail and discriminatedUnion to throw runtime errors.
- *
- * The factory pattern ensures:
- * - Both library and app use the same Valibot instance (no dual package hazard)
- * - Validation works correctly with proper instanceof checks
- * - Type inference flows through without manual type assertions
- * - Schemas are composable and can be used in unions
- *
- * @param valibot - The Valibot instance from the consuming application
- * @returns Object with messageSchema function and related utilities
- *
- * @example Basic usage:
- * ```typescript
- * import * as v from "valibot";
- * import { createMessageSchema } from "@ws-kit/valibot";
- *
- * const { messageSchema } = createMessageSchema(v);
- * const PingSchema = messageSchema("PING");
- * ```
- *
- * @example Singleton pattern (recommended for apps):
- * ```typescript
- * // schemas/factory.ts
- * export const { messageSchema, createMessage } = createMessageSchema(v);
- *
- * // schemas/messages.ts
- * import { messageSchema } from "./factory";
- * const LoginSchema = messageSchema("LOGIN", { username: v.string() });
- * ```
- *
- * @example With discriminated unions:
- * ```typescript
- * const PingSchema = messageSchema("PING");
- * const PongSchema = messageSchema("PONG");
- *
- * // This now works correctly!
- * const MessageUnion = v.union([PingSchema, PongSchema]);
- * ```
+ * Not part of public API. Use `message()` helper exported from `@ws-kit/zod` or `@ws-kit/valibot` instead.
+ * This function is only exported to support internal module structure. End users should not import this directly.
  */
 export function createMessageSchema(valibot: ValibotLike) {
   // Create base schemas using the provided Valibot instance
@@ -171,6 +137,11 @@ export function createMessageSchema(valibot: ValibotLike) {
    */
   function messageSchema<T extends string>(
     messageType: T,
+  ): SchemaWithSafeParse<ObjectSchema<BaseMessageEntries<T>, undefined>>;
+
+  function messageSchema<T extends string>(
+    messageType: T,
+    payload: undefined,
   ): SchemaWithSafeParse<ObjectSchema<BaseMessageEntries<T>, undefined>>;
 
   function messageSchema<
@@ -273,6 +244,7 @@ export function createMessageSchema(valibot: ValibotLike) {
       meta: metaSchema,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let schema: ObjectSchema<any, undefined>;
 
     if (payload === undefined) {
@@ -305,6 +277,7 @@ export function createMessageSchema(valibot: ValibotLike) {
 
     // Mark schema with validator identity for runtime compatibility checks
     // This allows the router to detect mismatched validators at registration time
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schema as any).__wsKitValidatorId = valibot.constructor;
 
     return schema;
@@ -381,6 +354,7 @@ export function createMessageSchema(valibot: ValibotLike) {
     responseType: ResT,
     responsePayload: ResP,
   ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const requestSchema = messageSchema(
       requestType,
       requestPayload as ReqP,

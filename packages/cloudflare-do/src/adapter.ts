@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { PlatformAdapter, ServerWebSocket } from "@ws-kit/core";
-import { DurablePubSub } from "./pubsub";
+import { DurablePubSub } from "./pubsub.js";
 
 /**
  * Create a Cloudflare Durable Object platform adapter.
@@ -31,9 +31,6 @@ export function createDurableObjectAdapter(): PlatformAdapter {
   const pubsub = new DurablePubSub();
 
   return {
-    // Cloudflare DO WebSocket already matches the core interface
-    getServerWebSocket: undefined,
-
     // Use DurablePubSub for per-instance broadcasting
     pubsub,
 
@@ -59,8 +56,7 @@ export function toDurableObjectServerWebSocket<TData = unknown>(
 ): ServerWebSocket<TData> {
   // Verify the interface at compile time
   // At runtime, this is a no-op—we just return the WebSocket as-is
-  const socket: ServerWebSocket<TData> = ws;
-  return socket;
+  return ws as ServerWebSocket<TData>;
 }
 
 /**

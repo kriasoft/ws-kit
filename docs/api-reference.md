@@ -152,93 +152,49 @@ Bun.serve({
 });
 ```
 
-## createMessageSchema
+## message()
 
-Factory function that creates message schema utilities using your validator instance. **Required since v0.4.0** to fix discriminated union support.
-
-```typescript
-function createMessageSchema(validator: ZodLike | ValibotLike): {
-  messageSchema: MessageSchemaFunction;
-  createMessage: CreateMessageFunction;
-  ErrorMessage: MessageSchema;
-  ErrorCode: Enum;
-  MessageMetadataSchema: Schema;
-};
-```
-
-**Parameters:**
-
-- `validator` - Your Zod (`z`) or Valibot (`v`) instance
-
-**Returns:**
-
-- `messageSchema` - Function to create message schemas
-- `createMessage` - Helper for client-side message creation
-- `ErrorMessage` - Pre-defined error message schema
-- `ErrorCode` - Error code enum/picklist
-- `MessageMetadataSchema` - Base metadata schema
-
-**Example:**
+Create a type-safe WebSocket message schema.
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+function message<TType extends string>(type: TType): MessageSchema<TType>;
 
-const { messageSchema, createMessage, ErrorMessage, ErrorCode } =
-  createMessageSchema(z);
-```
-
-## messageSchema
-
-Function for creating message schemas (obtained from `createMessageSchema`).
-
-### Overloads
-
-```typescript
-// Message without payload
-function messageSchema<TType extends string>(
+function message<TType extends string, TPayload>(
   type: TType,
-): MessageSchema<undefined>;
+  payload: Schema<TPayload>,
+): MessageSchema<TType, TPayload>;
 
-// Message with payload
-function messageSchema<TType extends string, TPayload>(
+function message<TType extends string, TPayload, TMeta>(
   type: TType,
-  schema: Schema<TPayload>,
-): MessageSchema<TPayload>;
-
-// Message with payload and custom metadata
-function messageSchema<TType extends string, TPayload, TMeta>(
-  type: TType,
-  schema: Schema<TPayload>,
-  metaSchema: Schema<TMeta>,
-): MessageSchema<TPayload>;
+  payload: Schema<TPayload>,
+  meta: Schema<TMeta>,
+): MessageSchema<TType, TPayload, TMeta>;
 ```
 
 **Parameters:**
 
 - `type` - Unique message type identifier
-- `schema` - Zod or Valibot schema for payload validation
-- `metaSchema` - Optional schema for custom metadata (third parameter, not wrapped in options)
+- `payload` - Zod or Valibot schema for payload validation (optional)
+- `meta` - Schema for custom metadata fields (optional)
 
 **Returns:** MessageSchema object with type information
 
 **Examples:**
 
 ```typescript
-// First create the factory
-const { messageSchema } = createMessageSchema(z);
+import { z, message, createRouter } from "@ws-kit/zod";
 
-// Simple message
-const PingMessage = messageSchema("PING");
+// Simple message without payload
+const PingMessage = message("PING");
 
 // With payload
-const ChatMessage = messageSchema("CHAT_MESSAGE", { text: z.string() });
+const ChatMessage = message("CHAT_MESSAGE", { text: z.string() });
 
 // With custom metadata
-const TrackedMessage = messageSchema(
+const TrackedMessage = message(
   "TRACKED_ACTION",
   { action: z.string() },
-  { correlationId: z.string() },
+  { roomId: z.string() },
 );
 
 // Works with discriminated unions!
@@ -247,6 +203,12 @@ const MessageUnion = z.discriminatedUnion("type", [
   ChatMessage,
   TrackedMessage,
 ]);
+
+// Use with router
+const router = createRouter();
+router.on(ChatMessage, (ctx) => {
+  console.log(ctx.payload.text); // Fully typed!
+});
 ```
 
 ## MessageContext
@@ -299,17 +261,17 @@ send(message: Message): void
 **Examples:**
 
 ```typescript
-// Using schema
-ctx.send(ErrorMessage, {
-  code: ErrorCode.RESOURCE_NOT_FOUND,
-  message: "User not found",
-});
+import { message, ErrorMessage } from "@ws-kit/zod";
 
-// Using raw message
-ctx.send({
-  type: "PONG",
-  meta: { timestamp: Date.now() },
-});
+// Send a typed message
+const PongMessage = message("PONG", { reply: z.string() });
+ctx.send(PongMessage, { reply: "pong" });
+
+// Send error (type-safe, predefined codes)
+ctx.error("NOT_FOUND", "User not found");
+
+// Send error with details
+ctx.error("VALIDATION_ERROR", "Invalid input", { field: "email" });
 ```
 
 ## Helper Functions

@@ -4,8 +4,11 @@
 import { describe, it, expect } from "bun:test";
 import { expectTypeOf } from "bun:test";
 import type { PlatformAdapter, PubSub } from "@ws-kit/core";
-import { createBunAdapter, createBunAdapterWithServer } from "../src/adapter";
-import { BunPubSub } from "../src/pubsub";
+import {
+  createBunAdapter,
+  createBunAdapterWithServer,
+} from "../src/adapter.js";
+import { BunPubSub } from "../src/pubsub.js";
 
 describe("createBunAdapter", () => {
   it("should return a PlatformAdapter", () => {

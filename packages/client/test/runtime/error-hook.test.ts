@@ -17,10 +17,10 @@
 
 import { beforeEach, describe, expect, it } from "bun:test";
 import { z, message } from "@ws-kit/zod";
-import { StateError } from "../../src/errors";
-import { createClient } from "../../src/index";
-import type { WebSocketClient } from "../../src/types";
-import { createMockWebSocket } from "./helpers";
+import { StateError } from "../../src/errors.js";
+import { createClient } from "../../src/index.js";
+import type { WebSocketClient } from "../../src/types.js";
+import { createMockWebSocket } from "./helpers.js";
 
 const TestMsg = message("TEST", { id: z.number() });
 const Hello = message("HELLO", { name: z.string() });

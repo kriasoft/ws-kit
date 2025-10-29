@@ -32,6 +32,9 @@ export type {
   MessageSchemaType as ValibotMessageSchema,
 } from "@ws-kit/valibot";
 
+// Re-export schema helpers for convenience
+export { v, message, rpc } from "@ws-kit/valibot";
+
 /**
  * Options for send() method with typed meta field inference.
  */
@@ -166,24 +169,4 @@ export interface ValibotWebSocketClient
  */
 export function wsClient(opts: ClientOptions): ValibotWebSocketClient {
   return createGenericClient(opts) as ValibotWebSocketClient;
-}
-
-/**
- * @deprecated Use `wsClient()` instead.
- *
- * The new `wsClient()` name emphasizes that this creates a WebSocket client
- * and is more consistent with the export-with-helpers pattern.
- *
- * ```typescript
- * // ❌ Old way
- * import { createClient } from "@ws-kit/client/valibot";
- * const client = createClient({ url: "..." });
- *
- * // ✅ New way
- * import { wsClient } from "@ws-kit/client/valibot";
- * const client = wsClient({ url: "..." });
- * ```
- */
-export function createClient(opts: ClientOptions): ValibotWebSocketClient {
-  return wsClient(opts);
 }

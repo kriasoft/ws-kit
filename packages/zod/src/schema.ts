@@ -73,48 +73,10 @@ type MessageWithPayloadAndMetaShape<
 };
 
 /**
- * Factory function to create messageSchema using the consumer's Zod instance.
+ * @internal Internal implementation detail.
  *
- * CRITICAL: This factory pattern is required to fix discriminated union support.
- * Without it, the library and consumer use different Zod instances, causing
- * instanceof checks to fail and discriminatedUnion to throw runtime errors.
- *
- * The factory pattern ensures:
- * - Both library and app use the same Zod instance (no dual package hazard)
- * - Discriminated unions work correctly with proper instanceof checks
- * - Type inference flows through without manual type assertions
- * - Schemas are composable and can be used in unions
- *
- * @param zod - The Zod instance from the consuming application
- * @returns Object with messageSchema function and related utilities
- *
- * @example Basic usage:
- * ```typescript
- * import { z } from "zod";
- * import { createMessageSchema } from "@ws-kit/zod";
- *
- * const { messageSchema } = createMessageSchema(z);
- * const PingSchema = messageSchema("PING");
- * ```
- *
- * @example Singleton pattern (recommended for apps):
- * ```typescript
- * // schemas/factory.ts
- * export const { messageSchema, createMessage } = createMessageSchema(z);
- *
- * // schemas/messages.ts
- * import { messageSchema } from "./factory";
- * const LoginSchema = messageSchema("LOGIN", { username: z.string() });
- * ```
- *
- * @example With discriminated unions:
- * ```typescript
- * const PingSchema = messageSchema("PING");
- * const PongSchema = messageSchema("PONG");
- *
- * // This now works correctly!
- * const MessageUnion = z.discriminatedUnion("type", [PingSchema, PongSchema]);
- * ```
+ * Not part of public API. Use `message()` helper exported from `@ws-kit/zod` or `@ws-kit/valibot` instead.
+ * This function is only exported to support internal module structure. End users should not import this directly.
  */
 export function createMessageSchema(zod: ZodLike) {
   // Create base schemas using the provided Zod instance
@@ -282,11 +244,15 @@ export function createMessageSchema(zod: ZodLike) {
     responseType: ResT,
     responsePayload: ResP,
   ) {
-    const requestSchema = messageSchema(
-      requestType,
-      requestPayload as ReqP,
+    const requestSchema = (
+      requestPayload === undefined
+        ? messageSchema(requestType)
+        : messageSchema(requestType, requestPayload as any)
     ) as any;
-    const responseSchema = messageSchema(responseType, responsePayload as ResP);
+    const responseSchema =
+      responsePayload === undefined
+        ? messageSchema(responseType)
+        : messageSchema(responseType, responsePayload as any);
 
     // Attach response schema as non-enumerable property to avoid breaking schema iteration
     Object.defineProperty(requestSchema, "response", {

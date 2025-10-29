@@ -3,7 +3,7 @@
 
 import type { PlatformAdapter } from "@ws-kit/core";
 import type { Server } from "bun";
-import { BunPubSub } from "./pubsub";
+import { BunPubSub } from "./pubsub.js";
 
 /**
  * Create a Bun platform adapter for use with WebSocketRouter.
@@ -29,14 +29,7 @@ import { BunPubSub } from "./pubsub";
  * @returns A PlatformAdapter suitable for use with WebSocketRouter
  */
 export function createBunAdapter(): PlatformAdapter {
-  return {
-    // Bun's ServerWebSocket already matches the core interface,
-    // so no getServerWebSocket wrapper needed
-    getServerWebSocket: undefined,
-
-    // PubSub will be set when the handler is created (server available)
-    pubsub: undefined,
-  };
+  return {};
 }
 
 /**
@@ -58,7 +51,9 @@ export function createBunAdapter(): PlatformAdapter {
  * @param server - Bun Server instance for pub/sub
  * @returns A PlatformAdapter with BunPubSub configured
  */
-export function createBunAdapterWithServer(server: Server): PlatformAdapter {
+export function createBunAdapterWithServer(
+  server: Server<any>,
+): PlatformAdapter {
   return {
     pubsub: new BunPubSub(server),
   };

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import type { ServerWebSocket } from "@ws-kit/core";
 import { z, message, createRouter } from "@ws-kit/zod";
-import { createBunHandler } from "../src/index";
+import { createBunHandler } from "../src/index.js";
 
 describe("@ws-kit/bun integration tests", () => {
   let router: any;

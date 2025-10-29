@@ -4,13 +4,13 @@
 import { describe, it } from "bun:test";
 import { expectTypeOf } from "bun:test";
 import type { PlatformAdapter, PubSub } from "@ws-kit/core";
-import { createDurableObjectAdapter } from "../../src/adapter";
-import { DurablePubSub } from "../../src/pubsub";
-import { createDurableObjectHandler } from "../../src/handler";
+import { createDurableObjectAdapter } from "../../src/adapter.js";
+import { DurablePubSub } from "../../src/pubsub.js";
+import { createDurableObjectHandler } from "../../src/handler.js";
 import type {
   DurableObjectHandler,
   DurableObjectWebSocketData,
-} from "../../src/types";
+} from "../../src/types.js";
 
 describe("@ws-kit/cloudflare-do type tests", () => {
   describe("createDurableObjectAdapter", () => {

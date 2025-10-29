@@ -32,14 +32,15 @@ export {
   createDurableObjectAdapter,
   toDurableObjectServerWebSocket,
   isDurableObjectServerWebSocket,
-} from "./adapter";
-export { DurablePubSub } from "./pubsub";
+} from "./adapter.js";
+export { DurablePubSub } from "./pubsub.js";
+export { createDurableObjectHandler } from "./handler.js";
 export {
-  createDurableObjectHandler,
-  createDurableObjectHandlerWithState,
-} from "./handler";
-export { federate, federateWithErrors, federateWithFilter } from "./federate";
-export { scopeToDoName, getShardedDoId, getShardedStub } from "./sharding";
+  federate,
+  federateWithErrors,
+  federateWithFilter,
+} from "./federate.js";
+export { scopeToDoName, getShardedDoId, getShardedStub } from "./sharding.js";
 
 // Export types
 export type {
@@ -52,4 +53,4 @@ export type {
   DurableObjectNamespace,
   DurableObjectStub,
   DurableObjectEnv,
-} from "./types";
+} from "./types.js";

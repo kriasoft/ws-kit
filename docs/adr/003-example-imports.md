@@ -43,7 +43,7 @@ Use **TypeScript path aliases + Bun path mappings** to resolve `@ws-kit/*` impor
 // examples/quick-start/index.ts
 import { z, message, createRouter } from "@ws-kit/zod";
 import { wsClient } from "@ws-kit/client/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 // All imports resolve to source files via path aliases
 // Same imports work after packages are published to npm

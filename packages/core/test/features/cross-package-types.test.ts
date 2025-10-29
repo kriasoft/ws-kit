@@ -2,19 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
+import { z, message } from "@ws-kit/zod";
 
 describe("Cross-package type safety", () => {
-  const { messageSchema } = createMessageSchema(z);
-
   test("should work with discriminated unions in consuming applications", () => {
     // Simulate cross-package usage patterns that caused issues
-    const PingSchema = messageSchema("PING");
-    const PongSchema = messageSchema("PONG", {
+    const PingSchema = message("PING");
+    const PongSchema = message("PONG", {
       reply: z.string(),
     });
-    const EchoSchema = messageSchema("ECHO", {
+    const EchoSchema = message("ECHO", {
       text: z.string(),
     });
 
@@ -73,7 +70,7 @@ describe("Cross-package type safety", () => {
 
   test("should handle complex payload types without 'as any'", () => {
     // Test that library type definitions work for typical use cases
-    const ComplexSchema = messageSchema("COMPLEX", {
+    const ComplexSchema = message("COMPLEX", {
       user: z.object({
         id: z.string(),
         roles: z.array(z.string()),
@@ -85,7 +82,7 @@ describe("Cross-package type safety", () => {
       timestamp: z.number(),
     });
 
-    const message = {
+    const msg = {
       type: "COMPLEX" as const,
       meta: {},
       payload: {
@@ -102,11 +99,11 @@ describe("Cross-package type safety", () => {
       },
     };
 
-    expect(ComplexSchema.parse(message)).toEqual(message);
+    expect(ComplexSchema.parse(msg)).toEqual(msg);
   });
 
   test("should provide proper intellisense for message creation", () => {
-    const ChatMessage = messageSchema("CHAT", {
+    const ChatMessage = message("CHAT", {
       roomId: z.string(),
       content: z.string(),
       mentions: z.array(z.string()).optional(),

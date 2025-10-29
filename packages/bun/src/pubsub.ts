@@ -34,7 +34,7 @@ import type { Server } from "bun";
  * ```
  */
 export class BunPubSub implements PubSub {
-  constructor(private server: Server) {}
+  constructor(private server: Server<any>) {}
 
   /**
    * Publish a message to a channel.

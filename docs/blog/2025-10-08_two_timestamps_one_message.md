@@ -268,13 +268,10 @@ Why the validation? Without it, a client sending a future timestamp produces **n
 
 ```typescript
 // ✅ SECURE: Broadcasts use server time for persistence, client time for UI
-import { z } from "zod";
-import { WebSocketRouter } from "@ws-kit/core";
-import { createMessageSchema, zodValidator } from "@ws-kit/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 import { publish } from "@ws-kit/zod/publish";
 
-const { messageSchema } = createMessageSchema(z);
-const ChatBroadcast = messageSchema("CHAT_BROADCAST", {
+const ChatBroadcast = message("CHAT_BROADCAST", {
   id: z.string(),
   text: z.string(),
 });
@@ -406,10 +403,14 @@ function normalizeInboundMessage(raw: unknown): unknown {
 When you detect timestamp manipulation, how should you respond?
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-const { messageSchema, ErrorMessage, ErrorCode } = createMessageSchema(z);
+const ErrorMessage = message("ERROR", {
+  code: z.string(),
+  message: z.string(),
+});
+
+const router = createRouter();
 
 router.on(ChatMessage, (ctx) => {
   // Check for obviously suspicious timestamps

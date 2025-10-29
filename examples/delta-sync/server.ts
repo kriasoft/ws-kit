@@ -5,8 +5,8 @@
  * Perfect for collaborative apps where bandwidth matters.
  */
 
-import { createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { createRouter, message } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
 import {
   ParticipantSchema,
   JoinMessage,

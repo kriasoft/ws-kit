@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { ValibotValidatorAdapter } from "./adapter";
+import { ValibotValidatorAdapter } from "./adapter.js";
 import type { ValidatorAdapter } from "@ws-kit/core";
 
 /**
@@ -17,16 +17,12 @@ import type { ValidatorAdapter } from "@ws-kit/core";
  * @example
  * ```typescript
  * // Recommended: Use typed router factory for full type inference
- * import { createRouter, createMessageSchema } from "@ws-kit/valibot";
- * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
- * import * as v from "valibot";
+ * import { v, message, createRouter } from "@ws-kit/valibot";
+ * import { createBunHandler } from "@ws-kit/bun";
  *
- * const { messageSchema } = createMessageSchema(v);
- * const PingSchema = messageSchema("PING", { text: v.string() });
+ * const PingSchema = message("PING", { text: v.string() });
  *
- * const router = createRouter({
- *   platform: createBunAdapter(),
- * });
+ * const router = createRouter();
  *
  * router.on(PingSchema, (ctx) => {
  *   console.log(ctx.payload.text); // ← type is inferred

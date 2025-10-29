@@ -8,10 +8,10 @@ This guide shows you how to build type-safe WebSocket applications with ws-kit. 
 
 ```bash
 # With Zod (recommended)
-bun add @ws-kit/zod @ws-kit/serve
+bun add @ws-kit/zod @ws-kit/bun
 
 # With Valibot (lighter bundles)
-bun add @ws-kit/valibot @ws-kit/serve
+bun add @ws-kit/valibot @ws-kit/bun
 ```
 
 ### Client (Browser)
@@ -60,7 +60,7 @@ Simple and straightforward—no factories, just plain functions.
 ```typescript
 // server.ts
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
 
 type AppData = {

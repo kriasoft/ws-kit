@@ -12,11 +12,8 @@
 
 import type { ServerWebSocket } from "bun";
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { publish } from "../../src/pubsub";
-import { createMessageSchema } from "@ws-kit/zod";
-
-const { messageSchema } = createMessageSchema(z);
+import { z, message } from "@ws-kit/zod";
+import { publish } from "../../src/pubsub.js";
 
 // Mock WebSocket with flexible data structure
 class MockServerWebSocket {
@@ -51,7 +48,7 @@ function castMockWebSocket(
 describe("Publish Origin Option", () => {
   describe("ClientId Never Injected", () => {
     it("should NEVER inject clientId into broadcast meta", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({ clientId: "client-123" });
 
       publish(castMockWebSocket(ws), "room", ChatMsg, { text: "hi" });
@@ -65,7 +62,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should not inject clientId even with custom meta", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({ clientId: "client-456" });
 
       publish(
@@ -82,7 +79,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should not inject clientId with extended meta schema", () => {
-      const RoomMsg = messageSchema(
+      const RoomMsg = message(
         "ROOM",
         { text: z.string() },
         { roomId: z.string() },
@@ -106,7 +103,7 @@ describe("Publish Origin Option", () => {
   describe("Origin Option - Basic Behavior", () => {
     it("should inject senderId from ws.data when origin specified", () => {
       // Schema must define senderId if using origin option
-      const ChatMsg = messageSchema(
+      const ChatMsg = message(
         "CHAT",
         { text: z.string() },
         { senderId: z.string().optional() },
@@ -131,7 +128,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should use custom key parameter for origin injection", () => {
-      const ChatMsg = messageSchema(
+      const ChatMsg = message(
         "CHAT",
         { text: z.string() },
         { authorId: z.string().optional() },
@@ -156,7 +153,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should inject origin with extended meta", () => {
-      const RoomMsg = messageSchema(
+      const RoomMsg = message(
         "ROOM",
         { text: z.string() },
         { roomId: z.string(), senderId: z.unknown().optional() },
@@ -183,7 +180,7 @@ describe("Publish Origin Option", () => {
 
   describe("Origin Option - No-Op Behavior", () => {
     it("should not inject senderId when ws.data[origin] is undefined", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({
         clientId: "client-123",
         // userId missing
@@ -203,7 +200,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should not inject when origin field does not exist", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({
         clientId: "client-123",
         otherField: "value",
@@ -223,7 +220,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should not inject when ws.data[origin] is null", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({
         clientId: "client-123",
         userId: null,
@@ -248,7 +245,7 @@ describe("Publish Origin Option", () => {
         clientId: "client-123",
         userId: "alice",
       });
-      const ChatMsg = messageSchema(
+      const ChatMsg = message(
         "CHAT",
         { text: z.string() },
         { senderId: z.unknown().optional() },
@@ -271,7 +268,7 @@ describe("Publish Origin Option", () => {
         clientId: "client-123",
         numericId: 42,
       });
-      const ChatMsg = messageSchema(
+      const ChatMsg = message(
         "CHAT",
         { text: z.string() },
         { senderId: z.unknown().optional() },
@@ -315,7 +312,7 @@ describe("Publish Origin Option", () => {
 
   describe("Auto-Timestamp Injection", () => {
     it("should always inject timestamp", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({ clientId: "client-123" });
 
       const before = Date.now();
@@ -328,7 +325,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should inject timestamp even when origin is no-op", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({
         clientId: "client-123",
         // userId missing
@@ -348,7 +345,7 @@ describe("Publish Origin Option", () => {
     });
 
     it("should preserve user-provided timestamp if specified", () => {
-      const ChatMsg = messageSchema(
+      const ChatMsg = message(
         "CHAT",
         { text: z.string() },
         { senderId: z.unknown().optional() },
@@ -375,7 +372,7 @@ describe("Publish Origin Option", () => {
 
   describe("Validation Before Broadcast", () => {
     it("should validate message with origin-injected senderId", () => {
-      const ChatMsg = messageSchema(
+      const ChatMsg = message(
         "CHAT",
         { text: z.string() },
         { senderId: z.unknown().optional() },
@@ -399,7 +396,7 @@ describe("Publish Origin Option", () => {
 
     it("should fail validation if origin injection creates invalid message", () => {
       // Schema requires specific meta structure
-      const StrictMsg = messageSchema(
+      const StrictMsg = message(
         "STRICT",
         { text: z.string() },
         {}, // No extended meta defined - strict mode will reject senderId
@@ -425,7 +422,7 @@ describe("Publish Origin Option", () => {
 
   describe("Edge Cases", () => {
     it("should handle empty ws.data gracefully", () => {
-      const ChatMsg = messageSchema("CHAT", { text: z.string() });
+      const ChatMsg = message("CHAT", { text: z.string() });
       const ws = new MockServerWebSocket({ clientId: "client-123" });
 
       publish(

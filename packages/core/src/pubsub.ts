@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "bun";
-import type { PubSub } from "./types";
+import type { PubSub } from "./types.js";
 
 /**
  * In-memory Pub/Sub implementation suitable for testing and single-server deployments.

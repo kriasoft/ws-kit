@@ -253,7 +253,7 @@ Quick example:
 
 ```typescript
 import { describe, it } from "bun:test";
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 import { wsClient } from "@ws-kit/client/zod";
 

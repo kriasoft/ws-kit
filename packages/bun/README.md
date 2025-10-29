@@ -307,15 +307,13 @@ import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
 import { createRouter, message } from "@ws-kit/zod";
 import { z } from "zod";
 
-const { messageSchema } = message(z);
-
 // Message schemas
-const JoinRoomMessage = messageSchema("ROOM:JOIN", { room: z.string() });
-const SendMessageMessage = messageSchema("ROOM:MESSAGE", { text: z.string() });
-const UserListMessage = messageSchema("ROOM:LIST", {
+const JoinRoomMessage = message("ROOM:JOIN", { room: z.string() });
+const SendMessageMessage = message("ROOM:MESSAGE", { text: z.string() });
+const UserListMessage = message("ROOM:LIST", {
   users: z.array(z.string()),
 });
-const BroadcastMessage = messageSchema("ROOM:BROADCAST", {
+const BroadcastMessage = message("ROOM:BROADCAST", {
   user: z.string(),
   text: z.string(),
 });

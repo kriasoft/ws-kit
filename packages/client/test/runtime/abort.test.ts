@@ -15,17 +15,14 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-import { z } from "zod";
-import { StateError } from "../../src/errors";
-import { createClient } from "../../src/index";
-import type { WebSocketClient } from "../../src/types";
-import { createMessageSchema } from "@ws-kit/zod";
-import { createMockWebSocket } from "./helpers";
+import { StateError } from "../../src/errors.js";
+import { createClient } from "../../src/index.js";
+import type { WebSocketClient } from "../../src/types.js";
+import { z, message } from "@ws-kit/zod";
+import { createMockWebSocket } from "./helpers.js";
 
-const { messageSchema } = createMessageSchema(z);
-
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
 
 describe("Client: AbortSignal Support", () => {
   let mockWs: ReturnType<typeof createMockWebSocket>;

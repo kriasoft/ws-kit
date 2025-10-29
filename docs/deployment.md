@@ -41,7 +41,7 @@ The simplest approach uses the platform-specific `serve()` helper:
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import jwt from "jsonwebtoken";
 import { config } from "./config";
 
@@ -121,7 +121,7 @@ Cloudflare Durable Objects provide stateful serverless compute for WebSocket con
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/cloudflare-do";
+import { serve } from "@ws-kit/cloudflare-do";
 import jwt from "jsonwebtoken";
 
 type AppData = {
@@ -307,7 +307,7 @@ router.on(SendMessage, (ctx) => {
 Enable per-message deflate in production:
 
 ```typescript
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 serve(router, {
   port: 3000,
@@ -513,7 +513,7 @@ Before production, test your router under multiple deployment targets. See [Adva
 Quick example with multiple runtimes:
 
 ```typescript
-import { serve } from "@ws-kit/serve";
+import { serve } from "@ws-kit/bun";
 import { describe, it } from "bun:test";
 
 for (const runtime of ["bun", "cloudflare-do"] as const) {
@@ -539,7 +539,7 @@ for (const runtime of ["bun", "cloudflare-do"] as const) {
 Handle shutdown signals and drain connections gracefully:
 
 ```typescript
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 let isShuttingDown = false;
 

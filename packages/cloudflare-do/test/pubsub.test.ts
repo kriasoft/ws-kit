@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "bun:test";
-import { DurablePubSub } from "../src/pubsub";
+import { DurablePubSub } from "../src/pubsub.js";
 
 describe("DurablePubSub", () => {
   it("should create an instance", () => {

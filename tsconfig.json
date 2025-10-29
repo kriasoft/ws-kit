@@ -1,49 +1,13 @@
 {
-  "compilerOptions": {
-    "composite": true,
-
-    // Environment setup & latest features
-    "lib": ["ESNext"],
-    "types": ["bun"],
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "allowJs": false,
-
-    // Module resolution & path aliases
-    "baseUrl": ".",
-    "paths": {
-      "@ws-kit/*": ["packages/*/src"]
-    },
-
-    // Bundler mode
-    "moduleResolution": "bundler",
-    "verbatimModuleSyntax": true,
-    "noEmit": true,
-
-    // Best practices
-    "strict": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "downlevelIteration": true,
-
-    // Some stricter flags (disabled by default)
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
-  },
   "files": [],
   "references": [
-    { "path": "./examples" },
     { "path": "./packages/core" },
-    { "path": "./packages/bun" },
-    { "path": "./packages/zod" },
-    { "path": "./packages/valibot" },
     { "path": "./packages/client" },
     { "path": "./packages/client/zod" },
     { "path": "./packages/client/valibot" },
+    { "path": "./packages/zod" },
+    { "path": "./packages/valibot" },
+    { "path": "./packages/bun" },
     { "path": "./packages/cloudflare-do" },
     { "path": "./packages/redis-pubsub" }
   ]

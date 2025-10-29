@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { BunPubSub } from "../src/pubsub";
+import { BunPubSub } from "../src/pubsub.js";
 
 describe("BunPubSub", () => {
   let mockServer: any;

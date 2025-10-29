@@ -4,8 +4,8 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { expectTypeOf } from "bun:test";
 import type { WebSocketRouter } from "@ws-kit/core";
-import { createBunHandler } from "../src/handler";
-import type { BunHandler } from "../src/types";
+import { createBunHandler } from "../src/handler.js";
+import type { BunHandler } from "../src/types.js";
 
 describe("createBunHandler", () => {
   let mockRouter: any;

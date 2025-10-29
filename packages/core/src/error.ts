@@ -76,16 +76,23 @@ export class WebSocketError extends Error {
     super(message || code);
     this.name = "WebSocketError";
     this.code = code;
-    this.details = details;
+    if (details) {
+      this.details = details;
+    }
   }
 
   /** Convert to error payload for sending to client */
   toPayload(): ErrorPayload {
-    return {
+    const payload: ErrorPayload = {
       code: this.code,
-      message: this.message,
-      details: this.details,
     };
+    if (this.message) {
+      payload.message = this.message;
+    }
+    if (this.details) {
+      payload.details = this.details;
+    }
+    return payload;
   }
 }
 

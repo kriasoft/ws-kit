@@ -23,13 +23,14 @@ Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** va
 ws-kit is organized as a modular monorepo with independent packages:
 
 - **`@ws-kit/core`** — Platform-agnostic router and type system (foundation)
-- **`@ws-kit/serve`** — Multi-runtime server with platform-specific subpaths (`/bun`, `/cloudflare-do`, etc.)
-- **`@ws-kit/zod`** — Zod validator adapter
-- **`@ws-kit/valibot`** — Valibot validator adapter
+- **`@ws-kit/zod`** — Zod validator adapter with `createRouter()` helper
+- **`@ws-kit/valibot`** — Valibot validator adapter with `createRouter()` helper
+- **`@ws-kit/bun`** — Bun platform adapter with `serve()` high-level and `createBunHandler()` low-level
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
 - **`@ws-kit/client`** — Universal browser/Node.js client
 - **`@ws-kit/redis-pubsub`** — Optional Redis PubSub for multi-server scaling
 
-Combine any platform adapter with any validator adapter for your use case.
+Combine any validator adapter with platform-specific packages. Each platform package (e.g., `@ws-kit/bun`) exports both high-level convenience (`serve()`) and low-level APIs (`createBunHandler()`).
 
 ### Key Features
 
@@ -55,15 +56,15 @@ Combine any platform adapter with any validator adapter for your use case.
 
 ## Installation
 
-Choose your validation library:
+Choose your validation library and platform:
 
 ```bash
-# With Zod (recommended for most projects)
-bun add @ws-kit/zod @ws-kit/serve
+# With Zod on Bun (recommended for most projects)
+bun add @ws-kit/zod @ws-kit/bun
 bun add zod bun @types/bun -D
 
-# With Valibot (lighter bundles)
-bun add @ws-kit/valibot @ws-kit/serve
+# With Valibot on Bun (lighter bundles)
+bun add @ws-kit/valibot @ws-kit/bun
 bun add valibot bun @types/bun -D
 ```
 
@@ -73,7 +74,7 @@ The **export-with-helpers pattern** is the first-class way to use ws-kit—no fa
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 // Define message schemas with full type inference
 const PingMessage = message("PING", { text: z.string() });
@@ -99,7 +100,7 @@ serve(router, {
 });
 ```
 
-**That's it!** All tools—validator, router, messages—come from one place. Type-safe from server to client.
+**That's it!** Validator, router, messages, and platform adapter all come from focused packages. Type-safe from server to client.
 
 ### Eliminating Verbose Generics with Declaration Merging
 
@@ -150,11 +151,11 @@ Choose between Zod and Valibot—same API, different trade-offs:
 ```ts
 // Zod - mature ecosystem, familiar method chaining API
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 
 // Valibot - 60-80% smaller bundles, functional composition
 import { v, message, createRouter } from "@ws-kit/valibot";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 ```
 
 ### Quick Comparison
@@ -168,34 +169,54 @@ import { serve } from "@ws-kit/serve/bun";
 
 ## Serving Your Router
 
-Configure how your router runs on your platform. All approaches support authentication, lifecycle hooks, and error handling.
+Each platform adapter exports both high-level convenience and low-level APIs. All approaches support authentication, lifecycle hooks, and error handling.
 
-**TL;DR:** Use platform-specific entrypoints for production (`@ws-kit/serve/bun`, `@ws-kit/serve/cloudflare-do`). They provide correct, runtime-specific options and better errors. The generic `serve(router, { runtime })` is for advanced/test harnesses only. See [Advanced: Multi-Runtime Harness](#advanced-multi-runtime-harness) below.
+### Platform-Specific Adapters (Recommended)
 
-### Platform-Specific Entrypoints (Recommended)
+Use platform-specific imports for production deployments—they provide correct options, type safety, and clear errors:
 
-Use platform-specific imports for production deployments. This is the "one true way"—all adapters work with both Zod and Valibot:
+**High-level (recommended):**
 
 ```ts
-// For Bun:
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
 serve(router, { port: 3000 });
 ```
 
+**Low-level (advanced control):**
+
+```ts
+import { createBunHandler } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter();
+const { fetch, websocket } = createBunHandler(router);
+
+Bun.serve({
+  port: 3000,
+  fetch(req, server) {
+    if (new URL(req.url).pathname === "/ws") {
+      return fetch(req, server);
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+  websocket,
+});
+```
+
 Benefits:
 
-- **Zero detection overhead** — No runtime detection, optimal tree-shaking
-- **Type-safe options** — Platform-specific options are available (e.g., backpressure handling for Bun, bindings for Cloudflare)
+- **Zero runtime detection** — No overhead, optimal tree-shaking
+- **Type-safe options** — Platform-specific settings built-in (e.g., port for Bun)
 - **Clear error messages** — Misconfigurations fail fast with helpful guidance
-- **Deterministic behavior** — No surprises in different environments
+- **Deterministic behavior** — Same behavior across all environments
 
 **For Cloudflare Durable Objects:**
 
 ```ts
-import { serve } from "@ws-kit/serve/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
@@ -211,38 +232,13 @@ export default {
 };
 ```
 
-### Advanced: Multi-Runtime Harness
-
-For tests, integration suites, or code that deploys to multiple runtimes, use the generic `serve()` with explicit runtime selection:
-
-```ts
-import { serve } from "@ws-kit/serve";
-import { createRouter } from "@ws-kit/zod";
-
-const router = createRouter();
-serve(router, {
-  port: 3000,
-  runtime: "bun", // Explicit in production; optional in development
-});
-```
-
-Or set the `WSKIT_RUNTIME` environment variable:
-
-```bash
-WSKIT_RUNTIME=bun node server.js
-```
-
-See [Advanced: Multi-Runtime Harness guide](./docs/guides/advanced-multi-runtime.md) for when to use this approach.
-
-⚠️ **Production Safety:** Always use platform-specific entrypoints in production. Avoid the generic `serve()` with runtime detection in production code—it limits type safety and error clarity.
-
 ### Authentication
 
 Secure your router by validating clients during the WebSocket upgrade. Pass authenticated user data via the `authenticate` hook—all handlers then have type-safe access to this data:
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/serve/bun";
+import { serve } from "@ws-kit/bun";
 import { verifyIdToken } from "./auth"; // Your authentication logic
 
 // Define secured message
