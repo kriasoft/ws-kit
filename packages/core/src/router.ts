@@ -37,6 +37,26 @@ interface HeartbeatState {
 }
 
 /**
+ * Testing utilities for inspecting router internal state.
+ * Used only in test mode for introspection and assertions.
+ */
+interface TestingUtils<TData extends WebSocketData = WebSocketData> {
+  /** Access to message handlers map for inspection */
+  handlers: Map<string, MessageHandlerEntry<TData>>;
+  /** Access to global middleware array for inspection */
+  middleware: Middleware<TData>[];
+  /** Access to per-route middleware map for inspection */
+  routeMiddleware: Map<string, Middleware<TData>[]>;
+  /** Access to heartbeat states for inspection */
+  heartbeatStates: Map<string, HeartbeatState>;
+  /** Access to lifecycle handlers for inspection */
+  openHandlers: OpenHandler<TData>[];
+  closeHandlers: CloseHandler<TData>[];
+  authHandlers: AuthHandler<TData>[];
+  errorHandlers: ErrorHandler<TData>[];
+}
+
+/**
  * Platform-agnostic WebSocket router for type-safe message routing with validation.
  *
  * Routes incoming messages to handlers based on message type, with support for:
@@ -92,6 +112,9 @@ export class WebSocketRouter<
   // Limits
   private readonly maxPayloadBytes: number;
 
+  // Testing utilities (only available when testing mode is enabled)
+  _testing?: TestingUtils<TData>;
+
   constructor(options: WebSocketRouterOptions<V, TData> = {}) {
     this.validator = options.validator;
     // Capture validator identity for runtime compatibility checks
@@ -130,6 +153,21 @@ export class WebSocketRouter<
       if (options.hooks.onClose) this.closeHandlers.push(options.hooks.onClose);
       if (options.hooks.onAuth) this.authHandlers.push(options.hooks.onAuth);
       if (options.hooks.onError) this.errorHandlers.push(options.hooks.onError);
+    }
+
+    // Set up testing utilities if testing mode is enabled
+    // This allows test code to inspect and assert on internal state without reflection
+    if ((options as any).testing === true) {
+      this._testing = {
+        handlers: this.messageHandlers,
+        middleware: this.middlewares,
+        routeMiddleware: this.routeMiddleware,
+        heartbeatStates: this.heartbeatStates,
+        openHandlers: this.openHandlers,
+        closeHandlers: this.closeHandlers,
+        authHandlers: this.authHandlers,
+        errorHandlers: this.errorHandlers,
+      };
     }
   }
 
@@ -373,6 +411,40 @@ export class WebSocketRouter<
     const routeMiddlewareList = this.routeMiddleware.get(messageType) || [];
     routeMiddlewareList.push(middleware);
     this.routeMiddleware.set(messageType, routeMiddlewareList);
+    return this;
+  }
+
+  /**
+   * Clear all registered handlers, middleware, and state.
+   *
+   * Useful for resetting the router in tests without creating a new instance.
+   * Preserves configuration like validator, platform adapter, and limits.
+   * Does NOT reset heartbeat states for active connections.
+   *
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * let router: WebSocketRouter;
+   *
+   * beforeEach(() => {
+   *   if (!router) {
+   *     router = createRouter();
+   *   } else {
+   *     router.reset(); // Reuse same instance, clear state
+   *   }
+   * });
+   * ```
+   */
+  reset(): this {
+    this.messageHandlers.clear();
+    this.middlewares.length = 0;
+    this.routeMiddleware.clear();
+    this.openHandlers.length = 0;
+    this.closeHandlers.length = 0;
+    this.authHandlers.length = 0;
+    this.errorHandlers.length = 0;
+    // NOTE: intentionally preserve heartbeatStates for active connections
     return this;
   }
 
@@ -1094,7 +1166,7 @@ export class WebSocketRouter<
   /**
    * Create a send function for a specific WebSocket connection.
    *
-   * The send function validates messages before sending.
+   * The send function validates messages before sending (unless validate: false).
    */
   private createSendFunction(ws: ServerWebSocket<TData>): SendFunction {
     return (
@@ -1102,7 +1174,7 @@ export class WebSocketRouter<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       payload: any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      meta: any = {},
+      options: any = {},
     ) => {
       try {
         if (!this.validator) {
@@ -1115,16 +1187,27 @@ export class WebSocketRouter<
         // Extract message type from schema
         const messageType = this.validator.getMessageType(schema);
 
+        // Extract validate option and filter it out from meta
+        const shouldValidate = options.validate !== false;
+        const metaOptions = { ...options };
+        delete metaOptions.validate;
+
         // Create message object with required structure
         // NOTE: timestamp auto-generated; clientId is NEVER injected
         const message = {
           type: messageType,
           meta: {
             timestamp: Date.now(),
-            ...meta,
+            ...metaOptions,
           },
           ...(payload !== undefined && { payload }),
         };
+
+        // Skip validation if explicitly disabled (useful for testing)
+        if (!shouldValidate) {
+          ws.send(JSON.stringify(message));
+          return;
+        }
 
         // Validate constructed message
         const validationResult = this.validator.safeParse(schema, message);

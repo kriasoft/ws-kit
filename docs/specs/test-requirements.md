@@ -37,12 +37,102 @@ bun test --watch                   # Watch mode
 Quick navigation for AI tools:
 
 - [#Test-Organization](#test-organization) — Directory structure and running tests
+- [#Router-Testability](#router-testability) — Testing utilities for router state inspection and reset
 - [#Type-Level-Testing](#type-level-testing) — Compile-time validation with expectTypeOf
 - [#Handler-Context-Inference](#handler-context-inference) — Server handler type tests
 - [#Client-Type-Inference](#client-type-inference) — Client handler and request/response tests
 - [#Runtime-Testing](#runtime-testing) — Validation, normalization, and strict schema tests
 - [#Key-Constraints](#key-constraints) — Testing requirements summary
 - **Testing patterns**: See @rules.md for broader testing guidance
+
+## Router Testability
+
+The WebSocketRouter provides three opt-in testing utilities to simplify unit test setup and assertions:
+
+### Testing Mode: Inspect Internal State
+
+Enable testing mode to access internal state without reflection:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter({ testing: true });
+
+const TestMsg = message("TEST", { id: z.number() });
+router.on(TestMsg, (ctx) => {
+  /* handler */
+});
+
+// Inspect handlers, middleware, and lifecycle handlers
+expect(router._testing?.handlers.size).toBe(1);
+expect(router._testing?.middleware.length).toBe(0);
+expect(router._testing?.openHandlers.length).toBe(0);
+```
+
+**When to use**: Unit testing where you need to verify router configuration without executing handlers.
+
+**Convention**: The `_testing` prefix signals "testing internals" (borrowed from Vitest/Preact). Not part of public API.
+
+### Reset Method: Reuse Router Instance
+
+Clear all handlers and middleware without creating a new router instance:
+
+```typescript
+let router: WebSocketRouter;
+
+beforeEach(() => {
+  if (!router) {
+    router = createRouter();
+  } else {
+    router.reset(); // Clear handlers, keep validator config
+  }
+});
+
+test("first test", () => {
+  router.on(Message1, handler1);
+  expect(router.routes().length).toBe(1);
+});
+
+test("second test", () => {
+  router.reset(); // Clean slate
+  router.on(Message2, handler2);
+  expect(router.routes().length).toBe(1); // Only Message2
+});
+```
+
+**What's cleared**: Message handlers, global middleware, per-route middleware, lifecycle handlers.
+
+**What's preserved**: Validator, platform adapter, heartbeat/limit configuration, active connection states.
+
+**Returns**: `this` for method chaining.
+
+### Validation Bypass: Test Edge Cases
+
+Skip message validation for testing without schema:
+
+```typescript
+const router = createRouter({ testing: true });
+
+// Send message without validation (useful for testing error paths)
+let contextSend: SendFunction;
+router.on(TestMsg, (ctx) => {
+  contextSend = ctx.send;
+});
+
+// In test: call send with invalid payload, skip validation
+const mockWs = createMockWebSocket();
+const sendFn = (router as any).createSendFunction(mockWs);
+sendFn(AnySchema, { invalid: "data" }, { validate: false });
+
+// Message sent as-is, no validation error
+expect(mockWs._getMessages().length).toBe(1);
+```
+
+**When to use**: Testing error handling, message processing pipelines, or edge cases that require bypassing validation.
+
+**Default behavior**: Validation is always ON (production safe). Pass `validate: false` explicitly to disable.
+
+**Metadata preservation**: Other metadata (correlationId, custom fields) is preserved when validation is skipped; only the `validate` flag is filtered out.
 
 ## Type-Level Testing
 

@@ -189,6 +189,16 @@ export interface MessageContext<
 }
 
 /**
+ * Options for sending a message.
+ */
+export interface SendOptions {
+  /** Optional metadata to include (timestamp, correlationId, etc.) */
+  [key: string]: unknown;
+  /** Skip validation of the message payload (default: false). Use only in tests. */
+  validate?: boolean;
+}
+
+/**
  * Type-safe send function for sending validated messages to the client.
  *
  * The exact signature depends on the ValidatorAdapter. Generic signature accepts
@@ -197,10 +207,10 @@ export interface MessageContext<
  *
  * @param schema - Message schema for validation
  * @param data - Payload data to send
- * @param meta - Optional metadata to include (timestamp, correlationId, etc.)
+ * @param options - Optional metadata and send options (validate, timestamp, correlationId, etc.)
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type SendFunction = (schema: any, data: any, meta?: any) => void;
+export type SendFunction = (schema: any, data: any, options?: any) => void;
 
 /**
  * Handler for WebSocket open event.

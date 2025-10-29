@@ -447,4 +447,287 @@ describe("WebSocketRouter", () => {
       expect(customRouter).toBeDefined();
     });
   });
+
+  describe("Testability - Testing Mode", () => {
+    it("should expose testing utilities when testing mode is enabled", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      expect(testingRouter._testing).toBeDefined();
+      expect(testingRouter._testing?.handlers).toBeDefined();
+      expect(testingRouter._testing?.middleware).toBeDefined();
+      expect(testingRouter._testing?.routeMiddleware).toBeDefined();
+      expect(testingRouter._testing?.heartbeatStates).toBeDefined();
+    });
+
+    it("should not expose testing utilities when testing mode is disabled", () => {
+      const normalRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: false,
+      } as any);
+
+      expect(normalRouter._testing).toBeUndefined();
+    });
+
+    it("should allow inspecting handlers via _testing", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const schema = { type: "TEST_MESSAGE" } as MessageSchemaType;
+      const handler = () => {
+        /* no-op */
+      };
+
+      testingRouter.on(schema, handler);
+
+      expect(testingRouter._testing?.handlers.size).toBe(1);
+      expect(testingRouter._testing?.handlers.has("TEST_MESSAGE")).toBe(true);
+    });
+
+    it("should allow inspecting middleware via _testing", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const middleware = (ctx: any, next: any) => next();
+      testingRouter.use(middleware);
+
+      expect(testingRouter._testing?.middleware.length).toBe(1);
+      expect(testingRouter._testing?.middleware[0]).toBe(middleware);
+    });
+
+    it("should allow inspecting lifecycle handlers via _testing", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const openHandler = () => {
+        /* no-op */
+      };
+      const closeHandler = () => {
+        /* no-op */
+      };
+
+      testingRouter.onOpen(openHandler).onClose(closeHandler);
+
+      expect(testingRouter._testing?.openHandlers.length).toBe(1);
+      expect(testingRouter._testing?.closeHandlers.length).toBe(1);
+      expect(testingRouter._testing?.openHandlers[0]).toBe(openHandler);
+      expect(testingRouter._testing?.closeHandlers[0]).toBe(closeHandler);
+    });
+  });
+
+  describe("Testability - Reset Method", () => {
+    it("should clear all handlers when reset is called", () => {
+      const schema = { type: "TEST_MESSAGE" } as MessageSchemaType;
+      const handler = () => {
+        /* no-op */
+      };
+
+      router.on(schema, handler);
+      expect(router.routes().length).toBe(1);
+
+      router.reset();
+      expect(router.routes().length).toBe(0);
+    });
+
+    it("should clear all middleware when reset is called", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const middleware1 = (_ctx: any, next: any) => next();
+      const middleware2 = (_ctx: any, next: any) => next();
+      testingRouter.use(middleware1);
+      testingRouter.use(middleware2);
+      expect(testingRouter._testing?.middleware.length).toBe(2);
+
+      testingRouter.reset();
+      expect(testingRouter._testing?.middleware.length).toBe(0);
+    });
+
+    it("should clear per-route middleware when reset is called", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const schema = { type: "TEST_MESSAGE" } as MessageSchemaType;
+      const middleware = (_ctx: any, next: any) => next();
+      testingRouter.use(schema, middleware);
+      expect(testingRouter._testing?.routeMiddleware.size).toBe(1);
+
+      testingRouter.reset();
+      expect(testingRouter._testing?.routeMiddleware.size).toBe(0);
+    });
+
+    it("should clear lifecycle handlers when reset is called", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const openHandler = () => {
+        /* no-op */
+      };
+      const closeHandler = () => {
+        /* no-op */
+      };
+      testingRouter.onOpen(openHandler);
+      testingRouter.onClose(closeHandler);
+      expect(testingRouter._testing?.openHandlers.length).toBe(1);
+      expect(testingRouter._testing?.closeHandlers.length).toBe(1);
+
+      testingRouter.reset();
+      expect(testingRouter._testing?.openHandlers.length).toBe(0);
+      expect(testingRouter._testing?.closeHandlers.length).toBe(0);
+    });
+
+    it("should support method chaining with reset", () => {
+      const result = router.reset();
+      expect(result).toBe(router);
+    });
+
+    it("should allow reusing router instance in tests", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const schema1 = { type: "MSG1" } as MessageSchemaType;
+      const schema2 = { type: "MSG2" } as MessageSchemaType;
+      const handler = () => {
+        /* no-op */
+      };
+
+      // First test
+      testingRouter.on(schema1, handler);
+      expect(testingRouter.routes().length).toBe(1);
+      expect(testingRouter._testing?.handlers.size).toBe(1);
+
+      // Reset for second test
+      testingRouter.reset();
+      expect(testingRouter.routes().length).toBe(0);
+      expect(testingRouter._testing?.handlers.size).toBe(0);
+
+      // Second test with different handler
+      testingRouter.on(schema2, handler);
+      expect(testingRouter.routes().length).toBe(1);
+      expect(testingRouter.routes()[0].messageType).toBe("MSG2");
+      expect(testingRouter._testing?.handlers.size).toBe(1);
+    });
+
+    it("should preserve validator config after reset", () => {
+      const testingRouter = new WebSocketRouter({
+        validator: mockValidator,
+        testing: true,
+      } as any);
+
+      const schema = { type: "TEST" } as MessageSchemaType;
+      testingRouter.on(schema, () => {
+        /* no-op */
+      });
+
+      testingRouter.reset();
+
+      // Should still be able to register new handlers with same validator
+      const schema2 = { type: "TEST2" } as MessageSchemaType;
+      expect(() => testingRouter.on(schema2, () => {})).not.toThrow();
+      expect(testingRouter.routes().length).toBe(1);
+    });
+  });
+
+  describe("Testability - Validation Bypass", () => {
+    it("should skip validation when validate: false is passed", () => {
+      const mockWs = createMockWebSocket();
+      const sendFn = (router as any).createSendFunction(mockWs);
+      const schema = { type: "TEST" } as MessageSchemaType;
+
+      // Send with validate: false - should not validate payload structure
+      // Even though payload is invalid per mockValidator, it should still be sent
+      sendFn(schema, { invalid: "payload" }, { validate: false });
+
+      const messages = (mockWs as any)._getMessages();
+      expect(messages.length).toBe(1);
+
+      const parsed = JSON.parse(messages[0]);
+      expect(parsed.type).toBe("TEST");
+      expect(parsed.meta).toBeDefined();
+      expect(parsed.payload).toEqual({ invalid: "payload" });
+    });
+
+    it("should validate by default when validate option is not provided", () => {
+      const mockWs = createMockWebSocket();
+      const sendFn = (router as any).createSendFunction(mockWs);
+      const schema = { type: "TEST" } as MessageSchemaType;
+
+      // Send without validate option (defaults to true)
+      // mockValidator will validate the message structure
+      const originalError = console.error;
+      console.error = () => {
+        // Suppress error logs during test
+      };
+
+      try {
+        sendFn(schema, { data: "value" }, {});
+
+        // mockValidator accepts any structure, so this succeeds
+        // Validation still runs but succeeds
+        const messages = (mockWs as any)._getMessages();
+        expect(messages.length).toBe(1);
+      } finally {
+        console.error = originalError;
+      }
+    });
+
+    it("should preserve metadata when using validate: false", () => {
+      const mockWs = createMockWebSocket();
+      const sendFn = (router as any).createSendFunction(mockWs);
+      const schema = { type: "TEST" } as MessageSchemaType;
+
+      // Send with metadata and validate: false
+      sendFn(schema, { payload: "data" }, {
+        correlationId: "123",
+        validate: false,
+      } as any);
+
+      const messages = (mockWs as any)._getMessages();
+      expect(messages.length).toBe(1);
+
+      const parsed = JSON.parse(messages[0]);
+      expect(parsed.meta.correlationId).toBe("123");
+      expect(parsed.meta.validate).toBeUndefined(); // Should be filtered out
+    });
+
+    it("should filter out validate option from metadata", () => {
+      const mockWs = createMockWebSocket();
+      const sendFn = (router as any).createSendFunction(mockWs);
+      const schema = { type: "TEST" } as MessageSchemaType;
+
+      // Pass validate in options along with other metadata
+      sendFn(
+        schema,
+        { data: "test" },
+        {
+          validate: false,
+          customField: "value",
+        },
+      );
+
+      const messages = (mockWs as any)._getMessages();
+      const parsed = JSON.parse(messages[0]);
+
+      // validate option should be removed from meta
+      expect(parsed.meta.validate).toBeUndefined();
+      // Other metadata should be preserved
+      expect(parsed.meta.customField).toBe("value");
+    });
+  });
 });
