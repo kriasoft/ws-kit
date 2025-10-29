@@ -8,13 +8,13 @@ Universal WebSocket client for browsers and Node.js.
 
 ## What This Package Provides
 
-- **`createClient()`**: Factory for creating universal WebSocket clients
-- **Auto-reconnection**: Exponential backoff with configurable options
-- **Message queueing**: Buffer messages while connecting
-- **Request/response patterns**: Async message request APIs
-- **Authentication helpers**: Built-in token management
-- **Platform-agnostic**: Works in browsers, Node.js, Bun, etc.
-- **No dependencies**: Core package has zero runtime dependencies
+- **`createClient()`**: Universal WebSocket client factory
+- **Auto-reconnection**: Exponential backoff with configurable retry logic
+- **Message buffering**: Queues messages while connecting
+- **Request/response patterns**: Async APIs for paired message exchanges
+- **Token management**: Built-in authentication helpers
+- **Universal runtime support**: Browsers, Node.js, Bun, and more
+- **Zero dependencies**: Core package has no runtime dependencies
 
 ## Optional Validator Integration (Phase 5.5+)
 
@@ -69,8 +69,3 @@ client.on("message", (msg: unknown) => {
 ## Design Philosophy
 
 The core client is validator-agnostic for maximum portability. Optional validator sub-packages enable type-safe message handling by re-using server schemas.
-
-## Implementation Status
-
-Phase 5 (coming soon): Complete universal client with auto-reconnection.
-Phase 5.5+: Optional validator integration sub-packages.

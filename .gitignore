@@ -34,8 +34,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .idea
 
 # VitePress
-docs/.vitepress/dist
-docs/.vitepress/cache
+.vitepress/dist
+.vitepress/cache
 
 # Finder (MacOS) folder config
 .DS_Store

@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "composite": true,
+    "incremental": true,
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,

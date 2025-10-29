@@ -5,19 +5,22 @@ import { defineConfig } from "vitepress";
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
-  base: "/bun-ws-router/",
-  title: "Bun WebSocket Router",
+  base: "/ws-kit/",
+  title: "WebSocket Kit",
   description:
     "Schema-first WebSocket message router for Bun with TypeScript validation",
   lang: "en-US",
   lastUpdated: true,
   cleanUrls: true,
+  srcDir: "docs",
+
   sitemap: {
-    hostname: "https://kriasoft.com/bun-ws-router/",
+    hostname: "https://kriasoft.com/ws-kit/",
     lastmodDateOnly: false,
   },
+
   head: [
-    ["link", { rel: "icon", href: "/bun-ws-router/favicon.ico" }],
+    ["link", { rel: "icon", href: "/ws-kit/favicon.ico" }],
     ["meta", { name: "theme-color", content: "#3c8772" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:locale", content: "en" }],
@@ -29,15 +32,12 @@ export default defineConfig({
       },
     ],
     ["meta", { property: "og:site_name", content: "Bun WebSocket Router" }],
-    [
-      "meta",
-      { property: "og:url", content: "https://kriasoft.com/bun-ws-router/" },
-    ],
+    ["meta", { property: "og:url", content: "https://kriasoft.com/ws-kit/" }],
     [
       "meta",
       {
         property: "og:image",
-        content: "https://kriasoft.com/bun-ws-router/og-image.webp",
+        content: "https://kriasoft.com/ws-kit/og-image.webp",
       },
     ],
   ],
@@ -53,7 +53,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: "https://github.com/kriasoft/bun-ws-router/edit/main/docs/:path",
+      pattern: "https://github.com/kriasoft/ws-kit/edit/main/docs/:path",
       text: "Edit this page on GitHub",
     },
 
@@ -85,19 +85,19 @@ export default defineConfig({
         items: [
           {
             text: "Specifications",
-            link: "https://github.com/kriasoft/bun-ws-router/tree/main/specs",
+            link: "https://github.com/kriasoft/ws-kit/tree/main/specs",
           },
           {
             text: "Architecture Decisions",
-            link: "https://github.com/kriasoft/bun-ws-router/blob/main/specs/adrs.md",
+            link: "https://github.com/kriasoft/ws-kit/blob/main/specs/adrs.md",
           },
           {
             text: "Contributing",
-            link: "https://github.com/kriasoft/bun-ws-router/blob/main/.github/CONTRIBUTING.md",
+            link: "https://github.com/kriasoft/ws-kit/blob/main/.github/CONTRIBUTING.md",
           },
           {
             text: "Security Policy",
-            link: "https://github.com/kriasoft/bun-ws-router/blob/main/.github/SECURITY.md",
+            link: "https://github.com/kriasoft/ws-kit/blob/main/.github/SECURITY.md",
           },
           {
             text: "Sponsor",
@@ -108,14 +108,18 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/kriasoft/bun-ws-router" },
+      { icon: "github", link: "https://github.com/kriasoft/ws-kit" },
     ],
 
     footer: {
       message:
-        'Released under the <a href="https://github.com/kriasoft/bun-ws-router/blob/main/LICENSE">MIT License</a>.',
+        'Released under the <a href="https://github.com/kriasoft/ws-kit/blob/main/LICENSE">MIT License</a>.',
       copyright:
         'Copyright © 2025-present <a href="https://kriasoft.com" target="_self">Kriasoft</a> · Created by <a href="https://github.com/koistya">Konstantin Tarkus</a>',
     },
+  },
+
+  vite: {
+    publicDir: "../.vitepress/public",
   },
 });

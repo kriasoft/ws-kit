@@ -54,7 +54,10 @@
   "files": [
     "dist"
   ],
-  "dependencies": {},
+  "dependencies": {
+    "@ws-kit/valibot": "workspace:*",
+    "@ws-kit/zod": "workspace:*"
+  },
   "engines": {
     "node": ">=22"
   }

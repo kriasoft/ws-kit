@@ -48,7 +48,7 @@
   ],
   "dependencies": {
     "@ws-kit/core": "workspace:*",
-    "uuid": "^10.0.0"
+    "uuid": "^13.0.0"
   },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4.0.0"

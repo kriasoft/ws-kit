@@ -5,7 +5,7 @@
     "declaration": true,
     "declarationMap": true,
     "allowImportingTsExtensions": false,
-    "moduleResolution": "node",
+    "moduleResolution": "nodenext",
     "outDir": "./dist",
     "rootDir": ".",
     "sourceMap": true,
