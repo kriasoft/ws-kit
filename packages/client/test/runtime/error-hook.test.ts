@@ -248,7 +248,9 @@ describe("Client: onError Hook", () => {
       });
 
       // Not connected, queue disabled
-      const promise = offlineClient.request(Hello, { name: "test" }, HelloOk);
+      const promise = offlineClient.request(Hello, { name: "test" }, HelloOk, {
+        timeoutMs: 1000,
+      });
 
       try {
         await promise;

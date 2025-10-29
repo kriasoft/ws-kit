@@ -155,6 +155,58 @@ serve(router, {
 });
 ```
 
+### Request-Response Pattern (RPC)
+
+Use `rpc()` to bind request and response schemas together for type-safe request-response pairs:
+
+```typescript
+import { z, rpc, createRouter } from "@ws-kit/zod";
+import { createClient } from "@ws-kit/client";
+
+// Define RPC schema - binds request to response type
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+
+// Server side: handler works like any other message
+const router = createRouter();
+router.on(Ping, (ctx) => {
+  ctx.reply({ reply: `Got: ${ctx.payload.text}` });
+});
+
+// Client side: response schema auto-detected
+const client = createClient({ url: "ws://localhost:3000" });
+const response = await client.request(Ping, { text: "hello" });
+// response.type === "PONG"
+// response.payload.reply === "Got: hello"
+```
+
+**Benefits:**
+
+- No schema repetition at call sites
+- Response type automatically inferred
+- Works seamlessly with router handlers (no special syntax needed)
+- Backward compatible with explicit response schemas
+
+**Advanced usage:**
+
+```typescript
+// RPC with no payloads
+const Heartbeat = rpc("HEARTBEAT", undefined, "HEARTBEAT_ACK", undefined);
+
+// RPC with complex types
+const CreateUser = rpc(
+  "CREATE_USER",
+  { user: z.object({ name: z.string(), email: z.string().email() }) },
+  "USER_CREATED",
+  { userId: z.string(), user: z.object({ /* ... */ }) },
+);
+
+// Client request with options (response still auto-detected)
+const result = await client.request(CreateUser, { user: {...} }, {
+  timeoutMs: 5000,
+  correlationId: "req-123",
+});
+```
+
 ### Broadcasting
 
 Type-safe publish/subscribe for rooms, channels, or topics:

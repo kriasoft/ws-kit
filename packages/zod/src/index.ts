@@ -39,10 +39,10 @@ import { createMessageSchema } from "./schema";
 
 // Create message helper using canonical Zod instance
 // (This creates the messageSchema function without requiring a factory)
-const { messageSchema: message, ErrorMessage } = createMessageSchema(z);
+const { messageSchema: message, ErrorMessage, rpc } = createMessageSchema(z);
 
 // Main exports: export-with-helpers pattern
-export { z, message, ErrorMessage };
+export { z, message, rpc, ErrorMessage };
 export { default as zodValidator } from "./validator";
 export { createZodRouter as createRouter } from "./router";
 

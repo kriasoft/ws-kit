@@ -230,7 +230,19 @@ payload: InferPayload<S>,
 opts?: { meta?: InferMeta<S>; correlationId?: string },
 ): boolean;
 
-// Request/response with correlationId (RPC-style)
+// Request/response with auto-detected response schema (RPC helper)
+// Bind request and response schemas with rpc() for cleaner client calls
+// Usage: const Ping = rpc("PING", {...}, "PONG", {...});
+//        await client.request(Ping, {...}, opts?);
+// Returns Promise resolving to fully typed reply message
+// Rejects on timeout, validation error, connection close, or server error
+request<S extends AnyMessageSchema & { response: AnyMessageSchema }>(
+schema: S,
+payload: InferPayload<S>,
+opts?: { timeoutMs?: number; meta?: InferMeta<S>; correlationId?: string; signal?: AbortSignal }, // timeoutMs default: 30000
+): Promise<InferMessage<S["response"]>>;
+
+// Request/response with explicit reply schema (backward compatible)
 // Note: opts.meta applies to the outbound request, not the reply
 // Returns Promise resolving to fully typed reply message
 // Rejects on timeout, validation error, connection close, or server error

@@ -340,6 +340,23 @@ export const JoinRoom = message("JOIN_ROOM", {
 
 Simple, no factories, one canonical import source.
 
+### Request-Response Pairs with `rpc()`
+
+For request-response patterns, use `rpc()` to bind request and response schemas together—no schema repetition at call sites:
+
+```ts
+import { z, rpc } from "@ws-kit/zod";
+
+// Define RPC schema - binds request to response type
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+
+// With Valibot
+import { v, rpc } from "@ws-kit/valibot";
+const Query = rpc("QUERY", { id: v.string() }, "RESULT", { data: v.string() });
+```
+
+The client auto-detects the response type from the RPC schema, eliminating the need to specify it separately on every request.
+
 ## Handlers and Routing
 
 Register handlers with full type safety. The context includes schema-typed payloads, connection data, and lifecycle hooks:
@@ -649,11 +666,12 @@ Where `chatRoutes` and `notificationRoutes` are separate routers created with `c
 Type-safe browser WebSocket client with automatic reconnection, authentication, and request/response patterns—using the same validator and message definitions:
 
 ```ts
-import { message, wsClient } from "@ws-kit/client/zod";
+import { rpc, message, wsClient } from "@ws-kit/client/zod";
 
-// Use the same message definitions from your server
-const Hello = message("HELLO", { name: z.string() });
-const HelloOk = message("HELLO_OK", { text: z.string() });
+// Define message schemas
+const Hello = rpc("HELLO", { name: z.string() }, "HELLO_OK", {
+  text: z.string(),
+});
 const ServerBroadcast = message("BROADCAST", { data: z.string() });
 
 // Create type-safe client with authentication
@@ -675,13 +693,14 @@ client.on(ServerBroadcast, (msg) => {
   console.log("Server broadcast:", msg.payload.data);
 });
 
-// Request/response pattern with timeout
+// Request/response with auto-detected response schema
 try {
   const reply = await client.request(
-    Hello, // Request schema
-    { name: "Bob" }, // Request payload
-    HelloOk, // Response schema
-    { timeoutMs: 5000 },
+    Hello,
+    { name: "Bob" },
+    {
+      timeoutMs: 5000,
+    },
   );
   // ✅ reply.payload.text is fully typed
   console.log("Server replied:", reply.payload.text);
@@ -691,6 +710,14 @@ try {
 
 // Graceful disconnect
 await client.disconnect();
+```
+
+You can also use explicit response schemas for backward compatibility:
+
+```ts
+const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
+  timeoutMs: 5000,
+});
 ```
 
 **Client Features:**

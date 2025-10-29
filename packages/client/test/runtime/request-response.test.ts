@@ -27,11 +27,17 @@ import type { WebSocketClient } from "../../src/types";
 import { createMessageSchema } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers";
 
-const { messageSchema } = createMessageSchema(z);
+const { messageSchema, rpc } = createMessageSchema(z);
 
 // Test schemas
 const Hello = messageSchema("HELLO", { name: z.string() });
 const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+
+// RPC schemas
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+const Query = rpc("QUERY", { id: z.string() }, "QUERY_RESULT", {
+  data: z.string(),
+});
 
 describe("Client: Request/Response Correlation", () => {
   let client: WebSocketClient;
@@ -234,7 +240,7 @@ describe("Client: Request/Response Correlation", () => {
       { timeoutMs: 1000 },
     );
 
-    await expect(promise).rejects.toThrow(StateError); // Client wraps validation error
+    await expect(promise).rejects.toThrow(ValidationError); // Client throws ValidationError for outbound validation
     await expect(promise).rejects.toMatchObject({
       message: expect.stringContaining("Outbound validation failed"),
     });
@@ -305,5 +311,228 @@ describe("Client: Request/Response Correlation", () => {
     });
 
     // No errors thrown; late reply dropped silently
+  });
+
+  describe("RPC-Style Requests (Auto-Detected Response)", () => {
+    it("sends and receives with auto-detected response schema from rpc()", async () => {
+      await client.connect();
+
+      // RPC-style: response schema auto-detected from Ping
+      const promise = client.request(
+        Ping,
+        { text: "hello" },
+        {
+          timeoutMs: 5000,
+          correlationId: "rpc-1",
+        },
+      );
+
+      // Server sends correct reply
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: "rpc-1" },
+        payload: { reply: "world" },
+      });
+
+      const reply = (await promise) as z.infer<typeof Ping>["response"];
+      expect(reply.type).toBe("PONG");
+      expect(reply.payload.reply).toBe("world");
+    });
+
+    it("works with multiple RPC requests in parallel", async () => {
+      await client.connect();
+
+      // Send two RPC requests
+      const promise1 = client.request(
+        Ping,
+        { text: "first" },
+        {
+          timeoutMs: 5000,
+          correlationId: "rpc-p1",
+        },
+      );
+
+      const promise2 = client.request(
+        Query,
+        { id: "123" },
+        {
+          timeoutMs: 5000,
+          correlationId: "rpc-p2",
+        },
+      );
+
+      // Reply to both in different order
+      simulateReceive({
+        type: "QUERY_RESULT",
+        meta: { correlationId: "rpc-p2" },
+        payload: { data: "result" },
+      });
+
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: "rpc-p1" },
+        payload: { reply: "second" },
+      });
+
+      const [reply1, reply2] = await Promise.all([promise1, promise2]);
+      expect((reply1 as any).type).toBe("PONG");
+      expect((reply2 as any).type).toBe("QUERY_RESULT");
+    });
+
+    it("rejects with ValidationError when RPC response has wrong type", async () => {
+      await client.connect();
+
+      const promise = client.request(
+        Ping,
+        { text: "test" },
+        {
+          timeoutMs: 5000,
+          correlationId: "rpc-wrong",
+        },
+      );
+
+      // Server sends wrong type
+      simulateReceive({
+        type: "GOODBYE", // Expected PONG
+        meta: { correlationId: "rpc-wrong" },
+        payload: { message: "bye" },
+      });
+
+      await expect(promise).rejects.toThrow(ValidationError);
+      await expect(promise).rejects.toMatchObject({
+        message: expect.stringContaining("Expected type PONG, got GOODBYE"),
+      });
+    });
+
+    it("rejects with ValidationError when RPC response payload is invalid", async () => {
+      await client.connect();
+
+      const promise = client.request(
+        Ping,
+        { text: "test" },
+        {
+          timeoutMs: 5000,
+          correlationId: "rpc-invalid",
+        },
+      );
+
+      // Server sends correct type but invalid payload
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: "rpc-invalid" },
+        payload: { reply: 123 }, // Should be string
+      });
+
+      await expect(promise).rejects.toThrow(ValidationError);
+    });
+
+    it("times out when RPC response doesn't arrive", async () => {
+      await client.connect();
+
+      const promise = client.request(
+        Ping,
+        { text: "test" },
+        {
+          timeoutMs: 100,
+          correlationId: "rpc-timeout",
+        },
+      );
+
+      // Don't send reply
+      await expect(promise).rejects.toThrow(TimeoutError);
+    });
+
+    it("auto-generates correlationId for RPC requests", async () => {
+      await client.connect();
+
+      const promise = client.request(
+        Ping,
+        { text: "test" },
+        {
+          timeoutMs: 5000,
+        },
+      );
+
+      // Get the sent message
+      const sent = mockWs._getSentMessages();
+      expect(sent).toHaveLength(1);
+      expect(sent[0].meta.correlationId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+
+      // Reply with auto-generated ID
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: sent[0].meta.correlationId },
+        payload: { reply: "ok" },
+      });
+
+      await promise;
+    });
+  });
+
+  describe("Backward Compatibility: Explicit Response Schema", () => {
+    it("still works with explicit response schema (not using rpc())", async () => {
+      await client.connect();
+
+      // Traditional style with explicit response
+      const promise = client.request(Hello, { name: "test" }, HelloOk, {
+        timeoutMs: 5000,
+        correlationId: "traditional",
+      });
+
+      simulateReceive({
+        type: "HELLO_OK",
+        meta: { correlationId: "traditional" },
+        payload: { text: "Hello, test!" },
+      });
+
+      const reply = (await promise) as z.infer<typeof HelloOk>;
+      expect(reply.type).toBe("HELLO_OK");
+      expect(reply.payload.text).toBe("Hello, test!");
+    });
+
+    it("can override RPC response schema with explicit schema", async () => {
+      await client.connect();
+
+      // Use RPC schema but provide explicit response (for testing edge cases)
+      const ExplicitPong = messageSchema("PONG", {
+        reply: z.string(),
+        extra: z.string().optional(),
+      });
+
+      const promise = client.request(Ping, { text: "test" }, ExplicitPong, {
+        timeoutMs: 5000,
+        correlationId: "override",
+      });
+
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: "override" },
+        payload: { reply: "world", extra: "data" },
+      });
+
+      const reply = (await promise) as any;
+      expect(reply.payload.extra).toBe("data");
+    });
+
+    it("detects legacy style (schema, payload, reply) correctly", async () => {
+      await client.connect();
+
+      // This is the legacy way with 4 args (before RPC auto-detection)
+      const promise = client.request(Hello, { name: "test" }, HelloOk, {
+        timeoutMs: 5000,
+        correlationId: "legacy",
+      });
+
+      simulateReceive({
+        type: "HELLO_OK",
+        meta: { correlationId: "legacy" },
+        payload: { text: "Hello!" },
+      });
+
+      const reply = (await promise) as z.infer<typeof HelloOk>;
+      expect(reply.type).toBe("HELLO_OK");
+    });
   });
 });

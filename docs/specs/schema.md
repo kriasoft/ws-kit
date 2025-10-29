@@ -1,6 +1,6 @@
 # Message Schema Specification
 
-**Status**: ✅ Implemented (export-with-helpers pattern, conditional typing)
+**Status**: ✅ Implemented (export-with-helpers pattern, conditional typing, RPC helper)
 
 ## Export-with-Helpers Pattern
 
@@ -42,17 +42,23 @@ import type {
 
 ```typescript
 // ✅ Server setup (Zod)
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, rpc, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/serve";
 
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
+// Standard messages
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
+// RPC helper: binds request and response schemas
+const QueryMsg = rpc("QUERY", { id: z.string() }, "QUERY_RESULT", {
+  data: z.any(),
+});
+
 // ✅ Server setup (Valibot)
-import { v, message, createRouter } from "@ws-kit/valibot";
+import { v, message, rpc, createRouter } from "@ws-kit/valibot";
 
 // ✅ Client setup (Typed)
 import { wsClient } from "@ws-kit/client/zod";
@@ -217,6 +223,46 @@ const RoomMessage = message(
 // meta: { correlationId?, timestamp?, roomId: string }
 // Handler: ctx.meta.roomId is string (required)
 ```
+
+### Request-Response Pattern (RPC)
+
+Bind request and response schemas together to eliminate repetition in request-response patterns:
+
+```typescript
+import { z, rpc } from "@ws-kit/zod";
+
+// Bind request and response schemas at definition time
+const QueryData = rpc("QUERY_DATA", { id: z.string() }, "QUERY_RESULT", {
+  data: z.object({ id: z.string(), value: z.any() }),
+});
+
+// Server: Handler works like any other message schema
+const router = createRouter();
+router.on(QueryData, (ctx) => {
+  const result = lookupData(ctx.payload.id);
+  ctx.reply({ data: result });
+});
+
+// Client: Response schema auto-detected from rpc()
+const client = wsClient({ url: "ws://localhost:3000" });
+const response = await client.request(QueryData, { id: "123" });
+// response.type === "QUERY_RESULT"
+// response.payload.data is fully typed
+```
+
+**Benefits:**
+
+- No schema repetition at call sites
+- Response type automatically inferred by TypeScript
+- Works transparently with router handlers
+- Backward compatible with explicit response schemas
+
+**Characteristics:**
+
+- `rpc()` returns a valid message schema that works with `router.on()`, `router.use()`, etc.
+- Client detects response schema automatically
+- Optional: `client.request(QueryData, payload, opts?)` - response schema from binding
+- Backward compat: `client.request(QueryData, payload, ExplicitResponse, opts?)` - explicit override
 
 ## Type Inference
 

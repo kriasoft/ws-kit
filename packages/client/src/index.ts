@@ -490,6 +490,23 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     }
   }
 
+  // Overload 1: RPC-style with auto-detected response schema
+  function request<
+    S extends AnyMessageSchema & {
+      response: AnyMessageSchema;
+    },
+  >(
+    schema: S,
+    payload: unknown,
+    opts?: {
+      timeoutMs?: number;
+      meta?: Record<string, unknown>;
+      correlationId?: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<unknown>;
+
+  // Overload 2: Traditional style with explicit response schema
   function request<S extends AnyMessageSchema, R extends AnyMessageSchema>(
     schema: S,
     payload: unknown,
@@ -498,8 +515,75 @@ export function createClient(opts: ClientOptions): WebSocketClient {
       timeoutMs?: number;
       meta?: Record<string, unknown>;
       correlationId?: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<unknown>;
+
+  // Implementation
+  function request<
+    S extends AnyMessageSchema,
+    R extends AnyMessageSchema = never,
+  >(
+    schema: S,
+    payload: unknown,
+    replyOrOpts?:
+      | R
+      | {
+          timeoutMs?: number;
+          meta?: Record<string, unknown>;
+          correlationId?: string;
+          signal?: AbortSignal;
+        },
+    optsArg?: {
+      timeoutMs?: number;
+      meta?: Record<string, unknown>;
+      correlationId?: string;
+      signal?: AbortSignal;
     },
   ): Promise<unknown> {
+    // Detect whether third arg is a response schema or options
+    // Key insight: If 4th arg is provided AND 3rd arg has safeParse, then it's RPC style (response schema)
+    // If no 4th arg provided, then 3rd arg must be explicit response schema
+    let reply: AnyMessageSchema | undefined;
+    let opts: any;
+
+    if (replyOrOpts === undefined) {
+      // No third arg: try to get response from RPC schema
+      reply = (schema as any).response;
+      opts = undefined;
+    } else if (optsArg !== undefined) {
+      // 4th arg present: third arg must be the response schema
+      reply = replyOrOpts as AnyMessageSchema;
+      opts = optsArg;
+    } else {
+      // No 4th arg: third arg could be either response schema or options
+      // If it's an options object (has at least one option key), treat as options
+      const isOptionsObject =
+        typeof replyOrOpts === "object" &&
+        ("timeoutMs" in replyOrOpts ||
+          "meta" in replyOrOpts ||
+          "correlationId" in replyOrOpts ||
+          "signal" in replyOrOpts);
+
+      if (isOptionsObject) {
+        // Third arg is options, use RPC response schema
+        reply = (schema as any).response;
+        opts = replyOrOpts;
+      } else {
+        // Third arg is response schema
+        reply = replyOrOpts as AnyMessageSchema;
+        opts = undefined;
+      }
+    }
+
+    if (!reply) {
+      return Promise.reject(
+        new Error(
+          "response schema must be provided via rpc() schema or explicit reply argument",
+        ),
+      );
+    }
+
     // Auto-connect if enabled and never attempted
     if (config.autoConnect && state === "closed" && !everAttemptedConnect) {
       return connect()

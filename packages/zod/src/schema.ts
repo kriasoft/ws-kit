@@ -246,12 +246,74 @@ export function createMessageSchema(zod: ZodLike) {
     return schema.safeParse(messageData);
   }
 
+  /**
+   * Creates a type-safe RPC schema that binds request and response message types.
+   *
+   * This helper eliminates repetition when defining request-response patterns by
+   * attaching the response schema to the request schema as a property.
+   *
+   * @param requestType - Message type for the request
+   * @param requestPayload - Validation schema for request payload
+   * @param responseType - Message type for the response
+   * @param responsePayload - Validation schema for response payload
+   * @returns Message schema with attached .response property
+   *
+   * @example
+   * ```typescript
+   * const ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+   *
+   * // Use with client - response schema auto-detected
+   * const result = await client.request(ping, { text: "hello" });
+   *
+   * // Use with router - still works like a normal message schema
+   * router.on(ping, (ctx) => {
+   *   ctx.reply({ reply: `Got: ${ctx.payload.text}` });
+   * });
+   * ```
+   */
+  function rpc<
+    ReqT extends string,
+    ReqP extends ZodRawShape | ZodObject<ZodRawShape> | undefined = undefined,
+    ResT extends string = string,
+    ResP extends ZodRawShape | ZodObject<ZodRawShape> | undefined = undefined,
+  >(
+    requestType: ReqT,
+    requestPayload: ReqP,
+    responseType: ResT,
+    responsePayload: ResP,
+  ) {
+    const requestSchema = messageSchema(
+      requestType,
+      requestPayload as ReqP,
+    ) as any;
+    const responseSchema = messageSchema(responseType, responsePayload as ResP);
+
+    // Attach response schema as non-enumerable property to avoid breaking schema iteration
+    Object.defineProperty(requestSchema, "response", {
+      value: responseSchema,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+
+    // Also attach response type for convenience
+    Object.defineProperty(requestSchema, "responseType", {
+      value: responseType,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+
+    return requestSchema;
+  }
+
   return {
     messageSchema,
     MessageMetadataSchema,
     ErrorCode,
     ErrorMessage,
     createMessage,
+    rpc,
   };
 }
 

@@ -39,10 +39,14 @@ import { createMessageSchema } from "./schema";
 
 // Create message helper using canonical Valibot instance
 // (This creates the messageSchema function without requiring a factory)
-const { messageSchema: message, ErrorMessage } = createMessageSchema(v as any);
+const {
+  messageSchema: message,
+  ErrorMessage,
+  rpc,
+} = createMessageSchema(v as any);
 
 // Main exports: export-with-helpers pattern
-export { v, message, ErrorMessage };
+export { v, message, rpc, ErrorMessage };
 export { default as valibotValidator } from "./validator";
 export { createValibotRouter as createRouter } from "./router";
 
