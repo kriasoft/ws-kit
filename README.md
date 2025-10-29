@@ -691,6 +691,10 @@ await client.disconnect();
 
 See the [Client Documentation](./docs/specs/client.md) for complete API reference and advanced usage.
 
+## Design & Architecture
+
+See [Architectural Decision Records](./docs/adr/) for the core design decisions that shaped ws-kit, including type safety patterns, platform adapters, and composability.
+
 ## Support
 
 Questions or issues? Join us on [Discord](https://discord.gg/aW29wXyb7w).
