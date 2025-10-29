@@ -4,7 +4,7 @@
 import { describe, expect, it } from "bun:test";
 import { createRouter, message, z } from "@ws-kit/zod";
 
-describe("addRoutes", () => {
+describe("merge", () => {
   it("should merge routes from another router", async () => {
     // Create first router with a message handler
     const router1 = createRouter();
@@ -34,7 +34,7 @@ describe("addRoutes", () => {
     });
 
     // Merge router2 into router1
-    router1.addRoutes(router2);
+    router1.merge(router2);
 
     // Get the WebSocket handler
     const wsHandler = router1._core.websocket;
@@ -97,8 +97,8 @@ describe("addRoutes", () => {
       msg3Called = true;
     });
 
-    // Chain multiple addRoutes calls
-    mainRouter.addRoutes(router1).addRoutes(router2);
+    // Chain multiple merge calls
+    mainRouter.merge(router1).merge(router2);
 
     const wsHandler = mainRouter._core.websocket;
     const mockWs = {

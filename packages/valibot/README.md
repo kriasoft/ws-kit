@@ -1,57 +1,112 @@
 # @ws-kit/valibot
 
-Valibot validator adapter for `@ws-kit/core`.
+Valibot validator adapter for type-safe WebSocket routing in ws-kit.
 
-## Purpose
+## Quick Start
 
-`@ws-kit/valibot` provides Valibot-based schema validation and type inference for WS-Kit, enabling full TypeScript support for message payloads with discriminated unions.
-
-## What This Package Provides
-
-- **`valibotValidator()`**: Convenience factory using default Valibot configuration
-- **`createValibotValidator(v)`**: Advanced factory for custom Valibot instances
-- **`messageSchema()`**: Convenience helper for defining typed message schemas
-- **`createMessageSchema(v)`**: Advanced factory for custom schema definitions
-- **Type overloads**: Full TypeScript inference from schema to handler context
-- **Discriminated unions**: Full support for union type narrowing in handlers
-
-## Design Pattern
-
-Two API patterns are supported:
-
-### Simple (Most Users)
+The **export-with-helpers pattern** is the recommended way to use this package—no factories, no dual imports:
 
 ```typescript
-import { valibotValidator, messageSchema } from "@ws-kit/valibot";
-import { WebSocketRouter } from "@ws-kit/core";
-import * as v from "valibot";
+import { v, message, createRouter } from "@ws-kit/valibot";
+import { serve } from "@ws-kit/serve/bun";
 
-const router = new WebSocketRouter({ validator: valibotValidator() });
-const PingMessage = messageSchema("PING", { text: v.string() });
+// Define message schemas with full type inference
+const PingMessage = message("PING", { text: v.string() });
+const PongMessage = message("PONG", { reply: v.string() });
 
+// Create type-safe router
+type AppData = { userId?: string };
+const router = createRouter<AppData>();
+
+// Register handlers—fully typed!
 router.on(PingMessage, (ctx) => {
-  // ctx.payload is typed as { text: string }
+  ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
+});
+
+// Serve with type-safe handlers
+serve(router, { port: 3000 });
+```
+
+## What This Package Exports
+
+**Primary (recommended):**
+
+- **`v`**: Re-exported Valibot instance (canonical import source)
+- **`message()`**: Helper to create type-safe message schemas
+- **`createRouter()`**: Create a type-safe router with full type inference
+
+**Secondary (advanced use cases):**
+
+- **`valibotValidator()`**: Validator adapter for custom router setup
+- **`ValibotValidatorAdapter`**: Type class for advanced patterns
+- **`ErrorMessage`**: Standard error message schema
+
+**Deprecated (avoid):**
+
+- ❌ `createMessageSchema()` — Use `message()` helper instead
+- ❌ `createValibotRouter()` — Use `createRouter()` instead
+
+## Key Design Principles
+
+### Single Canonical Import Source
+
+All validator and helper imports come from one place to prevent dual-package hazards:
+
+```typescript
+// ✅ CORRECT: Single import source
+import { v, message, createRouter } from "@ws-kit/valibot";
+
+// ❌ AVOID: Dual imports (creates type mismatches)
+import * as v from "valibot"; // Different instance
+import { message } from "@ws-kit/valibot"; // Uses @ws-kit/valibot's v
+// Now you have two Valibot instances!
+```
+
+### No Factory Setup Needed
+
+Messages are created with a simple helper function:
+
+```typescript
+// ✅ Direct: No factory call required
+const LoginMessage = message("LOGIN", {
+  username: v.string(),
+  password: v.pipe(v.string(), v.minLength(8)),
 });
 ```
 
-### Advanced (Custom Valibot Config)
+### Full Type Inference
+
+Schemas flow through handlers with complete type safety:
 
 ```typescript
-import { createValibotValidator, createMessageSchema } from "@ws-kit/valibot";
-import * as v from "valibot";
-
-const customV = { ...v }; // Custom Valibot instance
-const validator = createValibotValidator(customV);
-const { messageSchema } = createMessageSchema(customV);
-
-// ... same API from here
+router.on(LoginMessage, (ctx) => {
+  // ✅ ctx.payload.username is inferred as string
+  // ✅ ctx.type is inferred as "LOGIN" (literal type)
+});
 ```
 
-## Platform-Agnostic
+## Why Valibot?
 
-This adapter works with **any platform** (`@ws-kit/bun`, `@ws-kit/cloudflare-do`, etc.) without modification.
+Choose Valibot if you prioritize **bundle size and performance**:
+
+| Aspect      | Valibot              | Zod                        |
+| ----------- | -------------------- | -------------------------- |
+| Bundle Size | ~1-2 kB              | ~5-6 kB                    |
+| Performance | ~2x faster           | Baseline                   |
+| API Style   | Functional pipelines | Method chaining            |
+| Best for    | Client-side, mobile  | Server-side, familiar APIs |
+
+## Platform Support
+
+This adapter works with any ws-kit platform:
+
+- **`@ws-kit/bun`** — Bun.serve WebSocket handler
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects
+- Custom platforms via `@ws-kit/core`
 
 ## Dependencies
 
-- `@ws-kit/core` (required)
-- `valibot` (peer) — required in projects using this adapter
+- **`@ws-kit/core`** (required) — Core router
+- **`valibot`** (peer) — Validation library
+- **`@ws-kit/serve`** (optional) — Pre-built server setup
+- **`@ws-kit/client`** (optional) — Type-safe browser client

@@ -196,23 +196,30 @@ export function createMessageSchema(zod: ZodLike) {
       meta: metaSchema,
     };
 
+    let schema: any;
     if (payload === undefined) {
-      return zod.object(baseSchema).strict();
+      schema = zod.object(baseSchema).strict();
+    } else {
+      // Payloads can be a Zod object or a raw shape
+      const payloadSchema = (
+        (payload as { _def?: unknown })._def
+          ? (payload as ZodObject<ZodRawShape>)
+          : zod.object(payload as ZodRawShape)
+      ).strict(); // Payload must also be strict
+
+      schema = zod
+        .object({
+          ...baseSchema,
+          payload: payloadSchema,
+        })
+        .strict();
     }
 
-    // Payloads can be a Zod object or a raw shape
-    const payloadSchema = (
-      (payload as { _def?: unknown })._def
-        ? (payload as ZodObject<ZodRawShape>)
-        : zod.object(payload as ZodRawShape)
-    ).strict(); // Payload must also be strict
+    // Mark schema with validator identity for runtime compatibility checks
+    // This allows the router to detect mismatched validators at registration time
+    (schema as any).__wsKitValidatorId = zod.constructor;
 
-    return zod
-      .object({
-        ...baseSchema,
-        payload: payloadSchema,
-      })
-      .strict();
+    return schema;
   }
 
   // Standard schemas used across most WebSocket applications

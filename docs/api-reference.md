@@ -108,27 +108,29 @@ router.onClose((ctx) => {
 
 **Note:** The `send` function is provided in the context but can only be used for broadcasting to other clients via `publish()`. Sending directly to the disconnected client (`ctx.ws`) will fail since the connection is closed.
 
-#### `addRoutes(router)`
+#### `merge(router)`
 
-Merge routes from another router.
+Merge routes from another router into this one. Merges all handlers, lifecycle hooks, and middleware from the source router.
 
 ```typescript
-addRoutes(router: WebSocketRouter<TData>): this
+merge(router: WebSocketRouter<TData>): this
 ```
 
 **Parameters:**
 
 - `router` - Router instance to merge routes from
 
+**Returns:** This router for method chaining
+
 **Example:**
 
 ```typescript
-const authRouter = new WebSocketRouter();
-const chatRouter = new WebSocketRouter();
+import { createRouter } from "@ws-kit/zod";
 
-const mainRouter = new WebSocketRouter()
-  .addRoutes(authRouter)
-  .addRoutes(chatRouter);
+const authRouter = createRouter();
+const chatRouter = createRouter();
+
+const mainRouter = createRouter().merge(authRouter).merge(chatRouter);
 ```
 
 #### `websocket` (Property)

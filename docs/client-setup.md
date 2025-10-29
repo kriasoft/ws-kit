@@ -1,276 +1,364 @@
 # Client Setup
 
-The Bun WebSocket Router provides a type-safe browser client that reuses the same message schemas as your server.
+The ws-kit client provides a type-safe browser WebSocket client that reuses the same message schemas as your server.
 
 ## Installation
 
-```bash
-npm install bun-ws-router
-# or
-bun add bun-ws-router
-```
-
-Choose your validator:
+Choose your validator and install the client:
 
 ```bash
-npm install zod
-# or
-npm install valibot  # Recommended for browsers (smaller bundle)
+# With Zod (recommended for familiar APIs)
+bun add @ws-kit/client @ws-kit/zod zod
+
+# With Valibot (lighter bundles)
+bun add @ws-kit/client @ws-kit/valibot valibot
 ```
 
 ## Quick Start
 
-### 1. Share Schemas Between Client and Server
+### 1. Share Schemas
 
-Define schemas once, import everywhere:
+Define message schemas once, import in both client and server:
 
 ```typescript
-// shared/schemas.ts (imported by both client and server)
-import { z } from "zod";
-import { createMessageSchema } from "@ws-kit/zod";
+// shared/schemas.ts
+import { z, message } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
-
-export const Hello = messageSchema("HELLO", { name: z.string() });
-export const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
-export const ChatMessage = messageSchema("CHAT", { text: z.string() });
+export const Hello = message("HELLO", { name: z.string() });
+export const HelloReply = message("HELLO_REPLY", { greeting: z.string() });
+export const Broadcast = message("BROADCAST", { message: z.string() });
 ```
 
 ### 2. Create the Client
 
 ```typescript
 // client.ts
-import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
-import { Hello, HelloOk } from "./shared/schemas";
+import { wsClient } from "@ws-kit/client/zod";
+import { Hello, HelloReply, Broadcast } from "./shared/schemas";
 
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
 });
 
-// Connect to server
+// Connect
 await client.connect();
 
-// Send message
-client.send(Hello, { name: "Anna" });
+// Send a message (fire-and-forget)
+client.send(Hello, { name: "Alice" });
 
-// Receive messages with full type inference
-client.on(HelloOk, (msg) => {
-  // ✅ msg.payload.text is typed as string
-  console.log("Server says:", msg.payload.text);
+// Listen for replies
+client.on(HelloReply, (msg) => {
+  // ✅ msg.payload.greeting is typed as string
+  console.log(msg.payload.greeting);
 });
+
+// Listen for broadcasts
+client.on(Broadcast, (msg) => {
+  console.log(`Broadcast: ${msg.payload.message}`);
+});
+
+// Gracefully disconnect
+await client.disconnect();
 ```
 
-::: tip TYPED CLIENT REQUIRED
-Use `/zod/client` or `/valibot/client` for full type inference as shown above. The generic client (`/client`) provides `unknown` in handlers and is only for custom validators.
-:::
-
-### 3. Use on the Server
+### 3. Use Schemas on Server
 
 ```typescript
 // server.ts
-import { WebSocketRouter } from "@ws-kit/zod";
-import { Hello, HelloOk } from "./shared/schemas";
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
+import { Hello, HelloReply, Broadcast } from "./shared/schemas";
 
-const router = new WebSocketRouter();
+const router = createRouter();
 
 router.on(Hello, (ctx) => {
-  ctx.send(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
+  // ✅ ctx.payload.name is typed as string
+  ctx.send(HelloReply, {
+    greeting: `Hello, ${ctx.payload.name}!`,
+  });
 });
 
-Bun.serve({
-  fetch(req, server) {
-    return router.upgrade(req, { server });
+// Broadcast to all clients
+router.publish("all", Broadcast, {
+  message: "Server broadcast",
+});
+
+serve(router, { port: 3000 });
+```
+
+## Client API
+
+### Connection Management
+
+```typescript
+const client = wsClient({ url: "wss://api.example.com/ws" });
+
+// Connect
+await client.connect();
+
+// Check connection state
+if (client.isConnected) {
+  console.log("Connected!");
+}
+
+// Listen to state changes
+client.onState((state) => {
+  console.log(`State: ${state}`);
+  // States: "disconnected", "connecting", "connected", "closing"
+});
+
+// Wait for connection to open
+await client.onceOpen();
+
+// Disconnect
+await client.disconnect();
+```
+
+### Sending Messages
+
+**Fire-and-forget (no response expected):**
+
+```typescript
+client.send(HelloMessage, { name: "Bob" });
+
+// Messages without payload
+client.send(PingMessage);
+```
+
+**Request/Response (with timeout):**
+
+```typescript
+const reply = await client.request(HelloMessage, HelloReplyMessage, {
+  timeoutMs: 5000,
+});
+
+console.log(reply.payload.greeting);
+```
+
+### Receiving Messages
+
+**Register handlers:**
+
+```typescript
+client.on(BroadcastMessage, (msg) => {
+  // ✅ msg fully typed
+  console.log(`Message: ${msg.payload.text}`);
+});
+
+// Remove handler (calling returned function)
+const unsubscribe = client.on(SomeMessage, handler);
+unsubscribe();
+```
+
+**Handle unknown messages:**
+
+```typescript
+client.onUnhandled((msg) => {
+  console.log(`Unknown message type: ${msg.type}`);
+});
+```
+
+**Handle errors:**
+
+```typescript
+client.onError((error, context) => {
+  console.error(`Error (${context.type}): ${error.message}`);
+  // Types: "parse", "validation", "overflow", "unknown"
+});
+```
+
+## Authentication
+
+### Query Parameter
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  auth: {
+    getToken: async () => localStorage.getItem("token"),
   },
-  websocket: router.websocket,
+});
+
+// Token is sent as ?token=<value>
+```
+
+### Authorization Header
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  auth: {
+    getToken: async () => localStorage.getItem("token"),
+    type: "Bearer", // Sent as: Authorization: Bearer <token>
+  },
+});
+```
+
+### Server-Side Validation
+
+```typescript
+import { serve } from "@ws-kit/serve/bun";
+
+serve(router, {
+  authenticate(req) {
+    // Get token from header or query param
+    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+
+    if (!token) {
+      return undefined; // Connection rejected
+    }
+
+    try {
+      const user = verifyToken(token);
+      return { userId: user.id, username: user.username };
+    } catch (err) {
+      return undefined; // Connection rejected
+    }
+  },
+});
+```
+
+## Message Queueing
+
+Messages are automatically queued while connecting or offline:
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  queue: {
+    maxSize: 100, // Max queued messages
+  },
+});
+
+// This will be queued if not connected yet
+client.send(SomeMessage, payload);
+
+await client.connect();
+// Queued messages are sent automatically
+```
+
+## Auto-Reconnection
+
+The client automatically reconnects with exponential backoff:
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  reconnect: {
+    initialDelay: 1000, // Start with 1 second
+    maxDelay: 30000, // Cap at 30 seconds
+    maxAttempts: Infinity, // Retry forever
+  },
+});
+
+await client.connect();
+// Reconnects automatically on failure
+```
+
+Disable reconnection if needed:
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  reconnect: false,
+});
+```
+
+## Error Handling
+
+### Type-Safe Error Codes
+
+Server errors use standard error codes:
+
+```typescript
+client.on(ErrorMessage, (msg) => {
+  // Standard error codes
+  if (msg.payload.code === "AUTH_ERROR") {
+    console.log("Authentication failed");
+  } else if (msg.payload.code === "RATE_LIMIT") {
+    console.log("Rate limited");
+  }
+});
+```
+
+### Handling Validation Errors
+
+```typescript
+client.onError((error, context) => {
+  if (context.type === "validation") {
+    console.log("Invalid message received from server");
+  }
 });
 ```
 
 ## Import Patterns
 
-### Typed Clients (Recommended)
-
-**For full type safety, import from validator-specific paths:**
+Always use the correct import source:
 
 ```typescript
-// Zod users - RECOMMENDED
-import { createClient } from "@ws-kit/client/zod";
+// ✅ CORRECT: Single import source
+import { message } from "@ws-kit/zod";
+import { wsClient } from "@ws-kit/client/zod";
 
-// Valibot users - RECOMMENDED
-import { createClient } from "@ws-kit/client/valibot";
+// ❌ AVOID: Mixing imports
+import { z } from "zod"; // Different instance
+import { wsClient } from "@ws-kit/client/zod";
+// Type mismatches in handlers!
 ```
 
-**Why typed clients?**
+## Advanced: Using with TypeScript
 
-Typed clients provide full TypeScript inference in message handlers:
+Infer types from your router:
 
 ```typescript
-import { createClient } from "@ws-kit/client/zod"; // ✅ Typed client
+// server.ts
+import { createRouter } from "@ws-kit/zod";
+import { Hello, HelloReply } from "./shared/schemas";
 
-const client = createClient({ url: "wss://api.example.com" });
+export const router = createRouter();
 
-client.on(HelloOk, (msg) => {
-  // ✅ msg is fully typed: { type: "HELLO_OK", meta: {...}, payload: { text: string } }
-  console.log(msg.type); // "HELLO_OK" (literal type)
-  console.log(msg.payload.text.toUpperCase()); // ✅ String methods work!
+router.on(Hello, (ctx) => {
+  ctx.send(HelloReply, { greeting: "Hi" });
+});
+
+export type AppRouter = typeof router;
+```
+
+**Client:**
+
+```typescript
+import { wsClient } from "@ws-kit/client/zod";
+import type { AppRouter } from "./server";
+
+// Client is fully typed based on server router
+const client = wsClient<AppRouter>({ url: "wss://api.example.com/ws" });
+
+// All message schemas are inferred from server
+client.on(HelloReply, (msg) => {
+  console.log(msg.payload.greeting); // ✅ Fully typed
 });
 ```
 
-**Generic client (custom validators only):**
+## Valibot Alternative
 
-```typescript
-// ⚠️ Only for custom validators - handlers receive `unknown`
-import { createClient } from "@ws-kit/client";
+Use `@ws-kit/client/valibot` for Valibot schemas:
 
-client.on(HelloOk, (msg) => {
-  // ⚠️ msg is unknown - requires manual type assertion
-  const typed = msg as InferMessage<typeof HelloOk>;
-});
+```bash
+bun add @ws-kit/client @ws-kit/valibot valibot
 ```
 
-### Validator Packages
-
-Choose Zod or Valibot:
+The API is identical:
 
 ```typescript
-// Zod (server and client)
-import { WebSocketRouter, createMessageSchema } from "@ws-kit/zod";
-import type { AnyMessageSchema, InferMessage } from "@ws-kit/zod";
+import { v, message } from "@ws-kit/valibot";
+import { wsClient } from "@ws-kit/client/valibot";
 
-// Valibot (recommended for browsers)
-import { WebSocketRouter, createMessageSchema } from "@ws-kit/valibot";
-import type { AnyMessageSchema, InferMessage } from "@ws-kit/valibot";
+const client = wsClient({ url: "wss://api.example.com/ws" });
+// Everything else is the same!
 ```
 
-::: tip
-Valibot is recommended for browser clients due to its smaller bundle size (~2-3 KB client + validator). Zod is acceptable for larger apps already using Zod.
-:::
+## See Also
 
-## Connection Patterns
-
-### Explicit Connection (Default)
-
-```typescript
-const client = createClient({ url: "wss://example.com/ws" });
-
-// Manually control connection
-await client.connect();
-client.send(Hello, { name: "Anna" });
-```
-
-### Auto-Connection (Opt-in)
-
-```typescript
-const client = createClient({
-  url: "wss://example.com/ws",
-  autoConnect: true, // Auto-connect on first send/request
-});
-
-// No explicit connect() needed
-client.send(Hello, { name: "Anna" }); // Triggers connection if idle
-```
-
-**AutoConnect Semantics:**
-
-- First `send()` or `request()` triggers `connect()` if `state === "closed"` AND client never connected before
-- Connection errors:
-  - `send()` returns `false` (logged to console, never throws)
-  - `request()` returns rejected Promise (never throws synchronously)
-- After successful auto-connect, normal queue behavior applies
-- Does **NOT** auto-reconnect from `"closed"` after manual `close()`
-
-**When to Use AutoConnect:**
-
-| Scenario                                 | Use AutoConnect? | Reason                                 |
-| ---------------------------------------- | ---------------- | -------------------------------------- |
-| Prototypes/demos                         | ✅ Yes           | Simplifies code, connection assumed    |
-| Single connection lifecycle              | ✅ Yes           | Connection established once at startup |
-| Complex apps with reconnect logic        | ❌ No            | Need explicit connection control       |
-| Apps requiring connection error handling | ❌ No            | Errors hidden in fire-and-forget       |
-| Production real-time dashboards          | ⚠️ Maybe         | If connection failure is acceptable    |
-
-::: warning Production Guidance
-Auto-connect is convenient for prototypes but may hide connection errors. For production apps with critical real-time requirements, prefer explicit connection control with error handling.
-:::
-
-## Basic Usage
-
-### Sending Messages (Fire-and-Forget)
-
-```typescript
-// Simple send
-const sent = client.send(ChatMessage, { text: "Hello!" });
-if (!sent) {
-  console.warn("Message dropped (offline or buffer full)");
-}
-```
-
-### Receiving Messages
-
-```typescript
-// Register handler before connecting
-client.on(HelloOk, (msg) => {
-  console.log("Received:", msg.payload.text);
-  console.log("Timestamp:", msg.meta.timestamp);
-});
-
-await client.connect();
-```
-
-### Request/Response Pattern
-
-```typescript
-try {
-  const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
-    timeoutMs: 5000,
-  });
-  console.log("Reply:", reply.payload.text);
-} catch (err) {
-  if (err instanceof TimeoutError) {
-    console.warn("Request timed out");
-  }
-}
-```
-
-## State Management
-
-### Monitoring Connection State
-
-```typescript
-// Subscribe to state changes
-client.onState((state) => {
-  console.log("Connection state:", state);
-  // "closed" | "connecting" | "open" | "closing" | "reconnecting"
-});
-
-// Check current state
-if (client.state === "open") {
-  client.send(Hello, { name: "Anna" });
-}
-
-// Sugar for state === "open"
-if (client.isConnected) {
-  client.send(Hello, { name: "Anna" });
-}
-```
-
-### Wait for Connection
-
-```typescript
-// Wait until connected
-await client.onceOpen();
-console.log("Connected!");
-
-// Now safe to send
-client.send(Hello, { name: "Anna" });
-```
-
-## Cleanup
-
-```typescript
-// Graceful shutdown
-await client.close({ code: 1000, reason: "Done" });
-
-// Unsubscribe from handlers
-const unsubscribe = client.on(HelloOk, handler);
-unsubscribe(); // Remove this handler
-```
+- `@ws-kit/zod` — Server-side Zod adapter
+- `@ws-kit/valibot` — Server-side Valibot adapter
+- `docs/examples.md` — Real-world example code

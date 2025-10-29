@@ -78,34 +78,35 @@ This pattern is useful for protocol versioning, command/query separation, event 
 Compose multiple routers to organize your application into modules:
 
 ```typescript
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
+type AppData = { userId?: string };
+
+// Define message schemas
+const LoginMessage = message("LOGIN", {
+  email: z.string(),
+  password: z.string(),
+});
+const SendMessageMessage = message("SEND_MESSAGE", { text: z.string() });
+const KickUserMessage = message("KICK_USER", { userId: z.string() });
 
 // Authentication router
-const authRouter = new WebSocketRouter()
-  .on(LoginMessage, handleLogin)
-  .on(LogoutMessage, handleLogout)
-  .on(RefreshTokenMessage, handleRefresh);
+const authRouter = createRouter<AppData>().on(LoginMessage, handleLogin);
 
 // Chat router
-const chatRouter = new WebSocketRouter()
-  .on(SendMessageMessage, handleSendMessage)
-  .on(EditMessageMessage, handleEditMessage)
-  .on(DeleteMessageMessage, handleDeleteMessage);
+const chatRouter = createRouter<AppData>().on(
+  SendMessageMessage,
+  handleSendMessage,
+);
 
 // Admin router
-const adminRouter = new WebSocketRouter()
-  .on(KickUserMessage, handleKickUser)
-  .on(BanUserMessage, handleBanUser)
-  .on(MuteUserMessage, handleMuteUser);
+const adminRouter = createRouter<AppData>().on(KickUserMessage, handleKickUser);
 
 // Main router combining all
-const mainRouter = new WebSocketRouter()
-  .addRoutes(authRouter)
-  .addRoutes(chatRouter)
-  .addRoutes(adminRouter)
+const mainRouter = createRouter<AppData>()
+  .merge(authRouter)
+  .merge(chatRouter)
+  .merge(adminRouter)
   .onOpen(handleConnection)
   .onClose(handleDisconnection);
 ```

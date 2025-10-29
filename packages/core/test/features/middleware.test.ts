@@ -475,7 +475,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      router1.addRoutes(router2);
+      router1.merge(router2);
 
       const wsHandler = router1._core.websocket;
       const mockWs = {

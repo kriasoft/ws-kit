@@ -1,95 +1,165 @@
 # @ws-kit/client/valibot
 
-Typed WebSocket client with full TypeScript inference from Valibot schemas.
-
-## Installation
-
-Install the base client with Valibot support:
-
-```bash
-npm install @ws-kit/client valibot
-# or
-bun add @ws-kit/client valibot
-```
+Type-safe WebSocket client with full TypeScript inference from Valibot schemas.
 
 ## Quick Start
 
-Define schemas on the server, reuse in the client for zero duplication:
+Define schemas on the server, reuse in the client with full type safety:
 
 ```typescript
-// shared/messages.ts
-import * as v from "valibot";
-import { createMessageSchema } from "@ws-kit/valibot";
+// shared/messages.ts (import once, use everywhere)
+import { message } from "@ws-kit/valibot";
 
-const { messageSchema } = createMessageSchema(v);
-
-export const Messages = {
-  PING: messageSchema("PING"),
-  PONG: messageSchema("PONG", { latency: v.number() }),
-  USER: messageSchema("USER", {
-    id: v.number(),
-    name: v.string(),
-    email: v.string([v.email()]),
-  }),
-};
+export const Ping = message("PING");
+export const Pong = message("PONG", { latency: v.number() });
+export const UserUpdate = message("USER_UPDATE", {
+  id: v.number(),
+  name: v.string(),
+});
 ```
 
 ```typescript
 // client.ts
-import { createClient } from "@ws-kit/client/valibot";
-import { Messages } from "./shared/messages";
+import { wsClient } from "@ws-kit/client/valibot";
+import { Ping, Pong, UserUpdate } from "./shared/messages";
 
-const client = createClient({ url: "wss://api.example.com" });
+const client = wsClient({ url: "wss://api.example.com" });
 
-// Type-safe handlers
-client.on(Messages.PONG, (msg) => {
+await client.connect();
+
+// Type-safe message handler
+client.on(Pong, (msg) => {
   // ✅ msg.payload.latency is typed as number
   console.log(`Latency: ${msg.payload.latency}ms`);
 });
 
-// Type-safe sending
-client.send(Messages.PING);
+// Type-safe message sending (fire-and-forget)
+client.send(Ping);
 
-// Request/response
-const pong = await client.request(Messages.PING, Messages.PONG);
-console.log(pong.payload.latency);
+// Request/response pattern with timeout
+const response = await client.request(Ping, Pong, { timeoutMs: 5000 });
+console.log(`Server latency: ${response.payload.latency}ms`);
 ```
 
-## Features
-
-- **Full type inference** from Valibot schemas
-- **Discriminated unions** for multi-message handlers
-- **Schema reuse** between server and client
-- **Zero runtime overhead** — pure type-level wrapper
-- **Request/response patterns** with async/await
-- **Auto-reconnection** with exponential backoff
-- **Message queueing** while connecting
-
-## API
-
-All methods from `@ws-kit/client` are available with typed signatures. See `@ws-kit/client` documentation for full reference.
-
-Key overloads:
-
-- `on<S>(schema, handler)` — Handler receives typed message
-- `send<S>(schema, payload?)` — Payload type checked at compile time
-- `request<S, R>(schema, reply)` — Returns typed response promise
-
-## Alternative: Zod
-
-Use `@ws-kit/client/zod` for Zod schemas instead:
+## Installation
 
 ```bash
-npm install @ws-kit/client zod
+# Using Valibot (lighter bundles)
+bun add @ws-kit/client valibot
+
+# Or with npm
+npm install @ws-kit/client valibot
 ```
 
-The API is identical; only the validator library differs.
+## Key Features
+
+- **Full type inference** — Payload, meta, and type are fully typed
+- **Schema reuse** — Define once, use on server and client
+- **Zero runtime overhead** — Pure type-level wrapper
+- **Request/response patterns** — Async/await with timeouts
+- **Auto-reconnection** — Exponential backoff by default
+- **Message queueing** — Offline messages queued while connecting
+- **Discriminated unions** — Type narrowing with multiple message handlers
+- **Smaller bundles** — Valibot is 60-80% smaller than Zod for typical usage
+
+## Import Pattern (Critical)
+
+Always import from `@ws-kit/client/valibot`, never mix with direct imports:
+
+```typescript
+// ✅ CORRECT: Single canonical source
+import { message } from "@ws-kit/valibot";
+import { wsClient } from "@ws-kit/client/valibot";
+
+// ❌ AVOID: Mixing imports (causes type mismatches)
+import * as v from "valibot"; // Different instance
+import { message } from "@ws-kit/valibot"; // Uses @ws-kit/valibot's v
+// Result: Type mismatches in handlers
+```
+
+## API Reference
+
+The client provides typed overloads for these core methods:
+
+### `on(schema, handler)`
+
+Register a typed message handler:
+
+```typescript
+client.on(UserUpdate, (msg) => {
+  // msg.type === "USER_UPDATE" (literal)
+  // msg.payload.id is number
+  // msg.payload.name is string
+  console.log(`User ${msg.payload.id}: ${msg.payload.name}`);
+});
+```
+
+### `send(schema, payload?)`
+
+Send a message (fire-and-forget):
+
+```typescript
+// Schema with payload
+client.send(UserUpdate, { id: 1, name: "Alice" });
+
+// Schema without payload
+client.send(Ping);
+```
+
+### `request(schema, reply, options?)`
+
+Request/response with typed reply:
+
+```typescript
+const response = await client.request(Ping, Pong, { timeoutMs: 5000 });
+// response is fully typed as Pong schema
+```
+
+### `connect() / disconnect()`
+
+Manage connection lifecycle:
+
+```typescript
+await client.connect();
+// ... use client ...
+await client.disconnect();
+```
+
+### `state` / `isConnected`
+
+Query connection status:
+
+```typescript
+if (client.isConnected) {
+  client.send(Ping);
+}
+
+client.onState((state) => {
+  console.log(`State: ${state}`);
+});
+```
+
+## Zod Alternative
+
+For more familiar APIs, use `@ws-kit/client/zod` instead:
+
+```bash
+bun add @ws-kit/client zod
+```
+
+Import identically—only the validator library changes:
+
+```typescript
+// Identical API, just different validator
+import { z, message } from "@ws-kit/zod";
+import { wsClient } from "@ws-kit/client/zod";
+```
 
 ## See Also
 
-- `@ws-kit/client` — Base client documentation
 - `@ws-kit/valibot` — Server-side Valibot adapter
-- ws-kit documentation — Full guides and examples
+- `@ws-kit/zod` — Server-side Zod adapter (larger bundles, familiar API)
+- `@ws-kit/client` — Base client (for custom validators)
 
 ## License
 

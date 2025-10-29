@@ -303,6 +303,10 @@ export function createMessageSchema(valibot: ValibotLike) {
       };
     };
 
+    // Mark schema with validator identity for runtime compatibility checks
+    // This allows the router to detect mismatched validators at registration time
+    (schema as any).__wsKitValidatorId = valibot.constructor;
+
     return schema;
   }
 

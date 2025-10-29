@@ -160,7 +160,7 @@ export type { LoggerAdapter, LoggerOptions } from "./logger";
  * - Lifecycle hooks (onOpen, onClose, onAuth, onError)
  * - Connection heartbeat with auto-close on timeout
  * - Message payload size limits
- * - Router composition via addRoutes()
+ * - Router composition via merge()
  *
  * Platform-agnostic design allows composition with any platform adapter
  * (Bun, Cloudflare DO, Node.js, etc.) and any validator.

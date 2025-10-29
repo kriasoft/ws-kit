@@ -388,7 +388,7 @@ If migrating from the legacy `bun-ws-router`:
 ```typescript
 // Old pattern
 const ws = new WebSocketRouter();
-ws.addRoutes(chatRouter);
+ws.merge(chatRouter);
 Bun.serve({
   fetch: (req, server) => ws.upgrade(req, { server }),
   websocket: ws.websocket,

@@ -102,9 +102,9 @@ serve(router, {
 
 **That's it!** All tools—validator, router, messages—come from one place. Type-safe from server to client.
 
-### Typing Connection Data
+### Eliminating Verbose Generics with Declaration Merging
 
-For large applications, declare your connection data type once using TypeScript declaration merging, then omit the generic throughout your app:
+For applications with multiple routers, reduce repetition by declaring your connection data type once using TypeScript **declaration merging**. Then omit the generic everywhere—it's automatic:
 
 ```ts
 // types/app-data.d.ts
@@ -615,7 +615,7 @@ router.on(AuthenticateUser, (ctx) => {
 
 ## How to compose routes
 
-You can compose routes from different files into a single router using `addRoutes()`. This is useful for organizing code and keeping related handlers together.
+Organize code by splitting handlers into separate routers, then merge them into a main router using the `merge()` method:
 
 ```ts
 import { createRouter } from "@ws-kit/zod";
@@ -628,10 +628,10 @@ type AppData = { userId?: string };
 const mainRouter = createRouter<AppData>();
 
 // Compose with sub-routers
-mainRouter.addRoutes(chatRoutes).addRoutes(notificationRoutes);
+mainRouter.merge(chatRoutes).merge(notificationRoutes);
 ```
 
-Where `chatRoutes` and `notificationRoutes` are separate routers created with `createRouter<AppData>()` in their own files.
+Where `chatRoutes` and `notificationRoutes` are separate routers created with `createRouter<AppData>()` in their own files. The `merge()` method combines handlers, lifecycle hooks, and middleware from the composed routers.
 
 ## Browser Client
 

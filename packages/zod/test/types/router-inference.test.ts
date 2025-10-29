@@ -378,8 +378,8 @@ describe("Type inference in createRouter handlers", () => {
 
       // Compose routers
       const mainRouter = createRouter();
-      mainRouter.addRoutes(authRouter);
-      mainRouter.addRoutes(chatRouter);
+      mainRouter.merge(authRouter);
+      mainRouter.merge(chatRouter);
 
       // Types should still work on the main router
       expectTypeOf(mainRouter).toMatchTypeOf<{ [key: symbol]: any }>();

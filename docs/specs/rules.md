@@ -170,8 +170,8 @@ serve(router, { runtime: process.env.WSKIT_RUNTIME as any, port: 3000 });
 
 Accept these TypeScript violations for better DX:
 
-- **LSP variance in `addRoutes()`** → ADR-001
-- **`| any` in `addRoutes()`** (allows derived router instances) → ADR-001
+- **LSP variance in `merge()`** → ADR-001
+- **`| any` in `merge()`** (allows derived router instances) → ADR-001
 - **`@ts-expect-error` in type overrides** (enables IDE inference) → ADR-001
 
 ---
@@ -276,7 +276,7 @@ See @client.md#Multiple-Handlers for client multi-handler semantics.
 
 ## Route Composition Patterns
 
-- **Use `addRoutes()`** for feature module composition
+- **Use `merge()`** for feature module composition
 - **Pass auth/session data during `upgrade()`**
 - **Store connection metadata in `ctx.ws.data`** for lifecycle cleanup
 

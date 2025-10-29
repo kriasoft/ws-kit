@@ -1,57 +1,96 @@
 # @ws-kit/zod
 
-Zod validator adapter for `@ws-kit/core`.
+Zod validator adapter for type-safe WebSocket routing in ws-kit.
 
-## Purpose
+## Quick Start
 
-`@ws-kit/zod` provides Zod-based schema validation and type inference for WS-Kit, enabling full TypeScript support for message payloads with discriminated unions.
-
-## What This Package Provides
-
-- **`zodValidator()`**: Convenience factory using default Zod configuration
-- **`createZodValidator(z)`**: Advanced factory for custom Zod instances
-- **`messageSchema()`**: Convenience helper for defining typed message schemas
-- **`createMessageSchema(z)`**: Advanced factory for custom schema definitions
-- **Type overloads**: Full TypeScript inference from schema to handler context
-- **Discriminated unions**: Full support for union type narrowing in handlers
-
-## Design Pattern
-
-Two API patterns are supported:
-
-### Simple (Most Users)
+The **export-with-helpers pattern** is the recommended way to use this package—no factories, no dual imports:
 
 ```typescript
-import { zodValidator, messageSchema } from "@ws-kit/zod";
-import { WebSocketRouter } from "@ws-kit/core";
-import { z } from "zod";
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/serve/bun";
 
-const router = new WebSocketRouter({ validator: zodValidator() });
-const PingMessage = messageSchema("PING", { text: z.string() });
+// Define message schemas with full type inference
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
 
+// Create type-safe router
+type AppData = { userId?: string };
+const router = createRouter<AppData>();
+
+// Register handlers—fully typed!
 router.on(PingMessage, (ctx) => {
-  // ctx.payload is typed as { text: string }
+  ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
+});
+
+// Serve with type-safe handlers
+serve(router, { port: 3000 });
+```
+
+## What This Package Exports
+
+**Primary (recommended):**
+
+- **`z`**: Re-exported Zod instance (canonical import source)
+- **`message()`**: Helper to create type-safe message schemas
+- **`createRouter()`**: Create a type-safe router with full type inference
+
+**Secondary (advanced use cases):**
+
+- **`zodValidator()`**: Validator adapter for custom router setup
+- **`ZodValidatorAdapter`**: Type class for advanced patterns
+- **`ErrorMessage`**: Standard error message schema
+
+## Key Design Principles
+
+### Single Canonical Import Source
+
+All validator and helper imports come from one place to prevent dual-package hazards:
+
+```typescript
+// ✅ CORRECT: Single import source
+import { z, message, createRouter } from "@ws-kit/zod";
+
+// ❌ AVOID: Dual imports (creates type mismatches)
+import { z } from "zod"; // Different instance
+import { message } from "@ws-kit/zod"; // Uses @ws-kit/zod's z
+// Now you have two Zod instances!
+```
+
+### No Factory Setup Needed
+
+Messages are created with a simple helper function:
+
+```typescript
+// ✅ Direct: No factory call required
+const LoginMessage = message("LOGIN", {
+  username: z.string(),
+  password: z.string(),
 });
 ```
 
-### Advanced (Custom Zod Config)
+### Full Type Inference
+
+Schemas flow through handlers with complete type safety:
 
 ```typescript
-import { createZodValidator, createMessageSchema } from "@ws-kit/zod";
-import { z } from "zod";
-
-const customZ = z.strict(); // Custom Zod instance
-const validator = createZodValidator(customZ);
-const { messageSchema } = createMessageSchema(customZ);
-
-// ... same API from here
+router.on(LoginMessage, (ctx) => {
+  // ✅ ctx.payload.username is inferred as string
+  // ✅ ctx.type is inferred as "LOGIN" (literal type)
+});
 ```
 
-## Platform-Agnostic
+## Platform Support
 
-This adapter works with **any platform** (`@ws-kit/bun`, `@ws-kit/cloudflare-do`, etc.) without modification.
+This adapter works with any ws-kit platform:
+
+- **`@ws-kit/bun`** — Bun.serve WebSocket handler
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects
+- Custom platforms via `@ws-kit/core`
 
 ## Dependencies
 
-- `@ws-kit/core` (required)
-- `zod` (peer) — required in projects using this adapter
+- **`@ws-kit/core`** (required) — Core router
+- **`zod`** (peer) — Validation library
+- **`@ws-kit/serve`** (optional) — Pre-built server setup
+- **`@ws-kit/client`** (optional) — Type-safe browser client

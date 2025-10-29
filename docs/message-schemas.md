@@ -1,86 +1,99 @@
 # Message Schemas
 
-Message schemas are the foundation of type-safe WebSocket communication in Bun WebSocket Router. They define the structure and validation rules for your messages.
+Message schemas define the structure and validation for your WebSocket messages. ws-kit provides a simple, type-safe API for creating and using schemas.
 
-## Factory Pattern (Required)
+## Export-with-Helpers Pattern
 
-**Required since v0.4.0** to fix discriminated union support. The factory pattern ensures proper type inference and prevents dual package hazard:
-
-```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-
-// Create the factory with your validator instance
-const { messageSchema, createMessage, ErrorMessage, ErrorCode } =
-  createMessageSchema(z);
-```
-
-::: warning MIGRATION
-The old direct `messageSchema` export from root package is **deprecated** and will be removed in v1.0. Update imports to use factory pattern as shown above.
-:::
-
-## Creating Message Schemas
-
-### Basic Messages
-
-The simplest schema is a message without a payload:
+Use the **export-with-helpers pattern** to create schemas—no factories, no dual imports:
 
 ```typescript
-// After creating the factory as shown above
-const PingMessage = messageSchema("PING");
-const DisconnectMessage = messageSchema("DISCONNECT");
-```
+import { z, message } from "@ws-kit/zod";
+// or
+import { v, message } from "@ws-kit/valibot";
 
-### Messages with Payloads
-
-Add validated payloads using Zod or Valibot:
-
-::: code-group
-
-```typescript [Zod]
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-
-const { messageSchema } = createMessageSchema(z);
-
-const LoginMessage = messageSchema("LOGIN", {
+// Create a schema directly with the message() helper
+const LoginMessage = message("LOGIN", {
   username: z.string().min(3).max(20),
   password: z.string().min(8),
 });
 
-const ChatMessage = messageSchema("CHAT_MESSAGE", {
+// Use in routers and clients
+const router = createRouter();
+router.on(LoginMessage, (ctx) => {
+  // ✅ ctx.payload.username is typed as string
+  // ✅ ctx.payload.password is typed as string
+});
+```
+
+**Why this pattern:**
+
+- **Single import source** — Import validator and helpers from one place to prevent dual-package hazards
+- **No factories** — `message()` is a simple helper, not a factory-returned function
+- **Full type inference** — Constrained generics preserve types through handlers
+- **Zero setup friction** — Call `message()` directly, no factory call needed
+
+## Creating Message Schemas
+
+### Messages Without Payload
+
+The simplest message type carries only metadata:
+
+```typescript
+const PingMessage = message("PING");
+const DisconnectMessage = message("DISCONNECT");
+
+// Usage
+router.on(PingMessage, (ctx) => {
+  // ctx.type === "PING"
+  // No payload available
+  console.log("Received ping");
+});
+```
+
+### Messages With Payload
+
+Add validated payloads using your validator:
+
+**Zod:**
+
+```typescript
+import { z, message } from "@ws-kit/zod";
+
+const LoginMessage = message("LOGIN", {
+  username: z.string().min(3).max(20),
+  password: z.string().min(8),
+});
+
+const ChatMessage = message("CHAT", {
+  roomId: z.string().uuid(),
   text: z.string().max(1000),
-  roomId: z.uuid(),
   mentions: z.array(z.string()).optional(),
 });
 ```
 
-```typescript [Valibot]
-import * as v from "valibot";
-import { createMessageSchema } from "bun-ws-router/valibot";
+**Valibot:**
 
-const { messageSchema } = createMessageSchema(v);
+```typescript
+import { v, message } from "@ws-kit/valibot";
 
-const LoginMessage = messageSchema("LOGIN", {
+const LoginMessage = message("LOGIN", {
   username: v.pipe(v.string(), v.minLength(3), v.maxLength(20)),
   password: v.pipe(v.string(), v.minLength(8)),
 });
 
-const ChatMessage = messageSchema("CHAT_MESSAGE", {
-  text: v.pipe(v.string(), v.maxLength(1000)),
+const ChatMessage = message("CHAT", {
   roomId: v.pipe(v.string(), v.uuid()),
+  text: v.pipe(v.string(), v.maxLength(1000)),
   mentions: v.optional(v.array(v.string())),
 });
 ```
 
-:::
-
 ## Schema Validation Features
 
-### String Validation (Zod v4 Features)
+### String Validation (Zod v4)
 
 ```typescript
-const UserMessage = messageSchema("USER_UPDATE", {
+const UserMessage = message("USER_UPDATE", {
   // Basic string constraints
   username: z.string().min(3).max(20),
 
@@ -96,341 +109,227 @@ const UserMessage = messageSchema("USER_UPDATE", {
   // Enum values
   role: z.enum(["user", "admin", "moderator"]),
 
-  // Advanced string validators
-  jwt: z.jwt(), // JWT token validation
-  ipv4: z.ipv4(), // IPv4 address
-  ipv6: z.ipv6(), // IPv6 address
-  ulid: z.ulid(), // ULID validation
-  nanoid: z.nanoid(), // NanoID validation
-  datetime: z.iso.datetime(), // ISO datetime string
+  // JWT validation
+  token: z.jwt(),
 });
 ```
 
-### Number Validation
+### Numbers and Dates
 
 ```typescript
-const GameMessage = messageSchema("GAME_UPDATE", {
-  // Integer validation
-  score: z.number().int().min(0),
+const DataMessage = message("DATA", {
+  // Number validation
+  count: z.number().int().positive(),
+  price: z.number().multipleOf(0.01),
 
-  // Float with precision
-  position: z.object({
-    x: z.number().finite(),
-    y: z.number().finite(),
-  }),
-
-  // Range validation
-  health: z.number().min(0).max(100),
-
-  // Multiple of constraint
-  price: z.number().multipleOf(0.01), // For currency
-  quantity: z.number().int().multipleOf(5), // Must be multiple of 5
+  // Date handling
+  timestamp: z.number(), // Unix timestamp
+  createdAt: z.date().optional(),
 });
 ```
 
 ### Complex Types
 
 ```typescript
-const OrderMessage = messageSchema("CREATE_ORDER", {
-  // Nested objects
-  customer: z.object({
-    id: z.uuid(),
-    name: z.string(),
-    email: z.email(),
+const ComplexMessage = message("COMPLEX", {
+  // Arrays
+  items: z.array(z.string()),
+  scores: z.array(z.number()).nonempty(),
+
+  // Objects
+  metadata: z.object({
+    source: z.string(),
+    version: z.number(),
   }),
 
-  // Arrays with validation
-  items: z
-    .array(
-      z.object({
-        productId: z.string(),
-        quantity: z.number().int().positive(),
-        price: z.number().positive(),
-      }),
-    )
-    .min(1)
-    .max(50),
+  // Unions
+  value: z.union([z.string(), z.number()]),
 
-  // Union types
-  payment: z.union([
-    z.object({ type: z.literal("card"), last4: z.string() }),
-    z.object({ type: z.literal("paypal"), email: z.email() }),
-  ]),
-
-  // Optional with default
-  notes: z.string().optional().default(""),
+  // Records
+  tags: z.record(z.string()),
 });
 ```
 
-## Custom Metadata
+## Using Schemas in Routers
 
-Add custom metadata to messages by providing a third parameter (a direct object, not wrapped):
+### Type-Safe Handlers
 
-```typescript
-const AuthenticatedMessage = messageSchema(
-  "AUTHENTICATED_ACTION",
-  { action: z.string() },
-  {
-    // Defining base fields makes them required (overrides optional defaults)
-    correlationId: z.uuid(), // Now required (was optional in base)
-    version: z.string(), // Custom field
-  },
-);
-
-// Resulting meta type:
-// {
-//   timestamp?: number,     // Still optional (auto-added by ctx.send()/publish())
-//   correlationId: string,  // Required (redefined above)
-//   version: string,        // Required custom field
-// }
-```
-
-## Strict Schema Enforcement
-
-::: warning SECURITY REQUIREMENT
-All schemas are **strict by default** - they reject unknown keys at all levels (root, meta, payload). This is a security feature and cannot be disabled.
-:::
-
-### Why Strict Schemas Matter
-
-**Security Benefits:**
-
-1. **DoS Prevention**: Prevents attackers from sending unbounded unknown fields that could exhaust server memory
-2. **Contract Enforcement**: Handlers trust schema validation; unknown keys violate this security contract
-3. **Wire Cleanliness**: Catches client bugs early (e.g., sending `payload` when schema expects none)
-4. **Type Safety**: Ensures runtime data exactly matches TypeScript types
-
-**Example Attack Vector (Prevented by Strict Mode):**
+Handlers automatically receive typed payloads:
 
 ```typescript
-// ❌ Without strict mode, attacker could send:
-{
-  type: "CHAT_MESSAGE",
-  payload: { text: "hi" },
-  extraField1: "x".repeat(1000000),  // 1MB of garbage
-  extraField2: "y".repeat(1000000),  // 1MB of garbage
-  // ... exhaust memory
-}
-
-// ✅ With strict mode (enforced), validation rejects this immediately
-// Error: Unknown keys not allowed: extraField1, extraField2
-```
-
-**Client-Server Symmetry:**
-
-Strict schemas work on both client and server, catching mistakes before they reach production:
-
-```typescript
-// Client tries to send invalid message
-const msg = createMessage(ChatMessage, {
-  text: "hello",
-  typo: "oops", // ❌ Validation fails client-side
+const JoinRoom = message("JOIN_ROOM", {
+  roomId: z.string().uuid(),
+  username: z.string(),
 });
 
-if (!msg.success) {
-  // Caught before sending to server
-  console.error("Validation failed:", msg.error);
-}
-```
-
-## Reserved Meta Fields
-
-The following meta fields are **reserved for security** and cannot be defined in schemas or sent by clients:
-
-- **`clientId`** - Connection identity (UUID v7, auto-generated during WebSocket upgrade)
-  - Access via `ctx.ws.data.clientId` (not `ctx.meta.clientId`)
-  - Router strips this from client messages before validation (security boundary)
-
-- **`receivedAt`** - Server receive timestamp (milliseconds since epoch, `Date.now()`)
-  - Access via `ctx.receivedAt` (not `ctx.meta.receivedAt`)
-  - Captured before parsing, authoritative for all server-side logic
-
-### Why Reserved?
-
-1. **Connection identity belongs to transport layer** (not message payload)
-   - Prevents wire bloat (no need to send UUID in every message)
-   - Eliminates spoofing vectors (client cannot set connection identity)
-
-2. **Preserves client-side validation symmetry**
-   - Schemas work on both client and server
-   - Clients can validate messages they send
-
-3. **Security boundary via normalization**
-   - Router strips reserved keys before validation
-   - Handlers never receive un-normalized, spoofed data
-
-This is a security boundary that prevents client spoofing of server-controlled fields.
-
-### Schema Enforcement
-
-Extended meta schemas MUST NOT define reserved keys. The router throws at schema creation:
-
-```typescript
-// ❌ This throws immediately (caught at design time)
-const BadSchema = messageSchema(
-  "BAD",
-  { text: z.string() },
-  { clientId: z.string() }, // Error: Reserved meta keys not allowed: clientId
-);
-
-// ✅ Correct access in handlers
-router.on(GoodSchema, (ctx) => {
-  const id = ctx.ws.data.clientId; // ✅ Connection identity
-  const time = ctx.receivedAt; // ✅ Server timestamp (authoritative)
+router.on(JoinRoom, (ctx) => {
+  // ✅ ctx.payload.roomId is string
+  // ✅ ctx.payload.username is string
+  // ✅ ctx.type is "JOIN_ROOM" (literal)
+  console.log(`${ctx.payload.username} joined ${ctx.payload.roomId}`);
 });
 ```
 
-## Error Messages
+### Type Inference
 
-The factory provides built-in error handling utilities:
-
-```typescript
-// ErrorMessage and ErrorCode are provided by the factory
-const { ErrorMessage, ErrorCode } = createMessageSchema(z);
-
-// Use in handlers
-ctx.send(ErrorMessage, {
-  code: "VALIDATION_FAILED",
-  message: "Invalid input",
-  context: { field: "email", reason: "Invalid format" },
-});
-
-// Available error codes:
-// - INVALID_MESSAGE_FORMAT
-// - VALIDATION_FAILED
-// - UNSUPPORTED_MESSAGE_TYPE
-// - AUTHENTICATION_FAILED
-// - AUTHORIZATION_FAILED
-// - RESOURCE_NOT_FOUND
-// - RATE_LIMIT_EXCEEDED
-// - INTERNAL_SERVER_ERROR
-```
-
-## Type Inference
-
-Schemas provide full TypeScript type inference:
+All types are inferred from the schema:
 
 ```typescript
-const UserProfileMessage = messageSchema("USER_PROFILE", {
-  id: z.uuid(),
+const UserUpdate = message("USER_UPDATE", {
+  id: z.number(),
   name: z.string(),
-  age: z.number().int().positive(),
-  tags: z.array(z.string()),
+  role: z.enum(["user", "admin"]),
 });
 
-// Type is automatically inferred
-type UserProfile = z.infer<typeof UserProfileMessage.schema>;
-// {
-//   id: string;
-//   name: string;
-//   age: number;
-//   tags: string[];
-// }
-
-router.on(UserProfileMessage, (ctx) => {
-  // ctx.payload is fully typed as UserProfile
-  console.log(ctx.payload.name); // string
-  console.log(ctx.payload.age); // number
+router.on(UserUpdate, (ctx) => {
+  // All fields are fully typed
+  const { id, name, role } = ctx.payload;
+  console.log(`User ${id}: ${name} (${role})`);
 });
 ```
 
-## Validation Transforms
+## Client-Side Validation
 
-Transform data during validation:
-
-```typescript
-const DateMessage = messageSchema("SCHEDULE_EVENT", {
-  // Parse ISO string to Date
-  startDate: z
-    .string()
-    .datetime()
-    .transform((str) => new Date(str)),
-
-  // Normalize strings
-  title: z.string().transform((str) => str.trim().toLowerCase()),
-
-  // Parse JSON
-  metadata: z.string().transform((str) => JSON.parse(str)),
-});
-```
-
-## Discriminated Unions (NEW)
-
-With the factory pattern, discriminated unions now work correctly:
+Schemas work client-side too—validate before sending:
 
 ```typescript
-const PingSchema = messageSchema("PING");
-const PongSchema = messageSchema("PONG");
-const EchoSchema = messageSchema("ECHO", { text: z.string() });
+import { z, message } from "@ws-kit/zod";
 
-// This works perfectly with the factory pattern!
-const MessageUnion = z.discriminatedUnion("type", [
-  PingSchema,
-  PongSchema,
-  EchoSchema,
-]);
-
-// Type inference works correctly
-type Message = z.infer<typeof MessageUnion>;
-```
-
-## Reusable Schemas
-
-Create reusable schema components:
-
-```typescript
-// Common schemas
-const UserIdSchema = z.uuid();
-const TimestampSchema = z.number().int().positive();
-const PaginationSchema = z.object({
-  page: z.number().int().min(1).default(1),
-  limit: z.number().int().min(1).max(100).default(20),
-});
-
-// Compose into message schemas
-const GetUsersMessage = messageSchema("GET_USERS", {
-  filters: z
-    .object({
-      role: z.enum(["user", "admin"]).optional(),
-      active: z.boolean().optional(),
-    })
-    .optional(),
-  pagination: PaginationSchema,
-});
-
-const UserEventMessage = messageSchema("USER_EVENT", {
-  userId: UserIdSchema,
-  timestamp: TimestampSchema,
-  event: z.string(),
-});
-```
-
-## Singleton Pattern (Recommended)
-
-For applications, we recommend creating a singleton factory:
-
-```typescript
-// schemas/factory.ts
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-
-export const { messageSchema, createMessage, ErrorMessage, ErrorCode } =
-  createMessageSchema(z);
-
-// schemas/messages.ts
-import { z } from "zod";
-import { messageSchema } from "./factory";
-
-export const LoginMessage = messageSchema("LOGIN", {
+const LoginMessage = message("LOGIN", {
   username: z.string(),
   password: z.string(),
 });
+
+// Validate on client
+const data = {
+  type: "LOGIN",
+  payload: { username: "alice", password: "secret" },
+  meta: {},
+};
+const result = LoginMessage.safeParse(data);
+
+if (result.success) {
+  ws.send(JSON.stringify(result.data));
+} else {
+  console.error("Validation failed:", result.error);
+}
 ```
 
-## Performance Tips
+## Exporting Schemas
 
-1. **Use Factory Pattern**: Required for proper type inference and discriminated unions
-2. **Cache Schemas**: Define schemas once at module level
-3. **Avoid Complex Transforms**: Keep transforms simple for better performance
-4. **Use Valibot**: For 60-80% smaller bundles in production
-5. **Validate Early**: Let the router validate before your handler runs
+Define schemas in a shared file and reuse server + client:
+
+```typescript
+// shared/messages.ts
+import { z, message } from "@ws-kit/zod";
+
+export const LoginMessage = message("LOGIN", {
+  username: z.string(),
+  password: z.string(),
+});
+
+export const LoginSuccess = message("LOGIN_SUCCESS", {
+  userId: z.string(),
+});
+
+export const ChatMessage = message("CHAT", {
+  text: z.string(),
+});
+```
+
+**Server:**
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+import { LoginMessage, LoginSuccess, ChatMessage } from "./shared/messages";
+
+const router = createRouter();
+
+router.on(LoginMessage, (ctx) => {
+  ctx.send(LoginSuccess, { userId: "123" });
+});
+
+router.on(ChatMessage, (ctx) => {
+  console.log(ctx.payload.text);
+});
+```
+
+**Client:**
+
+```typescript
+import { wsClient } from "@ws-kit/client/zod";
+import { LoginMessage, LoginSuccess, ChatMessage } from "./shared/messages";
+
+const client = wsClient({ url: "wss://api.example.com" });
+
+client.on(LoginSuccess, (msg) => {
+  console.log(`Logged in as ${msg.payload.userId}`);
+});
+
+client.send(LoginMessage, { username: "alice", password: "secret" });
+```
+
+## Discriminated Unions
+
+Create unions of schemas for flexible message handling:
+
+```typescript
+const PingMsg = message("PING");
+const PongMsg = message("PONG", { latency: z.number() });
+const ChatMsg = message("CHAT", { text: z.string() });
+
+// Union type
+const AnyMessage = z.discriminatedUnion("type", [PingMsg, PongMsg, ChatMsg]);
+
+// Type narrowing works automatically
+router.on(PingMsg, (ctx) => {
+  console.log("Ping received");
+});
+
+router.on(ChatMsg, (ctx) => {
+  console.log(`Chat: ${ctx.payload.text}`);
+});
+```
+
+## Standard Error Messages
+
+All routers include a standard error message:
+
+```typescript
+import { message } from "@ws-kit/zod";
+
+// Available in all validators
+const errorCode = z.enum([
+  "VALIDATION_ERROR",
+  "AUTH_ERROR",
+  "INTERNAL_ERROR",
+  "NOT_FOUND",
+  "RATE_LIMIT",
+]);
+
+// Usage
+router.on(SomeMessage, (ctx) => {
+  if (!authorized) {
+    ctx.error("AUTH_ERROR", "Not authorized");
+  }
+});
+```
+
+## Import Warnings
+
+⚠️ **Always use the canonical import source:**
+
+```typescript
+// ✅ CORRECT
+import { z, message } from "@ws-kit/zod";
+const LoginMsg = message("LOGIN", { username: z.string() });
+
+// ❌ AVOID (creates dual-package hazard)
+import { z } from "zod";
+import { message } from "@ws-kit/zod";
+// Now z and message use different Zod instances!
+```
+
+**Why this matters:** Discriminated unions depend on all schemas using the same validator instance. Mixed imports cause silent type failures.
+
+See ADR-007 for more details on the export-with-helpers pattern.

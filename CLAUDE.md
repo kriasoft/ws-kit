@@ -73,7 +73,7 @@ const chatRouter = createRouter<AppData>();
 chatRouter.on(SendMessage, handleChat);
 
 const mainRouter = createRouter<AppData>();
-mainRouter.addRoutes(authRouter).addRoutes(chatRouter);
+mainRouter.merge(authRouter).merge(chatRouter);
 ```
 
 ### Middleware

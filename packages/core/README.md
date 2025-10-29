@@ -63,7 +63,7 @@ If the answer is "specific adapter," the feature belongs in that adapter, not co
 - Lifecycle hooks (`onOpen`, `onClose`, `onAuth`, `onError`)
 - Heartbeat management with configurable ping/pong
 - Payload size limits enforcement
-- Router composition via `addRoutes()`
+- Router composition via `merge()`
 - Message normalization and validation pipeline
 - PubSub integration with pluggable implementations
 
@@ -102,7 +102,7 @@ new WebSocketRouter<V, TData>(options?: WebSocketRouterOptions<V, TData>)
 
 **Router Operations**:
 
-- `addRoutes(router): this` — Merge handlers from another router
+- `merge(router): this` — Merge handlers from another router
 - `publish(channel, message): Promise<void>` — Broadcast to channel
 
 **Platform Adapter Integration** (called by platform adapters):

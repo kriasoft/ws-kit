@@ -5,9 +5,9 @@ import { createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/serve/bun";
 import { chatRouter } from "./chat";
 
-// Create a WebSocket router and add chat routes
+// Create a WebSocket router and merge chat routes
 const router = createRouter();
-router.addRoutes(chatRouter);
+router.merge(chatRouter);
 
 // Serve with Bun using the unified serve() helper
 serve(router, {

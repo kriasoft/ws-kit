@@ -64,6 +64,7 @@ export class WebSocketRouter<
   TData extends WebSocketData = WebSocketData,
 > {
   private readonly validator?: V;
+  private readonly validatorId?: unknown; // Store validator identity for compatibility checks
   private readonly platform?: PlatformAdapter;
   private readonly pubsub: PubSub;
 
@@ -92,6 +93,9 @@ export class WebSocketRouter<
 
   constructor(options: WebSocketRouterOptions<V, TData> = {}) {
     this.validator = options.validator;
+    // Capture validator identity for runtime compatibility checks
+    // Uses the constructor function as identity marker (works for both Zod and Valibot adapters)
+    this.validatorId = this.validator?.constructor;
     this.platform = options.platform;
     this.pubsub =
       options.pubsub || options.platform?.pubsub || new MemoryPubSub();
@@ -339,9 +343,20 @@ export class WebSocketRouter<
       return this;
     }
 
-    const messageType = this.validator.getMessageType(
-      schemaOrMiddleware as MessageSchemaType,
-    );
+    // Validate schema compatibility (runtime validator check)
+    const schema = schemaOrMiddleware as MessageSchemaType;
+    const schemaValidatorId = (
+      schema as unknown as { __wsKitValidatorId?: unknown }
+    )?.__wsKitValidatorId;
+    if (schemaValidatorId && schemaValidatorId !== this.validatorId) {
+      console.error(
+        `[ws] Per-route middleware schema uses incompatible validator. ` +
+          `Expected validator from same family as router, but got different validator instance.`,
+      );
+      return this;
+    }
+
+    const messageType = this.validator.getMessageType(schema);
     const routeMiddlewareList = this.routeMiddleware.get(messageType) || [];
     routeMiddlewareList.push(middleware);
     this.routeMiddleware.set(messageType, routeMiddlewareList);
@@ -353,10 +368,52 @@ export class WebSocketRouter<
   // ———————————————————————————————————————————————————————————————————————————
 
   /**
+   * Get all registered message routes.
+   *
+   * Returns a read-only view of the router's message handlers and their associated
+   * per-route middleware. Useful for introspection and composability.
+   *
+   * @returns Array of route entries with messageType, handler, and middleware
+   *
+   * @example
+   * ```typescript
+   * const routes = router.routes();
+   * for (const route of routes) {
+   *   console.log(`Route: ${route.messageType}, Middleware: ${route.middleware.length}`);
+   * }
+   * ```
+   */
+  routes(): ReadonlyArray<{
+    messageType: string;
+    handler: MessageHandlerEntry<TData>;
+    middleware: ReadonlyArray<Middleware<TData>>;
+  }> {
+    const result: Array<{
+      messageType: string;
+      handler: MessageHandlerEntry<TData>;
+      middleware: Middleware<TData>[];
+    }> = [];
+
+    for (const [messageType, handler] of this.messageHandlers) {
+      result.push({
+        messageType,
+        handler,
+        middleware: [...(this.routeMiddleware.get(messageType) || [])],
+      });
+    }
+
+    return result;
+  }
+
+  /**
    * Merge message handlers from another router into this one.
    *
    * Useful for composing routers from different modules/features.
+   * Merges handlers, lifecycle hooks, global middleware, and per-route middleware.
    * Last-write-wins for duplicate message types.
+   *
+   * This method provides the same functionality as `addRoutes()` with a clearer name
+   * that better expresses composition intent. Prefer `merge()` for new code.
    *
    * @param router - Another WebSocketRouter to merge
    * @returns This router for method chaining
@@ -374,9 +431,20 @@ export class WebSocketRouter<
    * const mainRouter = createRouter({
    *   platform: createBunAdapter(),
    * })
-   *   .addRoutes(authRouter)
-   *   .addRoutes(chatRouter);
+   *   .merge(authRouter)
+   *   .merge(chatRouter);
    * ```
+   */
+  merge(router: WebSocketRouter<V, TData>): this {
+    return this.addRoutes(router);
+  }
+
+  /**
+   * Merge message handlers from another router into this one.
+   *
+   * @deprecated Use `merge()` instead for clearer intent.
+   * @param router - Another WebSocketRouter to merge
+   * @returns This router for method chaining
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addRoutes(router: WebSocketRouter<V, TData> | any): this {

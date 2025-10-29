@@ -518,6 +518,18 @@ export interface MessageHandlerEntry<
 }
 
 /**
+ * Public route entry for router composition.
+ *
+ * Represents a single message route with its handlers and middleware.
+ * Used by the routes() accessor to provide clean router composition without private access.
+ */
+export interface RouteEntry<TData extends WebSocketData = WebSocketData> {
+  messageType: string;
+  handler: MessageHandlerEntry<TData>;
+  middleware: Middleware<TData>[];
+}
+
+/**
  * Adapter interface for pluggable validation libraries.
  *
  * Implementations bridge Zod/Valibot specifics with generic router logic.

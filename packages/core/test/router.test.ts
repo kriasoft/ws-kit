@@ -178,7 +178,7 @@ describe("WebSocketRouter", () => {
   });
 
   describe("Router Composition", () => {
-    it("should merge message handlers via addRoutes", () => {
+    it("should merge message handlers via merge", () => {
       const router1 = new WebSocketRouter({ validator: mockValidator });
       const router2 = new WebSocketRouter({ validator: mockValidator });
 
@@ -192,18 +192,18 @@ describe("WebSocketRouter", () => {
       router2.on(schema2, handler);
 
       const combined = new WebSocketRouter({ validator: mockValidator });
-      combined.addRoutes(router1).addRoutes(router2);
+      combined.merge(router1).merge(router2);
 
       // Test that both handlers are present by trying to handle messages
       // This is implicitly tested by handleMessage not throwing
       expect(() => combined).not.toThrow();
     });
 
-    it("should support method chaining with addRoutes", () => {
+    it("should support method chaining with merge", () => {
       const router1 = new WebSocketRouter({ validator: mockValidator });
       const router2 = new WebSocketRouter({ validator: mockValidator });
 
-      const result = router.addRoutes(router1).addRoutes(router2);
+      const result = router.merge(router1).merge(router2);
       expect(result).toBe(router);
     });
 
@@ -225,7 +225,7 @@ describe("WebSocketRouter", () => {
       router2.on(schema, handler2);
 
       const combined = new WebSocketRouter({ validator: mockValidator });
-      combined.addRoutes(router1).addRoutes(router2);
+      combined.merge(router1).merge(router2);
 
       // router2's handler should override router1's
       // This is tested in message handling tests

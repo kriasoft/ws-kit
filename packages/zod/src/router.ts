@@ -188,15 +188,13 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
   /**
    * Merge message handlers from another router into this one.
    *
-   * Useful for composing routers from different modules/features.
+   * Merges all handlers, lifecycle hooks, and middleware from the source router.
    * Last-write-wins for duplicate message types.
-   *
-   * Note: The source router should have the same validator type.
    *
    * @param router - Another router to merge
    * @returns This router for method chaining
    */
-  addRoutes(router: TypedZodRouter<TData>): this;
+  merge(router: TypedZodRouter<TData>): this;
 
   /**
    * Publish a message to all subscribers on a channel.
@@ -304,9 +302,9 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
     },
 
     // Router composition
-    addRoutes(sourceRouter) {
+    merge(sourceRouter) {
       const coreToAdd = (sourceRouter as any)[Symbol.for("ws-kit.core")];
-      coreRouter.addRoutes(coreToAdd);
+      coreRouter.merge(coreToAdd);
       return router;
     },
 
@@ -318,6 +316,13 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
     // Stable escape hatch for advanced introspection (following React convention)
     [Symbol.for("ws-kit.core")]: coreRouter,
   };
+
+  // Add _core property for backwards compatibility with tests
+  Object.defineProperty(router, "_core", {
+    get: () => coreRouter,
+    enumerable: false,
+    configurable: true,
+  });
 
   return router;
 }

@@ -452,9 +452,7 @@ authRouter.on(LoginMessage, handleLogin);
 const chatRouter = createRouter<AppData>();
 chatRouter.on(SendMessage, handleChat);
 
-const mainRouter = createRouter<AppData>()
-  .addRoutes(authRouter)
-  .addRoutes(chatRouter);
+const mainRouter = createRouter<AppData>().merge(authRouter).merge(chatRouter);
 ```
 
 **Type System Note**: All routers should define the same `TData` type for composition to work correctly. Type compatibility is enforced at compile time.

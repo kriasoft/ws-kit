@@ -8,7 +8,7 @@
  * 1. Global middleware has access to all message types
  * 2. Per-route middleware is correctly typed for specific message schemas
  * 3. Middleware can modify ctx.ws.data with type safety
- * 4. Router composition with addRoutes preserves message union types
+ * 4. router composition with merge preserves message union types
  * 5. Composed routers maintain proper type intersection
  *
  * Tests are run via `tsc --noEmit` to verify type safety.
