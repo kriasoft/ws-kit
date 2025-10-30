@@ -50,72 +50,86 @@ bun add valibot @ws-kit/valibot
 
 ## Quick Start
 
-### Basic Setup
+### High-Level API (Recommended)
 
 ```typescript
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { createRouter, message } from "@ws-kit/zod";
+import { z } from "zod";
 
-// Create router with Bun platform adapter
-const router = createRouter({
-  platform: createBunAdapter(),
+// Define message schemas
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
+
+// Create router
+const router = createRouter();
+
+// Register handlers
+router.on(PingMessage, (ctx) => {
+  ctx.send(PongMessage, { reply: ctx.payload.text });
 });
 
-// Register message handlers
-router.onOpen((ctx) => {
-  console.log(`Client connected: ${ctx.ws.data.clientId}`);
-});
-
-router.onClose((ctx) => {
-  console.log(`Client disconnected: ${ctx.ws.data.clientId}`);
-});
-
-// Create Bun handlers
-const { fetch, websocket } = createBunHandler(router);
-
-// Start server
-Bun.serve({
+// Serve with single call
+serve(router, {
   port: 3000,
-  fetch(req, server) {
-    const url = new URL(req.url);
-
-    // Route WebSocket requests
-    if (url.pathname === "/ws") {
-      return fetch(req, server);
-    }
-
-    // Handle other HTTP routes
-    return new Response("Not Found", { status: 404 });
+  authenticate(req) {
+    // Optional: verify auth token and return user data
+    return {};
   },
-  websocket,
+  // Optional: enable heartbeat for connection liveness detection
+  heartbeat: {
+    intervalMs: 30_000, // Ping every 30 seconds
+    timeoutMs: 5_000, // Wait 5 seconds for pong
+    onStaleConnection(clientId, ws) {
+      console.log(`Connection ${clientId} is stale, closing...`);
+      ws.close();
+    },
+  },
 });
 ```
 
-### With Zod Validation
+### Low-Level API (Advanced)
+
+For more control over server configuration, use the low-level API:
 
 ```typescript
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
 import { createRouter, message } from "@ws-kit/zod";
 import { z } from "zod";
 
-// Create router with Zod validator
+// Create router with Bun platform adapter
 const router = createRouter({
   platform: createBunAdapter(),
 });
 
-// Define message schemas
+// Define and register handlers
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Type-safe handlers with full inference
 router.on(PingMessage, (ctx) => {
-  // ctx.payload is { text: string }
   ctx.send(PongMessage, { reply: ctx.payload.text });
 });
 
-const { fetch, websocket } = createBunHandler(router);
+// Create handlers
+const { fetch, websocket } = createBunHandler(router, {
+  authenticate: async (req) => {
+    // Verify tokens, sessions, etc.
+    return {};
+  },
+});
 
-Bun.serve({ fetch, websocket });
+// Start server
+Bun.serve({
+  port: 3000,
+  fetch(req, server) {
+    const url = new URL(req.url);
+    if (url.pathname === "/ws") {
+      return fetch(req, server);
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+  websocket,
+});
 ```
 
 ## API Reference
@@ -183,16 +197,22 @@ router.on(SomeSchema, (ctx) => {
 ### Broadcasting
 
 ```typescript
-// Publish to all subscribers on a channel
-await router.publish("room:123", { text: "Hello" });
+// Define schemas
+const JoinRoom = message("JOIN_ROOM", { room: z.string() });
+const RoomUpdate = message("ROOM_UPDATE", { text: z.string() });
 
-// Subscribe in a handler
-router.on(JoinSchema, (ctx) => {
-  ctx.ws.subscribe("room:123");
+router.on(JoinRoom, (ctx) => {
+  const { room } = ctx.payload;
+
+  // Subscribe to room channel
+  ctx.subscribe(`room:${room}`);
 });
 
-// Messages from publish() go to all subscribed connections
+// Broadcast to all subscribers on a channel
+router.publish("room:123", RoomUpdate, { text: "Hello everyone!" });
 ```
+
+Messages published to a channel are received by all connections subscribed to that channel.
 
 ## PubSub Scope & Scaling
 
@@ -228,12 +248,12 @@ await router.publish("notifications", { message: "Hello" });
 Called when a WebSocket connection is established:
 
 ```typescript
-router.onOpen(async (ctx) => {
+router.onOpen((ctx) => {
   const { clientId } = ctx.ws.data;
   console.log(`[${clientId}] Connected`);
 
   // Subscribe to channels
-  ctx.ws.subscribe("notifications");
+  ctx.subscribe("notifications");
 
   // Send welcome message
   ctx.send(WelcomeMessage, { greeting: "Welcome!" });
@@ -326,35 +346,41 @@ const router = createRouter({
 // Track rooms
 const rooms = new Map<string, Set<string>>();
 
-router.on(JoinRoomMessage, async (ctx) => {
+router.on(JoinRoomMessage, (ctx) => {
   const { room } = ctx.payload;
   const { clientId } = ctx.ws.data;
 
   // Subscribe to room
-  ctx.ws.subscribe(`room:${room}`);
+  ctx.subscribe(`room:${room}`);
 
   // Track membership
   if (!rooms.has(room)) rooms.set(room, new Set());
   rooms.get(room)!.add(clientId);
 
-  // Broadcast user list
+  // Broadcast user list using schema
   const users = Array.from(rooms.get(room)!);
-  await router.publish(`room:${room}`, {
-    type: "ROOM:LIST",
-    users,
-  });
+  router.publish(`room:${room}`, UserListMessage, { users });
 });
 
-router.on(SendMessageMessage, async (ctx) => {
+router.on(SendMessageMessage, (ctx) => {
   const { text } = ctx.payload;
   const { clientId } = ctx.ws.data;
+  const room = (ctx.ws.data as any).room || "general"; // Set during JOIN
 
-  // Broadcast to all in room
-  await router.publish("room:general", {
-    type: "ROOM:BROADCAST",
+  // Broadcast to all in room using schema
+  router.publish(`room:${room}`, BroadcastMessage, {
     user: clientId,
     text,
   });
+});
+
+router.onClose((ctx) => {
+  const { clientId } = ctx.ws.data;
+  const room = (ctx.ws.data as any).room;
+
+  if (room && rooms.has(room)) {
+    rooms.get(room)!.delete(clientId);
+  }
 });
 
 const { fetch, websocket } = createBunHandler(router);

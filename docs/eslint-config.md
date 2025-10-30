@@ -17,165 +17,178 @@ import { message } from "@ws-kit/zod"; // Uses Instance B's z
 
 Configure ESLint to forbid direct imports from `"zod"` and `"valibot"`.
 
+**Note:** The ws-kit project currently does not enforce these restrictions in its own codebase, but we recommend adding them to application projects that use ws-kit to prevent dual-package hazards.
+
 ## Configuration
+
+WS-Kit uses ESLint 9.x with the modern flat config format (`eslint.config.js` or `eslint.config.ts`). If you're using an older version of ESLint, see the [legacy configuration section](#legacy-configuration-eslint-8x) below.
 
 ### For Zod Users
 
-Add this to `.eslintrc.js` or `.eslintrc.json`:
+**TypeScript (eslint.config.ts):**
 
-**JavaScript (.eslintrc.js):**
+```typescript
+import { defineConfig } from "eslint/config";
 
-```javascript
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        name: "zod",
-        message:
-          "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. " +
-          "Use: import { z, message, createRouter } from '@ws-kit/zod'",
-      },
-    ],
+export default defineConfig([
+  {
+    name: "restrict-zod-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "zod",
+          message:
+            "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. " +
+            "Use: import { z, message, createRouter } from '@ws-kit/zod'",
+        },
+      ],
+    },
   },
-};
+]);
 ```
 
-**JSON (.eslintrc.json):**
+**JavaScript (eslint.config.js):**
 
-```json
-{
-  "rules": {
-    "no-restricted-imports": [
-      "error",
-      {
-        "name": "zod",
-        "message": "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. Use: import { z, message, createRouter } from '@ws-kit/zod'"
-      }
-    ]
-  }
-}
+```javascript
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  {
+    name: "restrict-zod-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "zod",
+          message:
+            "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. " +
+            "Use: import { z, message, createRouter } from '@ws-kit/zod'",
+        },
+      ],
+    },
+  },
+]);
 ```
 
 ### For Valibot Users
 
-**JavaScript (.eslintrc.js):**
+**TypeScript (eslint.config.ts):**
 
-```javascript
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        name: "valibot",
-        message:
-          "Import Valibot from @ws-kit/valibot instead to prevent dual-package hazards. " +
-          "Use: import { v, message, createRouter } from '@ws-kit/valibot'",
-      },
-    ],
+```typescript
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  {
+    name: "restrict-valibot-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "valibot",
+          message:
+            "Import Valibot from @ws-kit/valibot instead to prevent dual-package hazards. " +
+            "Use: import { v, message, createRouter } from '@ws-kit/valibot'",
+        },
+      ],
+    },
   },
-};
-```
-
-**JSON (.eslintrc.json):**
-
-```json
-{
-  "rules": {
-    "no-restricted-imports": [
-      "error",
-      {
-        "name": "valibot",
-        "message": "Import Valibot from @ws-kit/valibot instead to prevent dual-package hazards. Use: import { v, message, createRouter } from '@ws-kit/valibot'"
-      }
-    ]
-  }
-}
+]);
 ```
 
 ### For Both Validators
 
 If your project might use both (e.g., server + client):
 
-**JavaScript (.eslintrc.js):**
+**TypeScript (eslint.config.ts):**
 
-```javascript
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        name: "zod",
-        message:
-          "Import Zod from @ws-kit/zod instead. " +
-          "Use: import { z, message, createRouter } from '@ws-kit/zod'",
-      },
-      {
-        name: "valibot",
-        message:
-          "Import Valibot from @ws-kit/valibot instead. " +
-          "Use: import { v, message, createRouter } from '@ws-kit/valibot'",
-      },
-    ],
+```typescript
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  {
+    name: "restrict-validator-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "zod",
+          message:
+            "Import Zod from @ws-kit/zod instead. " +
+            "Use: import { z, message, createRouter } from '@ws-kit/zod'",
+        },
+        {
+          name: "valibot",
+          message:
+            "Import Valibot from @ws-kit/valibot instead. " +
+            "Use: import { v, message, createRouter } from '@ws-kit/valibot'",
+        },
+      ],
+    },
   },
-};
+]);
 ```
 
 ## Allow Exceptions
 
 To allow direct imports in specific files (e.g., test files or utilities):
 
-**JavaScript (.eslintrc.js):**
+**TypeScript (eslint.config.ts):**
 
-```javascript
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        name: "zod",
-        message: "Import from @ws-kit/zod instead",
-        // Allow imports in files matching this pattern
-        importNames: ["ZodError"], // Allow specific imports
-      },
-    ],
-  },
+```typescript
+import { defineConfig } from "eslint/config";
 
-  // Or allow entire files
-  overrides: [
-    {
-      files: ["**/*.test.ts", "**/*.spec.ts"],
-      rules: {
-        "no-restricted-imports": "off", // Allow direct imports in tests
-      },
+export default defineConfig([
+  {
+    name: "restrict-validator-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "zod",
+          message: "Import from @ws-kit/zod instead",
+        },
+      ],
     },
-  ],
-};
+  },
+  {
+    name: "test-files-allow-direct-imports",
+    files: ["**/*.test.ts", "**/*.spec.ts"],
+    rules: {
+      "no-restricted-imports": "off", // Allow direct imports in tests
+    },
+  },
+]);
 ```
 
 ## Scope Restrictions
 
 Prevent imports from specific package paths (e.g., internal adapters):
 
-**JavaScript (.eslintrc.js):**
+**TypeScript (eslint.config.ts):**
 
-```javascript
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        name: "zod",
-        message: "Import from @ws-kit/zod instead",
-      },
-      {
-        name: "@ws-kit/zod/adapter", // Prevent internal imports
-        message:
-          "Do not import adapters directly. Import from @ws-kit/zod main entry.",
-      },
-    ],
+```typescript
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  {
+    name: "restrict-validator-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "zod",
+          message: "Import from @ws-kit/zod instead",
+        },
+        {
+          name: "@ws-kit/zod/adapter", // Prevent internal imports
+          message:
+            "Do not import adapters directly. Import from @ws-kit/zod main entry.",
+        },
+      ],
+    },
   },
-};
+]);
 ```
 
 ## Testing the Configuration
@@ -234,17 +247,25 @@ Enforce ESLint before commits using husky + lint-staged:
 
 ```json
 {
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
+  "scripts": {
+    "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,tsx}": "eslint --fix",
-    "*.{ts,tsx,json}": "prettier --write"
+    "*.{ts,tsx,js}": "eslint --report-unused-disable-directives --fix",
+    "*.{ts,tsx,js,json,md}": "prettier --write"
   }
 }
 ```
+
+Install and set up husky:
+
+```bash
+bun add -D husky lint-staged
+bun prepare
+echo 'bunx lint-staged' > .husky/pre-commit
+```
+
+**Note:** The ws-kit project itself uses a simpler lint-staged configuration that only runs Prettier. The example above shows best practices for application projects that want to enforce both ESLint and Prettier on commit.
 
 ## CI/CD Integration
 
@@ -261,22 +282,150 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: oven-sh/setup-bun@v1
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run lint
 ```
 
-**bun scripts (package.json):**
+**Package scripts (package.json):**
 
 ```json
 {
   "scripts": {
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix"
+    "lint": "eslint --report-unused-disable-directives .",
+    "lint:fix": "eslint --report-unused-disable-directives --fix ."
   }
 }
 ```
+
+## Complete Example
+
+Here's a full ESLint configuration for a ws-kit project using Zod:
+
+**eslint.config.ts:**
+
+```typescript
+import eslint from "@eslint/js";
+import prettier from "eslint-config-prettier";
+import { defineConfig } from "eslint/config";
+import tslint from "typescript-eslint";
+
+export default defineConfig([
+  {
+    name: "global-ignores",
+    ignores: ["node_modules", "dist/", ".bun/"],
+  },
+  {
+    name: "eslint-recommended",
+    extends: [eslint.configs.recommended],
+  },
+  {
+    name: "typescript-configs",
+    files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+    extends: [
+      ...tslint.configs.recommended,
+      ...tslint.configs.strict,
+      ...tslint.configs.stylistic,
+    ],
+  },
+  {
+    name: "restrict-validator-imports",
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          name: "zod",
+          message:
+            "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. " +
+            "Use: import { z, message, createRouter } from '@ws-kit/zod'",
+        },
+      ],
+    },
+  },
+  {
+    name: "test-files-relaxed",
+    files: ["**/*.test.ts", "**/*.spec.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-empty-function": "off",
+    },
+  },
+  {
+    name: "prettier-overrides",
+    extends: [prettier],
+  },
+]);
+```
+
+## ws-kit Project Configuration
+
+For reference, here's the actual ESLint configuration used in the ws-kit monorepo:
+
+**eslint.config.ts:**
+
+```typescript
+import eslint from "@eslint/js";
+import prettier from "eslint-config-prettier";
+import { defineConfig } from "eslint/config";
+import tslint from "typescript-eslint";
+
+export default defineConfig([
+  {
+    name: "global-ignores",
+    ignores: [
+      "node_modules",
+      ".bun/",
+      ".vitepress/dist",
+      ".vitepress/cache",
+      "docs/",
+      "packages/*/dist/",
+    ],
+  },
+  {
+    name: "eslint-recommended",
+    extends: [eslint.configs.recommended],
+  },
+  {
+    name: "typescript-configs",
+    files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+    extends: [
+      ...tslint.configs.recommended,
+      ...tslint.configs.strict,
+      ...tslint.configs.stylistic,
+    ],
+  },
+  {
+    name: "test-files-relaxed",
+    files: ["packages/**/test/**/*.ts", "packages/**/test/**/*.test.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-empty-function": "off",
+    },
+  },
+  {
+    name: "example-files-relaxed",
+    files: ["examples/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
+    name: "prettier-overrides",
+    extends: [prettier],
+  },
+]);
+```
+
+**Key differences from application projects:**
+
+- **No `no-restricted-imports` rule** — ws-kit packages need direct access to Zod/Valibot for adapter implementation
+- **More comprehensive ignores** — Ignores VitePress docs, package dist directories, and example projects
+- **Separate test and example file rules** — Test files have relaxed TypeScript rules for convenience
 
 ## Summary
 
@@ -290,8 +439,65 @@ jobs:
 
 The combination of ESLint + proper imports prevents discriminated union issues and ensures type safety across your codebase.
 
+## Legacy Configuration (ESLint 8.x)
+
+If you're still using ESLint 8.x with the legacy `.eslintrc` format, here's the equivalent configuration:
+
+**JavaScript (.eslintrc.js):**
+
+```javascript
+module.exports = {
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        name: "zod",
+        message:
+          "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. " +
+          "Use: import { z, message, createRouter } from '@ws-kit/zod'",
+      },
+    ],
+  },
+  overrides: [
+    {
+      files: ["**/*.test.ts", "**/*.spec.ts"],
+      rules: {
+        "no-restricted-imports": "off",
+      },
+    },
+  ],
+};
+```
+
+**JSON (.eslintrc.json):**
+
+```json
+{
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "name": "zod",
+        "message": "Import Zod from @ws-kit/zod instead to prevent dual-package hazards. Use: import { z, message, createRouter } from '@ws-kit/zod'"
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.spec.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}
+```
+
+**Note:** ESLint 8.x is deprecated. We recommend upgrading to ESLint 9.x and using the flat config format shown in the main sections above.
+
 ## See Also
 
 - [ADR-007: Export-with-Helpers Pattern](./adr/007-export-with-helpers-pattern.md)
 - [Message Schemas](./message-schemas.md)
 - [ESLint Documentation](https://eslint.org/docs/latest/rules/no-restricted-imports)
+- [ESLint Flat Config Migration Guide](https://eslint.org/docs/latest/use/configure/migration-guide)

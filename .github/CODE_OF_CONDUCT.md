@@ -2,7 +2,7 @@
 
 ## Our Commitment
 
-We're building bun-ws-router to be useful, reliable, and accessible to everyone. We want our community to reflect those same values.
+We're building WS-Kit to be useful, reliable, and accessible to everyone. We want our community to reflect those same values.
 
 ## Expected Behavior
 
@@ -24,13 +24,13 @@ We're building bun-ws-router to be useful, reliable, and accessible to everyone.
 Issues can be reported to:
 
 - **Project maintainers**: Open an issue or discussion
-- **Private concerns**: Email security@kriasoft.com
+- **Private concerns**: Email [security@kriasoft.com](mailto:security@kriasoft.com)
 
 We'll respond promptly and fairly. Consequences may include warnings, temporary restrictions, or permanent bans depending on severity.
 
 ## Scope
 
-This applies to all project spaces: GitHub repositories, discussions, and any bun-ws-router-related communications.
+This applies to all project spaces: GitHub repositories, discussions, and any WS-Kit-related communications.
 
 ---
 

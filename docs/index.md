@@ -17,20 +17,20 @@ hero:
 features:
   - icon: 🛡️
     title: Type-Safe Routing
-    details: Define message schemas with Zod or Valibot and get full TypeScript type inference from schema to handler
+    details: Define message schemas with Zod or Valibot and get full TypeScript type inference from schema to handler without type assertions
+  - icon: 🔄
+    title: Request-Response Pattern
+    details: Built-in RPC with auto-correlation, timeouts, and streaming progress updates using rpc() helper and ctx.reply()
+  - icon: 📡
+    title: Broadcasting & PubSub
+    details: Type-safe publish/subscribe with topic-based routing. Use ctx.publish() in handlers or router.publish() for system events
+  - icon: 🔌
+    title: Middleware Support
+    details: Global and per-route middleware with async/await support for authentication, rate limiting, and authorization
   - icon: ⚡
     title: Multi-Platform
     details: Works with Bun's high-performance WebSocket server and Cloudflare Durable Objects with platform-specific optimizations
-  - icon: 🎯
-    title: Message-Based Architecture
-    details: Consistent message structure with automatic routing based on message types
   - icon: 🔧
-    title: Developer Experience
-    details: Simple API with powerful features like error boundaries, connection metadata, and async handlers
-  - icon: 📦
-    title: Lightweight
-    details: Choose Valibot for significantly smaller bundles or Zod for familiar syntax. Core logic shared between adapters
-  - icon: 🚀
-    title: Production Ready
-    details: Built-in error handling, authentication patterns, and room broadcasting for real-world applications
+    title: Structured Error Handling
+    details: 13 gRPC-aligned error codes with WsKitError class following WHATWG Error standard. Automatic error responses, cause chaining, and JSON serialization for observability tools
 ---

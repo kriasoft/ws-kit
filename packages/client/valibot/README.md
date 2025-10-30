@@ -8,36 +8,40 @@ Define schemas on the server, reuse in the client with full type safety:
 
 ```typescript
 // shared/messages.ts (import once, use everywhere)
-import { message } from "@ws-kit/valibot";
+import { v, message, rpc } from "@ws-kit/valibot";
 
-export const Ping = message("PING");
-export const Pong = message("PONG", { latency: v.number() });
+// Fire-and-forget messages
 export const UserUpdate = message("USER_UPDATE", {
   id: v.number(),
   name: v.string(),
 });
+
+// Request/response with RPC (modern approach)
+export const Ping = rpc("PING", undefined, "PONG", { latency: v.number() });
 ```
 
 ```typescript
 // client.ts
 import { wsClient } from "@ws-kit/client/valibot";
-import { Ping, Pong, UserUpdate } from "./shared/messages";
+import { Ping, UserUpdate } from "./shared/messages";
 
 const client = wsClient({ url: "wss://api.example.com" });
 
 await client.connect();
 
 // Type-safe message handler
-client.on(Pong, (msg) => {
-  // ✅ msg.payload.latency is typed as number
-  console.log(`Latency: ${msg.payload.latency}ms`);
+client.on(UserUpdate, (msg) => {
+  // ✅ msg.payload.id is typed as number
+  // ✅ msg.payload.name is typed as string
+  console.log(`User ${msg.payload.id}: ${msg.payload.name}`);
 });
 
-// Type-safe message sending (fire-and-forget)
-client.send(Ping);
+// Fire-and-forget sending
+client.send(UserUpdate, { id: 1, name: "Alice" });
 
-// Request/response pattern with timeout
-const response = await client.request(Ping, Pong, { timeoutMs: 5000 });
+// RPC request/response with auto-detected response (modern)
+const response = await client.request(Ping, {}, { timeoutMs: 5000 });
+// ✅ response.payload.latency is typed as number (auto-detected from RPC schema)
 console.log(`Server latency: ${response.payload.latency}ms`);
 ```
 
@@ -106,13 +110,17 @@ client.send(UserUpdate, { id: 1, name: "Alice" });
 client.send(Ping);
 ```
 
-### `request(schema, reply, options?)`
+### `request(schema, payload?, options?)`
 
-Request/response with typed reply:
+Request/response with RPC schemas. Response type is auto-detected from the RPC schema:
 
 ```typescript
-const response = await client.request(Ping, Pong, { timeoutMs: 5000 });
-// response is fully typed as Pong schema
+// RPC-style (recommended): response auto-detected from schema
+const response = await client.request(Ping, {}, { timeoutMs: 5000 });
+// ✅ response.payload is fully typed from Ping.response
+
+// Traditional style: explicit response schema (backward compatible)
+const response = await client.request(Ping, {}, Pong, { timeoutMs: 5000 });
 ```
 
 ### `connect() / disconnect()`

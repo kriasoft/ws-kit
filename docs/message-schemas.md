@@ -77,20 +77,20 @@ const ChatMessage = message("CHAT", {
 import { v, message } from "@ws-kit/valibot";
 
 const LoginMessage = message("LOGIN", {
-  username: v.pipe(v.string(), v.minLength(3), v.maxLength(20)),
-  password: v.pipe(v.string(), v.minLength(8)),
+  username: v.string(),
+  password: v.string(),
 });
 
 const ChatMessage = message("CHAT", {
-  roomId: v.pipe(v.string(), v.uuid()),
-  text: v.pipe(v.string(), v.maxLength(1000)),
+  roomId: v.string(),
+  text: v.string(),
   mentions: v.optional(v.array(v.string())),
 });
 ```
 
 ## Schema Validation Features
 
-### String Validation (Zod v4)
+### String Validation
 
 ```typescript
 const UserMessage = message("USER_UPDATE", {
@@ -98,10 +98,10 @@ const UserMessage = message("USER_UPDATE", {
   username: z.string().min(3).max(20),
 
   // Email validation
-  email: z.email(),
+  email: z.string().email(),
 
   // URL validation
-  website: z.url().optional(),
+  website: z.string().url().optional(),
 
   // Regex patterns
   phoneNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/),
@@ -109,8 +109,8 @@ const UserMessage = message("USER_UPDATE", {
   // Enum values
   role: z.enum(["user", "admin", "moderator"]),
 
-  // JWT validation
-  token: z.jwt(),
+  // UUID validation
+  id: z.string().uuid(),
 });
 ```
 
@@ -200,7 +200,7 @@ const LoginMessage = message("LOGIN", {
   password: z.string(),
 });
 
-// Validate on client
+// Validate with safeParse before sending
 const data = {
   type: "LOGIN",
   payload: { username: "alice", password: "secret" },
@@ -213,7 +213,53 @@ if (result.success) {
 } else {
   console.error("Validation failed:", result.error);
 }
+
+// Or use the ws-kit client which handles validation automatically
+import { wsClient } from "@ws-kit/client/zod";
+
+const client = wsClient({ url: "ws://localhost:3000" });
+client.send(LoginMessage, { username: "alice", password: "secret" });
 ```
+
+## Request-Response Pattern (RPC)
+
+Use the `rpc()` helper to bind request and response schemas together:
+
+```typescript
+import { z, rpc } from "@ws-kit/zod";
+
+// Bind request and response schemas together
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_DATA", {
+  user: z.object({ name: z.string(), email: z.string() }),
+});
+
+// Server side: use with router.rpc()
+router.rpc(Ping, (ctx) => {
+  ctx.reply(Ping.response, { reply: `Got: ${ctx.payload.text}` });
+});
+
+router.rpc(GetUser, async (ctx) => {
+  const user = await db.users.findById(ctx.payload.id);
+  ctx.reply(GetUser.response, { user });
+});
+
+// Client side: response schema auto-detected
+const client = wsClient({ url: "ws://localhost:3000" });
+const response = await client.request(Ping, { text: "hello" });
+// response.type === "PONG"
+// response.payload.reply === "Got: hello"
+```
+
+The RPC pattern provides these benefits:
+
+- No schema repetition at call sites
+- Response type automatically inferred from bound schema
+- Works seamlessly with router handlers
+- Type-safe request and response payloads
+
+For more details, see docs/specs/schema.md.
 
 ## Exporting Schemas
 
@@ -221,7 +267,7 @@ Define schemas in a shared file and reuse server + client:
 
 ```typescript
 // shared/messages.ts
-import { z, message } from "@ws-kit/zod";
+import { z, message, rpc } from "@ws-kit/zod";
 
 export const LoginMessage = message("LOGIN", {
   username: z.string(),
@@ -235,13 +281,23 @@ export const LoginSuccess = message("LOGIN_SUCCESS", {
 export const ChatMessage = message("CHAT", {
   text: z.string(),
 });
+
+// RPC schemas
+export const GetUser = rpc("GET_USER", { id: z.string() }, "USER_DATA", {
+  user: z.object({ name: z.string(), email: z.string() }),
+});
 ```
 
 **Server:**
 
 ```typescript
 import { createRouter } from "@ws-kit/zod";
-import { LoginMessage, LoginSuccess, ChatMessage } from "./shared/messages";
+import {
+  LoginMessage,
+  LoginSuccess,
+  ChatMessage,
+  GetUser,
+} from "./shared/messages";
 
 const router = createRouter();
 
@@ -252,13 +308,23 @@ router.on(LoginMessage, (ctx) => {
 router.on(ChatMessage, (ctx) => {
   console.log(ctx.payload.text);
 });
+
+router.rpc(GetUser, (ctx) => {
+  const user = { name: "Alice", email: "alice@example.com" };
+  ctx.reply(GetUser.response, { user });
+});
 ```
 
 **Client:**
 
 ```typescript
 import { wsClient } from "@ws-kit/client/zod";
-import { LoginMessage, LoginSuccess, ChatMessage } from "./shared/messages";
+import {
+  LoginMessage,
+  LoginSuccess,
+  ChatMessage,
+  GetUser,
+} from "./shared/messages";
 
 const client = wsClient({ url: "wss://api.example.com" });
 
@@ -267,6 +333,10 @@ client.on(LoginSuccess, (msg) => {
 });
 
 client.send(LoginMessage, { username: "alice", password: "secret" });
+
+// RPC call
+const response = await client.request(GetUser, { id: "123" });
+console.log(`User: ${response.payload.user.name}`);
 ```
 
 ## Discriminated Unions
@@ -293,27 +363,50 @@ router.on(ChatMsg, (ctx) => {
 
 ## Standard Error Messages
 
-All routers include a standard error message:
+All routers include a standard error message (see docs/specs/error-handling.md for details):
 
 ```typescript
-import { message } from "@ws-kit/zod";
+import { ErrorMessage, ErrorCode } from "@ws-kit/zod";
+// or: import { ErrorMessage, ErrorCode } from "@ws-kit/valibot";
 
-// Available in all validators
-const errorCode = z.enum([
-  "INVALID_ARGUMENT",
-  "UNAUTHENTICATED",
-  "INTERNAL",
-  "NOT_FOUND",
-  "RESOURCE_EXHAUSTED",
-]);
+// Standard error codes (13 total, gRPC-aligned per ADR-015):
+// Terminal: UNAUTHENTICATED, PERMISSION_DENIED, INVALID_ARGUMENT,
+//          FAILED_PRECONDITION, NOT_FOUND, ALREADY_EXISTS, ABORTED
+// Transient: DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE
+// Server/evolution: UNIMPLEMENTED, INTERNAL, CANCELLED
 
-// Usage
+// Usage with ctx.error() helper
 router.on(SomeMessage, (ctx) => {
   if (!authorized) {
-    ctx.error("UNAUTHENTICATED", "Not authorized");
+    ctx.error("PERMISSION_DENIED", "Not authorized");
   }
 });
+
+// ErrorMessage schema structure:
+// {
+//   type: "ERROR",
+//   meta: { timestamp?, correlationId? },
+//   payload: {
+//     code: ErrorCode,          // One of the 13 standard codes
+//     message?: string,         // Optional error description
+//     details?: Record<string, any>,  // Optional additional context
+//     retryable?: boolean       // Optional retry hint
+//   }
+// }
+
+// Example error validation
+const result = ErrorMessage.safeParse({
+  type: "ERROR",
+  meta: {},
+  payload: {
+    code: "INVALID_ARGUMENT",
+    message: "Missing required field",
+    details: { field: "username" },
+  },
+});
 ```
+
+**Note**: `ERROR` messages are server-to-client only. Clients should NOT send `ERROR` type messages.
 
 ## Import Warnings
 

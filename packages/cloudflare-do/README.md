@@ -89,7 +89,14 @@ import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
 
-const handler = createDurableObjectHandler({ router: router });
+const handler = createDurableObjectHandler(router, {
+  authenticate: async (req) => {
+    const token = req.headers.get("authorization");
+    // Verify token and return user data
+    return { userId: "user_123" };
+  },
+  maxConnections: 500, // Optional: limit connections per DO
+});
 
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {
@@ -239,22 +246,42 @@ export default {
 ### Chat Application
 
 ```typescript
-const router = createRouter();
+import { z, message, createRouter } from "@ws-kit/zod";
+
+const JoinRoom = message("JOIN_ROOM", { room: z.string() });
+const SendMessage = message("SEND_MESSAGE", { text: z.string() });
+const RoomList = message("ROOM:LIST", { users: z.array(z.string()) });
+const RoomMessage = message("ROOM:MESSAGE", {
+  user: z.string(),
+  text: z.string(),
+});
+
+type AppData = { clientId?: string; room?: string };
+const router = createRouter<AppData>();
 
 const members = new Set<string>();
 
-router.on(JoinRoom, async (ctx) => {
-  members.add(ctx.ws.data.clientId);
-  await router.publish("room:updates", {
-    type: "ROOM:LIST",
+router.on(JoinRoom, (ctx) => {
+  const { room } = ctx.payload;
+  const { clientId } = ctx.ws.data;
+
+  members.add(clientId!);
+  ctx.assignData({ room });
+  ctx.subscribe(`room:${room}`);
+
+  // Broadcast updated member list using schema
+  router.publish(`room:${room}`, RoomList, {
     users: Array.from(members),
   });
 });
 
-router.on(SendMessage, async (ctx) => {
-  await router.publish("room:messages", {
-    type: "ROOM:MESSAGE",
-    user: ctx.ws.data.clientId,
+router.on(SendMessage, (ctx) => {
+  const room = ctx.ws.data.room || "general";
+  const { clientId } = ctx.ws.data;
+
+  // Broadcast message using schema
+  router.publish(`room:${room}`, RoomMessage, {
+    user: clientId!,
     text: ctx.payload.text,
   });
 });

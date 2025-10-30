@@ -94,10 +94,11 @@ new WebSocketRouter<V, TData>(options?: WebSocketRouterOptions<V, TData>)
 
 **Handler Registration**:
 
-- `on(schema, handler): this` — Register message handler
+- `on(schema, handler): this` — Register fire-and-forget message handler
+- `rpc(schema, handler): this` — Register request/response (RPC) handler
 - `onOpen(handler): this` — Register connection open handler
 - `onClose(handler): this` — Register connection close handler
-- `onAuth(handler): this` — Register authentication handler
+- `onAuth(handler): this` — Register authentication handler (called via validator)
 - `onError(handler): this` — Register error handler
 
 **Router Operations**:
@@ -114,11 +115,13 @@ new WebSocketRouter<V, TData>(options?: WebSocketRouterOptions<V, TData>)
 
 ### Lifecycle Hooks
 
-**onAuth**: Called on connection open to authenticate
+**onAuth**: Called on connection open to authenticate. Return `true` to allow connection, `false` to reject:
 
 ```typescript
 onAuth((ctx) => {
-  return ctx.ws.data.token ? true : false;
+  // Validate token or other credentials
+  const isValid = ctx.ws.data.token ? validateToken(ctx.ws.data.token) : false;
+  return isValid; // true to allow, false to reject
 });
 ```
 

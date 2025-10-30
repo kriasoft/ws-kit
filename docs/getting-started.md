@@ -38,6 +38,10 @@ Create message types once and share them between server and client:
 // shared/schemas.ts (imported by both server and client)
 import { z, message } from "@ws-kit/zod";
 
+export const JoinRoom = message("JOIN_ROOM", {
+  roomId: z.string(),
+});
+
 export const ChatMessage = message("CHAT_MESSAGE", {
   text: z.string(),
   roomId: z.string(),
@@ -59,9 +63,9 @@ Simple and straightforward—no factories, just plain functions.
 
 ```typescript
 // server.ts
-import { z, message, createRouter } from "@ws-kit/zod";
+import { createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
-import { ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
+import { JoinRoom, ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
 
 type AppData = {
   userId?: string;
@@ -70,33 +74,23 @@ type AppData = {
 
 const router = createRouter<AppData>();
 
-router.onOpen((ctx) => {
-  console.log(`Client ${ctx.ws.data?.userId} connected`);
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+
+  // Subscribe to room and store in connection data
+  ctx.assignData({ roomId });
+  ctx.subscribe(roomId);
 });
 
 router.on(ChatMessage, (ctx) => {
   const { text, roomId } = ctx.payload;
-  console.log(`Message in ${roomId}: ${text}`);
+  const userId = ctx.ws.data.userId || "anonymous";
 
-  // Subscribe to room
-  ctx.assignData({ roomId });
-  ctx.subscribe(roomId);
-
-  // Broadcast to room
+  // Broadcast to room subscribers
   router.publish(roomId, ChatMessage, {
     text,
     roomId,
   });
-});
-
-router.onClose((ctx) => {
-  const { roomId, userId } = ctx.ws.data || {};
-  console.log(`Client ${userId} disconnected from ${roomId}`);
-
-  if (roomId) {
-    ctx.unsubscribe(roomId);
-    router.publish(roomId, UserLeft, { userId: userId || "unknown" });
-  }
 });
 
 // Serve with type-safe handlers
@@ -107,6 +101,17 @@ serve(router, {
     const token = req.headers.get("authorization");
     return token ? { userId: "user_123" } : undefined;
   },
+  onOpen(ctx) {
+    console.log(`Client ${ctx.ws.data.userId} connected`);
+  },
+  onClose(ctx) {
+    const { roomId, userId } = ctx.ws.data;
+    console.log(`Client ${userId} disconnected from ${roomId}`);
+
+    if (roomId) {
+      router.publish(roomId, UserLeft, { userId: userId || "unknown" });
+    }
+  },
 });
 
 console.log("WebSocket server running on ws://localhost:3000");
@@ -116,8 +121,8 @@ console.log("WebSocket server running on ws://localhost:3000");
 
 ```typescript
 // client.ts
-import { message, wsClient } from "@ws-kit/client/zod";
-import { ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
+import { wsClient } from "@ws-kit/client/zod";
+import { JoinRoom, ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
 
 // Create type-safe client
 const client = wsClient({
@@ -129,6 +134,11 @@ const client = wsClient({
 
 // Connect and listen for messages
 await client.connect();
+
+// Join a room
+client.send(JoinRoom, {
+  roomId: "general",
+});
 
 // Listen for room updates
 client.on(ChatMessage, (msg) => {
@@ -145,18 +155,8 @@ client.send(ChatMessage, {
   roomId: "general",
 });
 
-// Request/response pattern
-const reply = await client.request(
-  ChatMessage,
-  { text: "Are you there?", roomId: "general" },
-  ChatMessage,
-  { timeoutMs: 5000 },
-);
-
-console.log("Got reply:", reply.payload.text);
-
 // Graceful disconnect
-await client.disconnect();
+await client.close();
 ```
 
 ::: tip Full Type Safety
@@ -181,7 +181,7 @@ All messages follow a consistent structure:
 ```
 
 ::: warning Server Timestamp
-**Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted).
+**Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted). The `ctx.receivedAt` field is added by the router at message ingress and reflects the server's clock.
 :::
 
 ### Message Schemas
@@ -211,20 +211,37 @@ The browser client provides:
 
 - **Auto-reconnection** with exponential backoff
 - **Offline message queueing** when disconnected
-- **Request/response pattern** with timeouts
+- **Request/response pattern (RPC)** with timeouts and correlation tracking
 - **Built-in authentication** via token or headers
 - **Full type inference** from shared schemas
 
 ```typescript
-// Request/response example
+import { z, rpc } from "@ws-kit/zod";
+import { wsClient } from "@ws-kit/client/zod";
+import { createRouter } from "@ws-kit/zod";
+
+// Define RPC schema (binds request and response)
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+
+// Server setup
+const router = createRouter();
+
+router.rpc(Ping, (ctx) => {
+  ctx.reply(Ping.response, { reply: `Got: ${ctx.payload.text}` });
+});
+
+// Client setup
+const client = wsClient({ url: "ws://localhost:3000" });
+await client.connect();
+
+// Request/response with auto-detected response schema
 try {
   const response = await client.request(
-    PingMessage,
+    Ping,
     { text: "ping" },
-    PongMessage,
     { timeoutMs: 5000 },
   );
-  console.log("Got response:", response.payload);
+  console.log("Got response:", response.payload.reply);
 } catch (err) {
   console.error("Request failed or timed out:", err);
 }

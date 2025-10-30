@@ -121,8 +121,7 @@ Cloudflare Durable Objects provide stateful serverless compute for WebSocket con
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/cloudflare-do";
-import jwt from "jsonwebtoken";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
 
 type AppData = {
   userId?: string;
@@ -145,7 +144,9 @@ router.use((ctx, next) => {
 
 router.on(AuthMessage, (ctx) => {
   try {
-    const decoded = jwt.verify(ctx.payload.token, JWT_SECRET);
+    // Access environment variable from Cloudflare DO env
+    const jwtSecret = "your-jwt-secret"; // In real app: get from env
+    const decoded = verifyJWT(ctx.payload.token, jwtSecret);
     ctx.assignData({
       userId: decoded.sub as string,
       roles: (decoded.roles as string[]) || [],
@@ -155,14 +156,21 @@ router.on(AuthMessage, (ctx) => {
   }
 });
 
-export default {
-  async fetch(req: Request) {
-    return await serve(router, {
+// Export Durable Object class (required by Cloudflare)
+export class ChatRoom {
+  private handler;
+
+  constructor(
+    private state: DurableObjectState,
+    private env: Env,
+  ) {
+    this.handler = createDurableObjectHandler(router, {
       authenticate(req) {
         const token = req.headers.get("authorization")?.replace("Bearer ", "");
         if (token) {
           try {
-            const decoded = jwt.verify(token, JWT_SECRET);
+            const jwtSecret = env.JWT_SECRET || "your-jwt-secret";
+            const decoded = verifyJWT(token, jwtSecret);
             return {
               userId: decoded.sub as string,
               roles: (decoded.roles as string[]) || [],
@@ -172,18 +180,20 @@ export default {
           }
         }
       },
-      onError(error) {
-        console.error("WebSocket error:", error);
-      },
-    }).fetch(req);
-  },
-} satisfies ExportedHandler;
+      maxConnections: 1000,
+    });
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    return this.handler.fetch(req);
+  }
+}
 ```
 
 Deploy to Cloudflare:
 
 ```bash
-wrangler publish
+wrangler deploy
 ```
 
 ## Security Best Practices
@@ -302,21 +312,31 @@ router.on(SendMessage, (ctx) => {
 });
 ```
 
-### 2. Message Compression
+### 2. Backpressure Handling
 
-Enable per-message deflate in production:
+Bun provides built-in backpressure handling through the `drain` callback:
 
 ```typescript
-import { serve } from "@ws-kit/bun";
+import { createBunHandler } from "@ws-kit/bun";
 
-serve(router, {
-  port: 3000,
-  backpressure: {
-    lowWaterMark: 16 * 1024, // Start buffering at 16KB
-    highWaterMark: 64 * 1024, // Stop accepting at 64KB
+const { fetch, websocket } = createBunHandler(router);
+
+// The drain callback is called when the socket's write buffer has been flushed
+// Use this to resume message processing if it was paused due to backpressure
+Bun.serve({
+  fetch,
+  websocket: {
+    ...websocket,
+    drain(ws) {
+      // Called when buffered messages are sent
+      // Resume processing if you paused due to high backpressure
+    },
   },
+  port: 3000,
 });
 ```
+
+For high-throughput scenarios, monitor `ws.send()` return value to detect backpressure and pause processing accordingly.
 
 ### 3. Memory Management
 
@@ -432,44 +452,50 @@ app.get("/metrics", (c) => {
 
 ### 1. Horizontal Scaling with Redis
 
-Use Redis for cross-instance pub/sub:
+For multi-instance deployments, use the Redis PubSub adapter for automatic cross-instance broadcasting:
 
 ```typescript
-import { createClient } from "redis";
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { createRedisPubSub } from "@ws-kit/redis-pubsub";
 
-const redis = createClient({ url: process.env.REDIS_URL });
-await redis.connect();
+type AppData = { userId?: string };
 
-const GlobalBroadcast = message("GLOBAL_BROADCAST", {
-  message: z.string(),
+// Create Redis PubSub instance
+const pubsub = createRedisPubSub({
+  url: process.env.REDIS_URL || "redis://localhost:6379",
+  namespace: "myapp:prod", // Optional: isolate channels per environment
 });
 
-router.on(GlobalBroadcast, async (ctx) => {
-  // Publish to Redis for other instances
-  await redis.publish(
-    "global_broadcast",
-    JSON.stringify({
-      type: "GLOBAL_BROADCAST",
-      payload: ctx.payload,
-      from: process.env.INSTANCE_ID,
-    }),
-  );
-
-  // Also broadcast to local clients
-  router.publish("global", GlobalBroadcast, ctx.payload);
+// Create router with Redis PubSub for cross-instance broadcasting
+const router = createRouter<AppData>({
+  pubsub,
 });
 
-// Subscribe to broadcasts from other instances
-redis.subscribe("global_broadcast", (message) => {
-  const data = JSON.parse(message);
-
-  // Skip if from current instance
-  if (data.from === process.env.INSTANCE_ID) return;
-
-  // Broadcast to local clients
-  router.publish("global", GlobalBroadcast, data.payload);
+const ChatMessage = message("CHAT", {
+  userId: z.string(),
+  text: z.string(),
 });
+
+router.on(ChatMessage, async (ctx) => {
+  // Broadcasts to all instances connected to Redis
+  await router.publish("chat:general", ChatMessage, {
+    userId: ctx.payload.userId,
+    text: ctx.payload.text,
+  });
+});
+
+serve(router, { port: 3000 });
 ```
+
+The Redis adapter handles all cross-instance coordination automatically:
+
+- Messages published via `router.publish()` are broadcast to all instances
+- Each instance delivers messages to its local subscribers
+- Automatic reconnection with exponential backoff
+- Connection pooling for optimal performance
+
+For more details, see the [redis-multi-instance example](https://github.com/kriasoft/ws-kit/tree/main/examples/redis-multi-instance/).
 
 ### 2. Load Balancing
 
@@ -508,68 +534,84 @@ server {
 
 ## Testing Multiple Runtimes
 
-Before production, test your router under multiple deployment targets. See [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) for integration test patterns that run the same router under Bun, Cloudflare DO, and other platforms.
+Before production, test your router under multiple deployment targets. The router is platform-agnostic, so you can test the same routing logic with different adapters.
 
-Quick example with multiple runtimes:
+Example testing approach:
 
 ```typescript
+import { createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
-import { describe, it } from "bun:test";
+import { describe, it, expect } from "bun:test";
 
-for (const runtime of ["bun", "cloudflare-do"] as const) {
-  describe(`Production deployment test (${runtime})`, () => {
-    it("handles authenticated messages", async () => {
-      await serve(router, {
-        port: 3000,
-        runtime,
-        authenticate(req) {
-          // Your auth logic
-          return { userId: "test" };
-        },
-      });
+// Create your router once
+const router = createRouter();
+// ... register handlers
 
-      // Run client tests...
+describe("Production deployment test", () => {
+  it("works with Bun adapter", async () => {
+    // Start server with Bun adapter
+    serve(router, {
+      port: 3000,
+      authenticate(req) {
+        return { userId: "test" };
+      },
     });
+
+    // Run client tests against ws://localhost:3000
   });
-}
+
+  // For Cloudflare DO, test with their local dev environment
+  // using `wrangler dev` or integration tests
+});
 ```
+
+For complete multi-runtime testing patterns, see [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime).
 
 ## Graceful Shutdown
 
 Handle shutdown signals and drain connections gracefully:
 
 ```typescript
-import { serve } from "@ws-kit/bun";
+import { z, message, createRouter } from "@ws-kit/zod";
+import { createBunHandler } from "@ws-kit/bun";
+
+const router = createRouter();
+const { fetch, websocket } = createBunHandler(router);
+
+const ShutdownNotice = message("SERVER_SHUTDOWN", {
+  reason: z.string(),
+});
 
 let isShuttingDown = false;
 
-async function gracefulShutdown() {
+async function gracefulShutdown(server: ReturnType<typeof Bun.serve>) {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
   console.log("Starting graceful shutdown...");
 
-  // Stop accepting new connections
-  server.stop();
-
   // Notify clients of shutdown
-  const ShutdownNotice = message("SERVER_SHUTDOWN", {
-    reason: z.string(),
-  });
-
-  router.publish("all", ShutdownNotice, {
+  await router.publish("all", ShutdownNotice, {
     reason: "Server maintenance",
   });
 
   // Give clients time to gracefully disconnect
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  // Close remaining connections
+  // Stop accepting new connections
+  server.stop();
+
   process.exit(0);
 }
 
-process.on("SIGTERM", gracefulShutdown);
-process.on("SIGINT", gracefulShutdown);
+const server = Bun.serve({
+  fetch,
+  websocket,
+  port: 3000,
+});
+
+process.on("SIGTERM", () => gracefulShutdown(server));
+process.on("SIGINT", () => gracefulShutdown(server));
 ```
 
 ## Deployment Checklist

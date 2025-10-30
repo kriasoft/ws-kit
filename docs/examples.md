@@ -6,7 +6,131 @@ outline: deep
 
 Real-world examples demonstrating common WebSocket patterns with ws-kit.
 
-## Chat Application
+All examples are located in the [`examples/`](https://github.com/kriasoft/ws-kit/tree/main/examples) directory of the repository.
+
+## Available Examples
+
+### Quick Start
+
+**Location:** [`examples/quick-start/`](https://github.com/kriasoft/ws-kit/tree/main/examples/quick-start)
+
+Simple reference examples for getting started with WS-Kit. Each file demonstrates a specific feature:
+
+- **`schema.ts`** — Define typed message schemas using the `message()` helper
+- **`auth-schema.ts`** — Authentication schema with Zod v4 validators (JWT, email, URL, etc.)
+- **`chat.ts`** — Chat room router with middleware, message broadcasting, and subscription patterns
+- **`error-handling.ts`** — Enhanced error handling with Zod v4 validation and middleware
+- **`client-usage.ts`** — Type-safe browser client patterns with `@ws-kit/client/zod`
+- **`index.ts`** — Full WebSocket server setup using `serve()` helper with route composition
+
+**Run the example:**
+
+```bash
+cd examples/quick-start
+bun index.ts
+```
+
+### Full-Featured Chat Application
+
+**Location:** [`examples/bun-zod-chat/`](https://github.com/kriasoft/ws-kit/tree/main/examples/bun-zod-chat)
+
+Complete chat application demonstrating production-ready patterns:
+
+- Full Bun.serve() integration with custom HTTP routing
+- Type-safe message schemas using `message()` helper
+- Room-based pub/sub with typed message publishing
+- Connection lifecycle hooks (onOpen, onClose, onError)
+- Global and per-route middleware
+- Stats endpoint for monitoring
+
+**Run the example:**
+
+```bash
+cd examples/bun-zod-chat
+bun index.ts
+# Open http://localhost:3000 in your browser
+```
+
+### Delta Sync for Collaborative Apps
+
+**Location:** [`examples/delta-sync/`](https://github.com/kriasoft/ws-kit/tree/main/examples/delta-sync)
+
+Revision-based state synchronization example perfect for collaborative applications:
+
+- Operation history with ring buffer
+- Delta sync (send only changes) vs. snapshot sync
+- Optimistic updates on client with server reconciliation
+- Heartbeat-based stale connection cleanup
+- Bandwidth-efficient state replication
+
+**Files:**
+
+- **`server.ts`** — Server with operation tracking and revision management
+- **`client.ts`** — Client-side state management with optimistic updates
+- **`schema.ts`** — Message schemas for delta protocol
+- **`ring-buffer.ts`** — Circular buffer for operation history
+
+**Run the example:**
+
+```bash
+# Terminal 1: Start server
+bun examples/delta-sync/server.ts
+
+# Terminal 2: Run client
+bun examples/delta-sync/client.ts
+```
+
+### Cloudflare Durable Objects Sharding
+
+**Location:** [`examples/cloudflare-sharding/`](https://github.com/kriasoft/ws-kit/tree/main/examples/cloudflare-sharding)
+
+Production-ready example of scaling pub/sub across multiple Durable Object instances by sharding subscriptions based on scope (room/channel).
+
+**Problem:** Cloudflare Durable Objects have a 100-connection limit per instance. Without sharding, you can only support 100 concurrent subscribers per room.
+
+**Solution:** Shard rooms across multiple DO instances using stable hashing.
+
+**Run the example:**
+
+```bash
+cd examples/cloudflare-sharding
+wrangler deploy
+```
+
+### Redis Multi-Instance Deployment
+
+**Location:** [`examples/redis-multi-instance/`](https://github.com/kriasoft/ws-kit/tree/main/examples/redis-multi-instance)
+
+Multi-instance deployment example with Redis PubSub for cross-instance broadcasting:
+
+- Multiple Bun server instances
+- Cross-instance message broadcasting via Redis
+- Redis pub/sub integration
+- Load balancer setup
+
+**Run the example:**
+
+```bash
+cd examples/redis-multi-instance
+bun index.ts
+```
+
+### Type-Safe Browser Client
+
+**Location:** [`examples/typed-client-usage.ts`](https://github.com/kriasoft/ws-kit/tree/main/examples/typed-client-usage.ts)
+
+Advanced client example showing:
+
+- Type-safe browser client with `@ws-kit/client/zod`
+- Full message type inference from schemas
+- Request/response patterns with timeout
+- Message sending with extended metadata
+
+## Common Patterns
+
+The following code examples demonstrate common patterns. For working examples, see the actual files in the [`examples/`](https://github.com/kriasoft/ws-kit/tree/main/examples) directory.
+
+### Chat Application
 
 A complete chat room implementation with authentication and message history.
 
@@ -61,7 +185,7 @@ router.onOpen((ctx) => {
   ctx.send(Welcome, { message: "Connected to chat server" });
 });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId, username } = ctx.payload;
 
   // Store username in connection data
@@ -79,23 +203,23 @@ router.on(JoinRoom, (ctx) => {
   ctx.subscribe(roomId);
 
   // Notify room members
-  router.publish(roomId, UserJoined, {
+  await router.publish(roomId, UserJoined, {
     username,
     userCount: rooms.get(roomId)!.size,
   });
 });
 
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const { roomId, text } = ctx.payload;
 
   // Broadcast message to room
-  router.publish(roomId, NewMessage, {
+  await router.publish(roomId, NewMessage, {
     username: ctx.ws.data.username || "Anonymous",
     text,
   });
 });
 
-router.on(LeaveRoom, (ctx) => {
+router.on(LeaveRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Remove from room
@@ -105,7 +229,7 @@ router.on(LeaveRoom, (ctx) => {
   ctx.unsubscribe(roomId);
 
   // Notify others
-  router.publish(roomId, UserLeft, {
+  await router.publish(roomId, UserLeft, {
     username: ctx.ws.data.username || "Anonymous",
     userCount: rooms.get(roomId)?.size || 0,
   });
@@ -168,8 +292,9 @@ const router = createRouter<AppData>();
 
 // Global middleware: require authentication for protected messages
 router.use((ctx, next) => {
-  if (!ctx.ws.data.authenticated && ctx.type !== "ADMIN_ACTION") {
-    return next();
+  if (!ctx.ws.data.authenticated) {
+    ctx.error("UNAUTHENTICATED", "Authentication required");
+    return;
   }
   return next();
 });
@@ -177,7 +302,7 @@ router.use((ctx, next) => {
 // Per-route middleware: admin-only access
 router.use(AdminAction, (ctx, next) => {
   if (!ctx.ws.data.roles.includes(Role.ADMIN)) {
-    ctx.error("UNAUTHENTICATED", "Admin access required");
+    ctx.error("PERMISSION_DENIED", "Admin access required");
     return;
   }
   return next();
@@ -285,27 +410,32 @@ router.on(SendMessage, (ctx) => {
 });
 ```
 
-## Request/Response Pattern
+## Request/Response Pattern (RPC)
 
-Implement request/response messaging with timeouts.
+Use the `rpc()` helper to bind request and response schemas for type-safe request/response pairs.
+
+**Server-side:**
 
 ```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, rpc, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 
-const Calculate = message("CALCULATE", {
-  operation: z.enum(["add", "multiply"]),
-  a: z.number(),
-  b: z.number(),
-});
-
-const CalculateResult = message("CALCULATE_RESULT", {
-  result: z.number(),
-});
+// Define RPC schema - binds request to response type
+const Calculate = rpc(
+  "CALCULATE",
+  {
+    operation: z.enum(["add", "multiply"]),
+    a: z.number(),
+    b: z.number(),
+  },
+  "CALCULATE_RESULT",
+  { result: z.number() },
+);
 
 const router = createRouter();
 
-router.on(Calculate, (ctx) => {
+// Use router.rpc() for type-safe RPC handlers
+router.rpc(Calculate, (ctx) => {
   const { operation, a, b } = ctx.payload;
 
   let result: number;
@@ -318,8 +448,8 @@ router.on(Calculate, (ctx) => {
       break;
   }
 
-  // Send response back to client
-  ctx.send(CalculateResult, { result });
+  // Reply with the bound response schema
+  ctx.reply(Calculate.response, { result });
 });
 
 serve(router, { port: 3000 });
@@ -328,27 +458,32 @@ serve(router, { port: 3000 });
 **Client-side:**
 
 ```typescript
-import { message, wsClient } from "@ws-kit/client/zod";
+import { z, rpc, wsClient } from "@ws-kit/client/zod";
 
-const Calculate = message("CALCULATE", {
-  operation: z.enum(["add", "multiply"]),
-  a: z.number(),
-  b: z.number(),
-});
-
-const CalculateResult = message("CALCULATE_RESULT", {
-  result: z.number(),
-});
+// Same RPC schema definition (share between client and server)
+const Calculate = rpc(
+  "CALCULATE",
+  {
+    operation: z.enum(["add", "multiply"]),
+    a: z.number(),
+    b: z.number(),
+  },
+  "CALCULATE_RESULT",
+  { result: z.number() },
+);
 
 const client = wsClient({ url: "ws://localhost:3000" });
 await client.connect();
 
-// Request with timeout
-const response = await client.request(Calculate, CalculateResult, {
-  timeoutMs: 5000,
+// Request with auto-detected response type
+const response = await client.request(Calculate, {
+  operation: "add",
+  a: 5,
+  b: 3,
 });
 
 console.log(`5 + 3 = ${response.payload.result}`);
+// response.type === "CALCULATE_RESULT"
 ```
 
 ## Type-Safe Error Handling
@@ -385,34 +520,70 @@ router.on(LoginMessage, async (ctx) => {
 });
 ```
 
-## Discriminated Unions
+## Heartbeat & Connection Monitoring
 
-Use discriminated unions for flexible message handling.
+Configure heartbeat for connection health monitoring.
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
 
-const PingMessage = message("PING");
-const PongMessage = message("PONG", { latency: z.number() });
-const ChatMessage = message("CHAT", { text: z.string() });
+type AppData = { userId?: string; lastSeen?: number };
 
-// Create a union for type narrowing
-const AllMessages = z.discriminatedUnion("type", [
-  PingMessage,
-  PongMessage,
-  ChatMessage,
-]);
-
-const router = createRouter();
-
-// Each handler is automatically typed
-router.on(PingMessage, (ctx) => {
-  // ctx.type === "PING" (narrowed)
-  console.log("Received ping");
+const router = createRouter<AppData>({
+  heartbeat: {
+    intervalMs: 30_000, // Send ping every 30 seconds
+    timeoutMs: 5_000, // Wait 5 seconds for pong
+    onStaleConnection: (clientId, ws) => {
+      console.log(`Connection ${clientId} is stale, closing...`);
+      ws.close(1008, "Heartbeat timeout");
+    },
+  },
 });
 
-router.on(ChatMessage, (ctx) => {
-  // ctx.payload.text is typed as string
-  console.log(`Chat: ${ctx.payload.text}`);
+router.onOpen((ctx) => {
+  console.log(`Client ${ctx.ws.data.clientId} connected`);
+  ctx.assignData({ lastSeen: Date.now() });
 });
+
+router.onClose((ctx) => {
+  const duration = Date.now() - (ctx.ws.data.lastSeen || 0);
+  console.log(
+    `Client ${ctx.ws.data.clientId} disconnected after ${duration}ms`,
+  );
+});
+
+serve(router, { port: 3000 });
+```
+
+## Getting Started
+
+1. **Start with `examples/quick-start/`** to learn the basics
+2. **Explore `examples/bun-zod-chat/`** for a real-world application
+3. **Check `examples/delta-sync/`** for collaborative app patterns
+4. **Review `examples/cloudflare-sharding/`** for scaling strategies
+5. **See `examples/typed-client-usage.ts`** for browser client implementation
+
+All examples use:
+
+- **Bun** as runtime
+- **Zod** for schema validation
+- **@ws-kit/** packages from workspace
+
+**Install dependencies:**
+
+```bash
+bun install
+```
+
+**Type-check all examples:**
+
+```bash
+bunx tsc --noEmit
+```
+
+**Run tests:**
+
+```bash
+bun test
 ```

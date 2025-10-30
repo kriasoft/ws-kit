@@ -45,6 +45,7 @@ await client.connect();
 
 // Send a message (fire-and-forget)
 client.send(Hello, { name: "Alice" });
+// Returns true if sent/queued, false if dropped
 
 // Listen for replies
 client.on(HelloReply, (msg) => {
@@ -78,7 +79,7 @@ router.on(Hello, (ctx) => {
   });
 });
 
-// Broadcast to all clients
+// Broadcast to all subscribed clients
 router.publish("all", Broadcast, {
   message: "Server broadcast",
 });
@@ -125,12 +126,39 @@ client.send(HelloMessage, { name: "Bob" });
 client.send(PingMessage);
 ```
 
-**Request/Response (with timeout):**
+**Request/Response (RPC with auto-detected response):**
 
 ```typescript
-const reply = await client.request(HelloMessage, HelloReplyMessage, {
-  timeoutMs: 5000,
+import { z, rpc, message } from "@ws-kit/zod";
+
+// Define RPC schema - binds request to response
+const Hello = rpc("HELLO", { name: z.string() }, "HELLO_REPLY", {
+  greeting: z.string(),
 });
+
+// Response schema auto-detected from RPC
+const reply = await client.request(
+  Hello,
+  { name: "Alice" },
+  {
+    timeoutMs: 5000,
+  },
+);
+
+console.log(reply.payload.greeting);
+```
+
+**Request/Response (with explicit response schema):**
+
+```typescript
+const reply = await client.request(
+  HelloMessage,
+  { name: "Alice" },
+  HelloReplyMessage,
+  {
+    timeoutMs: 5000,
+  },
+);
 
 console.log(reply.payload.greeting);
 ```
@@ -176,22 +204,28 @@ const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: async () => localStorage.getItem("token"),
+    attach: "query", // default
+    queryParam: "access_token", // default parameter name
   },
 });
 
-// Token is sent as ?token=<value>
+// Token is sent as ?access_token=<value>
 ```
 
-### Authorization Header
+### WebSocket Protocol (Sec-WebSocket-Protocol Header)
 
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: async () => localStorage.getItem("token"),
-    type: "Bearer", // Sent as: Authorization: Bearer <token>
+    attach: "protocol", // Use WebSocket subprotocol for auth
+    protocolPrefix: "bearer.", // default prefix
+    protocolPosition: "append", // default: append after user protocols
   },
 });
+
+// Token is sent via Sec-WebSocket-Protocol header as "bearer.<token>"
 ```
 
 ### Server-Side Validation
@@ -201,8 +235,18 @@ import { serve } from "@ws-kit/bun";
 
 serve(router, {
   authenticate(req) {
-    // Get token from header or query param
-    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    // Option 1: Get token from query parameter
+    const url = new URL(req.url);
+    const tokenFromQuery = url.searchParams.get("access_token");
+
+    // Option 2: Get token from Sec-WebSocket-Protocol header
+    const protocols =
+      req.headers.get("sec-websocket-protocol")?.split(",") || [];
+    const tokenFromProtocol = protocols
+      .find((p) => p.trim().startsWith("bearer."))
+      ?.replace("bearer.", "");
+
+    const token = tokenFromQuery || tokenFromProtocol;
 
     if (!token) {
       return undefined; // Connection rejected
@@ -225,13 +269,12 @@ Messages are automatically queued while connecting or offline:
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
-  queue: {
-    maxSize: 100, // Max queued messages
-  },
+  queue: "drop-newest", // Queue mode: "drop-newest" (default), "drop-oldest", or "off"
+  queueSize: 1000, // Max queued messages (default: 1000)
 });
 
 // This will be queued if not connected yet
-client.send(SomeMessage, payload);
+client.send(SomeMessage, { text: "hello" });
 
 await client.connect();
 // Queued messages are sent automatically
@@ -245,9 +288,11 @@ The client automatically reconnects with exponential backoff:
 const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: {
-    initialDelay: 1000, // Start with 1 second
-    maxDelay: 30000, // Cap at 30 seconds
-    maxAttempts: Infinity, // Retry forever
+    enabled: true, // default
+    initialDelayMs: 300, // default: Start with 300ms
+    maxDelayMs: 10_000, // default: Cap at 10 seconds
+    maxAttempts: Infinity, // default: Retry forever
+    jitter: "full", // default: Full jitter to prevent thundering herd
   },
 });
 
@@ -260,25 +305,40 @@ Disable reconnection if needed:
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
-  reconnect: false,
+  reconnect: {
+    enabled: false,
+  },
 });
 ```
 
 ## Error Handling
 
-### Type-Safe Error Codes
+### RPC Errors (ServerError)
 
-Server errors use standard error codes:
+When using `request()`, server errors are thrown as `ServerError`:
 
 ```typescript
-client.on(ErrorMessage, (msg) => {
-  // Standard error codes
-  if (msg.payload.code === "UNAUTHENTICATED") {
-    console.log("Authentication failed");
-  } else if (msg.payload.code === "RESOURCE_EXHAUSTED") {
-    console.log("Rate limited");
+import { ServerError, TimeoutError, ValidationError } from "@ws-kit/client/zod";
+
+try {
+  const reply = await client.request(Hello, { name: "Alice" }, HelloReply, {
+    timeoutMs: 5000,
+  });
+  console.log(reply.payload.greeting);
+} catch (err) {
+  if (err instanceof ServerError) {
+    // Server sent ERROR message with standard error code
+    if (err.code === "UNAUTHENTICATED") {
+      console.log("Authentication failed");
+    } else if (err.code === "RESOURCE_EXHAUSTED") {
+      console.log("Rate limited");
+    }
+  } else if (err instanceof TimeoutError) {
+    console.log("Request timed out");
+  } else if (err instanceof ValidationError) {
+    console.log("Invalid message");
   }
-});
+}
 ```
 
 ### Handling Validation Errors
@@ -293,50 +353,55 @@ client.onError((error, context) => {
 
 ## Import Patterns
 
-Always use the correct import source:
+Always use the typed client package for your validator:
 
 ```typescript
-// ✅ CORRECT: Single import source
-import { message } from "@ws-kit/zod";
+// ✅ CORRECT: Import everything from typed client package
+import { z, message, rpc, wsClient } from "@ws-kit/client/zod";
+
+// Also correct: Import schemas from validator package
+import { z, message, rpc } from "@ws-kit/zod";
 import { wsClient } from "@ws-kit/client/zod";
 
-// ❌ AVOID: Mixing imports
-import { z } from "zod"; // Different instance
-import { wsClient } from "@ws-kit/client/zod";
-// Type mismatches in handlers!
+// ❌ AVOID: Mixing validator instances
+import { z } from "zod"; // Different Zod instance!
+import { message } from "@ws-kit/zod";
+// May cause type mismatches
 ```
 
-## Advanced: Using with TypeScript
+## Advanced: Type-Safe Schemas
 
-Infer types from your router:
+Share schemas between client and server for full type safety:
 
 ```typescript
+// shared/schemas.ts
+import { z, message } from "@ws-kit/zod";
+
+export const Hello = message("HELLO", { name: z.string() });
+export const HelloReply = message("HELLO_REPLY", { greeting: z.string() });
+
 // server.ts
 import { createRouter } from "@ws-kit/zod";
 import { Hello, HelloReply } from "./shared/schemas";
 
-export const router = createRouter();
+const router = createRouter();
 
 router.on(Hello, (ctx) => {
-  ctx.send(HelloReply, { greeting: "Hi" });
+  ctx.send(HelloReply, { greeting: `Hi ${ctx.payload.name}!` });
 });
 
-export type AppRouter = typeof router;
-```
-
-**Client:**
-
-```typescript
+// client.ts
 import { wsClient } from "@ws-kit/client/zod";
-import type { AppRouter } from "./server";
+import { Hello, HelloReply } from "./shared/schemas";
 
-// Client is fully typed based on server router
-const client = wsClient<AppRouter>({ url: "wss://api.example.com/ws" });
+const client = wsClient({ url: "wss://api.example.com/ws" });
 
-// All message schemas are inferred from server
+// Full type inference from shared schemas
 client.on(HelloReply, (msg) => {
-  console.log(msg.payload.greeting); // ✅ Fully typed
+  console.log(msg.payload.greeting); // ✅ Fully typed as string
 });
+
+client.send(Hello, { name: "Alice" }); // ✅ Payload typed from schema
 ```
 
 ## Valibot Alternative

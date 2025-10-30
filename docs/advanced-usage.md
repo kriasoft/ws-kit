@@ -36,10 +36,11 @@ authRouter.on(LoginMessage, (ctx) => {
 const chatRouter = createRouter<AppData>();
 chatRouter.on(SendMessageMessage, (ctx) => {
   const userId = ctx.ws.data?.userId;
+  const roomId = "general"; // or from ctx.ws.data?.roomId
   console.log(`Message from ${userId}: ${ctx.payload.text}`);
 
-  // Broadcast to all connected clients
-  router.publish("chat", BroadcastMessage, {
+  // Broadcast to topic subscribers (use ctx.publish for convenience)
+  ctx.publish(`room:${roomId}`, BroadcastMessage, {
     message: ctx.payload.text,
   });
 });
@@ -99,8 +100,9 @@ router.on(RateLimitMessage, (ctx) => {
 - `router.use(middleware)` — Global middleware (runs for all messages)
 - `router.use(schema, middleware)` — Per-message middleware (runs only for that message)
 - Middleware can call `ctx.error()` to reject or skip calling `next()` to prevent handler execution
-- Middleware can modify `ctx.ws.data` for handlers to access
+- Middleware can modify connection data via `ctx.assignData()` for handlers to access
 - Both sync and async middleware supported
+- Execution order: Global middleware → per-route middleware → handler
 
 ## Error Handling
 
@@ -146,13 +148,29 @@ router.on(QueryMessage, (ctx) => {
 });
 ```
 
-**Standard error codes:**
+**Standard error codes** (gRPC-aligned, see ADR-015):
+
+**Terminal errors** (don't retry):
 
 - `INVALID_ARGUMENT` — Invalid payload or schema mismatch
-- `UNAUTHENTICATED` — Authentication failed
-- `INTERNAL` — Server error
+- `UNAUTHENTICATED` — Authentication failed (missing or invalid token)
+- `PERMISSION_DENIED` — Authenticated but lacks rights
 - `NOT_FOUND` — Resource not found
-- `RESOURCE_EXHAUSTED` — Rate limit exceeded
+- `FAILED_PRECONDITION` — State requirement not met
+- `ALREADY_EXISTS` — Uniqueness or idempotency violation
+- `ABORTED` — Concurrency conflict (race condition)
+
+**Transient errors** (retry with backoff):
+
+- `DEADLINE_EXCEEDED` — RPC request timed out
+- `RESOURCE_EXHAUSTED` — Rate limit, quota, or backpressure exceeded
+- `UNAVAILABLE` — Transient infrastructure error
+
+**Server/evolution**:
+
+- `UNIMPLEMENTED` — Feature not supported or deployed
+- `INTERNAL` — Unexpected server error
+- `CANCELLED` — Request cancelled by client or peer
 
 ## Discriminated Unions
 
@@ -185,7 +203,7 @@ const router = createRouter();
 
 router.on(TextMessage, (ctx) => {
   console.log("Text:", ctx.payload.content);
-  router.publish(ctx.payload.channelId, TextMessage, ctx.payload);
+  ctx.publish(ctx.payload.channelId, TextMessage, ctx.payload);
 });
 
 router.on(ImageMessage, (ctx) => {
@@ -196,12 +214,12 @@ router.on(ImageMessage, (ctx) => {
     "x",
     ctx.payload.height,
   );
-  router.publish(ctx.payload.channelId, ImageMessage, ctx.payload);
+  ctx.publish(ctx.payload.channelId, ImageMessage, ctx.payload);
 });
 
 router.on(VideoMessage, (ctx) => {
   console.log("Video:", ctx.payload.url, ctx.payload.duration, "s");
-  router.publish(ctx.payload.channelId, VideoMessage, ctx.payload);
+  ctx.publish(ctx.payload.channelId, VideoMessage, ctx.payload);
 });
 ```
 
@@ -245,43 +263,36 @@ type FeatureData = { feature: string; version: number };
 const featureRouter = createRouter<FeatureData>();
 ```
 
-## Testing Multiple Runtimes
+## Heartbeat Configuration
 
-For monorepos or comprehensive testing, test the same router under multiple runtimes (Bun, Cloudflare DO, etc.). See [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) for complete integration test patterns.
-
-Quick example:
+Heartbeat is opt-in and only enabled when explicitly configured:
 
 ```typescript
-import { describe, it } from "bun:test";
-import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
-import { wsClient } from "@ws-kit/client/zod";
 
-const router = createRouter();
-router.on(PingMessage, (ctx) => {
-  ctx.send(PongMessage, { reply: "pong" });
+const router = createRouter({
+  heartbeat: {
+    intervalMs: 30_000, // Optional: defaults to 30s
+    timeoutMs: 5_000, // Optional: defaults to 5s
+    onStaleConnection: (clientId, ws) => {
+      console.log(`Connection ${clientId} is stale`);
+      ws.close(1011, "Connection timeout");
+    },
+  },
 });
-
-// Test the same router under multiple runtimes
-for (const runtime of ["bun", "cloudflare-do"] as const) {
-  describe(`Router under ${runtime}`, () => {
-    it("handles messages", async () => {
-      const port = 3000 + (runtime === "bun" ? 0 : 1);
-
-      // Start server with explicit runtime
-      await serve(router, { port, runtime });
-
-      const client = wsClient(`ws://localhost:${port}`);
-      await client.connect();
-
-      const reply = await client.request(PingMessage, {}, PongMessage);
-
-      console.assert(reply.payload.reply === "pong");
-      await client.disconnect();
-    });
-  });
-}
 ```
+
+**When to use heartbeat:**
+
+- Long-lived connections that need liveness checks
+- Detecting network partitions or idle connections
+- Cleaning up zombie connections
+
+**When not to use:**
+
+- Short-lived request/response patterns
+- Applications where reconnect is acceptable
+- High-throughput scenarios (adds overhead)
 
 ## Publishing and Broadcasting
 
@@ -307,10 +318,10 @@ router.on(JoinRoom, (ctx) => {
 
   // Store room ID and subscribe to topic
   ctx.assignData({ roomId });
-  ctx.subscribe(roomId);
+  ctx.subscribe(`room:${roomId}`);
 
   // Broadcast to room (type-safe!)
-  router.publish(roomId, RoomUpdate, {
+  ctx.publish(`room:${roomId}`, RoomUpdate, {
     roomId,
     users: 5,
     message: `User ${userId} joined`,
@@ -320,8 +331,110 @@ router.on(JoinRoom, (ctx) => {
 
 All broadcast messages are validated against their schemas before being sent, providing the same type safety for broadcasts as for direct messaging.
 
+**Key points:**
+
+- Use `ctx.publish()` in handlers for ergonomic broadcasting (most common)
+- Use `router.publish()` outside handlers (cron jobs, system events)
+- Both enforce schema validation before transmission
+- Topic naming conventions help organize broadcasts (e.g., `room:${roomId}`)
+
+## RPC Pattern (Request-Response)
+
+For guaranteed request-response patterns with correlation tracking and timeouts, use the `rpc()` helper to bind request and response schemas:
+
+```typescript
+import { z, rpc, createRouter } from "@ws-kit/zod";
+
+// Define RPC schema - binds request to response type
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_RESPONSE", {
+  user: z.object({ id: z.string(), name: z.string() }),
+});
+
+const router = createRouter();
+
+// Use router.rpc() for type-safe RPC handlers
+router.rpc(GetUser, async (ctx) => {
+  // Optional progress updates before terminal reply
+  ctx.progress({ stage: "loading" });
+
+  const user = await db.users.findById(ctx.payload.id);
+
+  if (!user) {
+    ctx.error("NOT_FOUND", "User not found");
+    return;
+  }
+
+  // Terminal reply with response schema (type-safe, one-shot guaranteed)
+  ctx.reply(GetUser.response, { user });
+});
+```
+
+**RPC-specific context methods:**
+
+- `ctx.reply(schema, data)` — Terminal response (one-shot, schema-enforced)
+- `ctx.progress(data?)` — Non-terminal progress updates
+- `ctx.abortSignal` — Fires on client cancel/disconnect
+- `ctx.onCancel(callback)` — Register cancellation callback
+- `ctx.deadline` — Server-derived deadline (epoch ms)
+- `ctx.timeRemaining()` — Milliseconds until deadline
+
+**When to use RPC:**
+
+- Client needs guaranteed response
+- Correlation tracking required
+- Progress updates needed
+- Timeout handling important
+
+See ADR-015 for complete RPC design and error taxonomy.
+
+## Custom Validators
+
+While ws-kit provides official adapters for Zod and Valibot, you can integrate any validation library by implementing the `ValidatorAdapter` interface:
+
+```typescript
+import { WebSocketRouter, type ValidatorAdapter } from "@ws-kit/core";
+
+// Example: Custom validator adapter
+class CustomValidatorAdapter implements ValidatorAdapter {
+  validate(
+    schema: unknown,
+    data: unknown,
+  ): {
+    success: boolean;
+    data?: unknown;
+    error?: { message: string; path?: string[] };
+  } {
+    // Your validation logic here
+    try {
+      const result = myValidator.parse(schema, data);
+      return { success: true, data: result };
+    } catch (err) {
+      return {
+        success: false,
+        error: { message: String(err), path: [] },
+      };
+    }
+  }
+}
+
+// Use custom validator with router
+const router = new WebSocketRouter({
+  validator: new CustomValidatorAdapter(),
+});
+```
+
+**Validator requirements:**
+
+- **Strict mode**: Reject unknown keys at all levels (root, meta, payload)
+- **Payload enforcement**: Reject messages with `payload` key when schema defines none
+- **Type safety**: Preserve TypeScript types through validation
+- **Error reporting**: Provide clear error messages with paths
+
+See `docs/specs/validation.md` for complete requirements and validation flow.
+
 ## See Also
 
 - [Core Concepts](./core-concepts) — Message routing, lifecycle hooks
 - [Middleware](./adr/008-middleware-support) — Detailed middleware design
-- [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) — Integration testing, monorepo patterns
+- [Error Handling](./specs/error-handling.md) — Complete error code taxonomy
+- [Broadcasting](./specs/broadcasting.md) — Pub/sub patterns and throttling

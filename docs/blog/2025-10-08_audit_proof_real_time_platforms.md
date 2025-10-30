@@ -110,7 +110,7 @@ This dual timestamp pattern changes the conversation entirely. Compliance teams 
 Rolling out the pattern means coordinating architecture, SRE, and compliance teams:
 
 1. **Inventory trust boundaries**: Use `rg "timestamp"` (or similar) to flag every enforcement path that leans on client time.
-2. **Capture ingress early**: Some WebSocket stacks (bun-ws-router, Fastify WebSocket) surface a `receivedAt` timestamp at ingress. If yours doesn’t — think Socket.IO, uWebSockets, or Go’s gorilla/websocket — add middleware that stamps `receivedAt = Date.now()` before parsing and passes it through your handler context.
+2. **Capture ingress early**: Some WebSocket stacks (WS-Kit, Fastify WebSocket) surface a `receivedAt` timestamp at ingress. If yours doesn’t — think Socket.IO, uWebSockets, or Go’s gorilla/websocket — add middleware that stamps `receivedAt = Date.now()` before parsing and passes it through your handler context.
 3. **Persist and monitor**: Store `receivedAt` separately from `clientTimestamp`, emit drift metrics, and alert on future-dated payloads.
 4. **Update control narratives**: Brief legal and risk partners so audit binders reflect that retention, rate limiting, and sequencing now depend on server clocks.
 

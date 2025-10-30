@@ -2,14 +2,14 @@
 
 [![npm version](https://img.shields.io/npm/v/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
 [![npm downloads](https://img.shields.io/npm/dm/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
-[![GitHub Actions](https://github.com/kriasoft/bun-ws-router/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/bun-ws-router/actions)
+[![GitHub Actions](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
 [![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
 Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
 
 ## ⚠️ Environment Requirements
 
-**ws-kit is ESM-only** and optimized for modern runtimes:
+**WS-Kit is ESM-only** and optimized for modern runtimes:
 
 - **Bun** (recommended) — native ESM and WebSocket support
 - **Cloudflare Workers/Durable Objects** — native ESM support
@@ -20,7 +20,7 @@ Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** va
 
 ## Monorepo Structure
 
-ws-kit is organized as a modular monorepo with independent packages:
+WS-Kit is organized as a modular monorepo with independent packages:
 
 - **`@ws-kit/core`** — Platform-agnostic router and type system (foundation)
 - **`@ws-kit/zod`** — Zod validator adapter with `createRouter()` helper
@@ -70,7 +70,7 @@ bun add valibot bun @types/bun -D
 
 ## Quick Start
 
-The **export-with-helpers pattern** is the first-class way to use ws-kit—no factories, no dual imports:
+The **export-with-helpers pattern** is the first-class way to use WS-Kit —no factories, no dual imports:
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -84,7 +84,7 @@ const PongMessage = message("PONG", { reply: z.string() });
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
-// Register handlers—fully typed!
+// Register handlers — fully typed!
 router.on(PingMessage, (ctx) => {
   console.log(`Received: ${ctx.payload.text}`); // ✅ Fully typed
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
@@ -104,7 +104,7 @@ serve(router, {
 
 ### Eliminating Verbose Generics with Declaration Merging
 
-For applications with multiple routers, reduce repetition by declaring your connection data type once using TypeScript **declaration merging**. Then omit the generic everywhere—it's automatic:
+For applications with multiple routers, reduce repetition by declaring your connection data type once using TypeScript **declaration merging**. Then omit the generic everywhere — it's automatic:
 
 ```ts
 // types/app-data.d.ts
@@ -117,10 +117,10 @@ declare module "@ws-kit/core" {
 }
 ```
 
-Now all routers automatically use this type—no repetition:
+Now all routers automatically use this type — no repetition:
 
 ```ts
-// ✅ No generic needed—automatically uses AppDataDefault
+// ✅ No generic needed — automatically uses AppDataDefault
 const router = createRouter();
 
 router.on(SecureMessage, (ctx) => {
@@ -146,7 +146,7 @@ const featureRouter = createRouter<CustomData>();
 
 ## Validation Libraries
 
-Choose between Zod and Valibot—same API, different trade-offs:
+Choose between Zod and Valibot — same API, different trade-offs:
 
 ```ts
 // Zod - mature ecosystem, familiar method chaining API
@@ -173,7 +173,7 @@ Each platform adapter exports both high-level convenience and low-level APIs. Al
 
 ### Platform-Specific Adapters (Recommended)
 
-Use platform-specific imports for production deployments—they provide correct options, type safety, and clear errors:
+Use platform-specific imports for production deployments — they provide correct options, type safety, and clear errors:
 
 **High-level (recommended):**
 
@@ -220,21 +220,22 @@ import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
+const handler = createDurableObjectHandler(router, {
+  authenticate(req) {
+    /* ... */
+  },
+});
 
 export default {
   fetch(req: Request) {
-    return serve(router, {
-      authenticate(req) {
-        /* ... */
-      },
-    }).fetch(req);
+    return handler.fetch(req);
   },
 };
 ```
 
 ### Authentication
 
-Secure your router by validating clients during the WebSocket upgrade. Pass authenticated user data via the `authenticate` hook—all handlers then have type-safe access to this data:
+Secure your router by validating clients during the WebSocket upgrade. Pass authenticated user data via the `authenticate` hook — all handlers then have type-safe access to this data:
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -300,9 +301,9 @@ serve(router, {
 
 The `authenticate` function receives the HTTP upgrade request and returns user data that becomes `ctx.ws.data` in all handlers. If it returns `null` or `undefined`, the connection is rejected.
 
-## Message Schemas (No Factories!)
+## Message Schemas
 
-Use the `message()` helper directly—no factory pattern needed:
+Use the `message()` helper directly — no factory pattern needed:
 
 ```ts
 import { z, message } from "@ws-kit/zod";
@@ -338,20 +339,70 @@ Simple, no factories, one canonical import source.
 
 ### Request-Response Pairs with `rpc()`
 
-For request-response patterns, use `rpc()` to bind request and response schemas together—no schema repetition at call sites:
+For request-response patterns, use `rpc()` to bind request and response schemas together — no schema repetition at call sites:
 
 ```ts
-import { z, rpc } from "@ws-kit/zod";
+import { z, rpc, createRouter } from "@ws-kit/zod";
 
 // Define RPC schema - binds request to response type
 const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+const Query = rpc("QUERY", { id: z.string() }, "RESULT", { data: z.string() });
 
 // With Valibot
 import { v, rpc } from "@ws-kit/valibot";
-const Query = rpc("QUERY", { id: v.string() }, "RESULT", { data: v.string() });
+const Ping = rpc("PING", { text: v.string() }, "PONG", { reply: v.string() });
 ```
 
 The client auto-detects the response type from the RPC schema, eliminating the need to specify it separately on every request.
+
+### RPC Handlers
+
+Register RPC handlers with `router.rpc()` to use request/response pattern with `ctx.reply()` and `ctx.progress()`:
+
+```ts
+import { z, rpc, createRouter } from "@ws-kit/zod";
+
+const GetUser = rpc("GET_USER", { userId: z.string() }, "USER_DATA", {
+  name: z.string(),
+  email: z.string(),
+});
+
+const router = createRouter();
+
+router.rpc(GetUser, (ctx) => {
+  const { userId } = ctx.payload;
+
+  // Send terminal response (one-shot)
+  ctx.reply({ name: "Alice", email: "alice@example.com" });
+});
+```
+
+For streaming responses, use `ctx.progress()` for non-terminal updates before the final `ctx.reply()`:
+
+```ts
+const DownloadFile = rpc(
+  "DOWNLOAD_FILE",
+  { fileId: z.string() },
+  "FILE_CHUNK",
+  { chunk: z.string(), finished: z.boolean() },
+);
+
+router.rpc(DownloadFile, (ctx) => {
+  const { fileId } = ctx.payload;
+
+  // Send progress updates (non-terminal)
+  ctx.progress({ chunk: "data...", finished: false });
+  ctx.progress({ chunk: "more...", finished: false });
+
+  // Send terminal response (final)
+  ctx.reply({ chunk: "end", finished: true });
+});
+```
+
+**Fire-and-forget vs RPC:**
+
+- `router.on(Message, handler)` — Use `ctx.send()` for fire-and-forget messages
+- `router.rpc(RpcSchema, handler)` — Use `ctx.reply()` (terminal) and `ctx.progress()` (streaming) for request/response
 
 ## Handlers and Routing
 
@@ -513,35 +564,35 @@ const UserLeft = message("USER_LEFT", { userId: z.string() });
 
 router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data?.userId || ctx.ws.data?.clientId;
+  const userId = ctx.ws.data?.userId || "anonymous";
 
   // Store room ID and subscribe to topic
   ctx.assignData({ roomId });
-  ctx.ws.subscribe(roomId);
+  ctx.subscribe(roomId);
 
   // Send confirmation back
   ctx.send(UserJoined, { roomId, userId });
 
   // Broadcast to room subscribers with schema validation
-  router.publish(roomId, UserJoined, { roomId, userId });
+  ctx.publish(roomId, UserJoined, { roomId, userId });
 });
 
 router.on(SendMessage, (ctx) => {
   const { roomId, message: msg } = ctx.payload;
-  const userId = ctx.ws.data?.userId || ctx.ws.data?.clientId;
+  const userId = ctx.ws.data?.userId || "anonymous";
 
   console.log(`Message in room ${roomId} from ${userId}: ${msg}`);
 
   // Broadcast the message to all room subscribers
-  router.publish(roomId, NewMessage, { roomId, userId, message: msg });
+  ctx.publish(roomId, NewMessage, { roomId, userId, message: msg });
 });
 
 router.onClose((ctx) => {
-  const userId = ctx.ws.data?.userId || ctx.ws.data?.clientId;
+  const userId = ctx.ws.data?.userId || "anonymous";
   const roomId = ctx.ws.data?.roomId;
 
   if (roomId) {
-    ctx.ws.unsubscribe(roomId);
+    ctx.unsubscribe(roomId);
     // Notify others in the room
     router.publish(roomId, UserLeft, { userId });
   }
@@ -587,13 +638,29 @@ router.on(JoinRoom, async (ctx) => {
 
 The standard error codes (aligned with gRPC) are:
 
-- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+**Terminal errors (don't retry):**
+
 - `UNAUTHENTICATED` — Authentication failed
 - `PERMISSION_DENIED` — Authenticated but lacks rights
+- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+- `FAILED_PRECONDITION` — Operation preconditions not met
 - `NOT_FOUND` — Resource not found
-- `RESOURCE_EXHAUSTED` — Rate limit or backpressure exceeded
+- `ALREADY_EXISTS` — Resource already exists
+- `ABORTED` — Operation aborted
+
+**Transient errors (retry with backoff):**
+
+- `DEADLINE_EXCEEDED` — Request deadline exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit, backpressure, or quota exceeded
+- `UNAVAILABLE` — Service temporarily unavailable
+
+**Server & evolution:**
+
+- `UNIMPLEMENTED` — Feature not implemented
 - `INTERNAL` — Server error
-- See ADR-015 for the complete error code taxonomy
+- `CANCELLED` — Request cancelled by client
+
+See [ADR-015](docs/adr/015-error-handling.md) for the complete error code taxonomy.
 
 ### Custom error handling
 
@@ -661,7 +728,7 @@ Where `chatRoutes` and `notificationRoutes` are separate routers created with `c
 
 ## Browser Client
 
-Type-safe browser WebSocket client with automatic reconnection, authentication, and request/response patterns—using the same validator and message definitions:
+Type-safe browser WebSocket client with automatic reconnection, authentication, and request/response patterns — using the same validator and message definitions:
 
 ```ts
 import { rpc, message, wsClient } from "@ws-kit/client/zod";
@@ -691,7 +758,7 @@ client.on(ServerBroadcast, (msg) => {
   console.log("Server broadcast:", msg.payload.data);
 });
 
-// Request/response with auto-detected response schema
+// Request/response with auto-detected response schema (modern RPC-style)
 try {
   const reply = await client.request(
     Hello,
@@ -700,7 +767,7 @@ try {
       timeoutMs: 5000,
     },
   );
-  // ✅ reply.payload.text is fully typed
+  // ✅ reply.payload.text is fully typed from RPC schema
   console.log("Server replied:", reply.payload.text);
 } catch (err) {
   console.error("Request failed:", err);
@@ -710,9 +777,10 @@ try {
 await client.disconnect();
 ```
 
-You can also use explicit response schemas for backward compatibility:
+You can also use explicit response schemas for backward compatibility (traditional style):
 
 ```ts
+// Traditional: client.request(schema, payload, responseSchema, options)
 const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
   timeoutMs: 5000,
 });
@@ -727,6 +795,55 @@ const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
 - Full TypeScript type inference from schemas
 
 See the [Client Documentation](./docs/specs/client.md) for complete API reference and advanced usage.
+
+## Breaking Changes & Migration
+
+### Validator is Required
+
+The router now requires a validator to be configured. All imports should come from validator packages to ensure the correct validator is set up:
+
+```ts
+// ✅ Correct: Validator is included
+import { createRouter } from "@ws-kit/zod";
+const router = createRouter();
+
+// ❌ Incorrect: Will throw if no validator is set
+import { WebSocketRouter } from "@ws-kit/core";
+const router = new WebSocketRouter(); // ← Error: validator is required
+```
+
+**Migration:** Always import `createRouter()` from `@ws-kit/zod` or `@ws-kit/valibot`, not from `@ws-kit/core`.
+
+### Heartbeat is Now Opt-In
+
+Heartbeat is no longer enabled by default. Enable it explicitly if you need client liveness detection:
+
+```ts
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+
+const router = createRouter();
+
+serve(router, {
+  port: 3000,
+  heartbeat: {
+    intervalMs: 30_000, // Ping every 30s (default)
+    timeoutMs: 5_000, // Wait 5s for pong (default)
+    onStaleConnection(clientId, ws) {
+      console.log(`Connection ${clientId} is stale, closing...`);
+      ws.close();
+    },
+  },
+});
+```
+
+**Migration:** Add `heartbeat` config to `serve()` options if you previously relied on default heartbeat behavior.
+
+### PubSub is Lazily Initialized
+
+PubSub (for `ctx.publish()` and subscriptions) is now created only on first use. Apps without broadcasting incur zero overhead.
+
+**Migration:** No action needed. Broadcasting works the same way; initialization is just deferred.
 
 ## Design & Architecture
 

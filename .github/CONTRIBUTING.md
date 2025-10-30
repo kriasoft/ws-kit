@@ -39,13 +39,16 @@ Thanks for your interest in contributing! This guide will help you get started.
 
 2. **Write your code** following existing patterns
 3. **Add tests** for new functionality
-4. **Run checks**:
+4. **Run checks** (before committing):
 
    ```bash
    bun run typecheck   # Type checking
-   bun run format      # Auto-format code
+   bun run lint:fix    # Fix linting issues
+   bun run format      # Auto-format code (optional - runs automatically on commit)
    bun test            # Run tests
    ```
+
+   Pre-commit hooks will automatically format code and run type checks, but it's good practice to run these locally first.
 
 ### Code Standards
 

@@ -46,7 +46,7 @@ const LoginMessage = message("LOGIN", {
 import { v, message, createRouter } from "@ws-kit/valibot";
 
 const LoginMessage = message("LOGIN", {
-  username: v.pipe(v.string(), v.minLength(3)),
+  username: v.string(),
   password: v.pipe(v.string(), v.minLength(8)),
 });
 ```
@@ -66,6 +66,8 @@ const schema = z.string().min(3).max(20).email();
 **Valibot:**
 
 ```typescript
+import * as v from "valibot";
+
 const schema = v.pipe(v.string(), v.minLength(3), v.maxLength(20), v.email());
 ```
 
@@ -83,7 +85,9 @@ const ValueSchema = z.union([z.string(), z.number()]);
 **Valibot:**
 
 ```typescript
-const RoleSchema = v.enum(["user", "admin", "moderator"]);
+import * as v from "valibot";
+
+const RoleSchema = v.picklist(["user", "admin", "moderator"]);
 const ValueSchema = v.union([v.string(), v.number()]);
 ```
 
@@ -101,6 +105,8 @@ const schema = z.object({
 **Valibot:**
 
 ```typescript
+import * as v from "valibot";
+
 const schema = v.object({
   name: v.string(),
   tags: v.array(v.string()),
@@ -117,12 +123,12 @@ import { serve } from "@ws-kit/bun";
 
 // Define message schemas
 const JoinRoom = message("JOIN_ROOM", {
-  roomId: v.pipe(v.string(), v.uuid()),
-  username: v.pipe(v.string(), v.minLength(1), v.maxLength(20)),
+  roomId: v.string(),
+  username: v.string(),
 });
 
 const SendMessage = message("SEND_MESSAGE", {
-  text: v.pipe(v.string(), v.maxLength(500)),
+  text: v.string(),
 });
 
 const UserJoined = message("USER_JOINED", {
@@ -145,7 +151,8 @@ const rooms = new Map<string, Set<string>>();
 router.on(JoinRoom, (ctx) => {
   const { roomId, username } = ctx.payload;
 
-  ctx.assignData({ username });
+  // Update connection data
+  ctx.ws.data.username = username;
 
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new Set());
@@ -154,19 +161,24 @@ router.on(JoinRoom, (ctx) => {
   rooms.get(roomId)!.add(ctx.ws.data.clientId);
   ctx.subscribe(roomId);
 
-  router.publish(roomId, UserJoined, {
+  ctx.publish(roomId, UserJoined, {
     username,
     userCount: rooms.get(roomId)!.size,
   });
 });
 
 router.on(SendMessage, (ctx) => {
-  const roomId = Object.entries(rooms).find(([_, users]) =>
-    users.has(ctx.ws.data.clientId),
-  )?.[0];
+  // Find which room this user is in
+  let userRoomId: string | undefined;
+  for (const [roomId, users] of rooms.entries()) {
+    if (users.has(ctx.ws.data.clientId)) {
+      userRoomId = roomId;
+      break;
+    }
+  }
 
-  if (roomId) {
-    router.publish(roomId, NewMessage, {
+  if (userRoomId) {
+    ctx.publish(userRoomId, NewMessage, {
       username: ctx.ws.data.username || "Anonymous",
       text: ctx.payload.text,
     });
@@ -185,8 +197,8 @@ import { wsClient } from "@ws-kit/client/valibot";
 
 // Define schemas (same as server)
 const JoinRoom = message("JOIN_ROOM", {
-  roomId: v.pipe(v.string(), v.uuid()),
-  username: v.pipe(v.string(), v.minLength(1), v.maxLength(20)),
+  roomId: v.string(),
+  username: v.string(),
 });
 
 const UserJoined = message("USER_JOINED", {
@@ -195,7 +207,7 @@ const UserJoined = message("USER_JOINED", {
 });
 
 const SendMessage = message("SEND_MESSAGE", {
-  text: v.pipe(v.string(), v.maxLength(500)),
+  text: v.string(),
 });
 
 const NewMessage = message("NEW_MESSAGE", {
@@ -210,24 +222,22 @@ await client.connect();
 
 // Join a room
 client.send(JoinRoom, {
-  roomId: "550e8400-e29b-41d4-a716-446655440000",
+  roomId: "room-123",
   username: "Alice",
 });
 
 // Listen for users joining
-client.on(UserJoined, (msg) => {
-  // ✅ msg.payload.username and userCount are fully typed
-  console.log(
-    `${msg.payload.username} joined (${msg.payload.userCount} users)`,
-  );
+client.on(UserJoined, (payload) => {
+  // ✅ payload.username and userCount are fully typed
+  console.log(`${payload.username} joined (${payload.userCount} users)`);
 });
 
 // Send a message
 client.send(SendMessage, { text: "Hello everyone!" });
 
 // Listen for messages
-client.on(NewMessage, (msg) => {
-  console.log(`${msg.payload.username}: ${msg.payload.text}`);
+client.on(NewMessage, (payload) => {
+  console.log(`${payload.username}: ${payload.text}`);
 });
 ```
 
@@ -246,10 +256,12 @@ import { v, message, createRouter } from "@ws-kit/valibot";
 2. **Update validators:**
 
 ```typescript
-// Before
+// Before (Zod)
+import { z } from "@ws-kit/zod";
 z.string().min(3).max(20).email();
 
-// After
+// After (Valibot)
+import { v } from "@ws-kit/valibot";
 v.pipe(v.string(), v.minLength(3), v.maxLength(20), v.email());
 ```
 
@@ -279,18 +291,21 @@ import { message } from "@ws-kit/valibot"; // Uses @ws-kit/valibot's v
 
 ## Performance Tips
 
-Valibot's functional API can help with tree-shaking:
+Valibot's functional API enables excellent tree-shaking:
 
 ```typescript
-// Unused validators are eliminated by bundlers
-import { pipe, string, minLength, maxLength } from "valibot";
+// ✅ CORRECT: Import from @ws-kit/valibot for consistency
+import { v } from "@ws-kit/valibot";
 
-const username = pipe(
-  string(),
-  minLength(3),
-  maxLength(20),
+const username = v.pipe(
+  v.string(),
+  v.minLength(3),
+  v.maxLength(20),
   // Additional validators only if needed
 );
+
+// Unused validators are automatically eliminated by bundlers
+// Only the validators you use are included in your bundle
 ```
 
 ## See Also

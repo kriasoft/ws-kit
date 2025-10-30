@@ -1,6 +1,6 @@
-# Advanced Usage
+# Advanced Client Usage
 
-Advanced patterns for reconnection, queueing, request/response, and auto-connection.
+Advanced patterns for reconnection, queueing, request/response, RPC, and auto-connection.
 
 ## Reconnection
 
@@ -17,7 +17,7 @@ const client = wsClient({
     enabled: true, // default: true
     maxAttempts: Infinity, // default: Infinity
     initialDelayMs: 300, // default: 300
-    maxDelayMs: 10000, // default: 10000
+    maxDelayMs: 10_000, // default: 10_000
     jitter: "full", // default: "full"
   },
 });
@@ -41,7 +41,7 @@ delay = min(maxDelayMs, initialDelayMs × 2^(attempt-1))
 - Attempt 1: 0-300ms (random)
 - Attempt 2: 0-600ms
 - Attempt 3: 0-1200ms
-- Attempt 7+: 0-10000ms (capped)
+- Attempt 7+: 0-10_000ms (capped)
 
 ### Monitor Reconnection State
 
@@ -65,6 +65,12 @@ client.onState((state) => {
       break;
   }
 });
+
+// Sugar property for checking connection status
+if (client.isConnected) {
+  // Equivalent to: client.state === "open"
+  client.send(Message, { text: "hello" });
+}
 ```
 
 ### Disable Reconnection
@@ -115,7 +121,7 @@ type QueueMode = "drop-oldest" | "drop-newest" | "off";
 **`drop-newest`** (default) - Queue until full, reject new messages:
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "drop-newest", // default
   queueSize: 1000, // default: 1000
@@ -131,7 +137,7 @@ if (!sent) {
 **`drop-oldest`** - Queue until full, evict oldest:
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "drop-oldest",
   queueSize: 1000,
@@ -145,7 +151,7 @@ client.send(ChatMessage, { text: "New message" });
 **`off`** - Drop immediately when offline:
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "off", // No queueing
 });
@@ -173,27 +179,65 @@ client.onError((error, context) => {
 
 ```typescript
 // Large queue for high-volume apps
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "drop-oldest",
   queueSize: 5000, // 5000 messages
 });
 
 // Small queue for low-latency apps
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "drop-newest",
   queueSize: 100, // 100 messages
 });
 ```
 
-## Request/Response
+## Request/Response (RPC)
 
 Advanced request/response patterns with correlation, timeout, and cancellation.
 
-### Basic Request
+### RPC Pattern (Recommended)
+
+Use the `rpc()` helper to bind request and response schemas for cleaner code:
 
 ```typescript
+import { z, rpc, wsClient } from "@ws-kit/client/zod";
+
+// Define RPC schema - binds request to response type
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+
+const client = wsClient({ url: "wss://api.example.com" });
+
+// Response schema auto-detected from Ping.response
+try {
+  const reply = await client.request(
+    Ping,
+    { text: "hello" },
+    {
+      timeoutMs: 5000,
+    },
+  );
+
+  // ✅ reply fully typed: { type: "PONG", payload: { reply: string }, ... }
+  console.log("Reply:", reply.payload.reply);
+} catch (err) {
+  if (err instanceof TimeoutError) {
+    console.warn("Request timed out");
+  }
+}
+```
+
+### Traditional Pattern (Explicit Response Schema)
+
+```typescript
+import { z, message, wsClient } from "@ws-kit/client/zod";
+
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
+
+const client = wsClient({ url: "wss://api.example.com" });
+
 try {
   const reply = await client.request(Hello, { name: "Anna" }, HelloOk, {
     timeoutMs: 5000,
@@ -205,6 +249,25 @@ try {
     console.warn("Request timed out");
   }
 }
+```
+
+### Messages Without Payloads
+
+Both send and request support messages with no payload:
+
+```typescript
+import { message, rpc, wsClient } from "@ws-kit/client/zod";
+
+// Fire-and-forget without payload
+const Logout = message("LOGOUT"); // No payload schema
+
+client.send(Logout); // No payload parameter needed
+
+// RPC without payloads
+const Heartbeat = rpc("HEARTBEAT", undefined, "HEARTBEAT_ACK", undefined);
+
+const reply = await client.request(Heartbeat); // No payload parameter
+console.log("Heartbeat ack:", reply.type); // "HEARTBEAT_ACK"
 ```
 
 ### Custom Correlation ID
@@ -225,6 +288,8 @@ console.log("Reply to:", correlationId);
 Use `AbortSignal` for cancellable requests:
 
 ```typescript
+import { StateError } from "@ws-kit/client/zod";
+
 const controller = new AbortController();
 
 const promise = client.request(Hello, { name: "Anna" }, HelloOk, {
@@ -277,7 +342,9 @@ useEffect(() => {
 Prevent memory leaks with bounded pending requests:
 
 ```typescript
-const client = createClient({
+import { StateError } from "@ws-kit/client/zod";
+
+const client = wsClient({
   url: "wss://api.example.com/ws",
   pendingRequestsLimit: 1000, // default: 1000
 });
@@ -317,7 +384,7 @@ Lazy connection initialization for simpler code.
 ### Enable Auto-Connect
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   autoConnect: true, // Auto-connect on first operation
 });
@@ -341,7 +408,7 @@ client.send(Hello, { name: "Anna" }); // Triggers connection
 ### Error Handling with Auto-Connect
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com/ws",
   autoConnect: true,
 });
@@ -575,7 +642,7 @@ client.onUnhandled((msg) => {
 Use `wsFactory` for dependency injection:
 
 ```typescript
-import { createClient } from "@ws-kit/client/zod";
+import { wsClient } from "@ws-kit/client/zod";
 
 class FakeWebSocket {
   readyState = WebSocket.CONNECTING;
@@ -591,7 +658,7 @@ class FakeWebSocket {
   }
 }
 
-const client = createClient({
+const client = wsClient({
   url: "ws://test",
   wsFactory: (url) => new FakeWebSocket(url) as any,
 });
@@ -602,7 +669,7 @@ const client = createClient({
 Use `jitter: "none"` for predictable reconnection in tests:
 
 ```typescript
-const client = createClient({
+const client = wsClient({
   url: "ws://test",
   reconnect: {
     enabled: true,
@@ -613,4 +680,229 @@ const client = createClient({
 });
 
 // Delays: 100, 200, 400, 800, 1000, 1000...
+```
+
+## Error Classes
+
+All client errors are available from the typed client imports:
+
+```typescript
+import {
+  ValidationError, // Payload/schema validation failed
+  TimeoutError, // Request timed out
+  ServerError, // Server sent ERROR response
+  ConnectionClosedError, // Connection closed during request
+  StateError, // Request aborted or queue disabled
+} from "@ws-kit/client/zod";
+
+try {
+  const reply = await client.request(Ping, { text: "test" });
+} catch (err) {
+  if (err instanceof TimeoutError) {
+    console.warn(`Timeout after ${err.timeoutMs}ms`);
+  } else if (err instanceof ServerError) {
+    console.error(`Server error: ${err.code}`, err.context);
+  } else if (err instanceof ConnectionClosedError) {
+    console.warn("Connection closed before reply");
+  } else if (err instanceof ValidationError) {
+    console.error("Invalid reply:", err.issues);
+  } else if (err instanceof StateError) {
+    console.warn("Request aborted or state error");
+  }
+}
+```
+
+**Note**: The errors.ts file also exports `RpcError` and `WsDisconnectedError` classes, but these are not currently used by the client implementation. The active error classes are: `ValidationError`, `TimeoutError`, `ServerError`, `ConnectionClosedError`, and `StateError`.
+
+## Authentication
+
+The client supports automatic token attachment via query parameters or WebSocket protocols.
+
+### Query Parameter Auth (Default)
+
+Attach tokens as URL query parameters:
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  auth: {
+    getToken: () => localStorage.getItem("access_token"), // Called on each (re)connect
+    attach: "query", // default
+    queryParam: "access_token", // default parameter name
+  },
+});
+
+// Connects to: wss://api.example.com/ws?access_token=<token>
+```
+
+### Protocol-Based Auth
+
+Use WebSocket subprotocols for auth (tokens in `Sec-WebSocket-Protocol` header):
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  auth: {
+    getToken: () => localStorage.getItem("access_token"),
+    attach: "protocol",
+    protocolPrefix: "bearer.", // default: "bearer."
+    protocolPosition: "append", // default: append after user protocols
+  },
+});
+
+// WebSocket constructor receives: protocols: ["bearer.<token>"]
+```
+
+### Token Refresh on Reconnect
+
+The `getToken()` function is called before each connection attempt:
+
+```typescript
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  auth: {
+    // Async token refresh
+    getToken: async () => {
+      const token = localStorage.getItem("access_token");
+      if (isExpired(token)) {
+        return await refreshToken(); // Refresh expired token
+      }
+      return token;
+    },
+    attach: "protocol",
+  },
+  reconnect: {
+    enabled: true,
+    maxAttempts: 5,
+  },
+});
+
+// Token is refreshed before each reconnect attempt
+```
+
+### Protocol Position Control
+
+Control whether the auth protocol comes before or after user protocols:
+
+```typescript
+// Append (default): user protocols first, then auth
+const client1 = wsClient({
+  url: "wss://api.example.com/ws",
+  protocols: "chat-v2", // User protocol
+  auth: {
+    getToken: () => "abc123",
+    attach: "protocol",
+    protocolPosition: "append", // default
+  },
+});
+// WebSocket receives: ["chat-v2", "bearer.abc123"]
+
+// Prepend: auth first, then user protocols
+const client2 = wsClient({
+  url: "wss://api.example.com/ws",
+  protocols: "chat-v2",
+  auth: {
+    getToken: () => "abc123",
+    attach: "protocol",
+    protocolPosition: "prepend", // Auth protocol first
+  },
+});
+// WebSocket receives: ["bearer.abc123", "chat-v2"]
+```
+
+### Check Selected Protocol
+
+After connection, check which protocol the server selected:
+
+```typescript
+client.onState((state) => {
+  if (state === "open") {
+    console.log("Selected protocol:", client.protocol);
+    // "" if server selected no protocol
+    // "bearer.abc123" if server selected auth protocol
+    // "chat-v2" if server selected user protocol
+  }
+});
+```
+
+## Centralized Error Handling
+
+Use `onError()` for centralized logging and error tracking:
+
+```typescript
+client.onError((error, context) => {
+  switch (context.type) {
+    case "parse":
+      // Invalid JSON from server
+      console.warn("Parse error:", error.message, context.details);
+      Sentry.captureException(error, { tags: { type: "ws-parse" } });
+      break;
+
+    case "validation":
+      // Message failed schema validation
+      console.warn("Validation error:", error.message, context.details);
+      Sentry.captureException(error, {
+        tags: { type: "ws-validation" },
+        extra: context.details,
+      });
+      break;
+
+    case "overflow":
+      // Queue overflow (message dropped)
+      console.warn("Queue overflow:", error.message);
+      metrics.increment("ws.queue.overflow");
+      showUserWarning("Too many pending messages");
+      break;
+
+    case "unknown":
+      // Other client-side errors
+      console.warn("Unknown error:", error.message, context.details);
+      Sentry.captureException(error);
+      break;
+  }
+});
+```
+
+**What `onError()` catches:**
+
+- ✅ Parse failures (invalid JSON)
+- ✅ Validation failures (schema mismatches)
+- ✅ Queue overflow events
+- ✅ Invalid message structures
+
+**What `onError()` does NOT catch:**
+
+- ❌ `request()` rejections (handle with try/catch on caller side)
+- ❌ Handler errors (logged to `console.error` automatically)
+
+## Type Inference
+
+The typed client provides full type inference for all message operations:
+
+```typescript
+import { z, message, rpc, wsClient } from "@ws-kit/client/zod";
+
+// Define schemas
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
+const Ping = rpc("PING", { value: z.number() }, "PONG", { result: z.number() });
+
+const client = wsClient({ url: "wss://api.example.com" });
+
+// ✅ Handler gets fully typed message
+client.on(HelloOk, (msg) => {
+  msg.type; // "HELLO_OK" (literal type)
+  msg.payload.text; // string
+  msg.meta.timestamp; // number | undefined
+  msg.meta.correlationId; // string | undefined
+});
+
+// ✅ Send validates payload type
+client.send(Hello, { name: "Alice" }); // OK
+client.send(Hello, { name: 123 }); // ❌ Type error
+
+// ✅ Request returns typed response
+const reply = await client.request(Ping, { value: 42 });
+reply.type; // "PONG" (literal type)
+reply.payload.result; // number
 ```
