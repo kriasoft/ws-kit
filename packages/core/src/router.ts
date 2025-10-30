@@ -126,6 +126,10 @@ export class WebSocketRouter<
   private readonly rpcTimeoutMs: number;
   private readonly dropProgressOnBackpressure: boolean;
 
+  // Error handling configuration
+  private readonly autoSendErrorOnThrow: boolean;
+  private readonly exposeErrorDetails: boolean;
+
   // RPC state management (encapsulated in RpcManager)
   readonly #rpc: RpcManager;
 
@@ -162,6 +166,10 @@ export class WebSocketRouter<
     // Store backpressure behavior (default: true = drop progress messages)
     this.dropProgressOnBackpressure =
       options.dropProgressOnBackpressure ?? true;
+
+    // Store error handling configuration
+    this.autoSendErrorOnThrow = options.autoSendErrorOnThrow ?? true;
+    this.exposeErrorDetails = options.exposeErrorDetails ?? false;
 
     // Initialize RPC manager with configuration
     const rpcIdleTimeoutMs =
@@ -1687,16 +1695,37 @@ export class WebSocketRouter<
       try {
         await executeHandlerWithMiddleware();
       } catch (error) {
-        this.callErrorHandlers(
-          error instanceof Error ? error : new Error(String(error)),
-          context,
-        );
+        const actualError =
+          error instanceof Error ? error : new Error(String(error));
+        const suppressed = this.callErrorHandlers(actualError, context);
+
+        // Auto-send INTERNAL_ERROR response unless suppressed by error handler
+        if (this.autoSendErrorOnThrow && !suppressed) {
+          const errorMessage = this.exposeErrorDetails
+            ? actualError.message
+            : "Internal server error";
+          context.error("INTERNAL_ERROR", errorMessage);
+        }
       }
     } catch (error) {
-      this.callErrorHandlers(
-        error instanceof Error ? error : new Error(String(error)),
-        this.createMessageContext(ws, "", clientId, receivedAt, send),
+      const actualError =
+        error instanceof Error ? error : new Error(String(error));
+      const fallbackContext = this.createMessageContext(
+        ws,
+        "",
+        clientId,
+        receivedAt,
+        send,
       );
+      const suppressed = this.callErrorHandlers(actualError, fallbackContext);
+
+      // Auto-send INTERNAL_ERROR response unless suppressed by error handler
+      if (this.autoSendErrorOnThrow && !suppressed) {
+        const errorMessage = this.exposeErrorDetails
+          ? actualError.message
+          : "Internal server error";
+        fallbackContext.error("INTERNAL_ERROR", errorMessage);
+      }
     }
   }
 
@@ -1787,27 +1816,36 @@ export class WebSocketRouter<
 
     return true;
   }
-
   /**
-   * Call all registered error handlers.
+   * Call all registered error handlers and track suppression requests.
+   *
+   * @param error - The error to pass to handlers
+   * @param context - Message context (may be partial if error occurred early)
+   * @returns true if automatic error response should be suppressed (any handler returned false)
    */
   private callErrorHandlers(
     error: Error,
     context?: MessageContext<MessageSchemaType, TData>,
-  ): void {
+  ): boolean {
     if (this.errorHandlers.length === 0) {
       // No error handlers registered - log to console
       console.error("[ws] Unhandled error:", error, context);
-      return;
+      return false; // Not suppressed
     }
 
+    let suppressed = false;
     for (const handler of this.errorHandlers) {
       try {
-        handler(error, context);
+        const result = handler(error, context);
+        // Handler can return false to suppress automatic error response
+        if (result === false) {
+          suppressed = true;
+        }
       } catch (handlerError) {
         console.error("[ws] Error in error handler:", handlerError);
       }
     }
+    return suppressed;
   }
 
   /**

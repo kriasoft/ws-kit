@@ -504,4 +504,155 @@ describe("Middleware", () => {
       ]);
     });
   });
+
+  describe("Automatic error response on handler exception", () => {
+    it("should auto-send ERROR message when handler throws", async () => {
+      const router = createRouter();
+      const TestMessage = message("TEST", { value: z.string() });
+
+      const sentMessages: string[] = [];
+      router.on(TestMessage, () => {
+        throw new Error("Test error");
+      });
+
+      const wsHandler = router._core.websocket;
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: (msg: string) => {
+          sentMessages.push(msg);
+        },
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      // Should have sent an ERROR message
+      expect(sentMessages.length).toBe(1);
+      const errorMsg = JSON.parse(sentMessages[0]!);
+      expect(errorMsg.type).toBe("ERROR");
+      expect(errorMsg.payload.code).toBe("INTERNAL_ERROR");
+      expect(errorMsg.payload.message).toBe("Internal server error"); // Default sanitized message
+    });
+
+    it("should include actual error message when exposeErrorDetails is true", async () => {
+      const router = createRouter({ exposeErrorDetails: true });
+      const TestMessage = message("TEST", { value: z.string() });
+
+      const sentMessages: string[] = [];
+      router.on(TestMessage, () => {
+        throw new Error("Specific error message");
+      });
+
+      const wsHandler = router._core.websocket;
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: (msg: string) => {
+          sentMessages.push(msg);
+        },
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      // Should include the actual error message
+      const errorMsg = JSON.parse(sentMessages[0]!);
+      expect(errorMsg.payload.message).toBe("Specific error message");
+    });
+
+    it("should not auto-send error when autoSendErrorOnThrow is false", async () => {
+      const router = createRouter({ autoSendErrorOnThrow: false });
+      const TestMessage = message("TEST", { value: z.string() });
+
+      const sentMessages: string[] = [];
+      router.on(TestMessage, () => {
+        throw new Error("Test error");
+      });
+
+      const wsHandler = router._core.websocket;
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: (msg: string) => {
+          sentMessages.push(msg);
+        },
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      // Should NOT have sent any message (no error handler suppression needed)
+      expect(sentMessages.length).toBe(0);
+    });
+
+    it("error handler can suppress auto-send by returning false", async () => {
+      const errorHandlerCalled = { count: 0 };
+      const router = createRouter();
+      const TestMessage = message("TEST", { value: z.string() });
+
+      router.onError(() => {
+        errorHandlerCalled.count++;
+        return false; // Suppress auto-send
+      });
+
+      router.on(TestMessage, () => {
+        throw new Error("Test error");
+      });
+
+      const sentMessages: string[] = [];
+      const wsHandler = router._core.websocket;
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: (msg: string) => {
+          sentMessages.push(msg);
+        },
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      // Error handler was called
+      expect(errorHandlerCalled.count).toBe(1);
+      // But no error message was sent
+      expect(sentMessages.length).toBe(0);
+    });
+  });
 });

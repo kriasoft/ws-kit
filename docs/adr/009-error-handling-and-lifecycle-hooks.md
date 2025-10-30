@@ -519,8 +519,29 @@ router.on(QueryMessage, (ctx) => {
 // Flow:
 // 1. Router catches error
 // 2. onError hook called: onError(error, { type: "QUERY", userId: "123" })
-// 3. Generic error sent to client: { code: "INTERNAL_ERROR", message: "..." }
-// 4. Handler return early (connection stays open)
+//    - Error handler can return false to suppress automatic error response
+// 3. Generic error sent to client (unless suppressed):
+//    { code: "INTERNAL_ERROR", message: "Internal server error" }
+//    - Message is configurable via exposeErrorDetails option
+// 4. Handler returns early (connection stays open)
+```
+
+**Configuration Options:**
+
+- `autoSendErrorOnThrow` (default: `true`) - Automatically send INTERNAL_ERROR response to client when handler throws
+- `exposeErrorDetails` (default: `false`) - Include actual error message in response (true) or generic message (false)
+- Error handlers can return `false` to suppress automatic error response
+
+**Example with Suppression:**
+
+```typescript
+router.onError((error, ctx) => {
+  // Log error, send custom response, etc.
+  if (ctx) {
+    ctx.send(CustomErrorSchema, { code: "CUSTOM", message: error.message });
+  }
+  return false; // Suppress automatic INTERNAL_ERROR response
+});
 ```
 
 ### Middleware Error

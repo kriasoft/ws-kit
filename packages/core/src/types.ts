@@ -557,12 +557,15 @@ export type AuthHandler<TData extends WebSocketData = WebSocketData> = (
  *
  * @param error - The error that occurred
  * @param context - Message context (may be partial if error occurred early)
+ * @returns Return false (or falsy) to suppress automatic error response. If any error
+ *          handler returns false, the router will not send an INTERNAL_ERROR response
+ *          to the client (assuming autoSendErrorOnThrow is enabled).
  */
 export type ErrorHandler<TData extends WebSocketData = WebSocketData> = (
   error: Error,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context?: MessageContext<any, TData>,
-) => void;
+) => void | boolean;
 
 /**
  * Middleware function that executes before message handlers.
@@ -814,6 +817,28 @@ export interface WebSocketRouterOptions<
    * client disconnects that don't fire close handler or network partitions.
    */
   rpcIdleTimeoutMs?: number;
+
+  /**
+   * Automatically send INTERNAL_ERROR response when handler throws uncaught exception (default: true).
+   *
+   * When enabled, the router catches exceptions from handlers/middleware and sends
+   * an INTERNAL_ERROR response to the client. For RPC requests, this prevents
+   * the client from timing out. For regular messages, it provides feedback
+   * that something went wrong.
+   *
+   * Set to false to disable automatic error responses (error handlers still called).
+   */
+  autoSendErrorOnThrow?: boolean;
+
+  /**
+   * Include actual error message in INTERNAL_ERROR responses (default: false).
+   *
+   * When true, the actual error message is sent to clients (sanitized, no stack trace).
+   * When false, a generic "Internal server error" message is used instead.
+   *
+   * Recommended: false in production (security), true in development (debugging).
+   */
+  exposeErrorDetails?: boolean;
 }
 
 /**
