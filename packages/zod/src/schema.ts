@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { ZodObject, ZodRawShape, ZodType, z as zType } from "zod";
 import { validateMetaSchema } from "@ws-kit/core";
+import type { ZodObject, ZodRawShape, ZodType, z as zType } from "zod";
 
 /**
  * Minimal interface for Zod instance to avoid circular type references.
@@ -108,15 +108,28 @@ export function createMessageSchema(zod: ZodLike) {
   const MessageMetadataSchema = zod.object({
     timestamp: zod.number().int().positive().optional(),
     correlationId: zod.string().optional(),
+    timeoutMs: zod.number().int().positive().optional(),
   });
 
-  // Import canonical ErrorCode enum from core
+  // Canonical ErrorCode enum from core (per ADR-015, gRPC-aligned, 13 codes)
+  // Terminal: UNAUTHENTICATED, PERMISSION_DENIED, INVALID_ARGUMENT, FAILED_PRECONDITION,
+  //          NOT_FOUND, ALREADY_EXISTS, ABORTED
+  // Transient: DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE
+  // Server/evolution: UNIMPLEMENTED, INTERNAL, CANCELLED
   const ErrorCode = zod.enum([
-    "VALIDATION_ERROR",
-    "AUTH_ERROR",
-    "INTERNAL_ERROR",
+    "UNAUTHENTICATED",
+    "PERMISSION_DENIED",
+    "INVALID_ARGUMENT",
+    "FAILED_PRECONDITION",
     "NOT_FOUND",
-    "RATE_LIMIT",
+    "ALREADY_EXISTS",
+    "ABORTED",
+    "DEADLINE_EXCEEDED",
+    "RESOURCE_EXHAUSTED",
+    "UNAVAILABLE",
+    "UNIMPLEMENTED",
+    "INTERNAL",
+    "CANCELLED",
   ]);
 
   /**
@@ -197,6 +210,7 @@ export function createMessageSchema(zod: ZodLike) {
   >(
     messageType: T,
     config: { payload?: P; response?: never; meta?: ZodRawShape },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): ZodObject<any>;
 
   function messageSchema<
@@ -251,11 +265,13 @@ export function createMessageSchema(zod: ZodLike) {
         : MessageMetadataSchema
     ).strict();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const baseSchema: any = {
       type: zod.literal(messageType),
       meta: metaSchema,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let schema: any;
     if (actualPayload === undefined) {
       schema = zod.object(baseSchema).strict();
@@ -287,6 +303,7 @@ export function createMessageSchema(zod: ZodLike) {
 
     // Mark schema with validator identity for runtime compatibility checks
     // This allows the router to detect mismatched validators at registration time
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schema as any).__wsKitValidatorId = zod.constructor;
 
     return schema;
@@ -371,15 +388,23 @@ export function createMessageSchema(zod: ZodLike) {
       );
     }
 
-    const requestSchema = (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const requestSchema: any =
       requestPayload === undefined
         ? messageSchema(requestType)
-        : messageSchema(requestType, requestPayload as any)
-    ) as any;
+        : messageSchema(
+            requestType,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            requestPayload as any,
+          );
     const responseSchema =
       responsePayload === undefined
         ? messageSchema(responseType)
-        : messageSchema(responseType, responsePayload as any);
+        : messageSchema(
+            responseType,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            responsePayload as any,
+          );
 
     // Attach response schema as non-enumerable property to avoid breaking schema iteration
     Object.defineProperty(requestSchema, "response", {

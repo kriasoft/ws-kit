@@ -16,7 +16,7 @@ router.on(LoginMessage, (ctx) => {
 
 router.on(SecureMessage, (ctx) => {
   if (!ctx.ws.data?.userId) {
-    ctx.send(ErrorMessage, { code: "AUTH_ERROR" });
+    ctx.send(ErrorMessage, { code: "UNAUTHENTICATED" });
     return;
   }
   // Handle secure message
@@ -24,7 +24,7 @@ router.on(SecureMessage, (ctx) => {
 
 router.on(AnotherSecureMessage, (ctx) => {
   if (!ctx.ws.data?.userId) {
-    ctx.send(ErrorMessage, { code: "AUTH_ERROR" });
+    ctx.send(ErrorMessage, { code: "UNAUTHENTICATED" });
     return;
   }
   // Handle another secure message
@@ -132,7 +132,7 @@ export class WebSocketRouter<TData> {
 ```typescript
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler by not calling next()
   }
   return next();
@@ -181,7 +181,7 @@ router.use(SendMessage, (ctx, next) => {
   const state = rateLimiter.get(userId);
 
   if (state && state.resetAt > now && state.count >= 10) {
-    ctx.error("RATE_LIMIT", "Too many messages");
+    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return; // Skip handler
   }
 
@@ -210,7 +210,7 @@ router.use(QueryMessage, (ctx, next) => {
       query: parseQuery(ctx.payload.q),
     });
   } catch (err) {
-    ctx.error("VALIDATION_ERROR", "Invalid query syntax");
+    ctx.error("INVALID_ARGUMENT", "Invalid query syntax");
     return; // Skip handler
   }
   return next();
@@ -231,14 +231,14 @@ router.use((ctx, next) => {
     .then((res) => res.json())
     .then(({ enabled }) => {
       if (!enabled) {
-        ctx.error("NOT_AVAILABLE", "Feature is disabled");
+        ctx.error("UNAVAILABLE", "Feature is disabled");
         return;
       }
       return next();
     })
     .catch((err) => {
       console.error("Feature check failed:", err);
-      ctx.error("INTERNAL_ERROR", "Feature check failed");
+      ctx.error("INTERNAL", "Feature check failed");
     });
 });
 ```
@@ -269,7 +269,7 @@ router.use((ctx, next) => {
 ```typescript
 router.use((ctx, next) => {
   if (!isAllowed(ctx)) {
-    ctx.error("FORBIDDEN", "Access denied");
+    ctx.error("PERMISSION_DENIED", "Access denied");
     return; // Handler won't run
   }
   return next();
@@ -282,7 +282,7 @@ router.use((ctx, next) => {
 router.use(async (ctx, next) => {
   const allowed = await checkPermission(ctx.ws.data?.userId);
   if (!allowed) {
-    ctx.error("FORBIDDEN", "Access denied");
+    ctx.error("PERMISSION_DENIED", "Access denied");
     return;
   }
   return next();
@@ -331,7 +331,7 @@ router.use((ctx, next) => {
     const userId = JSON.parse(ctx.ws.data?.rawUserId);
     ctx.assignData({ userId });
   } catch (err) {
-    ctx.error("VALIDATION_ERROR", "Invalid user ID format");
+    ctx.error("INVALID_ARGUMENT", "Invalid user ID format");
     return; // Skip handler
   }
   return next();
@@ -345,13 +345,13 @@ router.use(async (ctx, next) => {
   try {
     const allowed = await checkPermission(ctx.ws.data?.userId);
     if (!allowed) {
-      ctx.error("FORBIDDEN", "Access denied");
+      ctx.error("PERMISSION_DENIED", "Access denied");
       return;
     }
   } catch (err) {
     // Log but don't expose internal error
     console.error("Permission check failed:", err);
-    ctx.error("INTERNAL_ERROR", "Could not verify permissions");
+    ctx.error("INTERNAL", "Could not verify permissions");
     return;
   }
   return next();
@@ -425,7 +425,7 @@ Wrap handlers in middleware:
 ```typescript
 const withAuth = (handler) => (ctx) => {
   if (!ctx.ws.data?.userId) {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
   return handler(ctx);

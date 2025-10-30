@@ -534,7 +534,7 @@ export class WebSocketRouter<
    * // Global authentication middleware
    * router.use((ctx, next) => {
    *   if (!ctx.ws.data?.userId) {
-   *     ctx.error("AUTH_ERROR", "Not authenticated");
+   *     ctx.error("UNAUTHENTICATED", "Not authenticated");
    *     return; // Skip handler
    *   }
    *   return next(); // Proceed to handler
@@ -572,7 +572,7 @@ export class WebSocketRouter<
    *   const recent = timestamps.filter((t) => now - t < 1000);
    *
    *   if (recent.length > 10) {
-   *     ctx.error("RATE_LIMIT", "Max 10 messages per second");
+   *     ctx.error("RESOURCE_EXHAUSTED", "Max 10 messages per second");
    *     return;
    *   }
    *
@@ -1224,7 +1224,7 @@ export class WebSocketRouter<
         );
         if (!authenticated) {
           console.warn(`[ws] Authentication failed for ${clientId}`);
-          ws.close(4403, "FORBIDDEN");
+          ws.close(4403, "PERMISSION_DENIED");
           return;
         }
         heartbeat.authenticated = true;
@@ -1461,7 +1461,7 @@ export class WebSocketRouter<
           console.warn(
             `[ws] RPC inflight limit exceeded for ${clientId}, rejecting ${correlationId}`,
           );
-          errorSend("RATE_LIMIT", "Too many in-flight RPCs", {
+          errorSend("RESOURCE_EXHAUSTED", "Too many in-flight RPCs", {
             retryable: true,
             retryAfterMs: 100,
           });
@@ -1516,8 +1516,8 @@ export class WebSocketRouter<
             console.warn(
               `[ws] Backpressure exceeded on RPC terminal send for ${correlationId}`,
             );
-            // Send BACKPRESSURE error instead
-            errorSend("BACKPRESSURE", "Socket buffer exceeded capacity", {
+            // Send RESOURCE_EXHAUSTED error instead (per ADR-015)
+            errorSend("RESOURCE_EXHAUSTED", "Socket buffer exceeded capacity", {
               retryable: true,
               retryAfterMs: 100,
             });
@@ -1710,12 +1710,12 @@ export class WebSocketRouter<
           error instanceof Error ? error : new Error(String(error));
         const suppressed = this.callErrorHandlers(actualError, context);
 
-        // Auto-send INTERNAL_ERROR response unless suppressed by error handler
+        // Auto-send INTERNAL response unless suppressed by error handler
         if (this.autoSendErrorOnThrow && !suppressed) {
           const errorMessage = this.exposeErrorDetails
             ? actualError.message
             : "Internal server error";
-          context.error("INTERNAL_ERROR", errorMessage);
+          context.error("INTERNAL", errorMessage);
         }
       }
     } catch (error) {
@@ -1730,12 +1730,12 @@ export class WebSocketRouter<
       );
       const suppressed = this.callErrorHandlers(actualError, fallbackContext);
 
-      // Auto-send INTERNAL_ERROR response unless suppressed by error handler
+      // Auto-send INTERNAL response unless suppressed by error handler
       if (this.autoSendErrorOnThrow && !suppressed) {
         const errorMessage = this.exposeErrorDetails
           ? actualError.message
           : "Internal server error";
-        fallbackContext.error("INTERNAL_ERROR", errorMessage);
+        fallbackContext.error("INTERNAL", errorMessage);
       }
     }
   }
@@ -1841,7 +1841,7 @@ export class WebSocketRouter<
     // Wrap error as WsKitError if it isn't already
     const wsKitError = WsKitError.wrap(
       error,
-      ErrorCode.INTERNAL_ERROR,
+      ErrorCode.INTERNAL,
       error.message,
     );
 

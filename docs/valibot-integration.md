@@ -298,4 +298,4 @@ const username = pipe(
 - `docs/message-schemas.md` — Message schema details
 - `docs/examples.md` — Real-world example code
 - `docs/client-setup.md` — Client setup and usage
-- [@ws-kit/valibot README](../packages/valibot/README.md) — Package details
+- [@ws-kit/valibot on GitHub](https://github.com/kriasoft/ws-kit/tree/main/packages/valibot) — Package details

@@ -53,7 +53,7 @@ Type-safe request-response patterns with automatic timeout, cancellation, and id
    try {
      await client.request(Query, payload);
    } catch (e) {
-     if (e instanceof RpcError && e.code === "BACKPRESSURE") {
+     if (e instanceof RpcError && e.code === "RESOURCE_EXHAUSTED") {
        console.log("Buffer full, retry after:", e.retryAfterMs);
      }
    }
@@ -131,7 +131,7 @@ router.on(Query, async (ctx) => {
   const timeRemaining = ctx.timeRemaining();
   if (timeRemaining < 1000) {
     // Less than 1 second left
-    ctx.error("RATE_LIMIT", "Server overloaded, retry later");
+    ctx.error("RESOURCE_EXHAUSTED", "Server overloaded, retry later");
     return;
   }
 
@@ -268,7 +268,7 @@ Promise resolves        cleanup RPC state
 - [ ] Only one `ctx.send()` or `ctx.error()` call?
 - [ ] `ctx.timeRemaining() > 0` (not expired)?
 - [ ] WebSocket still connected (`client.state === "open"`)?
-- [ ] Backpressure not rejecting message (check `e.code === "BACKPRESSURE"`)?
+- [ ] Backpressure not rejecting message (check `e.code === "RESOURCE_EXHAUSTED"`)?
 - [ ] Custom `correlationId` unique and stable?
 - [ ] Idempotency key format consistent across app?
 
@@ -320,6 +320,6 @@ const handler = createCloudflareHandler(router, {
    - TTL: max resend window (5 seconds default)
 
 4. **Monitor backpressure**
-   - Track `BACKPRESSURE` errors
+   - Track `RESOURCE_EXHAUSTED` errors
    - Increase `maxQueuedBytesPerSocket` if frequent
    - Consider request shaping on client

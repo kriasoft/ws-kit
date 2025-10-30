@@ -91,7 +91,7 @@ describe("Client: Request/Response Correlation", () => {
       type: "ERROR",
       meta: { correlationId: "req-456" },
       payload: {
-        code: "INTERNAL_SERVER_ERROR",
+        code: "INTERNAL",
         message: "Something went wrong",
         context: { detail: "database failure" },
       },

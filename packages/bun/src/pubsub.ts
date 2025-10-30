@@ -34,6 +34,7 @@ import type { Server } from "bun";
  * ```
  */
 export class BunPubSub implements PubSub {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(private server: Server<any>) {}
 
   /**

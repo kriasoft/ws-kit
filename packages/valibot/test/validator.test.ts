@@ -295,20 +295,32 @@ describe("@ws-kit/valibot Validator", () => {
         type: "ERROR",
         meta: { timestamp: Date.now() },
         payload: {
-          code: "VALIDATION_ERROR",
+          code: "INVALID_ARGUMENT",
           message: "Invalid input",
         },
       });
       expect(result.success).toBe(true);
     });
 
-    it("should support all error codes", () => {
+    it("should support all error codes (per ADR-015, 13 codes)", () => {
+      // 13 standard codes aligned with gRPC conventions
       const codes = [
-        "VALIDATION_ERROR",
-        "AUTH_ERROR",
-        "INTERNAL_ERROR",
+        // Terminal errors (don't auto-retry):
+        "UNAUTHENTICATED",
+        "PERMISSION_DENIED",
+        "INVALID_ARGUMENT",
+        "FAILED_PRECONDITION",
         "NOT_FOUND",
-        "RATE_LIMIT",
+        "ALREADY_EXISTS",
+        "ABORTED",
+        // Transient errors (retry with backoff):
+        "DEADLINE_EXCEEDED",
+        "RESOURCE_EXHAUSTED",
+        "UNAVAILABLE",
+        // Server/evolution:
+        "UNIMPLEMENTED",
+        "INTERNAL",
+        "CANCELLED",
       ];
 
       for (const code of codes) {

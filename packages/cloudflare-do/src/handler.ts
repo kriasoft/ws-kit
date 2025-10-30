@@ -51,7 +51,7 @@ import type {
 export function createDurableObjectHandler<
   TData extends WebSocketData = WebSocketData,
 >(
-  router: WebSocketRouter<any, TData>,
+  router: WebSocketRouter<unknown, TData>,
   options?: {
     authenticate?: (
       req: Request,

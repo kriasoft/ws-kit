@@ -46,7 +46,7 @@ describe("RPC Incomplete Handler Warning", () => {
   let router: ReturnType<typeof createRouter>;
   let ws: MockWebSocket;
   let originalConsoleWarn: typeof console.warn;
-  let warnCalls: Array<string> = [];
+  let warnCalls: string[] = [];
 
   beforeEach(() => {
     // Create router with Zod validator
@@ -217,7 +217,7 @@ describe("RPC Incomplete Handler Warning", () => {
       );
 
       (router as any)._core.rpc(TestRpc, (ctx: any) => {
-        ctx.error!("VALIDATION_ERROR", "Invalid ID");
+        ctx.error!("INVALID_ARGUMENT", "Invalid ID");
       });
 
       const wsHandler = router._core.websocket;

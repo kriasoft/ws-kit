@@ -161,7 +161,7 @@ router.on(PingMsg, (ctx) => {
 // 5. Middleware and broadcasting
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "PING") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
   return next();

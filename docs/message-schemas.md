@@ -300,17 +300,17 @@ import { message } from "@ws-kit/zod";
 
 // Available in all validators
 const errorCode = z.enum([
-  "VALIDATION_ERROR",
-  "AUTH_ERROR",
-  "INTERNAL_ERROR",
+  "INVALID_ARGUMENT",
+  "UNAUTHENTICATED",
+  "INTERNAL",
   "NOT_FOUND",
-  "RATE_LIMIT",
+  "RESOURCE_EXHAUSTED",
 ]);
 
 // Usage
 router.on(SomeMessage, (ctx) => {
   if (!authorized) {
-    ctx.error("AUTH_ERROR", "Not authorized");
+    ctx.error("UNAUTHENTICATED", "Not authorized");
   }
 });
 ```

@@ -273,9 +273,9 @@ Server errors use standard error codes:
 ```typescript
 client.on(ErrorMessage, (msg) => {
   // Standard error codes
-  if (msg.payload.code === "AUTH_ERROR") {
+  if (msg.payload.code === "UNAUTHENTICATED") {
     console.log("Authentication failed");
-  } else if (msg.payload.code === "RATE_LIMIT") {
+  } else if (msg.payload.code === "RESOURCE_EXHAUSTED") {
     console.log("Rate limited");
   }
 });

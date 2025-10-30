@@ -154,7 +154,7 @@ Use the built-in `ErrorMessage` and error codes for consistent error handling:
 ```typescript
 import { ErrorMessage } from "@ws-kit/zod";
 
-ctx.error("VALIDATION_ERROR", "Invalid room ID");
+ctx.error("INVALID_ARGUMENT", "Invalid room ID");
 ```
 
 Available error codes:

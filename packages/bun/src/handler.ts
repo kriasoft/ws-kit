@@ -87,7 +87,10 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
      *
      * Or you can return the result of server.upgrade directly from this fetch handler.
      */
-    fetch: async (req: Request, server: Server<any>): Promise<Response> => {
+    fetch: async (
+      req: Request,
+      server: Server<BunWebSocketData<TData>>,
+    ): Promise<Response> => {
       try {
         // Call onUpgrade hook (before authentication)
         options?.onUpgrade?.(req);
@@ -110,6 +113,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
         // Upgrade connection with initial data
         // Returns true if successful, false if not a valid WebSocket request
         const upgraded = server.upgrade(req, {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           data: data as any,
           headers: {
             [clientIdHeader]: clientId,

@@ -540,7 +540,7 @@ describe("Middleware", () => {
       expect(sentMessages.length).toBe(1);
       const errorMsg = JSON.parse(sentMessages[0]!);
       expect(errorMsg.type).toBe("ERROR");
-      expect(errorMsg.payload.code).toBe("INTERNAL_ERROR");
+      expect(errorMsg.payload.code).toBe("INTERNAL");
       expect(errorMsg.payload.message).toBe("Internal server error"); // Default sanitized message
     });
 

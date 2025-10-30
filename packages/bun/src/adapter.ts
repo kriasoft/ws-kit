@@ -52,6 +52,7 @@ export function createBunAdapter(): PlatformAdapter {
  * @returns A PlatformAdapter with BunPubSub configured
  */
 export function createBunAdapterWithServer(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server: Server<any>,
 ): PlatformAdapter {
   return {

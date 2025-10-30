@@ -398,7 +398,7 @@ Middleware runs before handlers and can modify context or skip execution:
 router.use((ctx, next) => {
   // Runs before any handler
   if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
   return next(); // Continue to handler
@@ -408,7 +408,7 @@ router.use((ctx, next) => {
 router.use(SendMessage, (ctx, next) => {
   // Rate limiting
   if (isRateLimited(ctx.ws.data?.userId)) {
-    ctx.error("RATE_LIMIT", "Too many messages");
+    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return; // Skip handler
   }
   return next();
@@ -472,7 +472,7 @@ const router = createRouter<AppData>();
 // Global middleware: require authentication
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && !["LOGIN", "REGISTER"].includes(ctx.type)) {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Handler is skipped
   }
   return next();
@@ -481,7 +481,7 @@ router.use((ctx, next) => {
 // Per-route middleware: admin-only check for dangerous operations
 router.use(DeleteMessage, (ctx, next) => {
   if (!ctx.ws.data?.roles?.includes("admin")) {
-    ctx.error("AUTH_ERROR", "Admin access required");
+    ctx.error("PERMISSION_DENIED", "Admin access required");
     return;
   }
   return next();
@@ -750,14 +750,14 @@ router.on(LoginMessage, (ctx) => {
     const user = authenticate(ctx.payload);
     if (!user) {
       // ✅ Type-safe error code
-      ctx.error("AUTH_ERROR", "Invalid credentials", {
+      ctx.error("UNAUTHENTICATED", "Invalid credentials", {
         hint: "Check your username and password",
       });
       return;
     }
     ctx.assignData({ userId: user.id });
   } catch (error) {
-    ctx.error("INTERNAL_ERROR", "Authentication service unavailable");
+    ctx.error("INTERNAL", "Authentication service unavailable");
   }
 });
 
@@ -766,20 +766,22 @@ router.on(QueryMessage, (ctx) => {
     const result = queryDatabase(ctx.payload);
     ctx.send(QueryResponse, result);
   } catch (error) {
-    ctx.error("INTERNAL_ERROR", "Database query failed", {
+    ctx.error("INTERNAL", "Database query failed", {
       reason: String(error),
     });
   }
 });
 ```
 
-**Standard Error Codes**:
+**Standard Error Codes** (see [ADR-015](../adr/015-unified-rpc-api-design.md) for complete taxonomy):
 
-- `VALIDATION_ERROR` — Invalid payload or schema mismatch
-- `AUTH_ERROR` — Authentication failed
-- `INTERNAL_ERROR` — Server error
+- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+- `UNAUTHENTICATED` — Authentication failed
+- `PERMISSION_DENIED` — Authenticated but lacks rights
 - `NOT_FOUND` — Resource not found
-- `RATE_LIMIT` — Rate limit exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit or backpressure exceeded
+- `INTERNAL` — Server error
+- See ADR-015 for full error code decision tree
 
 **Error Propagation**: If a handler throws an unhandled error, the router catches it and calls the `onError` lifecycle hook (if registered). See [Lifecycle Hooks](#lifecycle-hooks) for details.
 
@@ -850,22 +852,27 @@ serve(router, {
 
 When `ctx.error()` is called or a connection closes, the WebSocket close code is determined by the error type:
 
-| Error Code         | WS Close Code | Behavior                                   | Notes                                      |
-| ------------------ | ------------- | ------------------------------------------ | ------------------------------------------ |
-| `VALIDATION_ERROR` | 1008          | Invalid message payload or schema mismatch | Client should fix payload format           |
-| `AUTH_ERROR`       | 1008          | Authentication failed                      | Client should re-authenticate              |
-| `NOT_FOUND`        | 1008          | Resource referenced by message not found   | Client should verify resource exists       |
-| `RATE_LIMIT`       | 1008          | Rate limit exceeded                        | Client should implement backoff            |
-| `INTERNAL_ERROR`   | 1011          | Server error (unhandled exception)         | Server issue; client may retry after delay |
-| (normal close)     | 1000          | Clean shutdown                             | Graceful disconnect                        |
+| Error Code            | WS Close Code | Behavior                                   | Notes                                      |
+| --------------------- | ------------- | ------------------------------------------ | ------------------------------------------ |
+| `INVALID_ARGUMENT`    | 1008          | Invalid message payload or schema mismatch | Client should fix payload format           |
+| `UNAUTHENTICATED`     | 1008          | Not authenticated (token missing/invalid)  | Client should re-authenticate              |
+| `PERMISSION_DENIED`   | 1008          | Authenticated but lacks rights (authZ)     | Client may request different scope         |
+| `NOT_FOUND`           | 1008          | Resource referenced by message not found   | Client should verify resource exists       |
+| `FAILED_PRECONDITION` | 1008          | State requirement not met                  | Client should perform prerequisite action  |
+| `RESOURCE_EXHAUSTED`  | 1008          | Rate limit or backpressure exceeded        | Client should honor retryAfterMs, backoff  |
+| `INTERNAL`            | 1011          | Server error (unhandled exception)         | Server issue; client may retry after delay |
+| `UNIMPLEMENTED`       | 1008          | Feature not supported or deployed          | Feature-gate in UI; avoid retry            |
+| (normal close)        | 1000          | Clean shutdown                             | Graceful disconnect                        |
 
 **WebSocket Close Code Reference:**
 
 - **1000** — Normal closure
-- **1008** — Policy violation (semantic errors: validation, auth, not found, rate limit)
+- **1008** — Policy violation (semantic errors: validation, auth, not found, rate limit, etc.)
 - **1011** — Unexpected server condition (internal errors, exceptions)
 
-When using `ctx.error()`, the connection closes immediately with the appropriate code after the error message is sent.
+See [ADR-015](../adr/015-unified-rpc-api-design.md) for complete error code taxonomy and client retry guidance.
+
+When using `ctx.error()`, the connection may close with the appropriate code depending on the error type.
 
 ## Production Runtime Selection
 

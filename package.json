@@ -1,6 +1,6 @@
 {
   "name": "ws-kit",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "description": "WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare",
@@ -31,7 +31,7 @@
     "eslint-config-prettier": "^10.1.8",
     "expect-type": "^1.1.6",
     "globals": "^16.4.0",
-    "hono": "^4.10.3",
+    "hono": "^4.10.4",
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
     "lint-staged": "^16.2.6",

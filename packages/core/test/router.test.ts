@@ -383,10 +383,17 @@ describe("WebSocketRouter", () => {
         messages.push(msg);
       });
 
-      await router2.publish("test-channel", { type: "TEST", data: "hello" });
+      await router2.publish(
+        "test-channel",
+        { type: "TEST" },
+        { data: "hello" },
+      );
 
       expect(messages.length).toBe(1);
-      expect(messages[0]).toEqual({ type: "TEST", data: "hello" });
+      expect(messages[0]).toHaveProperty("type", "TEST");
+      expect((messages[0] as any).payload).toEqual({ data: "hello" });
+      expect(messages[0]).toHaveProperty("meta");
+      expect((messages[0] as any).meta).toHaveProperty("timestamp");
     });
 
     it("should default to MemoryPubSub if not provided", async () => {

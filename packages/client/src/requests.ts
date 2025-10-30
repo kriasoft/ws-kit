@@ -86,7 +86,10 @@ export class RequestTracker {
         signal.addEventListener("abort", abortHandler);
         pending.abortHandler = abortHandler;
         // Store signal reference for cleanup
-        (pending as any).signal = signal;
+        const pendingWithSignal = pending as PendingRequest & {
+          signal: AbortSignal;
+        };
+        pendingWithSignal.signal = signal;
       }
 
       // Start timeout AFTER message is flushed on OPEN socket
@@ -159,8 +162,11 @@ export class RequestTracker {
     }
 
     // Remove abort listener to prevent memory leak
-    if (pending.abortHandler && (pending as any).signal) {
-      (pending as any).signal.removeEventListener(
+    const pendingWithSignal = pending as PendingRequest & {
+      signal?: AbortSignal;
+    };
+    if (pending.abortHandler && pendingWithSignal.signal) {
+      pendingWithSignal.signal.removeEventListener(
         "abort",
         pending.abortHandler,
       );

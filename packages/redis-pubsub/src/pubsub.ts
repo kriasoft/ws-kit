@@ -249,14 +249,15 @@ export class RedisPubSub implements PubSub {
       // @ts-expect-error - redis types not found by TypeScript, but they work at runtime
       const redisModule = await import("redis");
       createClient = redisModule.createClient;
-    } catch (error) {
+    } catch {
       throw new RedisConnectionError(
         "redis module not found. Install it with: npm install redis",
       );
     }
 
     // Build connection options
-    const clientOptions: Record<string, any> = {};
+    const clientOptions: Record<string, string | number | boolean | object> =
+      {};
 
     if (this.options.url) {
       clientOptions.url = this.options.url;
@@ -287,30 +288,30 @@ export class RedisPubSub implements PubSub {
   private setupSubscriptionHandlers(): void {
     if (!this.subscribeClient) return;
 
-    this.subscribeClient.on?.(
-      "message" as any,
-      ((channel: string, message: string) => {
-        const handlers = this.subscriptions.get(channel);
-        if (handlers) {
-          try {
-            const deserialized = this.deserialize(message);
-            handlers.forEach((handler) => {
-              try {
-                handler(deserialized);
-              } catch (err) {
-                this.options.onError?.(
-                  err instanceof Error ? err : new Error(String(err)),
-                );
-              }
-            });
-          } catch (err) {
-            this.options.onError?.(
-              err instanceof Error ? err : new Error(String(err)),
-            );
-          }
+    this.subscribeClient.on?.("message", ((
+      channel: string,
+      message: string,
+    ) => {
+      const handlers = this.subscriptions.get(channel);
+      if (handlers) {
+        try {
+          const deserialized = this.deserialize(message);
+          handlers.forEach((handler) => {
+            try {
+              handler(deserialized);
+            } catch (err) {
+              this.options.onError?.(
+                err instanceof Error ? err : new Error(String(err)),
+              );
+            }
+          });
+        } catch (err) {
+          this.options.onError?.(
+            err instanceof Error ? err : new Error(String(err)),
+          );
         }
-      }) as any,
-    );
+      }
+    }) as (channel: string, message: string) => void);
 
     this.subscribeClient.on?.("error", (error: unknown) => {
       const err = error instanceof Error ? error : new Error(String(error));

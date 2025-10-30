@@ -546,10 +546,18 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     // Key insight: If 4th arg is provided AND 3rd arg has safeParse, then it's RPC style (response schema)
     // If no 4th arg provided, then 3rd arg must be explicit response schema
     let reply: AnyMessageSchema | undefined;
-    let opts: any;
+    let opts:
+      | {
+          timeoutMs?: number;
+          meta?: Record<string, unknown>;
+          correlationId?: string;
+          signal?: AbortSignal;
+        }
+      | undefined;
 
     if (replyOrOpts === undefined) {
       // No third arg: try to get response from RPC schema
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       reply = (schema as any).response;
       opts = undefined;
     } else if (optsArg !== undefined) {
@@ -569,6 +577,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
       if (isOptionsObject) {
         // Third arg is options, use RPC response schema
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         reply = (schema as any).response;
         opts = replyOrOpts;
       } else {
@@ -635,12 +644,14 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     // Validate outbound message
     const result = safeParse(schema, message);
     if (!result.success) {
-      const issues = Array.isArray((result.error as any)?.issues)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const error: any = result.error;
+      const issues = Array.isArray(error?.issues)
         ? (
-            (result.error as any).issues as Array<{
+            error.issues as {
               path?: string[];
               message: string;
-            }>
+            }[]
           ).map((issue) => ({
             path: issue.path ?? [],
             message: issue.message,

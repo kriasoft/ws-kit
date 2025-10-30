@@ -111,7 +111,7 @@ export interface EventMessageContext<
    * Creates and sends an ERROR message with standard error structure.
    * Use this for errors that should be communicated to the client.
    *
-   * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
+   * @param code - Standard error code (e.g., "UNAUTHENTICATED", "NOT_FOUND")
    * @param message - Human-readable error description
    * @param details - Optional error context/details
    */
@@ -221,7 +221,7 @@ export interface RpcMessageContext<
    * Creates and sends an RPC_ERROR message with standard error structure.
    * One-shot guarded: first error wins, subsequent calls are suppressed.
    *
-   * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
+   * @param code - Standard error code (e.g., "UNAUTHENTICATED", "NOT_FOUND")
    * @param message - Human-readable error description
    * @param details - Optional error context/details
    */
@@ -569,14 +569,16 @@ export type AuthHandler<TData extends WebSocketData = WebSocketData> = (
  * @param error - WsKitError with standardized structure
  * @param context - Message context including type, ws, meta, and payload
  * @returns Return false (or falsy) to suppress automatic error response. If any error
- *          handler returns false, the router will not send an INTERNAL_ERROR response
+ *          handler returns false, the router will not send an INTERNAL response
  *          to the client (assuming autoSendErrorOnThrow is enabled).
  */
-export type ErrorHandler<TData extends WebSocketData = WebSocketData> = (
-  error: WsKitError,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context: MessageContext<any, TData>,
-) => boolean | undefined;
+export type ErrorHandler<TData extends WebSocketData = WebSocketData> =
+  | ((error: WsKitError) => boolean | undefined)
+  | ((
+      error: WsKitError,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      context: MessageContext<any, TData>,
+    ) => boolean | undefined);
 
 /**
  * Middleware function that executes before message handlers.
@@ -599,7 +601,7 @@ export type ErrorHandler<TData extends WebSocketData = WebSocketData> = (
  * ```typescript
  * const requireAuth = (ctx, next) => {
  *   if (!ctx.ws.data?.userId) {
- *     ctx.send(ErrorSchema, { code: "AUTH_ERROR", message: "Not authenticated" });
+ *     ctx.send(ErrorSchema, { code: "UNAUTHENTICATED", message: "Not authenticated" });
  *     return; // Skip handler
  *   }
  *   return next(); // Proceed to handler
@@ -763,7 +765,7 @@ export interface WebSocketRouterOptions<
    * Socket buffer limit in bytes before backpressure (default: 1000000).
    *
    * When socket buffer exceeds this threshold during RPC replies,
-   * the router sends an RPC_ERROR with code "BACKPRESSURE" instead of buffering unbounded.
+   * the router sends an RPC_ERROR with code "RESOURCE_EXHAUSTED" instead of buffering unbounded.
    * Helps prevent memory exhaustion under high throughput.
    *
    * Set to Infinity to disable backpressure checks.
@@ -817,7 +819,7 @@ export interface WebSocketRouterOptions<
    * Maximum in-flight (non-terminal) RPC requests per socket (default: 1000).
    *
    * When a socket exceeds this limit, new RPC requests are rejected with
-   * RPC_ERROR code "RATE_LIMIT". Helps prevent resource exhaustion from
+   * RPC_ERROR code "RESOURCE_EXHAUSTED". Helps prevent resource exhaustion from
    * misbehaving clients sending unbounded concurrent RPC requests.
    */
   maxInflightRpcsPerSocket?: number;
@@ -832,10 +834,10 @@ export interface WebSocketRouterOptions<
   rpcIdleTimeoutMs?: number;
 
   /**
-   * Automatically send INTERNAL_ERROR response when handler throws uncaught exception (default: true).
+   * Automatically send INTERNAL response when handler throws uncaught exception (default: true).
    *
    * When enabled, the router catches exceptions from handlers/middleware and sends
-   * an INTERNAL_ERROR response to the client. For RPC requests, this prevents
+   * an INTERNAL response to the client. For RPC requests, this prevents
    * the client from timing out. For regular messages, it provides feedback
    * that something went wrong.
    *
@@ -844,7 +846,7 @@ export interface WebSocketRouterOptions<
   autoSendErrorOnThrow?: boolean;
 
   /**
-   * Include actual error message in INTERNAL_ERROR responses (default: false).
+   * Include actual error message in INTERNAL responses (default: false).
    *
    * When true, the actual error message is sent to clients (sanitized, no stack trace).
    * When false, a generic "Internal server error" message is used instead.
@@ -1013,12 +1015,11 @@ export interface RpcAbortWire {
 export interface RpcErrorWire {
   type: "RPC_ERROR";
   code:
-    | "VALIDATION"
-    | "AUTH"
+    | "INVALID_ARGUMENT"
+    | "UNAUTHENTICATED"
     | "NOT_FOUND"
-    | "RATE_LIMIT"
-    | "BACKPRESSURE"
-    | "CONFLICT"
+    | "RESOURCE_EXHAUSTED"
+    | "ABORTED"
     | "INTERNAL"
     | `APP_${string}`;
   message: string;

@@ -45,7 +45,7 @@ const mockValidator: ValidatorAdapter = {
  * - Error payload serialization
  */
 describe("WsKitError - Standardized Error Handling", () => {
-  let ws: ServerWebSocket;
+  let ws: ServerWebSocket<{ clientId: string }>;
 
   beforeEach(() => {
     // Mock WebSocket
@@ -56,7 +56,7 @@ describe("WsKitError - Standardized Error Handling", () => {
       subscribe: () => {},
       unsubscribe: () => {},
       readyState: 1,
-    };
+    } as ServerWebSocket<{ clientId: string }>;
   });
 
   describe("WsKitError.from()", () => {
@@ -102,24 +102,24 @@ describe("WsKitError - Standardized Error Handling", () => {
     });
 
     it("should return WsKitError as-is if already wrapped", () => {
-      const original = WsKitError.from("INTERNAL_ERROR", "Original error");
+      const original = WsKitError.from("INTERNAL", "Original error");
       const wrapped = WsKitError.wrap(original, "DIFFERENT_CODE");
 
       expect(wrapped).toBe(original);
     });
 
     it("should convert non-Error values to Error", () => {
-      const wrapped = WsKitError.wrap("string error", "INTERNAL_ERROR");
+      const wrapped = WsKitError.wrap("string error", "INTERNAL");
 
       expect(wrapped).toBeInstanceOf(WsKitError);
-      expect(wrapped.code).toBe("INTERNAL_ERROR");
+      expect(wrapped.code).toBe("INTERNAL");
       expect(wrapped.originalError).toBeInstanceOf(Error);
       expect(wrapped.originalError?.message).toBe("string error");
     });
 
     it("should use originalError message if not provided", () => {
       const originalError = new Error("Original message");
-      const wrapped = WsKitError.wrap(originalError, "INTERNAL_ERROR");
+      const wrapped = WsKitError.wrap(originalError, "INTERNAL");
 
       expect(wrapped.message).toBe("Original message");
     });
@@ -144,32 +144,33 @@ describe("WsKitError - Standardized Error Handling", () => {
 
       const wsKitError = WsKitError.wrap(
         originalError,
-        "INTERNAL_ERROR",
+        "INTERNAL",
         "Server error occurred",
         { context: "database" },
       );
 
       const json = wsKitError.toJSON();
 
-      expect(json.code).toBe("INTERNAL_ERROR");
+      expect(json.code).toBe("INTERNAL");
       expect(json.message).toBe("Server error occurred");
       expect(json.details).toEqual({ context: "database" });
-      expect(json.originalError).toBeDefined();
-      expect(json.originalError?.name).toBe("Error");
-      expect(json.originalError?.message).toBe("Original error message");
-      expect(json.originalError?.stack).toBe(
+      // WHATWG standard: cause is in the JSON for logging
+      expect(json.cause).toBeDefined();
+      expect((json.cause as any)?.name).toBe("Error");
+      expect((json.cause as any)?.message).toBe("Original error message");
+      expect((json.cause as any)?.stack).toBe(
         "Error: Original error message\n  at test.ts:1:1",
       );
       expect(json.stack).toBeDefined();
     });
 
-    it("should serialize error without originalError when not present", () => {
+    it("should serialize error without cause when not present", () => {
       const wsKitError = WsKitError.from("INVALID_ARGUMENT", "Bad input");
       const json = wsKitError.toJSON();
 
       expect(json.code).toBe("INVALID_ARGUMENT");
       expect(json.message).toBe("Bad input");
-      expect(json.originalError).toBeUndefined();
+      expect(json.cause).toBeUndefined();
       expect(json.stack).toBeDefined();
     });
   });
@@ -179,7 +180,7 @@ describe("WsKitError - Standardized Error Handling", () => {
       const originalError = new Error("Database query failed");
       const wsKitError = WsKitError.wrap(
         originalError,
-        "INTERNAL_ERROR",
+        ErrorCode.INTERNAL,
         "Server error",
         { field: "userId" },
       );
@@ -187,7 +188,7 @@ describe("WsKitError - Standardized Error Handling", () => {
       const payload = wsKitError.toPayload();
 
       // Should include code, message, and details
-      expect(payload.code).toBe("INTERNAL_ERROR");
+      expect(payload.code).toBe(ErrorCode.INTERNAL);
       expect(payload.message).toBe("Server error");
       expect(payload.details).toEqual({ field: "userId" });
 
@@ -197,10 +198,13 @@ describe("WsKitError - Standardized Error Handling", () => {
     });
 
     it("should omit details field if empty", () => {
-      const wsKitError = WsKitError.from("NOT_FOUND", "Resource not found");
+      const wsKitError = WsKitError.from(
+        ErrorCode.NOT_FOUND,
+        "Resource not found",
+      );
       const payload = wsKitError.toPayload();
 
-      expect(payload.code).toBe("NOT_FOUND");
+      expect(payload.code).toBe(ErrorCode.NOT_FOUND);
       expect(payload.message).toBe("Resource not found");
       expect(payload.details).toBeUndefined();
     });
@@ -231,7 +235,7 @@ describe("WsKitError - Standardized Error Handling", () => {
 
       expect(receivedError).toBeDefined();
       expect(WsKitError.isWsKitError(receivedError!)).toBe(true);
-      expect(receivedError!.code).toBe("INTERNAL_ERROR");
+      expect(receivedError!.code).toBe("INTERNAL");
       expect(receivedError!.originalError).toBeInstanceOf(Error);
     });
 
@@ -327,31 +331,22 @@ describe("WsKitError - Standardized Error Handling", () => {
   describe("Error Code Type Safety", () => {
     it("should support all standard error codes", () => {
       const codes: string[] = [
-        ErrorCode.INVALID_ARGUMENT,
-        ErrorCode.DEADLINE_EXCEEDED,
-        ErrorCode.CANCELLED,
+        ErrorCode.UNAUTHENTICATED,
         ErrorCode.PERMISSION_DENIED,
+        ErrorCode.INVALID_ARGUMENT,
+        ErrorCode.FAILED_PRECONDITION,
         ErrorCode.NOT_FOUND,
-        ErrorCode.CONFLICT,
+        ErrorCode.ALREADY_EXISTS,
+        ErrorCode.ABORTED,
+        ErrorCode.DEADLINE_EXCEEDED,
         ErrorCode.RESOURCE_EXHAUSTED,
         ErrorCode.UNAVAILABLE,
-        ErrorCode.INTERNAL_ERROR,
+        ErrorCode.UNIMPLEMENTED,
+        ErrorCode.INTERNAL,
+        ErrorCode.CANCELLED,
       ];
 
       for (const code of codes) {
-        const error = WsKitError.from(code, `Error: ${code}`);
-        expect(error.code).toBe(code);
-      }
-    });
-
-    it("should support legacy error codes for backwards compatibility", () => {
-      const legacyCodes: string[] = [
-        ErrorCode.VALIDATION_ERROR,
-        ErrorCode.AUTH_ERROR,
-        ErrorCode.RATE_LIMIT,
-      ];
-
-      for (const code of legacyCodes) {
         const error = WsKitError.from(code, `Error: ${code}`);
         expect(error.code).toBe(code);
       }
@@ -384,11 +379,14 @@ describe("WsKitError - Standardized Error Handling", () => {
 
       const wrapped = WsKitError.wrap(
         errorThrown!,
-        "INTERNAL_ERROR",
+        "INTERNAL",
         "Processing failed",
       );
 
+      // Check originalError getter for backward compat
       expect(wrapped.originalError?.stack).toContain("Original error");
+      // Also check WHATWG standard cause property
+      expect((wrapped.cause as any)?.stack).toContain("Original error");
       expect(wrapped.stack).toBeDefined();
       expect(wrapped.stack).toContain("WsKitError");
     });

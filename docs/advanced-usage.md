@@ -64,7 +64,7 @@ const router = createRouter<AppData>();
 // Global middleware: authentication check
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
   return next();
@@ -81,7 +81,7 @@ router.use(RateLimitMessage, (ctx, next) => {
   const count = (rateLimiter.get(userId) || 0) + 1;
 
   if (count > 10) {
-    ctx.error("RATE_LIMIT", "Too many messages");
+    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return;
   }
 
@@ -130,7 +130,7 @@ router.on(LoginMessage, (ctx) => {
     ctx.assignData({ userId: user.id });
   } catch (err) {
     // Type-safe error code
-    ctx.error("AUTH_ERROR", "Invalid credentials", {
+    ctx.error("UNAUTHENTICATED", "Invalid credentials", {
       hint: "Check your email and password",
     });
   }
@@ -141,18 +141,18 @@ router.on(QueryMessage, (ctx) => {
     const result = queryDatabase(ctx.payload.id);
     ctx.send(QueryResponse, { data: result });
   } catch (err) {
-    ctx.error("INTERNAL_ERROR", "Database query failed");
+    ctx.error("INTERNAL", "Database query failed");
   }
 });
 ```
 
 **Standard error codes:**
 
-- `VALIDATION_ERROR` — Invalid payload or schema mismatch
-- `AUTH_ERROR` — Authentication failed
-- `INTERNAL_ERROR` — Server error
+- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+- `UNAUTHENTICATED` — Authentication failed
+- `INTERNAL` — Server error
 - `NOT_FOUND` — Resource not found
-- `RATE_LIMIT` — Rate limit exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit exceeded
 
 ## Discriminated Unions
 
@@ -247,7 +247,7 @@ const featureRouter = createRouter<FeatureData>();
 
 ## Testing Multiple Runtimes
 
-For monorepos or comprehensive testing, test the same router under multiple runtimes (Bun, Cloudflare DO, etc.). See [Advanced: Multi-Runtime Harness](../guides/advanced-multi-runtime.md) for complete integration test patterns.
+For monorepos or comprehensive testing, test the same router under multiple runtimes (Bun, Cloudflare DO, etc.). See [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) for complete integration test patterns.
 
 Quick example:
 
@@ -323,5 +323,5 @@ All broadcast messages are validated against their schemas before being sent, pr
 ## See Also
 
 - [Core Concepts](./core-concepts) — Message routing, lifecycle hooks
-- [Middleware](../adr/008-middleware-support.md) — Detailed middleware design
-- [Advanced: Multi-Runtime Harness](../guides/advanced-multi-runtime.md) — Integration testing, monorepo patterns
+- [Middleware](./adr/008-middleware-support) — Detailed middleware design
+- [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) — Integration testing, monorepo patterns

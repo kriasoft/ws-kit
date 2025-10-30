@@ -61,7 +61,7 @@ chatRouter.on(SendMessage, async (c) => {
 
 chatRouter.onClose((c) => {
   const clientId = c.ws.data?.clientId;
-  const roomId = (c.ws.data as any)?.roomId;
+  const roomId = c.ws.data?.roomId as string | undefined;
 
   console.log(`Connection closed: ${clientId}`);
 

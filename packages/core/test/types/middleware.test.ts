@@ -198,8 +198,14 @@ describe("Router composition preserves message union types", () => {
     // When you compose two routers with different message types,
     // the composed router should be able to handle both message types
 
-    type Message1 = { type: "MSG1"; payload: { text: string } };
-    type Message2 = { type: "MSG2"; payload: { count: number } };
+    interface Message1 {
+      type: "MSG1";
+      payload: { text: string };
+    }
+    interface Message2 {
+      type: "MSG2";
+      payload: { count: number };
+    }
 
     // Simulating two routers with different handler types
     type Router1Messages = Message1;
@@ -264,14 +270,14 @@ describe("Router composition preserves message union types", () => {
 describe("Message union intersection in composition", () => {
   it("should maintain separate handler types for each message", () => {
     // Simulating message types from two routers
-    type ChatMessage = {
+    interface ChatMessage {
       type: "CHAT";
       payload: { text: string };
-    };
-    type PingMessage = {
+    }
+    interface PingMessage {
       type: "PING";
       payload?: undefined;
-    };
+    }
 
     type MessageUnion = ChatMessage | PingMessage;
 

@@ -41,20 +41,23 @@ import { z, message } from "@ws-kit/zod";
 
 const ErrorMessage = message("ERROR", {
   code: z.enum([
-    // RPC-standard codes (ADR-015)
-    "INVALID_ARGUMENT",
-    "DEADLINE_EXCEEDED",
-    "CANCELLED",
+    // Standard codes (13) - per ADR-015, gRPC-aligned
+    // Terminal errors (don't auto-retry):
+    "UNAUTHENTICATED",
     "PERMISSION_DENIED",
+    "INVALID_ARGUMENT",
+    "FAILED_PRECONDITION",
     "NOT_FOUND",
-    "CONFLICT",
+    "ALREADY_EXISTS",
+    "ABORTED",
+    // Transient errors (retry with backoff):
+    "DEADLINE_EXCEEDED",
     "RESOURCE_EXHAUSTED",
     "UNAVAILABLE",
-    "INTERNAL_ERROR",
-    // Legacy codes (deprecated)
-    "VALIDATION_ERROR",
-    "AUTH_ERROR",
-    "RATE_LIMIT",
+    // Server/evolution:
+    "UNIMPLEMENTED",
+    "INTERNAL",
+    "CANCELLED",
   ]),
   message: z.string(),
   details: z.record(z.any()).optional(),
@@ -76,37 +79,45 @@ const ErrorMessage = message("ERROR", {
 
 ## Standard Error Codes {#error-code-enum}
 
-**RPC-standard codes (aligned with gRPC conventions)**:
+**Standard codes (per ADR-015, gRPC-aligned, 13 codes)**:
 
 ```typescript
 type RpcErrorCode =
-  | "INVALID_ARGUMENT" // Schema validation or semantic validation failed
-  | "DEADLINE_EXCEEDED" // RPC request timed out
-  | "CANCELLED" // Request was cancelled by client or peer
+  // Terminal errors (don't auto-retry):
+  | "UNAUTHENTICATED" // Missing or invalid authentication
   | "PERMISSION_DENIED" // Authorization failed (after successful auth)
+  | "INVALID_ARGUMENT" // Input validation or semantic validation failed
+  | "FAILED_PRECONDITION" // Stateful precondition not met
   | "NOT_FOUND" // Requested resource doesn't exist
-  | "CONFLICT" // Correlation ID collision or uniqueness constraint
+  | "ALREADY_EXISTS" // Uniqueness or idempotency violation
+  | "ABORTED" // Concurrency conflict (race condition)
+  // Transient errors (retry with backoff):
+  | "DEADLINE_EXCEEDED" // RPC request timed out
   | "RESOURCE_EXHAUSTED" // Buffer overflow, rate limits, or backpressure
   | "UNAVAILABLE" // Transient infrastructure error (retriable)
-  | "INTERNAL_ERROR" // Unexpected server error (unhandled exception)
-  | "VALIDATION_ERROR" // @deprecated Use INVALID_ARGUMENT
-  | "AUTH_ERROR" // @deprecated Use PERMISSION_DENIED
-  | "RATE_LIMIT"; // @deprecated Use RESOURCE_EXHAUSTED
+  // Server/evolution:
+  | "UNIMPLEMENTED" // Feature not supported or deployed
+  | "INTERNAL" // Unexpected server error (unhandled exception)
+  | "CANCELLED"; // Request was cancelled by client or peer
 ```
 
 **Quick Error Selection (ADR-015)**:
 
-| Scenario                    | Code                 | Retryable           | Example                                        |
-| --------------------------- | -------------------- | ------------------- | ---------------------------------------------- |
-| Schema validation failed    | `INVALID_ARGUMENT`   | No                  | Missing field, wrong type                      |
-| Timeout                     | `DEADLINE_EXCEEDED`  | Yes (with backoff)  | RPC didn't complete in time                    |
-| Client aborted              | `CANCELLED`          | Yes (if idempotent) | `AbortSignal` fired                            |
-| Not authorized              | `PERMISSION_DENIED`  | No                  | Insufficient role/scope                        |
-| Not found                   | `NOT_FOUND`          | No                  | User/resource deleted                          |
-| Collision                   | `CONFLICT`           | No                  | Duplicate correlation ID, constraint violation |
-| Rate limited or buffer full | `RESOURCE_EXHAUSTED` | Yes                 | Too many requests, server backpressure         |
-| Network/transient error     | `UNAVAILABLE`        | Yes                 | Server temporarily unreachable                 |
-| Unhandled exception         | `INTERNAL_ERROR`     | No                  | Database crash, bug                            |
+| Scenario                    | Code                  | Retryable          | Example                                   |
+| --------------------------- | --------------------- | ------------------ | ----------------------------------------- |
+| Not authenticated           | `UNAUTHENTICATED`     | No                 | Missing/invalid token, re-authenticate    |
+| Not authorized              | `PERMISSION_DENIED`   | No                 | Insufficient role/scope after auth        |
+| Schema validation failed    | `INVALID_ARGUMENT`    | No                 | Missing field, wrong type, semantic error |
+| Precondition not met        | `FAILED_PRECONDITION` | No                 | Perform prerequisite action first         |
+| Not found                   | `NOT_FOUND`           | No                 | User/resource deleted or doesn't exist    |
+| Uniqueness violation        | `ALREADY_EXISTS`      | No                 | Duplicate key, idempotency key reuse      |
+| Race condition              | `ABORTED`             | Yes (with backoff) | Optimistic lock failure, write conflict   |
+| Timeout                     | `DEADLINE_EXCEEDED`   | Yes (with backoff) | RPC didn't complete in time               |
+| Rate limited or buffer full | `RESOURCE_EXHAUSTED`  | Yes                | Too many requests, server backpressure    |
+| Network/transient error     | `UNAVAILABLE`         | Yes                | Server temporarily unreachable            |
+| Feature not deployed        | `UNIMPLEMENTED`       | No                 | Feature behind flag, version skew         |
+| Unhandled exception         | `INTERNAL`            | No                 | Database crash, bug, unexpected error     |
+| User cancelled/disconnected | `CANCELLED`           | No                 | Socket closed, AbortSignal fired          |
 
 Use `ctx.error(code, message, details, { retryable })` for type-safe responses. The framework logs all errors with connection identity for traceability.
 
@@ -179,7 +190,7 @@ router.on(SomeMessage, async (ctx) => {
   try {
     await riskyOperation();
   } catch (error) {
-    ctx.error("INTERNAL_ERROR", "Operation failed", {
+    ctx.error("INTERNAL", "Operation failed", {
       reason: String(error),
     });
     // onError hook will be called with this error
@@ -223,7 +234,7 @@ router.on(ValidateFileMessage, (ctx) => {
     router.publish(`validation:${ctx.payload.fileId}`, FileValidated, result);
   } catch (error) {
     // Send error to all listeners
-    ctx.error("INTERNAL_ERROR", "File validation failed", {
+    ctx.error("INTERNAL", "File validation failed", {
       fileId: ctx.payload.fileId,
       reason: String(error),
     });
@@ -241,7 +252,7 @@ Handlers must explicitly close connections when needed. The library never closes
 router.use(SendMessage, (ctx, next) => {
   if (isRateLimited(ctx.ws.data?.userId)) {
     // Send error message first
-    ctx.error("RATE_LIMIT", "Too many requests");
+    ctx.error("RESOURCE_EXHAUSTED", "Too many requests");
 
     // Then close connection
     ctx.ws.close(1008, "Rate limit exceeded");
@@ -309,12 +320,14 @@ All errors passed to `onError` handlers are standardized as `WsKitError` objects
 ```typescript
 import { WsKitError } from "@ws-kit/core";
 
-// WsKitError has the following structure:
-interface WsKitError extends Error {
-  code: string; // Error code (e.g., INVALID_ARGUMENT)
+// WsKitError follows WHATWG Error standard with protocol-specific fields:
+class WsKitError extends Error {
+  code: WsKitErrorCode; // Error code (e.g., INVALID_ARGUMENT)
   message: string; // Human-readable message
   details: Record<string, unknown>; // Additional context for client
-  originalError?: Error; // Original error (preserved for debugging)
+  retryAfterMs?: number; // For transient errors
+  correlationId?: string; // For distributed tracing
+  cause?: unknown; // WHATWG standard: original error for debugging
 }
 ```
 
@@ -330,7 +343,7 @@ const router = createRouter();
 
 // onError handler receives WsKitError
 router.onError((error, context) => {
-  // error is a WsKitError with code, message, details, originalError
+  // error is a WsKitError with code, message, details, and cause (WHATWG standard)
 
   // Send to observability tool
   logger.error({
@@ -343,14 +356,22 @@ router.onError((error, context) => {
       receivedAt: context.receivedAt,
     },
     stack: error.stack,
-    originalError: error.originalError?.message, // For debugging only
+    // Original error is in error.cause (WHATWG standard)
+    cause:
+      error.cause instanceof Error
+        ? {
+            name: error.cause.name,
+            message: error.cause.message,
+            stack: error.cause.stack,
+          }
+        : error.cause,
   });
 });
 ```
 
 ### Creating Errors Programmatically
 
-Use `WsKitError.from()` to create errors with structured details:
+Use `WsKitError.from()` to create errors, or `WsKitError.wrap()` to preserve the original error as cause:
 
 ```typescript
 router.on(CreateUser, (ctx) => {
@@ -358,8 +379,8 @@ router.on(CreateUser, (ctx) => {
     const user = await db.users.create(ctx.payload);
     ctx.send(UserCreated, user);
   } catch (err) {
-    // Wrap unhandled errors with context
-    throw WsKitError.wrap(err, "INTERNAL_ERROR", "Failed to create user", {
+    // Wrap unhandled errors with context (original error becomes cause)
+    throw WsKitError.wrap(err, "INTERNAL", "Failed to create user", {
       email: ctx.payload.email,
     });
   }
@@ -375,17 +396,17 @@ const error = WsKitError.from("INVALID_ARGUMENT", "Email is required", {
   field: "email",
 });
 
-// For internal logging (includes original error, stack, etc.)
+// For internal logging (includes cause, stack, retryAfterMs, etc.)
 JSON.stringify(error.toJSON());
 // {
 //   "code": "INVALID_ARGUMENT",
 //   "message": "Email is required",
 //   "details": { "field": "email" },
 //   "stack": "Error at ...",
-//   "originalError": null
+//   "cause": null  // WHATWG standard (only present if set)
 // }
 
-// For client transmission (excludes internal details)
+// For client transmission (excludes cause, stack, debug info)
 error.toPayload();
 // {
 //   "code": "INVALID_ARGUMENT",
@@ -405,4 +426,4 @@ router.onError((error) => {
 });
 ```
 
-When the handler returns `false` and `autoSendErrorOnThrow` is enabled, the router will NOT send an `INTERNAL_ERROR` response to the client.
+When the handler returns `false` and `autoSendErrorOnThrow` is enabled, the router will NOT send an `INTERNAL` response to the client.

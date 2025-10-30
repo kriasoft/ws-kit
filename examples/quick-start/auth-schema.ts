@@ -43,7 +43,7 @@ export const VerifyEmailMessage = message("VERIFY_EMAIL", {
 /**
  * IP-based rate limiting message
  */
-export const RateLimitMessage = message("RATE_LIMIT", {
+export const RateLimitMessage = message("RESOURCE_EXHAUSTED", {
   clientIp: z.ipv4(),
   requests: z.number().int().positive(),
   windowMs: z.number().int().positive(),

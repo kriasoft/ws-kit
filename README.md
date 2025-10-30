@@ -258,7 +258,7 @@ const router = createRouter<AppData>();
 // Global middleware for auth checks
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
   return next();
@@ -585,13 +585,15 @@ router.on(JoinRoom, async (ctx) => {
 
 ### Standard error codes
 
-The standard error codes are:
+The standard error codes (aligned with gRPC) are:
 
-- `VALIDATION_ERROR` — Invalid payload or schema mismatch
-- `AUTH_ERROR` — Authentication failed
-- `INTERNAL_ERROR` — Server error
+- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+- `UNAUTHENTICATED` — Authentication failed
+- `PERMISSION_DENIED` — Authenticated but lacks rights
 - `NOT_FOUND` — Resource not found
-- `RATE_LIMIT` — Rate limit exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit or backpressure exceeded
+- `INTERNAL` — Server error
+- See ADR-015 for the complete error code taxonomy
 
 ### Custom error handling
 
@@ -604,7 +606,7 @@ router.onOpen((ctx) => {
     console.log(`Client ${ctx.ws.data?.clientId} connected`);
   } catch (error) {
     console.error("Error in connection setup:", error);
-    ctx.error("INTERNAL_ERROR", "Failed to set up connection");
+    ctx.error("INTERNAL", "Failed to set up connection");
   }
 });
 
@@ -613,7 +615,7 @@ router.use((ctx, next) => {
   try {
     return next();
   } catch (error) {
-    ctx.error("INTERNAL_ERROR", "Request failed");
+    ctx.error("INTERNAL", "Request failed");
   }
 });
 
@@ -625,14 +627,14 @@ router.on(AuthenticateUser, (ctx) => {
     const user = validateToken(token);
 
     if (!user) {
-      ctx.error("AUTH_ERROR", "Invalid authentication token");
+      ctx.error("UNAUTHENTICATED", "Invalid authentication token");
       return;
     }
 
     // Use assignData for type-safe connection data updates
     ctx.assignData({ userId: user.id, userRole: user.role });
   } catch (error) {
-    ctx.error("INTERNAL_ERROR", "Authentication process failed");
+    ctx.error("INTERNAL", "Authentication process failed");
   }
 });
 ```

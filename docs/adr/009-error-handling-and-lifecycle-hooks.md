@@ -33,11 +33,12 @@ Introduce:
 
 ```typescript
 type ErrorCode =
-  | "VALIDATION_ERROR"
-  | "AUTH_ERROR"
-  | "INTERNAL_ERROR"
+  | "INVALID_ARGUMENT"
+  | "UNAUTHENTICATED"
+  | "PERMISSION_DENIED"
+  | "INTERNAL"
   | "NOT_FOUND"
-  | "RATE_LIMIT";
+  | "RESOURCE_EXHAUSTED";
 
 interface MessageContext<S extends MessageSchema, TData> {
   /**
@@ -101,11 +102,12 @@ interface ServeOptions<TData> {
 ```typescript
 export const ErrorMessage = message("ERROR", {
   code: z.enum([
-    "VALIDATION_ERROR",
-    "AUTH_ERROR",
-    "INTERNAL_ERROR",
+    "INVALID_ARGUMENT",
+    "UNAUTHENTICATED",
+    "PERMISSION_DENIED",
+    "INTERNAL",
     "NOT_FOUND",
-    "RATE_LIMIT",
+    "RESOURCE_EXHAUSTED",
   ]),
   message: z.string(),
   details: z.record(z.any()).optional(),
@@ -146,14 +148,14 @@ router.on(LoginMessage, (ctx) => {
     const user = authenticate(ctx.payload);
     if (!user) {
       // ✅ Type-safe error code
-      ctx.error("AUTH_ERROR", "Invalid credentials", {
+      ctx.error("UNAUTHENTICATED", "Invalid credentials", {
         hint: "Check your username and password",
       });
       return;
     }
     ctx.assignData({ userId: user.id });
   } catch (err) {
-    ctx.error("INTERNAL_ERROR", "Authentication service unavailable");
+    ctx.error("INTERNAL", "Authentication service unavailable");
   }
 });
 ```
@@ -166,7 +168,7 @@ router.on(UpdateUserMessage, (ctx) => {
     const validated = validateEmail(ctx.payload.email);
     ctx.assignData({ email: validated });
   } catch (err) {
-    ctx.error("VALIDATION_ERROR", "Invalid email format", {
+    ctx.error("INVALID_ARGUMENT", "Invalid email format", {
       field: "email",
       received: ctx.payload.email,
     });
@@ -454,7 +456,7 @@ router.on(ProcessMessage, (ctx) => {
     ctx.send(ProcessedMessage, result);
   } catch (err) {
     // Caught error in handler
-    ctx.error("INTERNAL_ERROR", "Processing failed", {
+    ctx.error("INTERNAL", "Processing failed", {
       reason: String(err),
     });
     // onError hook is called with the error
@@ -469,13 +471,13 @@ router.use((ctx, next) => {
   try {
     const allowed = checkAccess(ctx.ws.data?.userId);
     if (!allowed) {
-      ctx.error("AUTH_ERROR", "Access denied");
+      ctx.error("PERMISSION_DENIED", "Access denied");
       return; // Skip handler
     }
   } catch (err) {
     // Caught error in middleware
     console.error("Access check failed:", err);
-    ctx.error("INTERNAL_ERROR", "Could not verify access");
+    ctx.error("INTERNAL", "Could not verify access");
     // onError hook is called
     return;
   }
@@ -521,14 +523,14 @@ router.on(QueryMessage, (ctx) => {
 // 2. onError hook called: onError(error, { type: "QUERY", userId: "123" })
 //    - Error handler can return false to suppress automatic error response
 // 3. Generic error sent to client (unless suppressed):
-//    { code: "INTERNAL_ERROR", message: "Internal server error" }
+//    { code: "INTERNAL", message: "Internal server error" }
 //    - Message is configurable via exposeErrorDetails option
 // 4. Handler returns early (connection stays open)
 ```
 
 **Configuration Options:**
 
-- `autoSendErrorOnThrow` (default: `true`) - Automatically send INTERNAL_ERROR response to client when handler throws
+- `autoSendErrorOnThrow` (default: `true`) - Automatically send INTERNAL response to client when handler throws
 - `exposeErrorDetails` (default: `false`) - Include actual error message in response (true) or generic message (false)
 - Error handlers can return `false` to suppress automatic error response
 
@@ -540,7 +542,7 @@ router.onError((error, ctx) => {
   if (ctx) {
     ctx.send(CustomErrorSchema, { code: "CUSTOM", message: error.message });
   }
-  return false; // Suppress automatic INTERNAL_ERROR response
+  return false; // Suppress automatic INTERNAL response
 });
 ```
 
@@ -633,13 +635,13 @@ router.on(SomeMessage, (ctx) => {
 Throw exceptions; router catches and converts to error messages:
 
 ```typescript
-class ValidationError extends Error {
-  code = "VALIDATION_ERROR";
+class InvalidArgumentError extends Error {
+  code = "INVALID_ARGUMENT";
 }
 
 router.on(ValidateMessage, (ctx) => {
   if (!isValid(ctx.payload)) {
-    throw new ValidationError("Invalid input");
+    throw new InvalidArgumentError("Invalid input");
   }
 });
 
@@ -657,7 +659,7 @@ type HandlerResult<T> = { ok: true; data: T } | { ok: false; error: ErrorCode };
 
 router.on(SomeMessage, (ctx): HandlerResult<Response> => {
   if (!isValid(ctx.payload)) {
-    return { ok: false, error: "VALIDATION_ERROR" };
+    return { ok: false, error: "INVALID_ARGUMENT" };
   }
   return { ok: true, data: /* ... */ };
 });

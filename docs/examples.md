@@ -177,7 +177,7 @@ router.use((ctx, next) => {
 // Per-route middleware: admin-only access
 router.use(AdminAction, (ctx, next) => {
   if (!ctx.ws.data.roles.includes(Role.ADMIN)) {
-    ctx.error("AUTH_ERROR", "Admin access required");
+    ctx.error("UNAUTHENTICATED", "Admin access required");
     return;
   }
   return next();
@@ -269,7 +269,7 @@ router.use(SendMessage, (ctx, next) => {
 
   // Check if limit exceeded
   if (recentTimestamps.length >= 10) {
-    ctx.error("RATE_LIMIT", "Too many messages. Max 10 per minute.");
+    ctx.error("RESOURCE_EXHAUSTED", "Too many messages. Max 10 per minute.");
     return;
   }
 
@@ -373,14 +373,14 @@ router.on(LoginMessage, async (ctx) => {
     const user = await validateUser(username, password);
 
     if (!user) {
-      ctx.error("AUTH_ERROR", "Invalid credentials");
+      ctx.error("UNAUTHENTICATED", "Invalid credentials");
       return;
     }
 
     ctx.assignData({ userId: user.id, username: user.username });
   } catch (error) {
     console.error("Login error:", error);
-    ctx.error("INTERNAL_ERROR", "Login failed");
+    ctx.error("INTERNAL", "Login failed");
   }
 });
 ```

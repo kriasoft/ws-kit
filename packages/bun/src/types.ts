@@ -11,6 +11,7 @@ import type { WebSocketData } from "@ws-kit/core";
  */
 export interface UpgradeOptions<TData = unknown> {
   /** Bun server instance (required for upgrade) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server: import("bun").Server<any>;
 
   /** Custom application data attached to the connection */
@@ -45,6 +46,7 @@ export interface BunHandlerOptions<TData = unknown> {
   onError?: (error: Error, ctx?: { type?: string; userId?: string }) => void;
 
   /** Called when router.publish() is invoked (before actual send) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onBroadcast?: (message: any, scope: string) => void;
 
   /** Called during WebSocket upgrade (before authentication) */
@@ -81,6 +83,7 @@ export interface BunHandler<TData = unknown> {
   /** Fetch handler for HTTP upgrade requests */
   fetch: (
     req: Request,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     server: import("bun").Server<any>,
   ) => Response | Promise<Response>;
 

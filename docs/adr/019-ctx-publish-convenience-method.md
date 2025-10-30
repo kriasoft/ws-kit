@@ -94,10 +94,10 @@ No need for a third API; two entry points suffice.
 
 **Two canonical entry points:**
 
-| Context                | Method                                               | Return            |
-| ---------------------- | ---------------------------------------------------- | ----------------- |
-| **Handler/Middleware** | `ctx.publish(channel, schema, payload, options?)`    | `Promise<number>` |
-| **Outside handler**    | `router.publish(channel, schema, payload, options?)` | `Promise<number>` |
+| Context                | Method                                               | Return                  |
+| ---------------------- | ---------------------------------------------------- | ----------------------- |
+| **Handler/Middleware** | `ctx.publish(channel, schema, payload, options?)`    | `Promise&lt;number&gt;` |
+| **Outside handler**    | `router.publish(channel, schema, payload, options?)` | `Promise&lt;number&gt;` |
 
 Both enforce schema validation. `ctx.publish` is a thin passthrough:
 
@@ -109,7 +109,7 @@ const publish = async (channel, schema, payload, options) => {
 
 ## PublishOptions
 
-```typescript
+```ts
 interface PublishOptions {
   excludeSelf?: boolean; // Future: suppress sender echo
   partitionKey?: string; // Future: distributed sharding
@@ -120,7 +120,7 @@ interface PublishOptions {
 - **Current**: Only `meta` is used; validation enforced for all options
 - **Future**: `excludeSelf` and `partitionKey` enable distributed pubsub without breaking API
 
-## Return Value: Promise<number>
+## Return Value: Promise&lt;number&gt;
 
 Returns matched subscriber count:
 
@@ -199,10 +199,10 @@ const count = await router.publish(
 
 ws-kit provides two complementary publishing patterns for different use cases:
 
-| API                       | Location        | Use Case                     | Returns           |
-| ------------------------- | --------------- | ---------------------------- | ----------------- |
-| **`ctx.publish(...)`**    | Message context | Handlers; ergonomic sugar    | `Promise<number>` |
-| **`router.publish(...)`** | Router instance | System jobs, cron, lifecycle | `Promise<number>` |
+| API                       | Location        | Use Case                     | Returns                 |
+| ------------------------- | --------------- | ---------------------------- | ----------------------- |
+| **`ctx.publish(...)`**    | Message context | Handlers; ergonomic sugar    | `Promise&lt;number&gt;` |
+| **`router.publish(...)`** | Router instance | System jobs, cron, lifecycle | `Promise&lt;number&gt;` |
 
 Both are high-level, type-safe, schema-validated APIs with identical semantics.
 Choose based on context: use `ctx.publish()` in handlers (ergonomic), `router.publish()` outside handlers (canonical).

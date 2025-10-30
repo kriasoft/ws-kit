@@ -173,7 +173,7 @@ router.rpc(ProcessFile, async (ctx) => {
     // Terminal reply
     ctx.reply?.({ result: "success" });
   } catch (err) {
-    ctx.error?.("INTERNAL_ERROR", err.message);
+    ctx.error?.("INTERNAL", err.message);
   }
 });
 ```
@@ -197,7 +197,7 @@ const Login = message("LOGIN", {
 router.rpc(Login, async (ctx) => {
   const user = await verifyCredentials(ctx.payload);
   if (!user) {
-    ctx.error?.("AUTH_ERROR", "Invalid credentials");
+    ctx.error?.("UNAUTHENTICATED", "Invalid credentials");
     return;
   }
   const token = generateToken(user.id);

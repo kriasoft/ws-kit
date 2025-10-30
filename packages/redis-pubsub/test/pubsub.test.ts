@@ -5,10 +5,10 @@ import type { MessageHandler } from "@ws-kit/redis-pubsub";
 // Mock Redis client for testing
 class MockRedisClient {
   isOpen = true;
-  handlers = new Map<string, Set<Function>>();
+  handlers = new Map<string, Set<(...args: unknown[]) => void>>();
   published = new Map<string, string[]>();
 
-  on(event: string, handler: Function) {
+  on(event: string, handler: (...args: unknown[]) => void) {
     if (!this.handlers.has(event)) {
       this.handlers.set(event, new Set());
     }

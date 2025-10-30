@@ -60,7 +60,7 @@ const router = createRouter<AppData>();
 // Middleware: require auth for protected messages
 router.use((ctx, next) => {
   if (!ctx.ws.data?.authenticated && ctx.type !== "AUTH") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
   return next();
@@ -78,7 +78,7 @@ router.on(AuthMessage, (ctx) => {
       authenticated: true,
     });
   } catch (error) {
-    ctx.error("AUTH_ERROR", "Invalid token");
+    ctx.error("UNAUTHENTICATED", "Invalid token");
   }
 });
 
@@ -137,7 +137,7 @@ const router = createRouter<AppData>();
 
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "AUTH") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
   return next();
@@ -151,7 +151,7 @@ router.on(AuthMessage, (ctx) => {
       roles: (decoded.roles as string[]) || [],
     });
   } catch {
-    ctx.error("AUTH_ERROR", "Invalid token");
+    ctx.error("UNAUTHENTICATED", "Invalid token");
   }
 });
 
@@ -232,7 +232,7 @@ router.use((ctx, next) => {
 
   if (limit && now < limit.resetAt) {
     if (limit.count >= 100) {
-      ctx.error("RATE_LIMIT", "Too many messages");
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
       return;
     }
     limit.count++;
@@ -508,7 +508,7 @@ server {
 
 ## Testing Multiple Runtimes
 
-Before production, test your router under multiple deployment targets. See [Advanced: Multi-Runtime Harness](../guides/advanced-multi-runtime.md) for integration test patterns that run the same router under Bun, Cloudflare DO, and other platforms.
+Before production, test your router under multiple deployment targets. See [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) for integration test patterns that run the same router under Bun, Cloudflare DO, and other platforms.
 
 Quick example with multiple runtimes:
 
@@ -590,5 +590,5 @@ Before deploying to production:
 
 ## See Also
 
-- [Advanced: Multi-Runtime Harness](../guides/advanced-multi-runtime.md) — Integration testing across platforms
-- [ADR-006: Multi-Runtime serve()](../adr/006-multi-runtime-serve-with-explicit-selection.md) — Runtime selection design
+- [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) — Integration testing across platforms
+- [ADR-006: Multi-Runtime serve()](./adr/006-multi-runtime-serve-with-explicit-selection) — Runtime selection design

@@ -15,7 +15,9 @@ import type { BunHandlerOptions } from "./types.js";
  *
  * Extends BunHandlerOptions with Bun-specific server config.
  */
-export interface ServeOptions<TData = any> extends BunHandlerOptions<TData> {
+export interface ServeOptions<
+  TData extends Record<string, unknown> = Record<string, unknown>,
+> extends BunHandlerOptions<TData> {
   /**
    * Port to listen on.
    * @default 3000
@@ -43,6 +45,7 @@ export interface ServeOptions<TData = any> extends BunHandlerOptions<TData> {
  * ```
  */
 export async function serve<TData extends { clientId: string }>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   router: WebSocketRouter<any, TData>,
   options: ServeOptions<TData> = {},
 ): Promise<void> {
@@ -50,9 +53,12 @@ export async function serve<TData extends { clientId: string }>(
 
   // Extract the core router if it's wrapped
   // (in case someone passes a typed wrapper)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlerOptions: any = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     authenticate: options.authenticate as any,
     onError: options.onError,
     onBroadcast: options.onBroadcast,

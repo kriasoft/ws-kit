@@ -291,6 +291,7 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
    * // For advanced introspection only
    * ```
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly [key: symbol]: any;
 }
 
@@ -314,9 +315,11 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
  * ```
  */
 export function createZodRouter<TData extends WebSocketData = WebSocketData>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options?: Omit<WebSocketRouterOptions<any, TData>, "validator">,
 ): TypedZodRouter<TData> {
   // Create core router with Zod validator
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const coreRouter = new WebSocketRouter<any, TData>({
     ...options,
     validator: zodValidator(),
@@ -326,6 +329,7 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
   const router: TypedZodRouter<TData> = {
     // Type-safe on with proper payload inference
     on(schema, handler) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       coreRouter.on(schema, handler as any);
       return router;
     },
@@ -338,12 +342,14 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
 
     // RPC handler registration (type-safe)
     rpc(schema, handler) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       coreRouter.rpc(schema, handler as any);
       return router;
     },
 
     // Topic handler registration (pub/sub)
     topic(schema, options) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       coreRouter.topic(schema, options as any);
       return router;
     },
@@ -370,6 +376,7 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
     },
 
     // Middleware
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     use(middleware: any) {
       coreRouter.use(middleware);
       return router;
@@ -377,6 +384,7 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
 
     // Router composition
     merge(sourceRouter) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const coreToAdd = (sourceRouter as any)[Symbol.for("ws-kit.core")];
       coreRouter.merge(coreToAdd);
       return router;

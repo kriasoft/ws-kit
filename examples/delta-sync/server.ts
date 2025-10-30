@@ -7,6 +7,7 @@
 
 import { createRouter, message } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
+import type { ServerWebSocket } from "@ws-kit/core";
 import {
   ParticipantSchema,
   JoinMessage,
@@ -91,7 +92,7 @@ class DeltaSyncServer {
       const participantId = ctx.ws.data?.participantId as string;
 
       if (!participantId) {
-        ctx.error("AUTH_ERROR", "No participant ID");
+        ctx.error("UNAUTHENTICATED", "No participant ID");
         return;
       }
 
@@ -216,7 +217,7 @@ class DeltaSyncServer {
   /**
    * Send full state snapshot to a client
    */
-  private sendSnapshot(ctx: any, participantId: string): void {
+  private sendSnapshot(ctx: ServerWebSocket, participantId: string): void {
     const payload = {
       rev: this.state.rev,
       participants: this.state.participants,

@@ -19,7 +19,9 @@ const AuthenticateMessage = message("AUTHENTICATE", {
     .optional(), // Semver pattern
 });
 
-type AppData = { clientId?: string };
+interface AppData {
+  clientId?: string;
+}
 
 const router = createRouter<AppData>();
 

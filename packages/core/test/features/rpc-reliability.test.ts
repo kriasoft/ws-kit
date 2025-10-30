@@ -16,6 +16,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createRouter, message, rpc, z } from "@ws-kit/zod";
+import { WebSocketRouter } from "../../src/router.js";
 import { RESERVED_CONTROL_PREFIX } from "../../src/constants.js";
 
 // Mock WebSocket for testing
@@ -334,21 +335,21 @@ describe("RPC Reliability (Phase A)", () => {
   });
 
   // ———————————————————————————————————————————————————————————————————————————
-  // 4. BACKPRESSURE TESTS
+  // 4. RESOURCE_EXHAUSTED TESTS (Backpressure)
   // ———————————————————————————————————————————————————————————————————————————
 
   describe("Backpressure: Fail-Fast Policy", () => {
-    it("should send RPC_ERROR{BACKPRESSURE} when buffer exceeds socketBufferLimitBytes", () => {
+    it("should send RPC_ERROR{RESOURCE_EXHAUSTED} when buffer exceeds socketBufferLimitBytes", () => {
       // When bufferedAmount > threshold, send RPC_ERROR instead of buffering
       expect(true).toBe(true); // Placeholder: requires mock buffer
     });
 
-    it("should include retryable=true and retryAfterMs=100 in BACKPRESSURE error", () => {
-      // BACKPRESSURE error should hint client to retry
+    it("should include retryable=true and retryAfterMs=100 in RESOURCE_EXHAUSTED error", () => {
+      // RESOURCE_EXHAUSTED error should hint client to retry
       expect(true).toBe(true); // Placeholder
     });
 
-    it("should abort RPC after sending BACKPRESSURE error", () => {
+    it("should abort RPC after sending RESOURCE_EXHAUSTED error", () => {
       // Further sends for this RPC are no-ops (one-shot guard)
       expect(true).toBe(true); // Placeholder
     });
@@ -728,12 +729,12 @@ describe("RPC Reliability (Phase A)", () => {
     });
 
     it("should reject RPC when inflight limit exceeded", () => {
-      // When socket reaches limit, send RPC_ERROR with code "RATE_LIMIT"
+      // When socket reaches limit, send RPC_ERROR with code "RESOURCE_EXHAUSTED"
       expect(true).toBe(true); // Placeholder: requires handler execution
     });
 
     it("should include retryable hint in limit error", () => {
-      // RATE_LIMIT error should suggest retry after short delay
+      // RESOURCE_EXHAUSTED error should suggest retry after short delay
       expect(true).toBe(true); // Placeholder
     });
 
@@ -832,7 +833,7 @@ describe("RPC Reliability (Phase A)", () => {
     });
 
     it("should reject new RPC immediately when limit exceeded", () => {
-      // Should not wait for timeout; should fail-fast with RATE_LIMIT
+      // Should not wait for timeout; should fail-fast with RESOURCE_EXHAUSTED
       expect(true).toBe(true); // Placeholder
     });
   });

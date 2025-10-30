@@ -44,6 +44,7 @@ const {
   ErrorMessage,
   rpc,
   createMessage,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = createMessageSchema(v as any);
 
 // Main exports: export-with-helpers pattern

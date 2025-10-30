@@ -120,23 +120,30 @@ export function createMessageSchema(valibot: ValibotLike) {
       valibot.pipe(valibot.number(), valibot.integer(), valibot.minValue(1)),
     ),
     correlationId: valibot.optional(valibot.string()),
+    timeoutMs: valibot.optional(
+      valibot.pipe(valibot.number(), valibot.integer(), valibot.minValue(1)),
+    ),
   });
 
-  // Use canonical ErrorCode enum from core
+  // Canonical ErrorCode enum from core (per ADR-015, gRPC-aligned, 13 codes)
+  // Terminal: UNAUTHENTICATED, PERMISSION_DENIED, INVALID_ARGUMENT, FAILED_PRECONDITION,
+  //          NOT_FOUND, ALREADY_EXISTS, ABORTED
+  // Transient: DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE
+  // Server/evolution: UNIMPLEMENTED, INTERNAL, CANCELLED
   const ErrorCode = valibot.picklist([
-    "INVALID_ARGUMENT",
-    "DEADLINE_EXCEEDED",
-    "CANCELLED",
+    "UNAUTHENTICATED",
     "PERMISSION_DENIED",
+    "INVALID_ARGUMENT",
+    "FAILED_PRECONDITION",
     "NOT_FOUND",
-    "CONFLICT",
+    "ALREADY_EXISTS",
+    "ABORTED",
+    "DEADLINE_EXCEEDED",
     "RESOURCE_EXHAUSTED",
     "UNAVAILABLE",
-    "INTERNAL_ERROR",
-    // Legacy codes for backwards compatibility
-    "VALIDATION_ERROR",
-    "AUTH_ERROR",
-    "RATE_LIMIT",
+    "UNIMPLEMENTED",
+    "INTERNAL",
+    "CANCELLED",
   ]);
 
   /**
@@ -287,6 +294,7 @@ export function createMessageSchema(valibot: ValibotLike) {
           correlationId: valibot.optional(valibot.string()),
         });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const baseSchema: any = {
       type: valibot.literal(messageType),
       meta: metaSchema,
@@ -436,10 +444,10 @@ export function createMessageSchema(valibot: ValibotLike) {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const requestSchema = messageSchema(
       requestType,
       requestPayload as ReqP,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ) as any;
     const responseSchema = messageSchema(responseType, responsePayload as ResP);
 

@@ -157,29 +157,41 @@ export function createLogger(options: LoggerOptions = {}): LoggerAdapter {
   return {
     debug(context, message, data) {
       if (levels.debug >= minLevelValue) {
-        options.log?.("debug", context, message, data) ||
+        if (options.log) {
+          options.log("debug", context, message, data);
+        } else {
           console.debug(`[${context}] ${message}`, data);
+        }
       }
     },
 
     info(context, message, data) {
       if (levels.info >= minLevelValue) {
-        options.log?.("info", context, message, data) ||
+        if (options.log) {
+          options.log("info", context, message, data);
+        } else {
           console.info(`[${context}] ${message}`, data);
+        }
       }
     },
 
     warn(context, message, data) {
       if (levels.warn >= minLevelValue) {
-        options.log?.("warn", context, message, data) ||
+        if (options.log) {
+          options.log("warn", context, message, data);
+        } else {
           console.warn(`[${context}] ${message}`, data);
+        }
       }
     },
 
     error(context, message, data) {
       if (levels.error >= minLevelValue) {
-        options.log?.("error", context, message, data) ||
+        if (options.log) {
+          options.log("error", context, message, data);
+        } else {
           console.error(`[${context}] ${message}`, data);
+        }
       }
     },
   };

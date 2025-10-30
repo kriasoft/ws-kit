@@ -20,32 +20,56 @@ export type SendFunction = <Schema extends MessageSchemaType>(
 ) => void;
 
 /**
- * Standard error codes for type-safe error handling.
- * These codes represent common error scenarios in WebSocket and RPC applications.
+ * Standard error codes for type-safe error handling (per ADR-015).
+ * These codes represent common error scenarios in WebSocket and RPC applications,
+ * aligned with gRPC conventions.
  *
- * Reference: @ws-kit/core/error.ts#ErrorCode for internal error definitions.
+ * Terminal errors (don't auto-retry):
+ * - UNAUTHENTICATED: Missing or invalid authentication
+ * - PERMISSION_DENIED: Authenticated but insufficient permissions
+ * - INVALID_ARGUMENT: Input validation or semantic violation
+ * - FAILED_PRECONDITION: Stateful precondition not met
+ * - NOT_FOUND: Resource does not exist
+ * - ALREADY_EXISTS: Uniqueness or idempotency violation
+ * - ABORTED: Concurrency conflict (race condition)
+ *
+ * Transient errors (retry with backoff):
+ * - DEADLINE_EXCEEDED: RPC timed out
+ * - RESOURCE_EXHAUSTED: Rate limit, quota, or buffer overflow
+ * - UNAVAILABLE: Transient infrastructure error
+ *
+ * Server/evolution:
+ * - UNIMPLEMENTED: Feature not supported or deployed
+ * - INTERNAL: Unexpected server error
+ * - CANCELLED: Call cancelled (client disconnect, abort)
+ *
+ * Reference: @ws-kit/core/error.ts#ErrorCode for internal definitions.
  * Use these codes in ctx.error() for consistent error handling.
  *
  * @example
  * ```typescript
+ * ctx.error("UNAUTHENTICATED", "Invalid token");
  * ctx.error("PERMISSION_DENIED", "Insufficient permissions");
+ * ctx.error("INVALID_ARGUMENT", "Email is required");
  * ctx.error("DEADLINE_EXCEEDED", "Request timed out");
- * ctx.error("INTERNAL_ERROR", "Database query failed");
+ * ctx.error("NOT_FOUND", "User not found");
+ * ctx.error("INTERNAL", "Database query failed");
  * ```
  */
 export type RpcErrorCode =
-  | "INVALID_ARGUMENT" // Message failed schema validation or semantic validation
-  | "DEADLINE_EXCEEDED" // RPC request timed out
-  | "CANCELLED" // Request was cancelled by client or peer
+  | "UNAUTHENTICATED" // Missing or invalid authentication
   | "PERMISSION_DENIED" // Authorization failed (after successful auth)
-  | "NOT_FOUND" // Requested resource doesn't exist
-  | "CONFLICT" // Correlation ID collision or uniqueness constraint violation
-  | "RESOURCE_EXHAUSTED" // Buffer overflow, rate limits, or backpressure
+  | "INVALID_ARGUMENT" // Input validation or semantic violation
+  | "FAILED_PRECONDITION" // Stateful precondition not met
+  | "NOT_FOUND" // Resource does not exist
+  | "ALREADY_EXISTS" // Uniqueness or idempotency violation
+  | "ABORTED" // Concurrency conflict (race condition)
+  | "DEADLINE_EXCEEDED" // RPC request timed out
+  | "RESOURCE_EXHAUSTED" // Rate limit, quota, or backpressure
   | "UNAVAILABLE" // Transient infrastructure error (retriable)
-  | "INTERNAL_ERROR" // Unexpected server error
-  | "VALIDATION_ERROR" // (Deprecated) Use INVALID_ARGUMENT
-  | "AUTH_ERROR" // (Deprecated) Use PERMISSION_DENIED
-  | "RATE_LIMIT"; // (Deprecated) Use RESOURCE_EXHAUSTED
+  | "UNIMPLEMENTED" // Feature not supported or deployed
+  | "INTERNAL" // Unexpected server error
+  | "CANCELLED"; // Request was cancelled by client or peer
 
 /**
  * @deprecated Use RpcErrorCode instead (renamed for clarity)
@@ -80,15 +104,15 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
    * Creates and sends an ERROR message with standard error structure.
    * Error code is enforced as a union of standard codes.
    *
-   * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
+   * @param code - Standard error code (e.g., "UNAUTHENTICATED", "NOT_FOUND")
    * @param message - Human-readable error description
    * @param details - Optional error context/details
    *
    * @example
    * ```typescript
-   * ctx.error("AUTH_ERROR", "Invalid credentials", { hint: "Check your password" });
-   * ctx.error("RATE_LIMIT", "Too many requests");
-   * ctx.error("INTERNAL_ERROR", "Database error");
+   * ctx.error("UNAUTHENTICATED", "Invalid credentials", { hint: "Check your password" });
+   * ctx.error("RESOURCE_EXHAUSTED", "Too many requests");
+   * ctx.error("INTERNAL", "Database error");
    * ```
    */
   error(

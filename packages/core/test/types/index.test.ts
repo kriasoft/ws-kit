@@ -218,15 +218,20 @@ describe("MemoryPubSub", () => {
 // ============================================================================
 
 describe("ErrorCode", () => {
-  it("should have standard error codes", () => {
-    expectTypeOf(ErrorCode.INVALID_MESSAGE_FORMAT).toBeString();
-    expectTypeOf(ErrorCode.VALIDATION_FAILED).toBeString();
-    expectTypeOf(ErrorCode.UNSUPPORTED_MESSAGE_TYPE).toBeString();
-    expectTypeOf(ErrorCode.AUTHENTICATION_FAILED).toBeString();
-    expectTypeOf(ErrorCode.AUTHORIZATION_FAILED).toBeString();
-    expectTypeOf(ErrorCode.RESOURCE_NOT_FOUND).toBeString();
-    expectTypeOf(ErrorCode.RATE_LIMIT_EXCEEDED).toBeString();
-    expectTypeOf(ErrorCode.INTERNAL_SERVER_ERROR).toBeString();
+  it("should have standard error codes from ADR-015", () => {
+    expectTypeOf(ErrorCode.UNAUTHENTICATED).toBeString();
+    expectTypeOf(ErrorCode.PERMISSION_DENIED).toBeString();
+    expectTypeOf(ErrorCode.INVALID_ARGUMENT).toBeString();
+    expectTypeOf(ErrorCode.FAILED_PRECONDITION).toBeString();
+    expectTypeOf(ErrorCode.NOT_FOUND).toBeString();
+    expectTypeOf(ErrorCode.ALREADY_EXISTS).toBeString();
+    expectTypeOf(ErrorCode.ABORTED).toBeString();
+    expectTypeOf(ErrorCode.DEADLINE_EXCEEDED).toBeString();
+    expectTypeOf(ErrorCode.RESOURCE_EXHAUSTED).toBeString();
+    expectTypeOf(ErrorCode.UNAVAILABLE).toBeString();
+    expectTypeOf(ErrorCode.UNIMPLEMENTED).toBeString();
+    expectTypeOf(ErrorCode.INTERNAL).toBeString();
+    expectTypeOf(ErrorCode.CANCELLED).toBeString();
   });
 });
 

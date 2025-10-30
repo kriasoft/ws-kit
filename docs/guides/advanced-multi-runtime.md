@@ -2,7 +2,7 @@
 
 The generic `serve(router, { runtime })` function with explicit runtime selection is designed for advanced scenarios where you need to deploy the same router code to multiple runtimes or dynamically select the target at startup.
 
-**For most applications**, use [platform-specific entrypoints](../README.md#platform-specific-entrypoints-recommended) instead. This guide covers the advanced use case.
+**For most applications**, use [platform-specific entrypoints](../index#platform-specific-entrypoints-recommended) instead. This guide covers the advanced use case.
 
 ## When to Use Generic Runtime Selection
 
@@ -125,7 +125,7 @@ When using generic `serve()`, TypeScript cannot narrow platform-specific options
 
 ### Not Recommended for Production
 
-For production deployments, use [platform-specific entrypoints](../README.md#platform-specific-entrypoints-recommended) instead:
+For production deployments, use [platform-specific entrypoints](../index#platform-specific-entrypoints-recommended) instead:
 
 ```typescript
 // ✅ Production: platform-specific, type-safe
@@ -157,4 +157,4 @@ serve(router, { port: 3000 });
 
 ## See Also
 
-- [ADR-006: Multi-Runtime serve()](./adr/006-multi-runtime-serve-with-explicit-selection.md) — Design decision and rationale
+- [ADR-006: Multi-Runtime serve()](../adr/006-multi-runtime-serve-with-explicit-selection) — Design decision and rationale

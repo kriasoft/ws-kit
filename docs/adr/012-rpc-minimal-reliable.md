@@ -49,7 +49,7 @@ Implement minimal, composable RPC features focused on reliability without bloati
 ### 5. **Backpressure: Fail-Fast Policy**
 
 - Configurable `maxQueuedBytesPerSocket` (default 1MB).
-- If buffered exceeds threshold during RPC reply, send `RPC_ERROR{BACKPRESSURE,retryable:true, retryAfterMs:100}` and abort RPC.
+- If buffered exceeds threshold during RPC reply, send `RPC_ERROR{RESOURCE_EXHAUSTED,retryable:true, retryAfterMs:100}` and abort RPC.
 - No unbounded queuing; predictable behavior under load.
 
 ### 6. **Progress Messages (Streaming Foundation)**

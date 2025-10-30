@@ -49,21 +49,43 @@ export class StateError extends Error {
 }
 
 /**
- * Standard RPC error codes for type narrowing.
+ * Standard RPC error codes for type narrowing (per ADR-015, gRPC-aligned).
  *
  * Can be extended by applications with custom codes as needed.
+ *
+ * Terminal errors (don't auto-retry):
+ * - UNAUTHENTICATED: Missing or invalid authentication
+ * - PERMISSION_DENIED: Authenticated but insufficient permissions
+ * - INVALID_ARGUMENT: Input validation failed
+ * - FAILED_PRECONDITION: Stateful precondition not met
+ * - NOT_FOUND: Resource does not exist
+ * - ALREADY_EXISTS: Uniqueness or idempotency violation
+ * - ABORTED: Concurrency conflict (race condition)
+ *
+ * Transient errors (retry with backoff):
+ * - DEADLINE_EXCEEDED: RPC timed out
+ * - RESOURCE_EXHAUSTED: Rate limit, quota, or buffer overflow
+ * - UNAVAILABLE: Transient infrastructure error
+ *
+ * Server/evolution:
+ * - UNIMPLEMENTED: Feature not supported or deployed
+ * - INTERNAL: Unexpected server error (unhandled exception)
+ * - CANCELLED: Call cancelled (client disconnect, abort)
  */
 export type RpcErrorCode =
-  | "VALIDATION"
-  | "AUTH_ERROR"
-  | "UNAUTHORIZED"
+  | "UNAUTHENTICATED"
+  | "PERMISSION_DENIED"
+  | "INVALID_ARGUMENT"
+  | "FAILED_PRECONDITION"
   | "NOT_FOUND"
-  | "BACKPRESSURE"
+  | "ALREADY_EXISTS"
+  | "ABORTED"
   | "DEADLINE_EXCEEDED"
+  | "RESOURCE_EXHAUSTED"
+  | "UNAVAILABLE"
+  | "UNIMPLEMENTED"
+  | "INTERNAL"
   | "CANCELLED"
-  | "INTERNAL_ERROR"
-  | "RATE_LIMIT"
-  | "ONE_SHOT"
   | string;
 
 /**
@@ -78,7 +100,7 @@ export type RpcErrorCode =
  *   await client.request(Query, payload);
  * } catch (e) {
  *   if (e instanceof RpcError) {
- *     if (e.code === "BACKPRESSURE") {
+ *     if (e.code === "RESOURCE_EXHAUSTED") {
  *       // Type-narrowed: retryAfterMs is present
  *       await sleep(e.retryAfterMs ?? 100);
  *     }
@@ -111,7 +133,7 @@ export class RpcError<TCode extends RpcErrorCode = RpcErrorCode> extends Error {
  * happens too late or idempotencyKey is not set.
  */
 export class WsDisconnectedError extends Error {
-  constructor(message: string = "WebSocket disconnected") {
+  constructor(message = "WebSocket disconnected") {
     super(message);
     this.name = "WsDisconnectedError";
   }

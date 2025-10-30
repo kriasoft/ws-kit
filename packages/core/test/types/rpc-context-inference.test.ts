@@ -271,7 +271,7 @@ describe("RPC with complex schema generics", () => {
       };
       response: {
         type: "COMPLEX_OK";
-        payload: { results: Array<{ id: string }> };
+        payload: { results: { id: string }[] };
       };
     }
 

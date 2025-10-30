@@ -50,7 +50,7 @@ describe("Type inference in createRouter handlers", () => {
 
         // Should NOT allow accessing undefined properties
         // @ts-expect-error - missing property
-        ctx.payload.nonexistent;
+        void ctx.payload.nonexistent;
       });
     });
 
@@ -150,7 +150,7 @@ describe("Type inference in createRouter handlers", () => {
       router.on(PingSchema, (ctx) => {
         // payload should not exist at all
         // @ts-expect-error - payload should not be available
-        ctx.payload;
+        void ctx.payload;
 
         // Type should be Record<string, never> (no properties)
         expectTypeOf(ctx).toMatchTypeOf<{
@@ -169,7 +169,7 @@ describe("Type inference in createRouter handlers", () => {
 
       router.on(PingEmptySchema, (ctx) => {
         // @ts-expect-error - payload should not be available
-        ctx.payload;
+        void ctx.payload;
       });
     });
   });
@@ -382,7 +382,7 @@ describe("Type inference in createRouter handlers", () => {
       mainRouter.merge(chatRouter);
 
       // Types should still work on the main router
-      expectTypeOf(mainRouter).toMatchTypeOf<{ [key: symbol]: any }>();
+      expectTypeOf(mainRouter).toMatchTypeOf<Record<symbol, unknown>>();
     });
   });
 

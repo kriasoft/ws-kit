@@ -124,7 +124,7 @@ const router = createRouter<AppData>();
 // Global middleware: authentication check
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
   return next();
@@ -136,7 +136,7 @@ router.use(SendMessage, (ctx, next) => {
   const userId = ctx.ws.data?.userId || "anon";
   const count = (rateLimiter.get(userId) || 0) + 1;
   if (count > 10) {
-    ctx.error("RATE_LIMIT", "Too many messages");
+    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return;
   }
   rateLimiter.set(userId, count);
@@ -170,7 +170,7 @@ const router = createRouter<AppData>();
 // Middleware: require auth for protected messages
 router.use((ctx, next) => {
   if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
-    ctx.error("AUTH_ERROR", "Not authenticated");
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
   return next();
@@ -311,7 +311,7 @@ router.on(LoginMessage, (ctx) => {
     ctx.send(LoginSuccess, { userId: user.id });
   } catch (err) {
     // ✅ Type-safe error code
-    ctx.error("AUTH_ERROR", "Invalid credentials", {
+    ctx.error("UNAUTHENTICATED", "Invalid credentials", {
       hint: "Check your password",
     });
   }
@@ -322,18 +322,20 @@ router.on(QueryMessage, (ctx) => {
     const result = queryDatabase(ctx.payload);
     ctx.send(QueryResponse, result);
   } catch (err) {
-    ctx.error("INTERNAL_ERROR", "Database query failed");
+    ctx.error("INTERNAL", "Database query failed");
   }
 });
 ```
 
 **Standard error codes:**
 
-- `VALIDATION_ERROR` — Invalid payload or schema mismatch
-- `AUTH_ERROR` — Authentication failed
-- `INTERNAL_ERROR` — Server error
+- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+- `UNAUTHENTICATED` — Authentication failed
+- `PERMISSION_DENIED` — Authenticated but lacks rights
+- `INTERNAL` — Server error
 - `NOT_FOUND` — Resource not found
-- `RATE_LIMIT` — Rate limit exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit or backpressure exceeded
+- See ADR-015 for the complete error code taxonomy
 
 ### Connection Data Type Safety
 

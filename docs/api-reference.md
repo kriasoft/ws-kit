@@ -271,7 +271,7 @@ ctx.send(PongMessage, { reply: "pong" });
 ctx.error("NOT_FOUND", "User not found");
 
 // Send error with details
-ctx.error("VALIDATION_ERROR", "Invalid input", { field: "email" });
+ctx.error("INVALID_ARGUMENT", "Invalid input", { field: "email" });
 ```
 
 ## Helper Functions

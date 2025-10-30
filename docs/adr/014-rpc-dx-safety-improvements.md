@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 **Date:** 2025-10-30
-**References:** ADR-012, ADR-013, docs/proposals/rpc-discussion-phase-2.md
+**References:** ADR-012, ADR-013
 
 ## Problem
 
@@ -69,14 +69,14 @@ router.on(QueryMessage, (ctx) => {
 
 ```typescript
 export type RpcErrorCode =
-  | "VALIDATION"
-  | "AUTH_ERROR"
+  | "INVALID_ARGUMENT"
+  | "UNAUTHENTICATED"
+  | "PERMISSION_DENIED"
   | "NOT_FOUND"
-  | "BACKPRESSURE"
+  | "RESOURCE_EXHAUSTED"
   | "DEADLINE_EXCEEDED"
   | "CANCELLED"
-  | "INTERNAL_ERROR"
-  | "RATE_LIMIT"
+  | "INTERNAL"
   | "ONE_SHOT"
   | string; // Allow custom codes
 ```
@@ -87,7 +87,7 @@ export type RpcErrorCode =
 try {
   await client.request(Query, payload);
 } catch (e) {
-  if (e instanceof RpcError && e.code === "BACKPRESSURE") {
+  if (e instanceof RpcError && e.code === "RESOURCE_EXHAUSTED") {
     // Type-narrowed: retryAfterMs guaranteed present
     await sleep(e.retryAfterMs ?? 100);
   }
@@ -179,7 +179,7 @@ New tests ensure invariants hold:
 
 1. **Property tests**: One-shot, deadline, correlation invariants
 2. **Reconnect fuzz**: Disconnect/reconnect with different resend policies
-3. **Backpressure**: Buffer exceeded → `BACKPRESSURE` error, never partial replies
+3. **Backpressure**: Buffer exceeded → `RESOURCE_EXHAUSTED` error, never partial replies
 4. **Error code coverage**: All `RpcErrorCode` types tested
 5. **Reserved prefix**: `rpc("$ws:BAD", ...)` throws at definition time
 
@@ -277,7 +277,6 @@ See `packages/core/test/features/rpc-incomplete-warning.test.ts` for full test c
 
 ## References
 
-- [docs/proposals/rpc-discussion-phase-2.md](../proposals/rpc-discussion-phase-2.md) — Full feedback discussion
 - [ADR-012: Minimal Reliable RPC](./012-rpc-minimal-reliable.md) — Core lifecycle features
 - [ADR-013: Reconnect & Idempotency Policy](./013-rpc-reconnect-idempotency.md) — Client resend logic
-- [docs/guides/rpc-troubleshooting.md](../guides/rpc-troubleshooting.md) — Common issues and solutions
+- [RPC Troubleshooting](../guides/rpc-troubleshooting) — Common issues and solutions

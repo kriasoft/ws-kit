@@ -12,10 +12,10 @@ export default defineConfig([
     ignores: [
       "node_modules",
       ".bun/",
-      "dist/",
       ".vitepress/dist",
       ".vitepress/cache",
       "docs/",
+      "packages/*/dist/",
     ],
   },
   {

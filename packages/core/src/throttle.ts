@@ -36,6 +36,7 @@ export function createThrottledPublish(
 ): (channel: string, message: unknown) => void {
   const queued = new Map<string, unknown>();
   let scheduled = false;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let timeout: ReturnType<typeof setTimeout> | null = null;
 
   const flush = async () => {
@@ -117,6 +118,7 @@ export function createAdvancedThrottledPublish(
   const { windowMs = 50, onFlush } = config;
   const queued = new Map<string, unknown[]>();
   let scheduled = false;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let timeout: ReturnType<typeof setTimeout> | null = null;
 
   const flush = async () => {

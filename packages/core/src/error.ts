@@ -7,64 +7,72 @@
  * @canonical This enum defines all valid error codes. Use these values,
  * not arbitrary strings, for consistent error handling across handlers.
  *
- * Reference: docs/specs/error-handling.md#error-code-enum, ADR-014
+ * Reference: ADR-015 (Unified RPC API Design), aligned with gRPC conventions
  *
- * Covers both standard WebSocket errors and RPC-specific scenarios:
- * - INVALID_ARGUMENT: Schema validation failed or semantic validation failed
- * - DEADLINE_EXCEEDED: RPC request timed out
- * - CANCELLED: Client or peer aborted the request
- * - PERMISSION_DENIED: Authorization check failed (different from AUTH_ERROR for token validation)
- * - NOT_FOUND: Requested resource doesn't exist
- * - CONFLICT: Correlation ID collision or uniqueness constraint violation
- * - RESOURCE_EXHAUSTED: Buffer overflow, rate limits exceeded, or backpressure
- * - UNAVAILABLE: Transient infrastructure error (retriable)
- * - INTERNAL_ERROR: Unexpected server error (unhandled exception, database failure)
+ * Terminal errors (don't retry):
+ * - UNAUTHENTICATED: Auth token missing, expired, or invalid
+ * - PERMISSION_DENIED: Authenticated but lacks rights (authZ)
+ * - INVALID_ARGUMENT: Input validation or semantic violation
+ * - FAILED_PRECONDITION: State requirement not met
+ * - NOT_FOUND: Target resource absent
+ * - ALREADY_EXISTS: Uniqueness or idempotency replay violation
+ * - ABORTED: Concurrency conflict (race condition)
  *
- * Plus legacy codes for backwards compatibility:
- * - VALIDATION_ERROR: (deprecated, use INVALID_ARGUMENT)
- * - AUTH_ERROR: (deprecated, use PERMISSION_DENIED for authz, add AUTH_REQUIRED for auth)
- * - RATE_LIMIT: (deprecated, use RESOURCE_EXHAUSTED)
+ * Transient errors (retry with backoff):
+ * - DEADLINE_EXCEEDED: RPC timed out
+ * - RESOURCE_EXHAUSTED: Rate limit, quota, or buffer overflow
+ * - UNAVAILABLE: Transient infrastructure error
  *
- * See docs/specs/error-handling.md for guidance on error code selection.
+ * Server / evolution:
+ * - UNIMPLEMENTED: Feature not supported or deployed
+ * - INTERNAL: Unexpected server error (bug)
+ * - CANCELLED: Call cancelled (client disconnect, timeout abort)
+ *
+ *
+ * See ADR-015 and docs/specs/error-handling.md for guidance.
  */
 export enum ErrorCode {
-  // RPC-standard codes (aligned with gRPC where applicable)
-  /** Invalid argument / schema validation or semantic validation failed */
-  INVALID_ARGUMENT = "INVALID_ARGUMENT",
+  // Terminal errors (don't retry)
+  /** Not authenticated / auth token missing, expired, or invalid */
+  UNAUTHENTICATED = "UNAUTHENTICATED",
 
-  /** Deadline exceeded / request timeout */
-  DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED",
-
-  /** Request was cancelled by client or peer */
-  CANCELLED = "CANCELLED",
-
-  /** Permission denied / authorization failed (after successful auth) */
+  /** Permission denied / authenticated but lacks rights (authZ) */
   PERMISSION_DENIED = "PERMISSION_DENIED",
 
-  /** Requested resource not found (invalid ID, deleted object, missing data) */
+  /** Invalid argument / input validation or semantic violation */
+  INVALID_ARGUMENT = "INVALID_ARGUMENT",
+
+  /** Failed precondition / state requirement not met */
+  FAILED_PRECONDITION = "FAILED_PRECONDITION",
+
+  /** Not found / target resource absent */
   NOT_FOUND = "NOT_FOUND",
 
-  /** Conflict / correlation ID collision or uniqueness constraint violation */
-  CONFLICT = "CONFLICT",
+  /** Already exists / uniqueness or idempotency replay violation */
+  ALREADY_EXISTS = "ALREADY_EXISTS",
 
-  /** Resource exhausted / buffer overflow, rate limits, or backpressure */
+  /** Aborted / concurrency conflict (race condition) */
+  ABORTED = "ABORTED",
+
+  // Transient errors (retry with backoff)
+  /** Deadline exceeded / RPC timed out */
+  DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED",
+
+  /** Resource exhausted / rate limit, quota, or buffer overflow */
   RESOURCE_EXHAUSTED = "RESOURCE_EXHAUSTED",
 
-  /** Unavailable / transient infrastructure error (retriable) */
+  /** Unavailable / transient infrastructure error */
   UNAVAILABLE = "UNAVAILABLE",
 
-  /** Unexpected server error (unhandled exception, database failure, external service error) */
-  INTERNAL_ERROR = "INTERNAL_ERROR",
+  // Server / evolution
+  /** Unimplemented / feature not supported or deployed */
+  UNIMPLEMENTED = "UNIMPLEMENTED",
 
-  // Legacy codes (deprecated, kept for backwards compatibility)
-  /** @deprecated Use INVALID_ARGUMENT instead */
-  VALIDATION_ERROR = "VALIDATION_ERROR",
+  /** Internal / unexpected server error (bug) */
+  INTERNAL = "INTERNAL",
 
-  /** @deprecated Use PERMISSION_DENIED for authz; add separate code for auth failures if needed */
-  AUTH_ERROR = "AUTH_ERROR",
-
-  /** @deprecated Use RESOURCE_EXHAUSTED instead */
-  RATE_LIMIT = "RATE_LIMIT",
+  /** Cancelled / call cancelled (client disconnect, timeout abort) */
+  CANCELLED = "CANCELLED",
 }
 
 /**
@@ -141,8 +149,8 @@ export interface ErrorMessage {
 /**
  * WsKitError: Standardized error object for structured error handling.
  *
- * Includes code, message, details for client transmission, and originalError
- * for internal debugging without exposing to clients.
+ * Follows WHATWG Error standard with `cause` for error chaining, while preserving
+ * `code` and `details` for protocol-level error handling.
  *
  * This enables better error parsing and integration with observability tools
  * like ELK, Sentry, etc.
@@ -155,11 +163,11 @@ export interface ErrorMessage {
  * });
  *
  * @example
- * // Wrap an existing error
+ * // Wrap an existing error (preserves original as cause)
  * try {
  *   await queryDatabase(id);
  * } catch (err) {
- *   throw WsKitError.wrap(err, "INTERNAL_ERROR", "Database query failed");
+ *   throw WsKitError.wrap(err, "INTERNAL", "Database query failed");
  * }
  */
 export class WsKitError extends Error {
@@ -172,26 +180,35 @@ export class WsKitError extends Error {
   /** Additional details safe to expose to clients */
   details: Record<string, unknown>;
 
-  /** Original error, preserved for internal debugging/logging */
-  originalError: Error | undefined;
+  /** WHATWG standard: original error for debugging (use instanceof Error check) */
+  override cause: unknown;
 
   constructor(
     code: string,
     message: string,
     details?: Record<string, unknown>,
-    originalError?: Error,
+    cause?: unknown,
   ) {
     super(message);
     this.name = "WsKitError";
     this.code = code;
     this.message = message;
     this.details = details || {};
-    this.originalError = originalError;
+
+    // Set WHATWG standard cause (Node 16.9+, modern browsers)
+    if (cause !== undefined) {
+      this.cause = cause;
+    }
 
     // Preserve stack trace
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, WsKitError);
     }
+  }
+
+  /** Convenience accessor: returns cause if it's an Error, otherwise undefined */
+  get originalError(): Error | undefined {
+    return this.cause instanceof Error ? this.cause : undefined;
   }
 
   /**
@@ -206,13 +223,13 @@ export class WsKitError extends Error {
   }
 
   /**
-   * Wrap an existing error as a WsKitError, preserving the original for debugging.
+   * Wrap an existing error as a WsKitError, preserving it as the cause.
    *
    * If the error is already a WsKitError, returns it as-is.
    * This is useful when catching unknown errors and wanting to preserve the stack trace
    * while providing structured error information.
    *
-   * @param error The error to wrap
+   * @param error The error to wrap (will be set as cause)
    * @param code Error code for client transmission
    * @param message Optional human-readable message (uses error.message if not provided)
    * @param details Optional additional details for client
@@ -236,7 +253,7 @@ export class WsKitError extends Error {
       code,
       message || originalError.message || code,
       details,
-      originalError,
+      originalError, // Passed as cause (WHATWG standard)
     );
   }
 
@@ -250,32 +267,63 @@ export class WsKitError extends Error {
   /**
    * Serialize to plain object for structured logging (ELK, Sentry, etc).
    *
-   * Includes the original error's stack trace when available.
+   * Includes cause and stack trace for internal debugging.
+   * Use toPayload() for client transmission instead.
    */
-  toJSON() {
-    return {
+  toJSON(): {
+    code: string;
+    message: string;
+    details: Record<string, unknown>;
+    stack: string | undefined;
+    cause?:
+      | {
+          name: string;
+          message: string;
+          stack: string | undefined;
+        }
+      | string;
+  } {
+    const result: {
+      code: string;
+      message: string;
+      details: Record<string, unknown>;
+      stack: string | undefined;
+      cause?:
+        | {
+            name: string;
+            message: string;
+            stack: string | undefined;
+          }
+        | string;
+    } = {
       code: this.code,
       message: this.message,
       details: this.details,
-      originalError: this.originalError
-        ? {
-            name: this.originalError.name,
-            message: this.originalError.message,
-            stack: this.originalError.stack,
-          }
-        : undefined,
       stack: this.stack,
     };
+
+    if (this.cause) {
+      result.cause =
+        this.cause instanceof Error
+          ? {
+              name: this.cause.name,
+              message: this.cause.message,
+              stack: this.cause.stack,
+            }
+          : String(this.cause);
+    }
+
+    return result;
   }
 
   /**
    * Create an error payload for client transmission.
    *
-   * Does NOT include the original error or stack trace.
+   * Does NOT include cause, stack trace, or other debug information.
    */
   toPayload(): ErrorPayload {
     const payload: ErrorPayload = {
-      code: (this.code as ErrorCode) || ErrorCode.INTERNAL_ERROR,
+      code: (this.code as ErrorCode) || ErrorCode.INTERNAL,
       message: this.message,
     };
     if (Object.keys(this.details).length > 0) {
