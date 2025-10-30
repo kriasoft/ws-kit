@@ -137,3 +137,150 @@ export interface ErrorMessage {
   type: "ERROR";
   payload: ErrorPayload;
 }
+
+/**
+ * WsKitError: Standardized error object for structured error handling.
+ *
+ * Includes code, message, details for client transmission, and originalError
+ * for internal debugging without exposing to clients.
+ *
+ * This enables better error parsing and integration with observability tools
+ * like ELK, Sentry, etc.
+ *
+ * @example
+ * // Create a new error
+ * const error = WsKitError.from("INVALID_ARGUMENT", "Invalid user ID", {
+ *   field: "userId",
+ *   hint: "User ID must be a positive integer",
+ * });
+ *
+ * @example
+ * // Wrap an existing error
+ * try {
+ *   await queryDatabase(id);
+ * } catch (err) {
+ *   throw WsKitError.wrap(err, "INTERNAL_ERROR", "Database query failed");
+ * }
+ */
+export class WsKitError extends Error {
+  /** Error code (one of ErrorCode values) */
+  code: string;
+
+  /** Human-readable error message */
+  override message: string;
+
+  /** Additional details safe to expose to clients */
+  details: Record<string, unknown>;
+
+  /** Original error, preserved for internal debugging/logging */
+  originalError: Error | undefined;
+
+  constructor(
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+    originalError?: Error,
+  ) {
+    super(message);
+    this.name = "WsKitError";
+    this.code = code;
+    this.message = message;
+    this.details = details || {};
+    this.originalError = originalError;
+
+    // Preserve stack trace
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, WsKitError);
+    }
+  }
+
+  /**
+   * Create a new WsKitError with given code, message, and details.
+   */
+  static from(
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ): WsKitError {
+    return new WsKitError(code, message, details);
+  }
+
+  /**
+   * Wrap an existing error as a WsKitError, preserving the original for debugging.
+   *
+   * If the error is already a WsKitError, returns it as-is.
+   * This is useful when catching unknown errors and wanting to preserve the stack trace
+   * while providing structured error information.
+   *
+   * @param error The error to wrap
+   * @param code Error code for client transmission
+   * @param message Optional human-readable message (uses error.message if not provided)
+   * @param details Optional additional details for client
+   */
+  static wrap(
+    error: unknown,
+    code: string,
+    message?: string,
+    details?: Record<string, unknown>,
+  ): WsKitError {
+    // If already a WsKitError, return as-is
+    if (error instanceof WsKitError) {
+      return error;
+    }
+
+    // Convert to Error if needed
+    const originalError =
+      error instanceof Error ? error : new Error(String(error));
+
+    return new WsKitError(
+      code,
+      message || originalError.message || code,
+      details,
+      originalError,
+    );
+  }
+
+  /**
+   * Type guard to check if a value is a WsKitError.
+   */
+  static isWsKitError(value: unknown): value is WsKitError {
+    return value instanceof WsKitError;
+  }
+
+  /**
+   * Serialize to plain object for structured logging (ELK, Sentry, etc).
+   *
+   * Includes the original error's stack trace when available.
+   */
+  toJSON() {
+    return {
+      code: this.code,
+      message: this.message,
+      details: this.details,
+      originalError: this.originalError
+        ? {
+            name: this.originalError.name,
+            message: this.originalError.message,
+            stack: this.originalError.stack,
+          }
+        : undefined,
+      stack: this.stack,
+    };
+  }
+
+  /**
+   * Create an error payload for client transmission.
+   *
+   * Does NOT include the original error or stack trace.
+   */
+  toPayload(): ErrorPayload {
+    const payload: ErrorPayload = {
+      code: (this.code as ErrorCode) || ErrorCode.INTERNAL_ERROR,
+      message: this.message,
+    };
+    if (Object.keys(this.details).length > 0) {
+      payload.details = this.details;
+    }
+    return payload;
+  }
+}

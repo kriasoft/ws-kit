@@ -4,17 +4,12 @@
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
-import {
-  RESERVED_META_KEYS,
-  RESERVED_CONTROL_PREFIX,
-  DEFAULT_CONFIG,
-} from "./constants.js";
+import { RESERVED_CONTROL_PREFIX, DEFAULT_CONFIG } from "./constants.js";
+import { WsKitError, ErrorCode } from "./error.js";
 import type {
   ServerWebSocket,
   WebSocketData,
   MessageContext,
-  EventMessageContext,
-  RpcMessageContext,
   MessageMeta,
   SendFunction,
   OpenHandler,
@@ -209,7 +204,7 @@ export class WebSocketRouter<
 
     // Set up testing utilities if testing mode is enabled
     // This allows test code to inspect and assert on internal state without reflection
-    if ((options as any).testing === true) {
+    if ((options as Record<string, unknown>).testing === true) {
       this._testing = {
         handlers: this.messageHandlers,
         middleware: this.middlewares,
@@ -690,16 +685,16 @@ export class WebSocketRouter<
    * }
    * ```
    */
-  routes(): ReadonlyArray<{
+  routes(): readonly {
     messageType: string;
     handler: MessageHandlerEntry<TData>;
-    middleware: ReadonlyArray<Middleware<TData>>;
-  }> {
-    const result: Array<{
+    middleware: readonly Middleware<TData>[];
+  }[] {
+    const result: {
       messageType: string;
       handler: MessageHandlerEntry<TData>;
       middleware: Middleware<TData>[];
-    }> = [];
+    }[] = [];
 
     for (const [messageType, handler] of this.messageHandlers) {
       result.push({
@@ -751,7 +746,7 @@ export class WebSocketRouter<
       routeMiddleware: Map<string, Middleware<TData>[]>;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // SAFETY: Router internals are intentionally accessible for testing
     const other = router as unknown as AccessibleRouter;
 
     // Merge message handlers
@@ -1425,7 +1420,7 @@ export class WebSocketRouter<
       const publish = async (
         channel: string,
         schema: MessageSchemaType,
-        payload: any,
+        payload: unknown,
         options?: PublishOptions,
       ): Promise<number> => {
         return this.publish(channel, schema, payload, options);
@@ -1445,18 +1440,17 @@ export class WebSocketRouter<
           : undefined;
 
       // Synthesize correlationId for RPC if missing (belt-and-suspenders approach)
-      let syntheticCorrelation = false;
       if (isRpc && !correlationId) {
         // Generate UUID v7-like correlation ID for missing ones
         correlationId = crypto.randomUUID();
-        syntheticCorrelation = true;
         console.debug(
           `[ws] Synthesized correlationId for RPC: ${correlationId}`,
         );
         // Update meta for downstream usage
         if (validatedData.meta && typeof validatedData.meta === "object") {
-          (validatedData.meta as any).correlationId = correlationId;
-          (validatedData.meta as any).syntheticCorrelation = true;
+          const meta = validatedData.meta as Record<string, unknown>;
+          meta.correlationId = correlationId;
+          meta.syntheticCorrelation = true;
         }
       }
 
@@ -1479,6 +1473,7 @@ export class WebSocketRouter<
         ? (cb: () => void): (() => void) => {
             if (!correlationId) {
               console.warn("[ws] onCancel called but no correlationId");
+              // eslint-disable-next-line @typescript-eslint/no-empty-function
               return () => {}; // No-op unregister
             }
             return this.#rpc.onCancel(clientId, correlationId, cb);
@@ -1497,8 +1492,8 @@ export class WebSocketRouter<
         // For RPC: wrap send with one-shot guard and backpressure checks
         rpcAwareSend = (
           schema: MessageSchemaType,
-          payload: any,
-          options: any = {},
+          payload: unknown,
+          options: Record<string, unknown> = {},
         ) => {
           // Check if terminal already sent (suppress further sends)
           if (this.#rpc.isTerminal(clientId, correlationId)) {
@@ -1510,12 +1505,11 @@ export class WebSocketRouter<
 
           // Check for backpressure on non-progress sends (terminal replies)
           const msgType = this.validator?.getMessageType(schema) ?? "";
+          const handlerSchema = handlerEntry.schema as Record<string, unknown>;
           const isProgressMsg =
             msgType !==
-            (handlerEntry.schema && (handlerEntry.schema as any).response
-              ? this.validator?.getMessageType(
-                  (handlerEntry.schema as any).response,
-                )
+            (handlerSchema && "response" in handlerSchema
+              ? this.validator?.getMessageType(handlerSchema.response)
               : "");
 
           if (!isProgressMsg && this.shouldBackpressure(ws)) {
@@ -1538,9 +1532,9 @@ export class WebSocketRouter<
           // Mark as terminal if this is the response message
           if (
             msgType ===
-            this.validator?.getMessageType(
-              (handlerEntry.schema as any).response,
-            )
+            ("response" in handlerSchema
+              ? this.validator?.getMessageType(handlerSchema.response)
+              : undefined)
           ) {
             this.#rpc.onTerminal(clientId, correlationId);
           }
@@ -1555,8 +1549,8 @@ export class WebSocketRouter<
       // Implement reply() for RPC terminal responses
       const reply = (
         responseSchema: MessageSchemaType,
-        data: any,
-        options: any = {},
+        data: unknown,
+        options: Record<string, unknown> = {},
       ): void => {
         if (!isRpc || !correlationId) {
           console.warn("[ws] reply() called on non-RPC message, ignoring");
@@ -1842,18 +1836,28 @@ export class WebSocketRouter<
    */
   private callErrorHandlers(
     error: Error,
-    context?: MessageContext<MessageSchemaType, TData>,
+    context: MessageContext<MessageSchemaType, TData>,
   ): boolean {
+    // Wrap error as WsKitError if it isn't already
+    const wsKitError = WsKitError.wrap(
+      error,
+      ErrorCode.INTERNAL_ERROR,
+      error.message,
+    );
+
     if (this.errorHandlers.length === 0) {
-      // No error handlers registered - log to console
-      console.error("[ws] Unhandled error:", error, context);
+      // No error handlers registered - log to console with structured format
+      console.error(
+        "[ws] Unhandled error:",
+        JSON.stringify(wsKitError.toJSON(), null, 2),
+      );
       return false; // Not suppressed
     }
 
     let suppressed = false;
     for (const handler of this.errorHandlers) {
       try {
-        const result = handler(error, context);
+        const result = handler(wsKitError, context);
         // Handler can return false to suppress automatic error response
         if (result === false) {
           suppressed = true;
@@ -1939,6 +1943,16 @@ export class WebSocketRouter<
       }
     };
 
+    // Publish to channel
+    const publish = async (
+      channel: string,
+      schema: MessageSchemaType,
+      payload: unknown,
+      options?: PublishOptions,
+    ): Promise<number> => {
+      return this.publish(channel, schema, payload, options);
+    };
+
     return {
       ws,
       type,
@@ -1946,10 +1960,11 @@ export class WebSocketRouter<
       receivedAt,
       send,
       error: errorSend,
-      reply: send as any, // Semantic alias (may not be RPC in all contexts)
+      reply: send as SendFunction, // Semantic alias (may not be RPC in all contexts)
       assignData,
       subscribe,
       unsubscribe,
+      publish,
       timeRemaining: () => Infinity, // No deadline in non-RPC contexts
       isRpc: false, // Not an RPC by default in this context factory
     };
@@ -2032,7 +2047,7 @@ export class WebSocketRouter<
     const heartbeat = this.heartbeatStates.get(clientId);
     if (!heartbeat) return;
 
-    const { intervalMs, timeoutMs } = this.heartbeatConfig;
+    const { intervalMs } = this.heartbeatConfig;
 
     // Set up periodic ping timer
     heartbeat.pingTimer = setInterval(() => {
@@ -2114,7 +2129,7 @@ export class WebSocketRouter<
       return this.platform.getBufferedBytes(ws);
     }
     // Fallback: check ws.bufferedAmount if available (Bun, browsers)
-    return (ws as any).bufferedAmount ?? 0;
+    return ((ws as Record<string, unknown>).bufferedAmount as number) ?? 0;
   }
 
   /**

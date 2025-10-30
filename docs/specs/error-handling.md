@@ -297,3 +297,112 @@ process.on("uncaughtException", (error) => {
 ```
 
 See [Bun Error Handling](https://bun.sh/docs/runtime/error-handling) for runtime configuration.
+
+## Structured Error Objects for Observability
+
+WsKitError provides standardized error objects for integration with observability tools (ELK, Sentry, DataDog, etc.).
+
+### WsKitError Structure
+
+All errors passed to `onError` handlers are standardized as `WsKitError` objects:
+
+```typescript
+import { WsKitError } from "@ws-kit/core";
+
+// WsKitError has the following structure:
+interface WsKitError extends Error {
+  code: string; // Error code (e.g., INVALID_ARGUMENT)
+  message: string; // Human-readable message
+  details: Record<string, unknown>; // Additional context for client
+  originalError?: Error; // Original error (preserved for debugging)
+}
+```
+
+### Error Handler with Structured Logging
+
+The `onError` handler receives a fully structured `WsKitError` ready for logging:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+import { WsKitError } from "@ws-kit/core";
+
+const router = createRouter();
+
+// onError handler receives WsKitError
+router.onError((error, context) => {
+  // error is a WsKitError with code, message, details, originalError
+
+  // Send to observability tool
+  logger.error({
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    context: {
+      type: context.type,
+      clientId: context.ws.data?.clientId,
+      receivedAt: context.receivedAt,
+    },
+    stack: error.stack,
+    originalError: error.originalError?.message, // For debugging only
+  });
+});
+```
+
+### Creating Errors Programmatically
+
+Use `WsKitError.from()` to create errors with structured details:
+
+```typescript
+router.on(CreateUser, (ctx) => {
+  try {
+    const user = await db.users.create(ctx.payload);
+    ctx.send(UserCreated, user);
+  } catch (err) {
+    // Wrap unhandled errors with context
+    throw WsKitError.wrap(err, "INTERNAL_ERROR", "Failed to create user", {
+      email: ctx.payload.email,
+    });
+  }
+});
+```
+
+### JSON Serialization for Logging
+
+`WsKitError` provides both internal and client-safe serialization:
+
+```typescript
+const error = WsKitError.from("INVALID_ARGUMENT", "Email is required", {
+  field: "email",
+});
+
+// For internal logging (includes original error, stack, etc.)
+JSON.stringify(error.toJSON());
+// {
+//   "code": "INVALID_ARGUMENT",
+//   "message": "Email is required",
+//   "details": { "field": "email" },
+//   "stack": "Error at ...",
+//   "originalError": null
+// }
+
+// For client transmission (excludes internal details)
+error.toPayload();
+// {
+//   "code": "INVALID_ARGUMENT",
+//   "message": "Email is required",
+//   "details": { "field": "email" }
+// }
+```
+
+### Error Handler Return Value
+
+Return `false` from `onError` to suppress automatic error response:
+
+```typescript
+router.onError((error) => {
+  logger.error(error); // Log the error
+  return false; // Prevent automatic ERROR message to client
+});
+```
+
+When the handler returns `false` and `autoSendErrorOnThrow` is enabled, the router will NOT send an `INTERNAL_ERROR` response to the client.

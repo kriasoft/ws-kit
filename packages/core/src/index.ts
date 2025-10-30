@@ -58,7 +58,7 @@ export type {
 // Error Handling
 // ============================================================================
 
-export { ErrorCode, WebSocketError } from "./error.js";
+export { ErrorCode, WebSocketError, WsKitError } from "./error.js";
 export type { ErrorCodeValue, ErrorPayload, ErrorMessage } from "./error.js";
 
 // ============================================================================

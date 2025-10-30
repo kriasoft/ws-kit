@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import type { WsKitError } from "./error.js";
+
 /**
  * Platform-agnostic WebSocket abstraction.
  *
@@ -324,7 +326,11 @@ export interface RpcMessageContext<
    * @param data - Response data (must match the response schema)
    * @param options - Optional metadata and send options
    */
-  reply(responseSchema: MessageSchemaType, data: unknown, options?: any): void;
+  reply(
+    responseSchema: MessageSchemaType,
+    data: unknown,
+    options?: Record<string, unknown>,
+  ): void;
 
   /**
    * Server-derived deadline for this RPC request (milliseconds since epoch).
@@ -552,20 +558,25 @@ export type AuthHandler<TData extends WebSocketData = WebSocketData> = (
  * Handler for error events.
  *
  * Called when an error occurs during message processing (parse, validation,
- * handler execution, etc.). Errors are logged but don't close the connection
- * automatically.
+ * handler execution, etc.). Errors are standardized as WsKitError objects with
+ * code, message, details, and originalError (for internal debugging).
  *
- * @param error - The error that occurred
- * @param context - Message context (may be partial if error occurred early)
+ * This enables structured error logging and integration with observability tools
+ * like ELK, Sentry, and similar platforms.
+ *
+ * Errors are logged but don't close the connection automatically.
+ *
+ * @param error - WsKitError with standardized structure
+ * @param context - Message context including type, ws, meta, and payload
  * @returns Return false (or falsy) to suppress automatic error response. If any error
  *          handler returns false, the router will not send an INTERNAL_ERROR response
  *          to the client (assuming autoSendErrorOnThrow is enabled).
  */
 export type ErrorHandler<TData extends WebSocketData = WebSocketData> = (
-  error: Error,
+  error: WsKitError,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context?: MessageContext<any, TData>,
-) => void | boolean;
+  context: MessageContext<any, TData>,
+) => boolean | undefined;
 
 /**
  * Middleware function that executes before message handlers.
@@ -716,6 +727,7 @@ export interface LimitsConfig {
  * This avoids repeating the TData generic at every router instantiation.
  * Keep this interface empty in the library; users extend it in their own code.
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AppDataDefault {}
 
 /**
@@ -798,6 +810,7 @@ export interface WebSocketRouterOptions<
    * const router = createRouter({ logger });
    * ```
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logger?: any; // LoggerAdapter - use 'any' to avoid circular dependency
 
   /**

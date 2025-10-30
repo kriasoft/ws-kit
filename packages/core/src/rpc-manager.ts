@@ -7,7 +7,7 @@
 interface RpcRequestState {
   cancelled: boolean;
   terminalSent: boolean;
-  onCancelCallbacks: Array<() => void>;
+  onCancelCallbacks: (() => void)[];
   createdAt: number;
   lastActivityAt: number;
 }
@@ -299,6 +299,7 @@ export class RpcManager {
       });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const state = stateMap.get(correlationId)!;
     state.lastActivityAt = Date.now(); // Update activity on access
     return state;
