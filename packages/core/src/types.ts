@@ -839,6 +839,21 @@ export interface WebSocketRouterOptions<
    * Recommended: false in production (security), true in development (debugging).
    */
   exposeErrorDetails?: boolean;
+
+  /**
+   * Warn if RPC handler completes without calling reply or error (default: true, dev-mode only).
+   *
+   * When enabled (default), the router logs a warning if an RPC handler finishes
+   * execution without sending a terminal response (via ctx.reply() or ctx.error()).
+   * This helps catch common bugs where developers forget to reply, causing client timeouts.
+   *
+   * Warning is only emitted in development mode (NODE_ENV !== "production").
+   * For legitimate async patterns that spawn background work, set to false or ignore warnings.
+   *
+   * Example: setTimeout(reply) will trigger the warning since reply() happens after handler completes.
+   * Workaround: Disable this warning for async patterns that intentionally defer responses.
+   */
+  warnIncompleteRpc?: boolean;
 }
 
 /**

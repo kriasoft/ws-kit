@@ -196,6 +196,79 @@ New tests ensure invariants hold:
 
 **Library Status**: This library has not been published yet, so all API decisions are final with no backward compatibility constraints.
 
+## 7. Incomplete RPC Handler Detection
+
+**Problem**: RPC handlers that complete without calling `ctx.reply()` or `ctx.error()` cause clients to hang with timeouts. This is a common developer mistake but only caught at runtime via client timeout, with no server-side warning.
+
+**Solution**:
+
+Add automatic warning in development mode when RPC handlers complete without sending a terminal response:
+
+```typescript
+// Enable by default (router option)
+const router = createRouter({
+  warnIncompleteRpc: true, // Default: enabled
+});
+
+// Disable for legitimate async patterns
+const router = createRouter({
+  warnIncompleteRpc: false, // For spawned async work
+});
+```
+
+**Behavior**:
+
+- **When enabled** (default): After RPC handler execution completes, check if terminal response was sent
+- **If not terminal**: Emit warning with message type, correlation ID, and actionable guidance
+- **Dev-mode only**: Warnings only in `NODE_ENV !== "production"`
+- **Zero cost in production**: No checks or logging when disabled or in production
+
+**Warning message example**:
+
+```text
+[ws] RPC handler for GET_USER (req-abc123) completed without calling ctx.reply() or ctx.error().
+Client may timeout. Consider using ctx.reply() to send a response, or disable this warning
+with warnIncompleteRpc: false if spawning async work.
+```
+
+**Use cases**:
+
+✅ **Caught immediately**:
+
+- Sync handlers that forget reply
+- Async handlers that return early without error
+- Handlers with conditional returns missing error cases
+
+✅ **Known false positive (legitimate async)**:
+
+- `setTimeout(() => ctx.reply(...), delay)` — warns because reply happens after handler completes
+- `setImmediate(() => ctx.reply(...))` — same pattern
+
+**Mitigation for async patterns**:
+
+Either disable the warning or use a pattern that marks async work:
+
+```typescript
+// Option 1: Disable warning (for known async patterns)
+const router = createRouter({ warnIncompleteRpc: false });
+
+// Option 2: Use explicit deferral (future enhancement)
+// ctx.defer(() => reply()): // Explicitly mark async work
+```
+
+**Testing**:
+
+Tests verify:
+
+- Warning fires for sync/async handlers without reply
+- No warning when reply or error is sent
+- No warning for non-RPC messages
+- Respects `warnIncompleteRpc: false` config
+- Warning only in dev mode
+- Warning includes message type and correlation ID
+
+See `packages/core/test/features/rpc-incomplete-warning.test.ts` for full test coverage.
+
 ## Future Work
 
 - **Phase B**: Streaming RPC with enhanced AsyncIterable client API

@@ -31,6 +31,10 @@ export class RpcManager {
   // Inflight RPC counter per socket (for rate limiting)
   private readonly inflightByClient = new Map<string, number>();
 
+  // Track recently-completed RPC IDs (for detecting incomplete handlers)
+  // Format: `${clientId}:${correlationId}` to track across clients
+  private readonly recentlyTerminated = new Set<string>();
+
   // Idle cleanup interval handle
   private idleCleanupHandle?: ReturnType<typeof setInterval>;
 
@@ -97,6 +101,9 @@ export class RpcManager {
 
     state.terminalSent = true;
 
+    // Track that this RPC was terminated (persists after pruning)
+    this.recentlyTerminated.add(`${clientId}:${correlationId}`);
+
     // Prune immediately to free memory
     this.prune(clientId, correlationId);
 
@@ -154,6 +161,9 @@ export class RpcManager {
           }
         }
       }
+
+      // Clean up recently-terminated tracking for this socket
+      this.recentlyTerminated.delete(`${clientId}:${correlationId}`);
     }
 
     // Clear all state for this socket
@@ -163,8 +173,15 @@ export class RpcManager {
 
   /**
    * Check if an RPC has been terminated (reply or error already sent).
+   * Checks both current state and recently-terminated tracking.
    */
   isTerminal(clientId: string, correlationId: string): boolean {
+    // Check if marked as recently terminated (persists after pruning)
+    if (this.recentlyTerminated.has(`${clientId}:${correlationId}`)) {
+      return true;
+    }
+
+    // Check if still in state map (not yet pruned)
     const stateMap = this.statesByClient.get(clientId);
     if (!stateMap) {
       return false;
@@ -250,6 +267,9 @@ export class RpcManager {
 
           // Then prune the state
           this.prune(clientId, correlationId);
+
+          // Also clean up from recently-terminated tracking
+          this.recentlyTerminated.delete(`${clientId}:${correlationId}`);
         }
       }
     }

@@ -276,6 +276,81 @@ The test file verifies:
 - Metadata type safety
 - ADR-002 type override compatibility
 
+## RPC Incomplete Handler Detection Tests
+
+**Location**: `packages/core/test/features/rpc-incomplete-warning.test.ts`
+
+**Purpose**: Verify that the router warns developers when RPC handlers complete without sending a terminal response (reply or error). This helps catch common bugs where `ctx.reply()` or `ctx.error()` is forgotten, causing client timeouts.
+
+**Configuration tested**:
+
+- `warnIncompleteRpc?: boolean` (default: true)
+- Dev-mode only (`NODE_ENV !== "production"`)
+- Configuration flag respected (disabled when false)
+
+### Warning Triggering
+
+Tests verify warnings fire when:
+
+- Sync handler completes without reply or error
+- Async handler completes without reply or error
+- Handler returns early (e.g., without calling error in early-return branches)
+- Progress is sent but terminal response is missing
+
+### No Warning Cases
+
+Tests verify warnings do NOT fire when:
+
+- Handler calls `ctx.reply()` with response
+- Handler calls `ctx.error()` with error code and message
+- Non-RPC messages (event handlers) complete without reply
+- Configuration flag is disabled (`warnIncompleteRpc: false`)
+
+### Warning Message Content
+
+Tests verify warning messages include:
+
+- Message type being handled
+- Correlation ID for request identification
+- Actionable guidance (mention ctx.reply/error)
+- Suggestion to disable warning for legitimate async patterns
+
+### Configuration Behavior
+
+```typescript
+// Enabled by default
+const router = createRouter();
+// Warnings logged in dev mode
+
+// Disabled
+const router = createRouter({ warnIncompleteRpc: false });
+// No warnings even if handlers forget reply
+
+// Custom timeout config (orthogonal to warnings)
+const router = createRouter({
+  rpcTimeoutMs: 5000,
+  warnIncompleteRpc: true,
+});
+```
+
+### Legitimate Async Patterns
+
+The implementation warns for common bugs while providing escape hatch for legitimate async patterns:
+
+```typescript
+// ✅ Will warn (legitimate false positive - pattern should be disabled)
+router.rpc(LongTask, (ctx) => {
+  setTimeout(() => {
+    ctx.reply(Result, { done: true });
+  }, 1000);
+  // Handler completes before setTimeout fires
+});
+
+// Mitigation:
+const router = createRouter({ warnIncompleteRpc: false });
+// Or: configure per-router if needed
+```
+
 ## Runtime Testing
 
 ```typescript

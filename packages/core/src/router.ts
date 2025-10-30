@@ -129,6 +129,7 @@ export class WebSocketRouter<
   // Error handling configuration
   private readonly autoSendErrorOnThrow: boolean;
   private readonly exposeErrorDetails: boolean;
+  private readonly warnIncompleteRpc: boolean;
 
   // RPC state management (encapsulated in RpcManager)
   readonly #rpc: RpcManager;
@@ -170,6 +171,7 @@ export class WebSocketRouter<
     // Store error handling configuration
     this.autoSendErrorOnThrow = options.autoSendErrorOnThrow ?? true;
     this.exposeErrorDetails = options.exposeErrorDetails ?? false;
+    this.warnIncompleteRpc = options.warnIncompleteRpc ?? true;
 
     // Initialize RPC manager with configuration
     const rpcIdleTimeoutMs =
@@ -1694,6 +1696,21 @@ export class WebSocketRouter<
       // Execute the middleware pipeline with proper error handling
       try {
         await executeHandlerWithMiddleware();
+
+        // Warn if RPC handler completed without sending terminal response
+        if (
+          process.env.NODE_ENV !== "production" &&
+          this.warnIncompleteRpc &&
+          isRpc &&
+          correlationId &&
+          !this.#rpc.isTerminal(clientId, correlationId)
+        ) {
+          console.warn(
+            `[ws] RPC handler for ${messageType} (${correlationId}) completed without calling ctx.reply() or ctx.error(). ` +
+              `Client may timeout. Consider using ctx.reply() to send a response, or disable this warning ` +
+              `with warnIncompleteRpc: false if spawning async work.`,
+          );
+        }
       } catch (error) {
         const actualError =
           error instanceof Error ? error : new Error(String(error));
