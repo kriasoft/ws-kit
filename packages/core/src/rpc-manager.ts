@@ -232,6 +232,23 @@ export class RpcManager {
           console.warn(
             `[ws] Cleaning up idle RPC ${correlationId} (no activity for ${this.idleTimeoutMs}ms)`,
           );
+
+          // Fire cancel callbacks if not already cancelled
+          if (!state.cancelled) {
+            state.cancelled = true;
+            for (const callback of state.onCancelCallbacks) {
+              try {
+                callback();
+              } catch (error) {
+                console.error(
+                  "[ws] Error in onCancel callback during idle cleanup:",
+                  error,
+                );
+              }
+            }
+          }
+
+          // Then prune the state
           this.prune(clientId, correlationId);
         }
       }
