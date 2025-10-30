@@ -204,6 +204,78 @@ const union = z.discriminatedUnion("type", [TestSchema]);
 expectTypeOf(union).toMatchTypeOf<z.ZodDiscriminatedUnion<"type", any>>();
 ```
 
+## RPC Context Inference Type Tests
+
+**Location**: `packages/core/test/types/rpc-context-inference.test.ts`
+
+**Purpose**: Verify RPC context (via `router.rpc()`) and event context (via `router.on()`) have properly discriminated types with correct inference for RPC-specific methods: `reply()`, `progress()`, `onCancel()`, `deadline`.
+
+**Related**: ADR-001, ADR-002, ADR-015
+
+### Context Type Discrimination
+
+RPC context must have `isRpc: true` and RPC methods; event context must have `isRpc: false` without RPC methods:
+
+```typescript
+router.rpc(GetUser, (ctx) => {
+  expectTypeOf(ctx.isRpc).toEqualTypeOf<true>();
+  expectTypeOf(ctx.reply).toBeFunction();
+  expectTypeOf(ctx.deadline).toBeNumber();
+});
+
+router.on(UserLoggedIn, (ctx) => {
+  expectTypeOf(ctx.isRpc).toEqualTypeOf<false>();
+  // @ts-expect-error - RPC methods should not exist
+  ctx.reply;
+});
+```
+
+### Payload Conditional Typing
+
+Payload presence matches schema in both RPC and event contexts:
+
+```typescript
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_OK", {
+  name: z.string(),
+});
+router.rpc(GetUser, (ctx) => {
+  expectTypeOf(ctx.payload).toEqualTypeOf<{ id: string }>();
+});
+
+const Heartbeat = rpc("HEARTBEAT", undefined, "HEARTBEAT_ACK", undefined);
+router.rpc(Heartbeat, (ctx) => {
+  // @ts-expect-error - no payload
+  ctx.payload;
+});
+```
+
+### Middleware Context Narrowing
+
+Use `isRpc` flag to narrow context in middleware:
+
+```typescript
+router.use((ctx, next) => {
+  if (ctx.isRpc) {
+    ctx.onCancel(() => {
+      /* cleanup */
+    });
+  }
+  return next();
+});
+```
+
+### Test Coverage
+
+The test file verifies:
+
+- Context type discrimination and narrowing
+- Payload conditional typing (RPC & Event)
+- Union type handling (`MessageContext<T>` union)
+- Custom data type preservation
+- Complex generics (discriminated unions, nested payloads)
+- Metadata type safety
+- ADR-002 type override compatibility
+
 ## Runtime Testing
 
 ```typescript
