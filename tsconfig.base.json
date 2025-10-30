@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "lib": ["ES2022"],
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "declaration": true,
+    "declarationMap": true,
+    "composite": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+
+    "newLine": "lf",
+    "forceConsistentCasingInFileNames": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@ws-kit/core": ["packages/core/src/index.ts"],
+      "@ws-kit/bun": ["packages/bun/src/index.ts"],
+      "@ws-kit/zod": ["packages/zod/src/index.ts"],
+      "@ws-kit/valibot": ["packages/valibot/src/index.ts"],
+      "@ws-kit/redis-pubsub": ["packages/redis-pubsub/src/index.ts"],
+      "@ws-kit/cloudflare-do": ["packages/cloudflare-do/src/index.ts"],
+      "@ws-kit/client": ["packages/client/src/index.ts"],
+      "@ws-kit/client/zod": ["packages/client/zod/src/index.ts"],
+      "@ws-kit/client/valibot": ["packages/client/valibot/src/index.ts"]
+    },
+
+    "types": []
+  },
+  "exclude": ["**/dist", "**/.turbo", "**/node_modules", "examples"]
+}

@@ -1,0 +1,63 @@
+{
+  "name": "@ws-kit/valibot",
+  "version": "0.0.0",
+  "description": "Valibot validator adapter for WS-Kit with lightweight runtime validation and minimal bundle size",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/valibot"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "valibot",
+    "validator",
+    "adapter",
+    "validation",
+    "schema",
+    "typescript",
+    "schema-validation",
+    "type-safety",
+    "websocket-validation",
+    "data-validation",
+    "runtime-validation",
+    "valibot-integration",
+    "message-validation",
+    "lightweight",
+    "modular",
+    "websocket",
+    "realtime",
+    "type-safe"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ws-kit/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "valibot": ">=1.0.0"
+  },
+  "devDependencies": {
+    "valibot": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

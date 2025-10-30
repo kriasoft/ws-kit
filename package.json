@@ -1,40 +1,11 @@
 {
-  "name": "bun-ws-router",
-  "version": "0.6.1",
-  "description": "Lightweight client/server WebSocket router for Bun with type-safe Zod/Valibot validation.",
-  "keywords": [
-    "broadcast",
-    "bun",
-    "client",
-    "framework",
-    "handler",
-    "hono",
-    "messaging",
-    "middleware",
-    "pubsub",
-    "realtime",
-    "router",
-    "schema",
-    "server",
-    "socket",
-    "socketio",
-    "type-safe",
-    "typesafe",
-    "typescript",
-    "valibot",
-    "validation",
-    "web-socket",
-    "websocket",
-    "ws",
-    "zod"
-  ],
-  "homepage": "https://kriasoft.com/bun-ws-router/",
-  "bugs": "https://github.com/kriasoft/bun-ws-router/issues",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kriasoft/bun-ws-router.git"
-  },
+  "name": "ws-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare",
   "license": "MIT",
+  "packageManager": "bun@1.3.1",
   "author": "Kriasoft <hello@kriasoft.com>",
   "contributors": [
     {
@@ -42,98 +13,52 @@
       "url": "https://github.com/sponsors/koistya"
     }
   ],
-  "type": "module",
-  "exports": {
-    ".": {
-      "bun": "./index.ts",
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./zod": {
-      "bun": "./zod/index.ts",
-      "types": "./dist/zod/index.d.ts",
-      "default": "./dist/zod/index.js"
-    },
-    "./valibot": {
-      "bun": "./valibot/index.ts",
-      "types": "./dist/valibot/index.d.ts",
-      "default": "./dist/valibot/index.js"
-    },
-    "./zod/client": {
-      "types": "./dist/zod/client.d.ts",
-      "default": "./dist/zod/client.js"
-    },
-    "./valibot/client": {
-      "types": "./dist/valibot/client.d.ts",
-      "default": "./dist/valibot/client.js"
-    },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
-    },
-    "./package.json": "./package.json"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git"
   },
-  "types": "./dist/index.d.ts",
-  "files": [
-    "client/",
-    "dist/",
-    "shared/",
-    "valibot/",
-    "zod/",
-    "index.ts"
+  "workspaces": [
+    "examples/*",
+    "packages/*"
   ],
-  "dependencies": {
-    "uuid": "^13.0.0"
-  },
-  "peerDependencies": {
-    "@types/bun": ">=1.1.0",
-    "valibot": ">=1.1.0",
-    "zod": ">=4.0.14"
-  },
-  "peerDependenciesMeta": {
-    "zod": {
-      "optional": true
-    },
-    "valibot": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@eslint/js": "^9.37.0",
-    "@types/bun": "^1.2.23",
+    "@changesets/cli": "^2.29.7",
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "@eslint/js": "^9.38.0",
+    "@types/bun": "^1.3.1",
+    "bun-types": "^1.3.1",
+    "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint": "^9.37.0",
+    "expect-type": "^1.1.6",
     "globals": "^16.4.0",
-    "hono": "^4.9.10",
+    "hono": "^4.10.4",
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
-    "lint-staged": "^16.2.3",
+    "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
-    "typescript-eslint": "^8.46.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
     "valibot": "^1.1.0",
     "vitepress": "^1.6.4",
     "zod": "^4.1.12"
   },
   "scripts": {
     "prepare": "husky",
-    "build": "rm -rf dist && tsc --project tsconfig.build.json",
+    "build": "tsc -b",
+    "rebuild": "tsc -b --clean && tsc -b",
+    "clean": "tsc -b --clean",
+    "test": "bun test",
+    "typecheck": "tsc -b && tsc --noEmit",
     "lint": "eslint --report-unused-disable-directives .",
     "lint:fix": "eslint --report-unused-disable-directives --fix .",
-    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs",
-    "docs:deploy": "bunx gh-pages -d docs/.vitepress/dist"
+    "docs:build": "vitepress build",
+    "docs:deploy": "gh-pages -d .vitepress/dist"
   },
   "lint-staged": {
     "*.{ts,js,json,md}": [
       "bun prettier --write"
-    ],
-    "{shared,valibot,zod}/**/*.ts": [
-      "bun tsc --noEmit --skipLibCheck"
     ]
   },
   "prettier": {

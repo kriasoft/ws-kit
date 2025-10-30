@@ -1,0 +1,19 @@
+{
+  "name": "bun-zod-chat-example",
+  "version": "0.0.0",
+  "description": "Real-time chat application using @ws-kit/bun + @ws-kit/zod",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "start": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "@ws-kit/bun": "workspace:*",
+    "@ws-kit/core": "workspace:*",
+    "@ws-kit/zod": "workspace:*",
+    "zod": "^4.0.0"
+  }
+}

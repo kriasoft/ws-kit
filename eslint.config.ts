@@ -9,7 +9,14 @@ import tslint from "typescript-eslint";
 export default defineConfig([
   {
     name: "global-ignores",
-    ignores: ["node_modules", ".bun/", "dist/", "docs/"],
+    ignores: [
+      "node_modules",
+      ".bun/",
+      ".vitepress/dist",
+      ".vitepress/cache",
+      "docs/",
+      "packages/*/dist/",
+    ],
   },
   {
     name: "eslint-recommended",
@@ -26,7 +33,7 @@ export default defineConfig([
   },
   {
     name: "test-files-relaxed",
-    files: ["test/**/*.ts", "test/**/*.test.ts"],
+    files: ["packages/**/test/**/*.ts", "packages/**/test/**/*.test.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",

@@ -1,11 +1,36 @@
-# Bun WebSocket Router
+# WS-Kit — Type-Safe WebSocket Router
 
-[![npm version](https://img.shields.io/npm/v/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
-[![npm downloads](https://img.shields.io/npm/dm/bun-ws-router.svg)](https://www.npmjs.com/package/bun-ws-router)
-[![GitHub Actions](https://github.com/kriasoft/bun-ws-router/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/bun-ws-router/actions)
+[![npm version](https://img.shields.io/npm/v/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
+[![npm downloads](https://img.shields.io/npm/dm/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
+[![GitHub Actions](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
 [![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
-Type-safe WebSocket communication for Bun servers and browsers with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
+Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
+
+## ⚠️ Environment Requirements
+
+**WS-Kit is ESM-only** and optimized for modern runtimes:
+
+- **Bun** (recommended) — native ESM and WebSocket support
+- **Cloudflare Workers/Durable Objects** — native ESM support
+- **Node.js** (with bundler) — requires Node 18+ and a bundler like Vite, esbuild, or Rollup
+- **Browser** — works with modern bundlers
+
+**Not compatible** with CommonJS-only projects or legacy runtimes.
+
+## Monorepo Structure
+
+WS-Kit is organized as a modular monorepo with independent packages:
+
+- **`@ws-kit/core`** — Platform-agnostic router and type system (foundation)
+- **`@ws-kit/zod`** — Zod validator adapter with `createRouter()` helper
+- **`@ws-kit/valibot`** — Valibot validator adapter with `createRouter()` helper
+- **`@ws-kit/bun`** — Bun platform adapter with `serve()` high-level and `createBunHandler()` low-level
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
+- **`@ws-kit/client`** — Universal browser/Node.js client
+- **`@ws-kit/redis-pubsub`** — Optional Redis PubSub for multi-server scaling
+
+Combine any validator adapter with platform-specific packages. Each platform package (e.g., `@ws-kit/bun`) exports both high-level convenience (`serve()`) and low-level APIs (`createBunHandler()`).
 
 ### Key Features
 
@@ -31,73 +56,106 @@ Type-safe WebSocket communication for Bun servers and browsers with **Zod** or *
 
 ## Installation
 
-Choose your validation library:
+Choose your validation library and platform:
 
 ```bash
-# With Zod
-bun add bun-ws-router zod
-bun add @types/bun -D
+# With Zod on Bun (recommended for most projects)
+bun add @ws-kit/zod @ws-kit/bun
+bun add zod bun @types/bun -D
 
-# With Valibot (60-80% smaller bundles)
-bun add bun-ws-router valibot
-bun add @types/bun -D
+# With Valibot on Bun (lighter bundles)
+bun add @ws-kit/valibot @ws-kit/bun
+bun add valibot bun @types/bun -D
 ```
 
-## Getting Started
+## Quick Start
 
-The following example demonstrates how to set up a Bun server with both (RESTful) HTTP and WebSocket routers.
+The **export-with-helpers pattern** is the first-class way to use WS-Kit —no factories, no dual imports:
 
 ```ts
-import { Hono } from "hono";
-import { WebSocketRouter } from "bun-ws-router/zod"; // Explicit Zod import
-import { exampleRouter } from "./example";
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
 
-// HTTP router
-const app = new Hono();
-app.get("/", (c) => c.text("Welcome to Hono!"));
+// Define message schemas with full type inference
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
 
-// WebSocket router
-const ws = new WebSocketRouter();
-ws.addRoutes(exampleRouter); // Add routes from another file
+// Create type-safe router with optional connection data
+type AppData = { userId?: string };
+const router = createRouter<AppData>();
 
-Bun.serve({
-  port: 3000,
-
-  fetch(req, server) {
-    const url = new URL(req.url);
-
-    // Handle WebSocket upgrade requests
-    if (url.pathname === "/ws") {
-      return ws.upgrade(req, {
-        server,
-      });
-    }
-
-    // Handle regular HTTP requests
-    return app.fetch(req, { server });
-  },
-
-  // Handle WebSocket connections
-  websocket: ws.websocket,
+// Register handlers — fully typed!
+router.on(PingMessage, (ctx) => {
+  console.log(`Received: ${ctx.payload.text}`); // ✅ Fully typed
+  ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
-console.log(`WebSocket server listening on ws://localhost:3000/ws`);
+// Serve with type-safe handlers
+serve(router, {
+  port: 3000,
+  authenticate(req) {
+    const token = req.headers.get("authorization");
+    return token ? { userId: "u_123" } : undefined;
+  },
+});
+```
+
+**That's it!** Validator, router, messages, and platform adapter all come from focused packages. Type-safe from server to client.
+
+### Eliminating Verbose Generics with Declaration Merging
+
+For applications with multiple routers, reduce repetition by declaring your connection data type once using TypeScript **declaration merging**. Then omit the generic everywhere — it's automatic:
+
+```ts
+// types/app-data.d.ts
+declare module "@ws-kit/core" {
+  interface AppDataDefault {
+    userId?: string;
+    email?: string;
+    roles?: string[];
+  }
+}
+```
+
+Now all routers automatically use this type — no repetition:
+
+```ts
+// ✅ No generic needed — automatically uses AppDataDefault
+const router = createRouter();
+
+router.on(SecureMessage, (ctx) => {
+  // ✅ ctx.ws.data is properly typed with all default fields
+  const userId = ctx.ws.data?.userId; // string | undefined
+  const roles = ctx.ws.data?.roles; // string[] | undefined
+});
+```
+
+If you need custom data for a specific router, use an explicit generic:
+
+```ts
+type CustomData = { feature: string; version: number };
+const featureRouter = createRouter<CustomData>();
+```
+
+### Do and Don't
+
+```
+✅ DO:  import { z, message, createRouter } from "@ws-kit/zod"
+❌ DON'T: import { z } from "zod"  (direct imports cause dual-package hazards)
 ```
 
 ## Validation Libraries
 
-You can choose between Zod and Valibot validators using different import paths:
+Choose between Zod and Valibot — same API, different trade-offs:
 
 ```ts
-// Zod - mature ecosystem, method chaining
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { z } from "zod";
-const { messageSchema } = createMessageSchema(z);
+// Zod - mature ecosystem, familiar method chaining API
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
 
-// Valibot - 90% smaller bundles, functional pipelines
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
-import * as v from "valibot";
-const { messageSchema } = createMessageSchema(v);
+// Valibot - 60-80% smaller bundles, functional composition
+import { v, message, createRouter } from "@ws-kit/valibot";
+import { serve } from "@ws-kit/bun";
 ```
 
 ### Quick Comparison
@@ -109,293 +167,434 @@ const { messageSchema } = createMessageSchema(v);
 | API Style   | Method chaining          | Functional               |
 | Best for    | Server-side, familiarity | Client-side, performance |
 
-## How to handle authentication
+## Serving Your Router
 
-You can handle authentication by checking the `Authorization` header for a JWT token or any other authentication method you prefer. The following example demonstrates how to verify a JWT token and pass the user information to the WebSocket router.
+Each platform adapter exports both high-level convenience and low-level APIs. All approaches support authentication, lifecycle hooks, and error handling.
+
+### Platform-Specific Adapters (Recommended)
+
+Use platform-specific imports for production deployments — they provide correct options, type safety, and clear errors:
+
+**High-level (recommended):**
 
 ```ts
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { DecodedIdToken } from "firebase-admin/auth";
+import { serve } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
-import { verifyIdToken } from "./auth"; // Your authentication logic
+const router = createRouter();
+serve(router, { port: 3000 });
+```
 
-type Meta = {
-  user?: DecodedIdToken | null;
-};
+**Low-level (advanced control):**
 
-// WebSocket router
-const ws = new WebSocketRouter<Meta>();
+```ts
+import { createBunHandler } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter();
+const { fetch, websocket } = createBunHandler(router);
 
 Bun.serve({
   port: 3000,
-
-  async fetch(req, server) {
-    const url = new URL(req.url);
-
-    // Check if the user is authenticated
-    const user = await verifyIdToken(req);
-
-    // Handle WebSocket upgrade requests
-    if (url.pathname === "/ws") {
-      return ws.upgrade(req, {
-        server,
-        data: { user },
-      });
+  fetch(req, server) {
+    if (new URL(req.url).pathname === "/ws") {
+      return fetch(req, server);
     }
-
-    // Handle regular HTTP requests
-    return await app.fetch(req, { server, user });
+    return new Response("Not Found", { status: 404 });
   },
-
-  // Handle WebSocket connections
-  websocket: ws.websocket,
+  websocket,
 });
 ```
 
-The `verifyIdToken` function is a placeholder for your authentication logic which could use user ID token verification from `firebase-admin` or any other authentication library.
+Benefits:
 
-By verifying the user before the WebSocket connection is established and passing the `user` data, you ensure that only authenticated users can connect, and you have their info ready to use in your `onOpen`, `onMessage`, and `onClose` handlers.
+- **Zero runtime detection** — No overhead, optimal tree-shaking
+- **Type-safe options** — Platform-specific settings built-in (e.g., port for Bun)
+- **Clear error messages** — Misconfigurations fail fast with helpful guidance
+- **Deterministic behavior** — Same behavior across all environments
 
-## How to define message types
-
-To define message types, first create a message schema factory using your validation library, then use it to define your message schemas. This approach ensures proper TypeScript support and avoids dual package hazard issues.
-
-### With Zod
+**For Cloudflare Durable Objects:**
 
 ```ts
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createRouter } from "@ws-kit/zod";
 
-// Create the message schema factory with your Zod instance
-const { messageSchema } = createMessageSchema(z);
+const router = createRouter();
+const handler = createDurableObjectHandler(router, {
+  authenticate(req) {
+    /* ... */
+  },
+});
 
-// Now define your message types
-export const JoinRoom = messageSchema("JOIN_ROOM", {
+export default {
+  fetch(req: Request) {
+    return handler.fetch(req);
+  },
+};
+```
+
+### Authentication
+
+Secure your router by validating clients during the WebSocket upgrade. Pass authenticated user data via the `authenticate` hook — all handlers then have type-safe access to this data:
+
+```ts
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { verifyIdToken } from "./auth"; // Your authentication logic
+
+// Define secured message
+const SendMessage = message("SEND_MESSAGE", {
+  text: z.string(),
+});
+
+// Define router with user data type
+type AppData = {
+  userId?: string;
+  email?: string;
+  roles?: string[];
+};
+
+const router = createRouter<AppData>();
+
+// Global middleware for auth checks
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
+    return; // Skip handler
+  }
+  return next();
+});
+
+// Handlers have full type safety
+router.on(SendMessage, (ctx) => {
+  const userId = ctx.ws.data?.userId; // ✅ Type narrowed
+  const email = ctx.ws.data?.email; // ✅ Type narrowed
+  console.log(`${email} sent: ${ctx.payload.text}`);
+});
+
+// Authenticate and serve
+serve(router, {
+  port: 3000,
+  authenticate(req) {
+    // Verify JWT or session token
+    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    if (token) {
+      const decoded = verifyIdToken(token);
+      return {
+        userId: decoded.uid,
+        email: decoded.email,
+        roles: decoded.roles || [],
+      };
+    }
+  },
+  onError(error, ctx) {
+    console.error(`ws-kit error in ${ctx?.type}:`, error);
+  },
+  onOpen(ctx) {
+    console.log(`User ${ctx.ws.data?.email} connected`);
+  },
+  onClose(ctx) {
+    console.log(`User ${ctx.ws.data?.email} disconnected`);
+  },
+});
+```
+
+The `authenticate` function receives the HTTP upgrade request and returns user data that becomes `ctx.ws.data` in all handlers. If it returns `null` or `undefined`, the connection is rejected.
+
+## Message Schemas
+
+Use the `message()` helper directly — no factory pattern needed:
+
+```ts
+import { z, message } from "@ws-kit/zod";
+
+// Define your message types
+export const JoinRoom = message("JOIN_ROOM", {
   roomId: z.string(),
 });
 
-export const UserJoined = messageSchema("USER_JOINED", {
+export const UserJoined = message("USER_JOINED", {
   roomId: z.string(),
   userId: z.string(),
 });
 
-export const UserLeft = messageSchema("USER_LEFT", {
+export const UserLeft = message("USER_LEFT", {
   userId: z.string(),
 });
 
-export const SendMessage = messageSchema("SEND_MESSAGE", {
+export const SendMessage = message("SEND_MESSAGE", {
   roomId: z.string(),
-  message: z.string(),
+  text: z.string(),
+});
+
+// With Valibot
+import { v, message } from "@ws-kit/valibot";
+
+export const JoinRoom = message("JOIN_ROOM", {
+  roomId: v.string(),
 });
 ```
 
-### With Valibot
+Simple, no factories, one canonical import source.
+
+### Request-Response Pairs with `rpc()`
+
+For request-response patterns, use `rpc()` to bind request and response schemas together — no schema repetition at call sites:
 
 ```ts
-import * as v from "valibot";
-import { createMessageSchema } from "bun-ws-router/valibot";
+import { z, rpc, createRouter } from "@ws-kit/zod";
 
-// Create the message schema factory with your Valibot instance
-const { messageSchema } = createMessageSchema(v);
+// Define RPC schema - binds request to response type
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+const Query = rpc("QUERY", { id: z.string() }, "RESULT", { data: z.string() });
 
-// Now define your message types
-export const JoinRoom = messageSchema("JOIN_ROOM", {
-  roomId: v.string(),
+// With Valibot
+import { v, rpc } from "@ws-kit/valibot";
+const Ping = rpc("PING", { text: v.string() }, "PONG", { reply: v.string() });
+```
+
+The client auto-detects the response type from the RPC schema, eliminating the need to specify it separately on every request.
+
+### RPC Handlers
+
+Register RPC handlers with `router.rpc()` to use request/response pattern with `ctx.reply()` and `ctx.progress()`:
+
+```ts
+import { z, rpc, createRouter } from "@ws-kit/zod";
+
+const GetUser = rpc("GET_USER", { userId: z.string() }, "USER_DATA", {
+  name: z.string(),
+  email: z.string(),
 });
 
-export const UserJoined = messageSchema("USER_JOINED", {
-  roomId: v.string(),
-  userId: v.string(),
+const router = createRouter();
+
+router.rpc(GetUser, (ctx) => {
+  const { userId } = ctx.payload;
+
+  // Send terminal response (one-shot)
+  ctx.reply({ name: "Alice", email: "alice@example.com" });
 });
 ```
 
-> **Note**: The factory pattern (`createMessageSchema`) ensures that your schemas use the same validation library instance as your application, enabling features like discriminated unions and preventing type conflicts.
-
-## How to define routes
-
-Define routes using the `WebSocketRouter` instance methods: `onOpen`, `onMessage`, and `onClose`.
+For streaming responses, use `ctx.progress()` for non-terminal updates before the final `ctx.reply()`:
 
 ```ts
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
+const DownloadFile = rpc(
+  "DOWNLOAD_FILE",
+  { fileId: z.string() },
+  "FILE_CHUNK",
+  { chunk: z.string(), finished: z.boolean() },
+);
+
+router.rpc(DownloadFile, (ctx) => {
+  const { fileId } = ctx.payload;
+
+  // Send progress updates (non-terminal)
+  ctx.progress({ chunk: "data...", finished: false });
+  ctx.progress({ chunk: "more...", finished: false });
+
+  // Send terminal response (final)
+  ctx.reply({ chunk: "end", finished: true });
+});
+```
+
+**Fire-and-forget vs RPC:**
+
+- `router.on(Message, handler)` — Use `ctx.send()` for fire-and-forget messages
+- `router.rpc(RpcSchema, handler)` — Use `ctx.reply()` (terminal) and `ctx.progress()` (streaming) for request/response
+
+## Handlers and Routing
+
+Register handlers with full type safety. The context includes schema-typed payloads, connection data, and lifecycle hooks:
+
+```ts
+import { z, message, createRouter } from "@ws-kit/zod";
 import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
 
-const { messageSchema } = createMessageSchema(z);
-
-// Define custom connection data type
 type ConnectionData = {
   userId?: string;
   roomId?: string;
 };
 
-const ws = new WebSocketRouter<ConnectionData>();
+const router = createRouter<ConnectionData>();
 
 // Handle new connections
-ws.onOpen((ctx) => {
-  console.log(`Client connected: ${ctx.ws.data.clientId}`);
-  // ctx.ws.data.clientId is always present (UUID v7)
-  // Send welcome message if needed
+router.onOpen((ctx) => {
+  console.log(`Client connected: ${ctx.ws.data.userId}`);
 });
 
-// Handle specific message types
-ws.onMessage(JoinRoom, (ctx) => {
-  const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+// Handle specific message types (fully typed!)
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload; // ✅ Fully typed from schema
+  const userId = ctx.ws.data?.userId;
 
-  // Store room in connection data
-  ctx.ws.data.roomId = roomId;
+  // Update connection data
+  ctx.assignData({ roomId });
 
-  // Subscribe to room topic for broadcasts
-  ctx.ws.subscribe(roomId);
+  // Subscribe to room broadcasts
+  ctx.subscribe(roomId);
 
   console.log(`User ${userId} joined room: ${roomId}`);
-  console.log(`Message received at: ${ctx.receivedAt}`); // Server timestamp
+  console.log(`Message received at: ${ctx.receivedAt}`);
 
-  // Send confirmation back to this client
-  ctx.send(UserJoined, { roomId, userId });
+  // Send confirmation (type-safe!)
+  ctx.send(UserJoined, { roomId, userId: userId || "anonymous" });
 });
 
-ws.onMessage(SendMessage, (ctx) => {
-  const { message } = ctx.payload;
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
-  const roomId = ctx.ws.data.roomId;
+router.on(SendMessage, (ctx) => {
+  const { text } = ctx.payload;
+  const userId = ctx.ws.data?.userId;
+  const roomId = ctx.ws.data?.roomId;
 
-  console.log(`Message in room ${roomId} from ${userId}: ${message}`);
-  // See "How to broadcast messages" section for broadcasting logic
+  console.log(`[${roomId}] ${userId}: ${text}`);
+
+  // Broadcast to room subscribers (type-safe!)
+  router.publish(roomId, SendMessage, { text, userId: userId || "anonymous" });
 });
 
 // Handle disconnections
-ws.onClose((ctx) => {
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
-  console.log(`Client disconnected: ${userId}, code: ${ctx.code}`);
-
-  if (ctx.ws.data.roomId) {
-    // Unsubscribe and notify others (see broadcasting section)
-    ctx.ws.unsubscribe(ctx.ws.data.roomId);
-  }
-});
-```
-
-**Handler Context Fields:**
-
-- `ctx.ws` — ServerWebSocket instance with connection data
-- `ctx.ws.data.clientId` — Auto-generated UUID v7 (always present)
-- `ctx.type` — Message type literal (e.g., `"JOIN_ROOM"`)
-- `ctx.payload` — Typed payload (only exists when schema defines it)
-- `ctx.meta` — Client-provided metadata (correlationId, timestamp, custom fields)
-- `ctx.receivedAt` — Server receive timestamp (use for rate limiting, ordering, TTL)
-- `ctx.send()` — Type-safe send function (sends to this client only)
-
-## How to broadcast messages
-
-Broadcasting messages to multiple clients is a common requirement for real-time applications. `bun-ws-router` complements Bun's built-in PubSub functionality with schema validation support.
-
-### Option 1: Using Bun's native WebSocket PubSub
-
-Bun's WebSocket implementation includes built-in support for the PubSub pattern through `subscribe`, `publish`, and `unsubscribe` methods:
-
-```ts
-ws.onMessage(JoinRoom, (ctx) => {
-  const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
-
-  // Store room ID in connection data
-  ctx.ws.data.roomId = roomId;
-
-  // Subscribe the client to the room's topic
-  ctx.ws.subscribe(roomId);
-
-  console.log(`User ${userId} joined room: ${roomId}`);
-
-  // Send confirmation back to the user who joined
-  ctx.send(UserJoined, { roomId, userId });
-
-  // Broadcast to all other subscribers that a new user joined
-  const message = JSON.stringify({
-    type: "USER_JOINED",
-    meta: { timestamp: Date.now() },
-    payload: { roomId, userId },
-  });
-  ctx.ws.publish(roomId, message);
-});
-
-ws.onClose((ctx) => {
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
-  const roomId = ctx.ws.data.roomId;
+router.onClose((ctx) => {
+  const userId = ctx.ws.data?.userId;
+  const roomId = ctx.ws.data?.roomId;
 
   if (roomId) {
-    // Unsubscribe from room
-    ctx.ws.unsubscribe(roomId);
+    ctx.unsubscribe(roomId);
+    // Notify others
+    router.publish(roomId, UserLeft, { userId: userId || "anonymous" });
+  }
+  console.log(`Disconnected: ${userId}`);
+});
+```
 
-    // Notify others the user has left
-    const message = JSON.stringify({
-      type: "USER_LEFT",
-      meta: { timestamp: Date.now() },
-      payload: { userId },
+**Context Fields:**
+
+- `ctx.payload` — Typed payload from schema (✅ fully typed!)
+- `ctx.ws.data` — Connection data (type-narrowed from `<TData>`)
+- `ctx.type` — Message type literal (e.g., `"JOIN_ROOM"`)
+- `ctx.meta` — Client metadata (correlationId, timestamp)
+- `ctx.receivedAt` — Server receive timestamp
+- `ctx.send()` — Type-safe send to this client only
+- `ctx.assignData()` — Type-safe partial data updates
+- `ctx.subscribe()` / `ctx.unsubscribe()` — Topic management
+- `ctx.error()` — Send type-safe error messages
+
+## Broadcasting and Subscriptions
+
+Broadcasting messages to multiple clients is type-safe with schema validation:
+
+```ts
+import { z, message, createRouter } from "@ws-kit/zod";
+
+const RoomUpdate = message("ROOM_UPDATE", {
+  roomId: z.string(),
+  users: z.number(),
+  message: z.string(),
+});
+
+const router = createRouter<{ roomId?: string }>();
+
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+
+  // Subscribe to room updates
+  ctx.subscribe(roomId);
+  ctx.assignData({ roomId });
+
+  console.log(`User joined: ${roomId}`);
+
+  // Broadcast to all room subscribers (type-safe!)
+  router.publish(roomId, RoomUpdate, {
+    roomId,
+    users: 5,
+    message: "A user has joined",
+  });
+});
+
+router.on(SendMessage, (ctx) => {
+  const roomId = ctx.ws.data?.roomId;
+
+  // Broadcast message to room (fully typed, no JSON.stringify needed!)
+  router.publish(roomId, RoomUpdate, {
+    roomId,
+    users: 5,
+    message: ctx.payload.text,
+  });
+});
+
+router.onClose((ctx) => {
+  const roomId = ctx.ws.data?.roomId;
+  if (roomId) {
+    ctx.unsubscribe(roomId);
+    router.publish(roomId, RoomUpdate, {
+      roomId,
+      users: 4,
+      message: "A user has left",
     });
-    ctx.ws.publish(roomId, message);
   }
 });
 ```
 
-### Option 2: Using the publish helper function
+**Broadcasting API:**
 
-The library provides a helper function that combines schema validation with publishing:
+- `router.publish(scope, schema, payload)` — Type-safe broadcast to all subscribers on a scope
+- `ctx.subscribe(topic)` — Subscribe connection to a topic (adapter-dependent)
 
 ```ts
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { publish } from "bun-ws-router/zod/publish";
-import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
+type AppData = { userId?: string; roomId?: string };
+const router = createRouter<AppData>();
 
-ws.onMessage(JoinRoom, (ctx) => {
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const UserJoined = message("USER_JOINED", {
+  roomId: z.string(),
+  userId: z.string(),
+});
+const SendMessage = message("SEND_MESSAGE", {
+  roomId: z.string(),
+  message: z.string(),
+});
+const NewMessage = message("NEW_MESSAGE", {
+  roomId: z.string(),
+  userId: z.string(),
+  message: z.string(),
+});
+const UserLeft = message("USER_LEFT", { userId: z.string() });
+
+router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+  const userId = ctx.ws.data?.userId || "anonymous";
 
   // Store room ID and subscribe to topic
-  ctx.ws.data.roomId = roomId;
-  ctx.ws.subscribe(roomId);
+  ctx.assignData({ roomId });
+  ctx.subscribe(roomId);
 
-  // Send confirmation back to the user who joined
+  // Send confirmation back
   ctx.send(UserJoined, { roomId, userId });
 
-  // Broadcast to other subscribers with schema validation
-  publish(ctx.ws, roomId, UserJoined, { roomId, userId });
+  // Broadcast to room subscribers with schema validation
+  ctx.publish(roomId, UserJoined, { roomId, userId });
 });
 
-ws.onMessage(SendMessage, (ctx) => {
-  const { roomId, message } = ctx.payload;
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
+router.on(SendMessage, (ctx) => {
+  const { roomId, message: msg } = ctx.payload;
+  const userId = ctx.ws.data?.userId || "anonymous";
 
-  console.log(`Message in room ${roomId} from ${userId}: ${message}`);
+  console.log(`Message in room ${roomId} from ${userId}: ${msg}`);
 
-  // Broadcast the message to all subscribers in the room
-  const NewMessage = messageSchema("NEW_MESSAGE", {
-    roomId: z.string(),
-    userId: z.string(),
-    message: z.string(),
-  });
-
-  publish(ctx.ws, roomId, NewMessage, {
-    roomId,
-    userId,
-    message,
-  });
+  // Broadcast the message to all room subscribers
+  ctx.publish(roomId, NewMessage, { roomId, userId, message: msg });
 });
 
-ws.onClose((ctx) => {
-  const userId = ctx.ws.data.userId || ctx.ws.data.clientId;
-  const roomId = ctx.ws.data.roomId;
+router.onClose((ctx) => {
+  const userId = ctx.ws.data?.userId || "anonymous";
+  const roomId = ctx.ws.data?.roomId;
 
   if (roomId) {
-    ctx.ws.unsubscribe(roomId);
-
-    // Notify others using the publish helper
-    publish(ctx.ws, roomId, UserLeft, { userId });
+    ctx.unsubscribe(roomId);
+    // Notify others in the room
+    router.publish(roomId, UserLeft, { userId });
   }
 });
 ```
@@ -404,156 +603,147 @@ The `publish()` function ensures that all broadcast messages are validated again
 
 ## Error handling and sending error messages
 
-Effective error handling is crucial for maintaining robust WebSocket connections. `bun-ws-router` provides built-in tools for standardized error messages that align with the library's schema validation pattern.
+Effective error handling is crucial for maintaining robust WebSocket connections. WS-Kit provides built-in error response support with standardized error codes.
 
-### Using ErrorCode and ErrorMessage schema
+### Error handling with ctx.error()
 
-The library includes a standardized error schema and predefined error codes:
+Use `ctx.error()` to send type-safe error responses:
 
 ```ts
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-const { ErrorMessage, ErrorCode } = createMessageSchema(z);
+type AppData = { userId?: string };
+const router = createRouter<AppData>();
 
-ws.onMessage(JoinRoom, async (ctx) => {
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Check if room exists
   const roomExists = await checkRoomExists(roomId);
   if (!roomExists) {
     // Send error with standardized code
-    ctx.send(ErrorMessage, {
-      code: ErrorCode.RESOURCE_NOT_FOUND,
-      message: `Room ${roomId} does not exist`,
-      context: { roomId }, // Optional context for debugging
-    });
+    ctx.error("NOT_FOUND", `Room ${roomId} does not exist`, { roomId });
     return;
   }
 
-  // Continue with normal flow...
-  ctx.ws.data.roomId = roomId;
+  // Continue with normal flow
+  ctx.assignData({ roomId });
   ctx.ws.subscribe(roomId);
-  // ...
 });
 ```
 
+### Standard error codes
+
+The standard error codes (aligned with gRPC) are:
+
+**Terminal errors (don't retry):**
+
+- `UNAUTHENTICATED` — Authentication failed
+- `PERMISSION_DENIED` — Authenticated but lacks rights
+- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
+- `FAILED_PRECONDITION` — Operation preconditions not met
+- `NOT_FOUND` — Resource not found
+- `ALREADY_EXISTS` — Resource already exists
+- `ABORTED` — Operation aborted
+
+**Transient errors (retry with backoff):**
+
+- `DEADLINE_EXCEEDED` — Request deadline exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit, backpressure, or quota exceeded
+- `UNAVAILABLE` — Service temporarily unavailable
+
+**Server & evolution:**
+
+- `UNIMPLEMENTED` — Feature not implemented
+- `INTERNAL` — Server error
+- `CANCELLED` — Request cancelled by client
+
+See [ADR-015](docs/adr/015-error-handling.md) for the complete error code taxonomy.
+
 ### Custom error handling
 
-You can add your own error handling middleware by using the `onMessage` handler:
+You can add error handling middleware or lifecycle hooks:
 
 ```ts
 // Error handling in connection setup
-ws.onOpen((ctx) => {
+router.onOpen((ctx) => {
   try {
-    // Your connection setup logic
-    console.log(`Client ${ctx.ws.data.clientId} connected`);
+    console.log(`Client ${ctx.ws.data?.clientId} connected`);
   } catch (error) {
     console.error("Error in connection setup:", error);
-    ctx.send(ErrorMessage, {
-      code: ErrorCode.INTERNAL_SERVER_ERROR,
-      message: "Failed to set up connection",
-    });
+    ctx.error("INTERNAL", "Failed to set up connection");
+  }
+});
+
+// Error handling with middleware
+router.use((ctx, next) => {
+  try {
+    return next();
+  } catch (error) {
+    ctx.error("INTERNAL", "Request failed");
   }
 });
 
 // Error handling in message handlers
-ws.onMessage(AuthenticateUser, (ctx) => {
+const AuthenticateUser = message("AUTH", { token: z.string() });
+router.on(AuthenticateUser, (ctx) => {
   try {
-    // Validate token
     const { token } = ctx.payload;
     const user = validateToken(token);
 
     if (!user) {
-      ctx.send(ErrorMessage, {
-        code: ErrorCode.AUTHENTICATION_FAILED,
-        message: "Invalid authentication token",
-      });
+      ctx.error("UNAUTHENTICATED", "Invalid authentication token");
       return;
     }
 
-    // Store user data for future requests
-    ctx.ws.data.userId = user.id;
-    ctx.ws.data.userRole = user.role;
-
-    // Send success response
-    ctx.send(AuthSuccess, { userId: user.id });
+    // Use assignData for type-safe connection data updates
+    ctx.assignData({ userId: user.id, userRole: user.role });
   } catch (error) {
-    ctx.send(ErrorMessage, {
-      code: ErrorCode.INTERNAL_SERVER_ERROR,
-      message: "Authentication process failed",
-    });
+    ctx.error("INTERNAL", "Authentication process failed");
   }
-});
-```
-
-### Available Error Codes
-
-The built-in `ErrorCode` enum provides consistent error types:
-
-| Error Code                 | Description                                           |
-| -------------------------- | ----------------------------------------------------- |
-| `INVALID_MESSAGE_FORMAT`   | Message isn't valid JSON or lacks required structure  |
-| `VALIDATION_FAILED`        | Message failed schema validation                      |
-| `UNSUPPORTED_MESSAGE_TYPE` | No handler registered for this message type           |
-| `AUTHENTICATION_FAILED`    | Client isn't authenticated or has invalid credentials |
-| `AUTHORIZATION_FAILED`     | Client lacks permission for the requested action      |
-| `RESOURCE_NOT_FOUND`       | Requested resource (user, room, etc.) doesn't exist   |
-| `RATE_LIMIT_EXCEEDED`      | Client is sending messages too frequently             |
-| `INTERNAL_SERVER_ERROR`    | Unexpected server error occurred                      |
-
-You can also broadcast error messages to multiple clients using the `publish` function:
-
-```ts
-// Notify all users in a room that it's being deleted
-publish(ctx.ws, roomId, ErrorMessage, {
-  code: ErrorCode.RESOURCE_NOT_FOUND,
-  message: "This room is being deleted and will no longer be available",
-  context: { roomId },
 });
 ```
 
 ## How to compose routes
 
-You can compose routes from different files into a single router. This is useful for organizing your code and keeping related routes together.
+Organize code by splitting handlers into separate routers, then merge them into a main router using the `merge()` method:
 
 ```ts
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-import { Meta } from "./schemas";
-
-const { messageSchema } = createMessageSchema(z);
+import { createRouter } from "@ws-kit/zod";
 import { chatRoutes } from "./chat";
 import { notificationRoutes } from "./notification";
 
-const ws = new WebSocketRouter<Meta>();
-ws.addRoutes(chatRoutes);
-ws.addRoutes(notificationRoutes);
+type AppData = { userId?: string };
+
+// Create main router
+const mainRouter = createRouter<AppData>();
+
+// Compose with sub-routers
+mainRouter.merge(chatRoutes).merge(notificationRoutes);
 ```
 
-Where `chatRoutes` and `notificationRoutes` are other router instances defined in separate files.
+Where `chatRoutes` and `notificationRoutes` are separate routers created with `createRouter<AppData>()` in their own files. The `merge()` method combines handlers, lifecycle hooks, and middleware from the composed routers.
 
 ## Browser Client
 
-Type-safe browser WebSocket client with automatic reconnection, authentication, and request/response patterns:
+Type-safe browser WebSocket client with automatic reconnection, authentication, and request/response patterns — using the same validator and message definitions:
 
 ```ts
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
-import { createClient } from "bun-ws-router/zod/client"; // ✅ Typed client
+import { rpc, message, wsClient } from "@ws-kit/client/zod";
 
-// Define schemas (shared with server)
-const { messageSchema } = createMessageSchema(z);
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
+// Define message schemas
+const Hello = rpc("HELLO", { name: z.string() }, "HELLO_OK", {
+  text: z.string(),
+});
+const ServerBroadcast = message("BROADCAST", { data: z.string() });
 
-// Create client with auth and reconnection
-const client = createClient({
+// Create type-safe client with authentication
+const client = wsClient({
   url: "wss://api.example.com/ws",
-  reconnect: { enabled: true },
   auth: {
     getToken: () => localStorage.getItem("access_token"),
-    attach: "query", // Appends ?access_token=...
   },
 });
 
@@ -562,25 +752,102 @@ await client.connect();
 // Send fire-and-forget message
 client.send(Hello, { name: "Anna" });
 
-// Receive messages with full type inference
-client.on(HelloOk, (msg) => {
-  // ✅ msg.payload.text is typed as string
-  console.log("Server says:", msg.payload.text);
+// Listen for server broadcasts with full type inference
+client.on(ServerBroadcast, (msg) => {
+  // ✅ msg.payload.data is typed as string
+  console.log("Server broadcast:", msg.payload.data);
 });
 
-// Request/response pattern with timeout
+// Request/response with auto-detected response schema (modern RPC-style)
 try {
-  const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
-    timeoutMs: 5000,
-  });
-  // ✅ reply.payload.text is typed as string
-  console.log("Reply:", reply.payload.text);
+  const reply = await client.request(
+    Hello,
+    { name: "Bob" },
+    {
+      timeoutMs: 5000,
+    },
+  );
+  // ✅ reply.payload.text is fully typed from RPC schema
+  console.log("Server replied:", reply.payload.text);
 } catch (err) {
   console.error("Request failed:", err);
 }
+
+// Graceful disconnect
+await client.disconnect();
 ```
 
-See the [Client Documentation](./docs/client-setup.md) for complete API reference and advanced usage.
+You can also use explicit response schemas for backward compatibility (traditional style):
+
+```ts
+// Traditional: client.request(schema, payload, responseSchema, options)
+const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
+  timeoutMs: 5000,
+});
+```
+
+**Client Features:**
+
+- Auto-reconnection with exponential backoff
+- Configurable offline message queueing
+- Request/response pattern with timeouts
+- Built-in auth (query param or protocol header)
+- Full TypeScript type inference from schemas
+
+See the [Client Documentation](./docs/specs/client.md) for complete API reference and advanced usage.
+
+## Breaking Changes & Migration
+
+### Validator is Required
+
+The router now requires a validator to be configured. All imports should come from validator packages to ensure the correct validator is set up:
+
+```ts
+// ✅ Correct: Validator is included
+import { createRouter } from "@ws-kit/zod";
+const router = createRouter();
+
+// ❌ Incorrect: Will throw if no validator is set
+import { WebSocketRouter } from "@ws-kit/core";
+const router = new WebSocketRouter(); // ← Error: validator is required
+```
+
+**Migration:** Always import `createRouter()` from `@ws-kit/zod` or `@ws-kit/valibot`, not from `@ws-kit/core`.
+
+### Heartbeat is Now Opt-In
+
+Heartbeat is no longer enabled by default. Enable it explicitly if you need client liveness detection:
+
+```ts
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+
+const router = createRouter();
+
+serve(router, {
+  port: 3000,
+  heartbeat: {
+    intervalMs: 30_000, // Ping every 30s (default)
+    timeoutMs: 5_000, // Wait 5s for pong (default)
+    onStaleConnection(clientId, ws) {
+      console.log(`Connection ${clientId} is stale, closing...`);
+      ws.close();
+    },
+  },
+});
+```
+
+**Migration:** Add `heartbeat` config to `serve()` options if you previously relied on default heartbeat behavior.
+
+### PubSub is Lazily Initialized
+
+PubSub (for `ctx.publish()` and subscriptions) is now created only on first use. Apps without broadcasting incur zero overhead.
+
+**Migration:** No action needed. Broadcasting works the same way; initialization is just deferred.
+
+## Design & Architecture
+
+See [Architectural Decision Records](./docs/adr/) for the core design decisions that shaped ws-kit, including type safety patterns, platform adapters, and composability.
 
 ## Support
 

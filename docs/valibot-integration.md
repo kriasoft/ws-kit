@@ -1,128 +1,104 @@
 # Valibot Integration
 
-This library now supports both **Zod** and **Valibot** validators through separate import paths. This allows you to choose the validation library that best fits your needs in terms of bundle size, performance, and API preferences.
+ws-kit supports both **Zod** and **Valibot** validators with identical APIs. Choose based on your bundle size and performance needs.
 
 ## Quick Comparison
 
 | Feature             | Zod (v4)                | Valibot (v1)         |
 | ------------------- | ----------------------- | -------------------- |
 | Bundle Size         | ~5-6 kB (minified)      | ~1-2 kB (minified)   |
-| Runtime Performance | Fast                    | ~2x faster           |
+| Runtime Performance | Baseline                | ~2x faster           |
 | API Style           | Method chaining         | Functional pipelines |
 | Ecosystem           | Mature, large community | Growing, modern      |
 | TypeScript Support  | Excellent               | Excellent            |
 
-::: tip Bundle Size
-Actual bundle size depends on usage. Both libraries are tree-shakeable. Valibot typically results in 60-80% smaller bundles for typical WebSocket message validation use cases.
-:::
+**Choose Valibot for:** Client-side applications, mobile, or size-critical bundles.
+**Choose Zod for:** Familiar method-chaining API, server-side, or large ecosystem.
 
 ## Installation
 
-Install the validator library you want to use:
-
 ```bash
-# For Zod users
-bun add zod
+# Valibot validator
+bun add @ws-kit/valibot valibot
 
-# For Valibot users
-bun add valibot
-
-# Or both for migration
-bun add zod valibot
+# Client (if needed)
+bun add @ws-kit/client @ws-kit/valibot
 ```
 
-## Usage
+## Basic Setup
 
-### Zod Implementation
-
-```typescript
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-
-// Create factory with your Zod instance
-const { messageSchema } = createMessageSchema(z);
-
-// Create message schemas
-const JoinRoomMessage = messageSchema("JOIN_ROOM", {
-  roomId: z.string(),
-  userId: z.string(),
-});
-
-const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
-  roomId: z.string(),
-});
-
-// Create router
-const router = new WebSocketRouter<{ userId?: string }>();
-
-// Define response schema first
-const RoomJoinedMessage = messageSchema("ROOM_JOINED", {
-  success: z.boolean(),
-});
-
-// Register handlers
-router.onMessage(JoinRoomMessage, (ctx) => {
-  console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
-
-  // Type-safe response
-  ctx.send(RoomJoinedMessage, {
-    success: true,
-  });
-});
-```
-
-### Valibot Implementation
-
-```typescript
-import * as v from "valibot";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
-
-// Create factory with your Valibot instance
-const { messageSchema } = createMessageSchema(v);
-
-// Create message schemas
-const JoinRoomMessage = messageSchema("JOIN_ROOM", {
-  roomId: v.string(),
-  userId: v.string(),
-});
-
-const LeaveRoomMessage = messageSchema("LEAVE_ROOM", {
-  roomId: v.string(),
-});
-
-// Create router
-const router = new WebSocketRouter<{ userId?: string }>();
-
-// Define response schema first
-const RoomJoinedMessage = messageSchema("ROOM_JOINED", {
-  success: v.boolean(),
-});
-
-// Register handlers
-router.onMessage(JoinRoomMessage, (ctx) => {
-  console.log(`User ${ctx.payload.userId} joining room ${ctx.payload.roomId}`);
-
-  // Type-safe response
-  ctx.send(RoomJoinedMessage, {
-    success: true,
-  });
-});
-```
-
-## API Differences
-
-### Schema Creation
+The API is identical to Zod—just replace the validator:
 
 **Zod:**
 
 ```typescript
-import { z } from "zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-// Basic validation
-const userSchema = z.object({
-  name: z.string().min(1),
-  email: z.email(),
-  age: z.number().min(18),
+const LoginMessage = message("LOGIN", {
+  username: z.string().min(3),
+  password: z.string().min(8),
+});
+```
+
+**Valibot:**
+
+```typescript
+import { v, message, createRouter } from "@ws-kit/valibot";
+
+const LoginMessage = message("LOGIN", {
+  username: v.string(),
+  password: v.pipe(v.string(), v.minLength(8)),
+});
+```
+
+Everything else remains the same.
+
+## Key Validator Differences
+
+### String Validation
+
+**Zod:**
+
+```typescript
+const schema = z.string().min(3).max(20).email();
+```
+
+**Valibot:**
+
+```typescript
+import * as v from "valibot";
+
+const schema = v.pipe(v.string(), v.minLength(3), v.maxLength(20), v.email());
+```
+
+Valibot uses **pipes** for composing validators instead of method chains.
+
+### Enums and Unions
+
+**Zod:**
+
+```typescript
+const RoleSchema = z.enum(["user", "admin", "moderator"]);
+const ValueSchema = z.union([z.string(), z.number()]);
+```
+
+**Valibot:**
+
+```typescript
+import * as v from "valibot";
+
+const RoleSchema = v.picklist(["user", "admin", "moderator"]);
+const ValueSchema = v.union([v.string(), v.number()]);
+```
+
+### Objects and Arrays
+
+**Zod:**
+
+```typescript
+const schema = z.object({
+  name: z.string(),
+  tags: z.array(z.string()),
 });
 ```
 
@@ -131,187 +107,210 @@ const userSchema = z.object({
 ```typescript
 import * as v from "valibot";
 
-// Functional pipelines
-const userSchema = v.object({
-  name: v.pipe(v.string(), v.minLength(1)),
-  email: v.pipe(v.string(), v.email()),
-  age: v.pipe(v.number(), v.minValue(18)),
+const schema = v.object({
+  name: v.string(),
+  tags: v.array(v.string()),
 });
 ```
 
-### Message Schema Factory
+## Complete Example
 
-Both validators require creating a factory first, then use the same `messageSchema()` function signature:
-
-**Zod:**
+### Server
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { v, message, createRouter } from "@ws-kit/valibot";
+import { serve } from "@ws-kit/bun";
 
-const { messageSchema } = createMessageSchema(z);
-
-// Basic message
-const PingMessage = messageSchema("PING");
-
-// With payload
-const ChatMessage = messageSchema("CHAT", {
-  content: z.string(),
-  roomId: z.string(),
-});
-
-// With custom metadata (required field)
-const PrivateMessage = messageSchema(
-  "PRIVATE",
-  { content: z.string(), recipientId: z.string() },
-  { roomId: z.string() },
-);
-```
-
-**Valibot:**
-
-```typescript
-import * as v from "valibot";
-import { createMessageSchema } from "bun-ws-router/valibot";
-
-const { messageSchema } = createMessageSchema(v);
-
-// Basic message
-const PingMessage = messageSchema("PING");
-
-// With payload
-const ChatMessage = messageSchema("CHAT", {
-  content: v.string(),
+// Define message schemas
+const JoinRoom = message("JOIN_ROOM", {
   roomId: v.string(),
+  username: v.string(),
 });
 
-// With custom metadata (required field)
-const PrivateMessage = messageSchema(
-  "PRIVATE",
-  { content: v.string(), recipientId: v.string() },
-  { roomId: v.string() },
+const SendMessage = message("SEND_MESSAGE", {
+  text: v.string(),
+});
+
+const UserJoined = message("USER_JOINED", {
+  username: v.string(),
+  userCount: v.number(),
+});
+
+const NewMessage = message("NEW_MESSAGE", {
+  username: v.string(),
+  text: v.string(),
+});
+
+// Create router
+type AppData = { username?: string };
+const router = createRouter<AppData>();
+
+// Track users in rooms
+const rooms = new Map<string, Set<string>>();
+
+router.on(JoinRoom, (ctx) => {
+  const { roomId, username } = ctx.payload;
+
+  // Update connection data
+  ctx.ws.data.username = username;
+
+  if (!rooms.has(roomId)) {
+    rooms.set(roomId, new Set());
+  }
+
+  rooms.get(roomId)!.add(ctx.ws.data.clientId);
+  ctx.subscribe(roomId);
+
+  ctx.publish(roomId, UserJoined, {
+    username,
+    userCount: rooms.get(roomId)!.size,
+  });
+});
+
+router.on(SendMessage, (ctx) => {
+  // Find which room this user is in
+  let userRoomId: string | undefined;
+  for (const [roomId, users] of rooms.entries()) {
+    if (users.has(ctx.ws.data.clientId)) {
+      userRoomId = roomId;
+      break;
+    }
+  }
+
+  if (userRoomId) {
+    ctx.publish(userRoomId, NewMessage, {
+      username: ctx.ws.data.username || "Anonymous",
+      text: ctx.payload.text,
+    });
+  }
+});
+
+// Start server
+serve(router, { port: 3000 });
+```
+
+### Client
+
+```typescript
+import { v, message } from "@ws-kit/valibot";
+import { wsClient } from "@ws-kit/client/valibot";
+
+// Define schemas (same as server)
+const JoinRoom = message("JOIN_ROOM", {
+  roomId: v.string(),
+  username: v.string(),
+});
+
+const UserJoined = message("USER_JOINED", {
+  username: v.string(),
+  userCount: v.number(),
+});
+
+const SendMessage = message("SEND_MESSAGE", {
+  text: v.string(),
+});
+
+const NewMessage = message("NEW_MESSAGE", {
+  username: v.string(),
+  text: v.string(),
+});
+
+// Create client
+const client = wsClient({ url: "wss://api.example.com/ws" });
+
+await client.connect();
+
+// Join a room
+client.send(JoinRoom, {
+  roomId: "room-123",
+  username: "Alice",
+});
+
+// Listen for users joining
+client.on(UserJoined, (payload) => {
+  // ✅ payload.username and userCount are fully typed
+  console.log(`${payload.username} joined (${payload.userCount} users)`);
+});
+
+// Send a message
+client.send(SendMessage, { text: "Hello everyone!" });
+
+// Listen for messages
+client.on(NewMessage, (payload) => {
+  console.log(`${payload.username}: ${payload.text}`);
+});
+```
+
+## Migration from Zod to Valibot
+
+1. **Replace imports:**
+
+```typescript
+// Before
+import { z, message, createRouter } from "@ws-kit/zod";
+
+// After
+import { v, message, createRouter } from "@ws-kit/valibot";
+```
+
+2. **Update validators:**
+
+```typescript
+// Before (Zod)
+import { z } from "@ws-kit/zod";
+z.string().min(3).max(20).email();
+
+// After (Valibot)
+import { v } from "@ws-kit/valibot";
+v.pipe(v.string(), v.minLength(3), v.maxLength(20), v.email());
+```
+
+3. **Update client imports:**
+
+```typescript
+// Before
+import { wsClient } from "@ws-kit/client/zod";
+
+// After
+import { wsClient } from "@ws-kit/client/valibot";
+```
+
+## Import Patterns
+
+Always use the canonical import source to prevent dual-package hazards:
+
+```typescript
+// ✅ CORRECT: Single source
+import { v, message, createRouter } from "@ws-kit/valibot";
+
+// ❌ AVOID: Mixing imports
+import * as v from "valibot"; // Different instance
+import { message } from "@ws-kit/valibot"; // Uses @ws-kit/valibot's v
+// Discriminated unions will break!
+```
+
+## Performance Tips
+
+Valibot's functional API enables excellent tree-shaking:
+
+```typescript
+// ✅ CORRECT: Import from @ws-kit/valibot for consistency
+import { v } from "@ws-kit/valibot";
+
+const username = v.pipe(
+  v.string(),
+  v.minLength(3),
+  v.maxLength(20),
+  // Additional validators only if needed
 );
+
+// Unused validators are automatically eliminated by bundlers
+// Only the validators you use are included in your bundle
 ```
 
-## Performance Benefits
+## See Also
 
-### Bundle Size Impact
-
-For a typical WebSocket application with 5-10 message types:
-
-- **Zod version**: ~15-20 kB total validation code
-- **Valibot version**: ~2-3 kB total validation code
-
-This difference is especially important for:
-
-- Client-side applications
-- Serverless environments
-- Mobile applications
-- Edge computing scenarios
-
-### Runtime Performance
-
-Valibot's functional design and tree-shakeable architecture provides:
-
-- ~2x faster validation than Zod
-- Better startup performance due to minimal initialization
-- Smaller memory footprint
-
-## Migration Guide
-
-### From Zod to Valibot
-
-1. **Update imports:**
-
-   ```typescript
-   // Before (Zod)
-   import { z } from "zod";
-   import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-   const { messageSchema } = createMessageSchema(z);
-
-   // After (Valibot)
-   import * as v from "valibot";
-   import { WebSocketRouter, createMessageSchema } from "bun-ws-router/valibot";
-   const { messageSchema } = createMessageSchema(v);
-   ```
-
-2. **Convert schema definitions:**
-
-   ```typescript
-   // Zod
-   const schema = z.object({
-     name: z.string().min(1).max(50),
-     age: z.number().int().positive(),
-   });
-
-   // Valibot
-   const schema = v.object({
-     name: v.pipe(v.string(), v.minLength(1), v.maxLength(50)),
-     age: v.pipe(v.number(), v.integer(), v.minValue(1)),
-   });
-   ```
-
-3. **Update validation calls:**
-
-   ```typescript
-   // Zod
-   const result = schema.safeParse(data);
-
-   // Valibot
-   const result = v.safeParse(schema, data);
-   ```
-
-### Gradual Migration
-
-You can use both validators simultaneously during migration:
-
-```typescript
-// Legacy Zod handlers
-import { WebSocketRouter as ZodRouter } from "bun-ws-router/zod";
-
-// New Valibot handlers
-import { WebSocketRouter as ValibotRouter } from "bun-ws-router/valibot";
-
-const zodRouter = new ZodRouter();
-const valibotRouter = new ValibotRouter();
-
-// Merge routers
-zodRouter.addRoutes(valibotRouter);
-```
-
-## Backward Compatibility
-
-The main package export (`bun-ws-router`) continues to use Zod for backward compatibility, but you must use the factory pattern:
-
-```typescript
-import { z } from "zod";
-import { WebSocketRouter, createMessageSchema } from "bun-ws-router/zod";
-
-// ✅ REQUIRED - use factory pattern
-const { messageSchema } = createMessageSchema(z);
-```
-
-## When to Choose Which
-
-### Choose Zod if:
-
-- You're new to validation libraries
-- You need extensive ecosystem support
-- You're working on server-side applications where bundle size isn't critical
-- You prefer method chaining APIs
-- You need complex, nested validation logic
-
-### Choose Valibot if:
-
-- Bundle size is critical (client-side, serverless, edge)
-- You need maximum runtime performance
-- You prefer functional programming patterns
-- You're building new applications and can start fresh
-- You want the latest validation technology
-
-## Further Resources
-
-- [Valibot Documentation](https://valibot.dev/)
-- [Zod Documentation](https://zod.dev/)
-- [Bundle Size Comparison](https://bundlephobia.com/compare/zod@3.24.3,valibot@0.42.1)
-- [Performance Benchmarks](https://moltar.github.io/typescript-runtime-type-benchmarks/)
+- `docs/message-schemas.md` — Message schema details
+- `docs/examples.md` — Real-world example code
+- `docs/client-setup.md` — Client setup and usage
+- [@ws-kit/valibot on GitHub](https://github.com/kriasoft/ws-kit/tree/main/packages/valibot) — Package details

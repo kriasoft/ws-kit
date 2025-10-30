@@ -10,30 +10,25 @@
  * - Extended meta field support
  * - Request/response patterns
  *
- * @see specs/adrs.md#ADR-002 - Type override implementation
- * @see specs/client.md - Full client API
+ * @see docs/adr/002-typed-client-adapters.md - Type override implementation
+ * @see docs/specs/client.md - Full client API
  */
 
-import { z } from "zod";
-import { createMessageSchema } from "../zod/index.js";
-import { createClient } from "../zod/client.js";
-
-// Create schema factory
-const { messageSchema } = createMessageSchema(z);
+import { z, message, wsClient } from "@ws-kit/client/zod";
 
 // Define message schemas
-const Hello = messageSchema("HELLO", { name: z.string() });
-const HelloOk = messageSchema("HELLO_OK", { text: z.string() });
-const Logout = messageSchema("LOGOUT"); // No payload
-const LogoutOk = messageSchema("LOGOUT_OK"); // No payload
-const ChatMessage = messageSchema(
+const Hello = message("HELLO", { name: z.string() });
+const HelloOk = message("HELLO_OK", { text: z.string() });
+const Logout = message("LOGOUT"); // No payload
+const LogoutOk = message("LOGOUT_OK"); // No payload
+const ChatMessage = message(
   "CHAT",
   { text: z.string() },
   { roomId: z.string() }, // Required extended meta
 );
 
 // Create typed client
-const client = createClient({
+const client = wsClient({
   url: "wss://api.example.com",
   autoConnect: true,
   reconnect: { enabled: true },
@@ -148,11 +143,11 @@ async function requestExamples() {
 // Generic Client (Fallback - No Type Inference)
 // ============================================================================
 
-// For comparison: generic client requires manual type assertions
-import { createClient as createGenericClient } from "../client/index.js";
-import type { InferMessage } from "../zod/types.js";
+// For comparison: generic client without schema types requires manual type assertions
+import { wsClient as wsClientGeneric } from "@ws-kit/client";
+import type { InferMessage } from "@ws-kit/client/zod";
 
-const genericClient = createGenericClient({ url: "wss://api.example.com" });
+const genericClient = wsClientGeneric({ url: "wss://api.example.com" });
 
 genericClient.on(HelloOk, (msg) => {
   // ⚠️ msg is unknown - requires manual type assertion

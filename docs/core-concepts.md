@@ -1,23 +1,23 @@
 # Core Concepts
 
-Understanding these core concepts will help you build robust WebSocket applications with Bun WebSocket Router.
+Understanding these core concepts will help you build robust WebSocket applications with ws-kit.
 
-::: tip Factory Pattern Required
-**Required since v0.4.0** to fix discriminated union support. Use `createMessageSchema()` to create schemas:
+::: tip Recommended: Export-with-Helpers Pattern
+Use the modern import pattern for optimal tree-shaking and simplicity:
 
 ```typescript
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
+// Use message() directly - no factory setup needed
+const PingMessage = message("PING", { text: z.string() });
 ```
 
-The old direct `messageSchema` export is deprecated and will be removed in v1.0. See [Message Schemas](./message-schemas.md#factory-pattern-required) for migration details.
+See [Message Schemas](./message-schemas.md) (ADR-007) for details on the export-with-helpers pattern.
 :::
 
 ## Message-Based Architecture
 
-Bun WebSocket Router uses a message-based architecture where all communication follows a consistent structure. This provides several benefits:
+ws-kit uses a message-based architecture where all communication follows a consistent structure. This provides several benefits:
 
 - **Type Safety**: Messages are validated against schemas before reaching handlers
 - **Predictability**: All messages have the same structure, making debugging easier
@@ -78,9 +78,7 @@ Normalization is a **security boundary** that prevents clients from spoofing ser
 :::
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
-
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   // ctx provides everything you need:
   // - ctx.ws: The WebSocket instance
   // - ctx.ws.data.clientId: Client identifier (UUID v7, auto-generated)
@@ -88,14 +86,15 @@ router.onMessage(ChatMessage, (ctx) => {
   // - ctx.meta: Validated metadata (timestamp, correlationId, custom fields)
   // - ctx.payload: Validated message data (conditional - only if schema defines it)
   // - ctx.receivedAt: Server receive timestamp (Date.now(), authoritative for server logic)
-  // - ctx.send: Type-safe send function
+  // - ctx.send: Type-safe send function (1-to-1, to current connection)
+  // - ctx.publish: Type-safe publish function (1-to-many, to topic subscribers)
 
-  // For broadcasting, use the standalone publish() helper:
-  publish(ctx.ws, "chat", ChatMessage, ctx.payload);
+  // For broadcasting to topic subscribers:
+  await ctx.publish("chat", ChatMessage, ctx.payload);
 
   // For subscriptions:
-  ctx.ws.subscribe("room:123");
-  ctx.ws.unsubscribe("room:456");
+  ctx.subscribe("room:123");
+  ctx.unsubscribe("room:456");
 });
 ```
 
@@ -117,18 +116,67 @@ router.onClose((ctx) => {
 The router provides full type inference from schema definition to handler:
 
 ```typescript
-const UpdateProfileMessage = messageSchema("UPDATE_PROFILE", {
+import { z, message, createRouter } from "@ws-kit/zod";
+
+const UpdateProfileMessage = message("UPDATE_PROFILE", {
   name: z.string(),
   avatar: z.url().optional(),
 });
 
-router.onMessage(UpdateProfileMessage, (ctx) => {
+const router = createRouter();
+
+router.on(UpdateProfileMessage, (ctx) => {
   // TypeScript knows:
   // - ctx.payload.name is string
   // - ctx.payload.avatar is string | undefined
   // - ctx.send() only accepts valid message schemas
 });
 ```
+
+## Middleware
+
+Middleware runs before handlers to provide cross-cutting concerns like authentication, logging, and rate limiting:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+
+type AppData = { userId?: string; roles?: string[] };
+const router = createRouter<AppData>();
+
+// Global middleware: runs for all messages
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
+    return; // Skip handler
+  }
+  return next(); // Continue to handler
+});
+
+// Per-route middleware: runs only for specific message
+router.use(SendMessage, (ctx, next) => {
+  if (isRateLimited(ctx.ws.data?.userId)) {
+    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+    return;
+  }
+  return next();
+});
+
+router.on(SendMessage, (ctx) => {
+  // Handler runs if all middleware calls next()
+  processMessage(ctx.payload);
+});
+```
+
+**Key features:**
+
+- **Global middleware** — `router.use(middleware)` runs for all messages
+- **Per-route middleware** — `router.use(schema, middleware)` runs only for specific messages
+- **Execution order** — Global → per-route → handler
+- **Control flow** — Call `next()` to continue; omit to skip handler
+- **Context mutation** — Middleware can update `ctx.ws.data` via `ctx.assignData()`
+- **Error handling** — Call `ctx.error()` to reject and stop execution
+
+See [Middleware Guide](./middleware.md) and ADR-008 for complete documentation.
 
 ## Error Handling
 
@@ -137,7 +185,7 @@ router.onMessage(UpdateProfileMessage, (ctx) => {
 All handlers are wrapped in error boundaries to prevent crashes:
 
 ```typescript
-router.onMessage(SomeMessage, (ctx) => {
+router.on(SomeMessage, (ctx) => {
   throw new Error("Something went wrong");
   // Router catches this and sends an error message to the client
 });
@@ -145,27 +193,37 @@ router.onMessage(SomeMessage, (ctx) => {
 
 ### Standard Error Codes
 
-Use the built-in `ErrorCode` enum for consistent error handling:
+Use `ctx.error()` with standard error codes for consistent error handling:
 
 ```typescript
-const { ErrorCode, ErrorMessage } = createMessageSchema(z);
-
-ctx.send(ErrorMessage, {
-  code: ErrorCode.VALIDATION_FAILED,
-  message: "Invalid room ID",
-});
+ctx.error("INVALID_ARGUMENT", "Invalid room ID");
 ```
 
-Available error codes:
+Available error codes (aligned with gRPC standards):
 
-- `INVALID_MESSAGE_FORMAT`: Message isn't valid JSON or lacks required structure
-- `VALIDATION_FAILED`: Message failed schema validation
-- `UNSUPPORTED_MESSAGE_TYPE`: No handler registered for message type
-- `AUTHENTICATION_FAILED`: Authentication required or token invalid
-- `AUTHORIZATION_FAILED`: Insufficient permissions
-- `RESOURCE_NOT_FOUND`: Resource not found
-- `RATE_LIMIT_EXCEEDED`: Too many requests
-- `INTERNAL_SERVER_ERROR`: Server error
+**Terminal errors** (don't retry):
+
+- `UNAUTHENTICATED`: Auth token missing, expired, or invalid
+- `PERMISSION_DENIED`: Authenticated but lacks rights
+- `INVALID_ARGUMENT`: Input validation or semantic violation
+- `FAILED_PRECONDITION`: State requirement not met
+- `NOT_FOUND`: Resource not found
+- `ALREADY_EXISTS`: Uniqueness or idempotency violation
+- `ABORTED`: Concurrency conflict (race condition)
+
+**Transient errors** (retry with backoff):
+
+- `DEADLINE_EXCEEDED`: RPC timed out
+- `RESOURCE_EXHAUSTED`: Rate limit, quota, or backpressure exceeded
+- `UNAVAILABLE`: Transient infrastructure error
+
+**Server/evolution**:
+
+- `UNIMPLEMENTED`: Feature not supported or deployed
+- `INTERNAL`: Unexpected server error (bug)
+- `CANCELLED`: Call cancelled (client disconnect, timeout abort)
+
+See [Error Handling](./specs/error-handling.md) and ADR-015 for complete error code taxonomy.
 
 ## WebSocket Data
 
@@ -180,12 +238,19 @@ interface WebSocketData<T = unknown> {
 Pass custom data during upgrade:
 
 ```typescript
-server.upgrade(req, {
-  data: {
-    // Router auto-generates clientId (UUID v7)
-    id: "123",
-    name: "Alice",
-    roles: ["user", "admin"],
+// During WebSocket upgrade (using platform adapter)
+// Router auto-generates clientId (UUID v7)
+serve(router, {
+  port: 3000,
+  authenticate(req) {
+    const token = req.headers.get("authorization");
+    if (!token) return undefined;
+
+    const decoded = decodeToken(token);
+    return {
+      userId: decoded.id,
+      roles: decoded.roles,
+    };
   },
 });
 ```
@@ -205,8 +270,25 @@ interface MessageContext<TPayload, TData = unknown> {
     [key: string]: unknown; // Custom metadata fields
   };
   receivedAt: number; // Server receive timestamp (authoritative)
-  send: SendFunction; // Type-safe send function
+
+  // All handlers
+  send: SendFunction; // Type-safe send to current connection (1-to-1)
+  publish: PublishFunction; // Type-safe publish to topic subscribers (1-to-many)
+  error: ErrorFunction; // Type-safe error responses
+  assignData: AssignDataFunction; // Merge partial data into ctx.ws.data
+  subscribe: SubscribeFunction; // Subscribe to a channel
+  unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
+  timeRemaining: () => number; // ms until deadline (Infinity for events)
+  isRpc: boolean; // Flag: is this an RPC message?
+
   payload?: TPayload; // Validated payload (conditional)
+
+  // RPC handlers only (when using router.rpc())
+  reply?: (schema: Schema, data: ResponseType) => void; // Terminal reply, one-shot guarded
+  progress?: (data?: unknown) => void; // Progress update (non-terminal)
+  abortSignal?: AbortSignal; // Fires on client cancel/disconnect
+  onCancel?: (cb: () => void) => () => void; // Register cancel callback
+  deadline?: number; // Server-derived deadline (epoch ms)
 }
 ```
 
@@ -215,45 +297,108 @@ interface MessageContext<TPayload, TData = unknown> {
 - Access client ID via `ctx.ws.data.clientId` (not `ctx.clientId`)
 - Use `ctx.receivedAt` for server-side logic (rate limiting, ordering, TTL, auditing)
 - Use `ctx.meta.timestamp` only for UI display (not authoritative)
-- For subscriptions: `ctx.ws.subscribe(topic)` and `ctx.ws.unsubscribe(topic)`
-- For publishing: Use standalone `publish()` helper from `bun-ws-router/zod/publish`
-- For custom data: Access `ctx.ws.data` directly (no getData/setData methods)
+- **Subscriptions**: `ctx.subscribe(topic)` and `ctx.unsubscribe(topic)`
+- **Publishing**: `await ctx.publish(topic, schema, payload)` (1-to-many) or `await router.publish()` outside handlers
+- **Sending**: `ctx.send(schema, payload)` (1-to-1, to current connection)
+- **Custom data**: Access `ctx.ws.data` directly or use `ctx.assignData()` to merge partial updates
+- **RPC**: Use `ctx.reply(schema, data)` for terminal responses, `ctx.progress(data)` for streaming updates (only available in `router.rpc()` handlers)
+
+## Request-Response Pattern (RPC)
+
+ws-kit provides first-class support for request-response messaging with automatic correlation tracking. Use `router.rpc()` for handlers that need guaranteed responses:
+
+```typescript
+import { z, rpc, createRouter } from "@ws-kit/zod";
+
+// Define RPC schema - binds request to response type
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_RESPONSE", {
+  user: UserSchema,
+});
+
+const router = createRouter();
+
+// Use router.rpc() for RPC handlers
+router.rpc(GetUser, async (ctx) => {
+  const user = await db.users.findById(ctx.payload.id);
+
+  if (!user) {
+    ctx.error("NOT_FOUND", "User not found");
+    return;
+  }
+
+  // Terminal reply (type-safe to response schema)
+  ctx.reply(GetUser.response, { user });
+});
+```
+
+**Key RPC features:**
+
+- **`ctx.reply(schema, data)`** — Terminal response, one-shot guarded (only called once)
+- **`ctx.progress(data)`** — Optional streaming updates before terminal reply
+- **`ctx.abortSignal`** — AbortSignal for cancellation (integrates with fetch, etc.)
+- **`ctx.onCancel(cb)`** — Register cleanup callbacks for cancellation
+- **Automatic correlation** — No manual tracking needed; client requests match responses
+
+**Client-side usage:**
+
+```typescript
+import { wsClient } from "@ws-kit/client/zod";
+
+const client = wsClient({ url: "ws://localhost:3000" });
+
+// Make RPC call
+const call = client.request(GetUser, { id: "123" });
+
+// Optional: listen to progress updates
+for await (const p of call.progress()) {
+  console.log("Progress:", p);
+}
+
+// Wait for terminal response
+const { user } = await call.result();
+```
+
+See [RPC Guide](./rpc.md) and ADR-015 for complete RPC documentation.
 
 ## Broadcasting and PubSub
 
-Leverage Bun's native PubSub for efficient broadcasting:
+Use type-safe publishing for efficient broadcasting to topic subscribers:
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
-
-router.onMessage(JoinRoomMessage, (ctx) => {
+router.on(JoinRoomMessage, async (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Subscribe to room topic
-  ctx.ws.subscribe(`room:${roomId}`);
+  ctx.subscribe(`room:${roomId}`);
 
-  // Broadcast to all subscribers with type-safe publish helper
-  publish(ctx.ws, `room:${roomId}`, UserJoinedMessage, {
+  // Broadcast to all subscribers with type-safe publish
+  await ctx.publish(`room:${roomId}`, UserJoinedMessage, {
     username: ctx.payload.username,
   });
 });
 
-router.onMessage(LeaveRoomMessage, (ctx) => {
+router.on(LeaveRoomMessage, async (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Unsubscribe when leaving
-  ctx.ws.unsubscribe(`room:${roomId}`);
+  ctx.unsubscribe(`room:${roomId}`);
 
   // Notify others
-  publish(ctx.ws, `room:${roomId}`, UserLeftMessage, {
+  await ctx.publish(`room:${roomId}`, UserLeftMessage, {
     username: ctx.payload.username,
   });
 });
 ```
 
-::: tip
-The `publish()` helper validates messages before broadcasting. See [API Reference](/api-reference#publish) for complete documentation.
-:::
+**Key Distinction:**
+
+- **`ctx.send(schema, data)`** — Sends to single connection (1-to-1)
+- **`ctx.publish(topic, schema, data)`** — Broadcasts to topic subscribers (1-to-many)
+- **`router.publish(topic, schema, data)`** — Use outside handlers (cron jobs, system events)
+
+Both `ctx.publish()` and `router.publish()` return `Promise<number>` (recipient count).
+
+See [Broadcasting](./specs/broadcasting.md) and ADR-018/ADR-019 for complete documentation.
 
 ## Timestamp Handling
 
@@ -267,14 +412,14 @@ The router provides two timestamps with different trust levels:
 **Rule:** Server logic MUST use `ctx.receivedAt` for all business logic (rate limiting, ordering, TTL, auditing).
 
 ```typescript
-router.onMessage(ChatMessage, (ctx) => {
+router.on(ChatMessage, (ctx) => {
   // Rate limiting with server timestamp
   const lastMessageTime = messageLog.get(ctx.ws.data.clientId);
   if (lastMessageTime && ctx.receivedAt - lastMessageTime < 1000) {
-    ctx.send(ErrorMessage, {
-      code: "RATE_LIMIT_EXCEEDED",
-      message: "Please wait before sending another message",
-    });
+    ctx.error(
+      "RESOURCE_EXHAUSTED",
+      "Please wait before sending another message",
+    );
     return;
   }
   messageLog.set(ctx.ws.data.clientId, ctx.receivedAt);
@@ -292,5 +437,9 @@ router.onMessage(ChatMessage, (ctx) => {
 
 - **Message Parsing**: Messages are parsed once and cached
 - **Validation**: Schema validation happens before handler execution
-- **Error Boundaries**: Handlers are wrapped but with minimal overhead
-- **PubSub**: Uses Bun's native implementation for maximum performance
+- **Error Boundaries**: Handlers are wrapped with minimal overhead
+- **PubSub**: Uses platform-native implementations (Bun, Cloudflare DO, etc.) for maximum performance
+- **Type Safety**: Zero runtime overhead—all type checking happens at compile time
+- **Modular Design**: Tree-shakeable imports ensure minimal bundle size
+
+For platform-specific optimizations, see the adapter documentation for your target platform.

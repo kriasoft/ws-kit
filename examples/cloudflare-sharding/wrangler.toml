@@ -1,0 +1,19 @@
+name = "ws-kit-sharding-example"
+type = "javascript"
+account_id = ""  # Set your Cloudflare account ID
+workers_dev = true
+
+# Main handler entry point
+main = "router.ts"
+
+# Durable Object binding
+[[durable_objects.bindings]]
+name = "ROUTER"
+class_name = "WebSocketRouter"
+script_name = "ws-kit-sharding-example"  # Same as name above
+
+# Development server configuration
+[env.development]
+routes = [
+  { pattern = "localhost:*", zone_name = "" }
+]

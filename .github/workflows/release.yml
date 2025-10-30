@@ -2,29 +2,26 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
   contents: read
   id-token: write
   packages: write
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: true
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   release:
+    name: Release
     runs-on: ubuntu-latest
     environment: "release"
-    env:
-      DIST_TAG: ${{ contains(github.ref_name, '-') && 'next' || 'latest' }}
     steps:
       - uses: actions/checkout@v5
+        with: { fetch-depth: 0 } # changesets needs tags/history to compute versions
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+        with: { bun-version: "latest" }
       - name: Ensure tag commit is on main
         run: |
           git fetch --no-tags --depth=1 origin main
@@ -37,6 +34,42 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun publish --access public --ignore-scripts --tag "$DIST_TAG"
+      - name: Setup NPM and Git
+        run: |
+          npm config set //registry.npmjs.org/:_authToken=${NPM_TOKEN}
+          echo "NPM_CONFIG_PROVENANCE=true" >> $GITHUB_ENV
+          git config user.name "Kriasoft Bot"
+          git config user.email "github-bot@kriasoft.com"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Import GPG key
+        run: |
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --pinentry-mode loopback --import
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          cat <<'EOF' > ~/.gnupg/gpg-loopback-wrapper.sh
+          #!/usr/bin/env bash
+          exec gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$@"
+          EOF
+          chmod 700 ~/.gnupg/gpg-loopback-wrapper.sh
+          git config user.signingkey ${{ secrets.GPG_KEY_ID }}
+          git config commit.gpgsign true
+          git config tag.gpgsign true
+          git config gpg.program ~/.gnupg/gpg-loopback-wrapper.sh
+          gpg-connect-agent reloadagent /bye || true
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - uses: changesets/action@v1
+        with:
+          publish: bun changeset publish --dry-run
+          version: bun changeset version
+          commit: "chore: version and release packages"
+          title: "chore: version and release packages"
+          setupGitUser: true
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

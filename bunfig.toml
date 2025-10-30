@@ -1,0 +1,7 @@
+# Bun configuration
+# https://bun.com/docs/runtime/bunfig
+
+[paths]
+# Path aliases that match tsconfig.json paths
+# Enables module resolution for @ws-kit/* imports at runtime
+"@ws-kit/*" = "packages/*/src"

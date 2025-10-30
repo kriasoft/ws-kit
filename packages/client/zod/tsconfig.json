@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "../dist/zod",
+    "tsBuildInfoFile": "../dist/zod/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../" }, { "path": "../../zod" }]
+}

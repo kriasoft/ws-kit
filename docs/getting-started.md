@@ -1,84 +1,117 @@
 # Getting Started
 
-This guide shows you how to build type-safe WebSocket applications with Bun WebSocket Router. You'll learn how to set up both the server (Bun) and client (browser) using shared message schemas for full-stack type safety.
+This guide shows you how to build type-safe WebSocket applications with ws-kit. You'll learn how to set up both the server and client using shared message schemas for full-stack type safety.
 
 ## Installation
 
-### Server (Bun)
+### Server
 
 ```bash
-bun add bun-ws-router zod
-# or
-bun add bun-ws-router valibot  # 60-80% smaller bundles
+# With Zod (recommended)
+bun add @ws-kit/zod @ws-kit/bun
+
+# With Valibot (lighter bundles)
+bun add @ws-kit/valibot @ws-kit/bun
 ```
 
 ### Client (Browser)
 
 ```bash
-npm install bun-ws-router zod
-# or
-npm install bun-ws-router valibot  # Recommended for browsers
+# With Zod
+bun add @ws-kit/client/zod
+
+# With Valibot (recommended for browsers due to smaller bundle)
+bun add @ws-kit/client/valibot
 ```
 
 ::: tip
-Valibot is recommended for browser clients due to its smaller bundle size (~2-3 KB). Zod is great for servers or apps already using Zod.
+Valibot is recommended for browser clients due to its smaller bundle size (~1-2 KB). Zod is great for servers or apps already using Zod.
 :::
 
 ## Quick Start
 
-### 1. Define Shared Schemas
+### 1. Define Shared Message Schemas
 
-Create schemas once and share them between server and client:
+Create message types once and share them between server and client:
 
 ```typescript
 // shared/schemas.ts (imported by both server and client)
-import { z } from "zod";
-import { createMessageSchema } from "bun-ws-router/zod";
+import { z, message } from "@ws-kit/zod";
 
-const { messageSchema } = createMessageSchema(z);
+export const JoinRoom = message("JOIN_ROOM", {
+  roomId: z.string(),
+});
 
-export const ChatMessage = messageSchema("CHAT_MESSAGE", {
+export const ChatMessage = message("CHAT_MESSAGE", {
   text: z.string(),
   roomId: z.string(),
 });
 
-export const UserJoined = messageSchema("USER_JOINED", {
+export const UserJoined = message("USER_JOINED", {
   username: z.string(),
   roomId: z.string(),
 });
+
+export const UserLeft = message("USER_LEFT", {
+  userId: z.string(),
+});
 ```
+
+Simple and straightforward—no factories, just plain functions.
 
 ### 2. Set Up Server
 
 ```typescript
 // server.ts
-import { WebSocketRouter } from "bun-ws-router/zod";
-import { publish } from "bun-ws-router/zod/publish";
-import { ChatMessage, UserJoined } from "./shared/schemas";
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { JoinRoom, ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
 
-const router = new WebSocketRouter()
-  .onOpen((ctx) => {
-    console.log(`Client ${ctx.ws.data.clientId} connected`);
-  })
-  .onMessage(ChatMessage, (ctx) => {
-    console.log(`Message from ${ctx.ws.data.clientId}: ${ctx.payload.text}`);
+type AppData = {
+  userId?: string;
+  roomId?: string;
+};
 
-    // Subscribe to room
-    ctx.ws.subscribe(`room:${ctx.payload.roomId}`);
+const router = createRouter<AppData>();
 
-    // Broadcast to room
-    publish(ctx.ws, `room:${ctx.payload.roomId}`, ChatMessage, ctx.payload);
-  })
-  .onClose((ctx) => {
-    console.log(`Client ${ctx.ws.data.clientId} disconnected`);
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+
+  // Subscribe to room and store in connection data
+  ctx.assignData({ roomId });
+  ctx.subscribe(roomId);
+});
+
+router.on(ChatMessage, (ctx) => {
+  const { text, roomId } = ctx.payload;
+  const userId = ctx.ws.data.userId || "anonymous";
+
+  // Broadcast to room subscribers
+  router.publish(roomId, ChatMessage, {
+    text,
+    roomId,
   });
+});
 
-Bun.serve({
+// Serve with type-safe handlers
+serve(router, {
   port: 3000,
-  fetch(req, server) {
-    return router.upgrade(req, { server });
+  authenticate(req) {
+    // Validate token or session and return user data
+    const token = req.headers.get("authorization");
+    return token ? { userId: "user_123" } : undefined;
   },
-  websocket: router.websocket,
+  onOpen(ctx) {
+    console.log(`Client ${ctx.ws.data.userId} connected`);
+  },
+  onClose(ctx) {
+    const { roomId, userId } = ctx.ws.data;
+    console.log(`Client ${userId} disconnected from ${roomId}`);
+
+    if (roomId) {
+      router.publish(roomId, UserLeft, { userId: userId || "unknown" });
+    }
+  },
 });
 
 console.log("WebSocket server running on ws://localhost:3000");
@@ -88,29 +121,42 @@ console.log("WebSocket server running on ws://localhost:3000");
 
 ```typescript
 // client.ts
-import { createClient } from "bun-ws-router/zod/client";
-import { ChatMessage, UserJoined } from "./shared/schemas";
+import { wsClient } from "@ws-kit/client/zod";
+import { JoinRoom, ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
 
-const client = createClient({
+// Create type-safe client
+const client = wsClient({
   url: "ws://localhost:3000",
-  reconnect: { enabled: true },
+  auth: {
+    getToken: () => localStorage.getItem("access_token"),
+  },
 });
 
-// Register handlers before connecting
+// Connect and listen for messages
+await client.connect();
+
+// Join a room
+client.send(JoinRoom, {
+  roomId: "general",
+});
+
+// Listen for room updates
 client.on(ChatMessage, (msg) => {
-  console.log(`Received: ${msg.payload.text}`);
+  console.log(`${msg.payload.roomId}: ${msg.payload.text}`);
 });
 
 client.on(UserJoined, (msg) => {
   console.log(`${msg.payload.username} joined ${msg.payload.roomId}`);
 });
 
-// Connect and send
-await client.connect();
+// Send message
 client.send(ChatMessage, {
   text: "Hello, world!",
   roomId: "general",
 });
+
+// Graceful disconnect
+await client.close();
 ```
 
 ::: tip Full Type Safety
@@ -125,39 +171,38 @@ All messages follow a consistent structure:
 
 ```typescript
 {
-  type: string,         // Message type for routing
-  meta: {               // Metadata (optional)
-    timestamp?: number, // Producer time (client clock, UI display only)
+  type: string,          // Message type for routing
+  meta?: {               // Optional metadata
+    timestamp?: number,  // Producer timestamp (client clock)
     correlationId?: string, // Optional request tracking
   },
-  payload?: any         // Your data (validated by schema)
+  payload?: any          // Your validated data
 }
 ```
 
-::: tip Server Timestamp Usage
-**Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted). See [Core Concepts - Timestamp Handling](./core-concepts#timestamp-handling) for guidance.
+::: warning Server Timestamp
+**Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted). The `ctx.receivedAt` field is added by the router at message ingress and reflects the server's clock.
 :::
 
-### Schema Patterns
+### Message Schemas
 
-Message schemas support different patterns:
+Schemas support flexible patterns:
 
 ```typescript
-// Simple message without payload
-const PingMessage = messageSchema("PING");
+// Message without payload
+const PingMessage = message("PING");
 
 // Message with validated payload
-const JoinRoomMessage = messageSchema("JOIN_ROOM", {
-  roomId: z.uuid(),
+const JoinRoomMessage = message("JOIN_ROOM", {
+  roomId: z.string().uuid(),
   username: z.string().min(1).max(20),
 });
 
-// Message with extended metadata
-const RoomMessage = messageSchema(
-  "ROOM_MSG",
-  { text: z.string() },
-  { roomId: z.string() }, // Extended meta fields
-);
+// With optional fields
+const MessageWithOptional = message("MSG", {
+  text: z.string(),
+  mentions: z.array(z.string()).optional(),
+});
 ```
 
 ### Client Features
@@ -165,41 +210,50 @@ const RoomMessage = messageSchema(
 The browser client provides:
 
 - **Auto-reconnection** with exponential backoff
-- **Message queueing** when offline
-- **Request/response pattern** with timeouts
-- **Built-in authentication** (query param or protocol header)
+- **Offline message queueing** when disconnected
+- **Request/response pattern (RPC)** with timeouts and correlation tracking
+- **Built-in authentication** via token or headers
 - **Full type inference** from shared schemas
 
 ```typescript
-// Request/response pattern (for schemas without payload)
-const PingMessage = messageSchema("PING");
-const PongMessage = messageSchema("PONG");
+import { z, rpc } from "@ws-kit/zod";
+import { wsClient } from "@ws-kit/client/zod";
+import { createRouter } from "@ws-kit/zod";
 
+// Define RPC schema (binds request and response)
+const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
+
+// Server setup
+const router = createRouter();
+
+router.rpc(Ping, (ctx) => {
+  ctx.reply(Ping.response, { reply: `Got: ${ctx.payload.text}` });
+});
+
+// Client setup
+const client = wsClient({ url: "ws://localhost:3000" });
+await client.connect();
+
+// Request/response with auto-detected response schema
 try {
-  const reply = await client.request(PingMessage, PongMessage, {
-    timeoutMs: 5000,
-  });
-  console.log("Got pong!");
+  const response = await client.request(
+    Ping,
+    { text: "ping" },
+    { timeoutMs: 5000 },
+  );
+  console.log("Got response:", response.payload.reply);
 } catch (err) {
-  console.error("Timeout or error:", err);
+  console.error("Request failed or timed out:", err);
 }
 ```
 
-See [Client Setup](./client-setup) for complete client documentation.
-
 ## Next Steps
 
-Now that you understand the basics, explore:
+Now that you understand the basics:
 
-- **[Core Concepts](./core-concepts)** - Message structure, routing, error handling
-- **[Client Setup](./client-setup)** - Full client API and advanced features
-- **[Message Schemas](./message-schemas)** - Schema patterns and validation
-- **[API Reference](./api-reference)** - Complete API documentation
-- **[Examples](./examples)** - Real-world usage patterns
-
-### Framework Integration
-
-The router works with any HTTP framework. For framework-specific examples:
-
-- **[Advanced Usage](./advanced-usage#framework-integration)** - Hono, Express, and more
-- **[Deployment](./deployment)** - Production deployment patterns
+- **[Core Concepts](./core-concepts)** — Message routing, lifecycle hooks, error handling
+- **[Client Setup](./client-setup)** — Complete client API and advanced features
+- **[Message Schemas](./message-schemas)** — Schema patterns and validation
+- **[API Reference](./api-reference)** — Complete API documentation
+- **[Advanced Usage](./advanced-usage)** — Middleware, composition, patterns
+- **[Deployment](./deployment)** — Production patterns and scaling

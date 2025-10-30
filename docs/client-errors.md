@@ -2,6 +2,14 @@
 
 The WebSocket client provides comprehensive error handling with type-safe error classes and centralized reporting.
 
+## Quick Reference
+
+- **Error Classes**: See [#error-classes](#error-classes) for all available error types
+- **Error Codes**: See [RpcError section](#rpcerror-advanced) for the 13 standard error codes (gRPC-aligned)
+- **Error Patterns**: See [#error-patterns](#error-patterns) for common error handling examples
+- **Centralized Reporting**: See [#centralized-error-reporting](#centralized-error-reporting) for logging integration
+- **Server-side errors**: See `/Users/koistya/Projects/ws-kit/docs/specs/error-handling.md` for server error specification
+
 ## Error Classes
 
 Import error classes from the client package:
@@ -13,8 +21,27 @@ import {
   ServerError,
   ConnectionClosedError,
   StateError,
-} from "bun-ws-router/client";
+  RpcError,
+  WsDisconnectedError,
+  type RpcErrorCode,
+} from "@ws-kit/client";
 ```
+
+**Core error classes** (currently in use):
+
+- `ValidationError` - Message validation failures
+- `TimeoutError` - Request timeouts
+- `ServerError` - Server error responses (current implementation)
+- `ConnectionClosedError` - Connection closed during request
+- `StateError` - Invalid operation state
+
+**Future error classes** (defined but not yet used in client implementation):
+
+- `RpcError` - Enhanced RPC error with retry hints, `retryAfterMs`, and correlation tracking
+- `WsDisconnectedError` - Disconnection with idempotency support for safe auto-resend
+- `RpcErrorCode` - Type for 13 standard error codes aligned with gRPC (per ADR-015)
+
+**Note**: Error codes are aligned with the server-side error handling specification (see `/Users/koistya/Projects/ws-kit/docs/specs/error-handling.md`). The same 13 standard codes are used on both client and server for consistency.
 
 ### ValidationError
 
@@ -87,7 +114,7 @@ Thrown when server sends error response.
 class ServerError extends Error {
   constructor(
     message: string,
-    public readonly code: ErrorCode,
+    public readonly code: string,
     public readonly context?: Record<string, unknown>
   );
 }
@@ -106,14 +133,16 @@ try {
   if (err instanceof ServerError) {
     console.error(`Server error: ${err.code}`, err.context);
 
-    if (err.code === "RESOURCE_NOT_FOUND") {
+    if (err.code === "NOT_FOUND") {
       console.warn("Item not found");
-    } else if (err.code === "AUTHENTICATION_FAILED") {
+    } else if (err.code === "UNAUTHENTICATED") {
       redirectToLogin();
     }
   }
 }
 ```
+
+**Note**: The server's ERROR payload uses `details` field (per ADR-015), but the client's `ServerError` class currently uses `context` for backward compatibility. This will be unified when `RpcError` replaces `ServerError` in a future release.
 
 ### ConnectionClosedError
 
@@ -176,6 +205,87 @@ try {
 }
 ```
 
+### RpcError (Future)
+
+Enhanced error class for RPC operations with retry hints and correlation tracking. Defined in the codebase but **not yet used** by the client implementation. Future versions will use this instead of `ServerError`.
+
+```typescript
+class RpcError<TCode extends RpcErrorCode = RpcErrorCode> extends Error {
+  constructor(
+    message: string,
+    public readonly code: TCode,
+    public readonly details?: unknown,
+    public readonly retryable?: boolean,
+    public readonly retryAfterMs?: number,
+    public readonly correlationId?: string
+  );
+}
+```
+
+**Standard error codes** (per ADR-015, gRPC-aligned):
+
+**Terminal errors** (don't auto-retry):
+
+- `UNAUTHENTICATED` - Missing or invalid authentication
+- `PERMISSION_DENIED` - Authenticated but insufficient permissions
+- `INVALID_ARGUMENT` - Input validation failed
+- `FAILED_PRECONDITION` - Stateful precondition not met
+- `NOT_FOUND` - Resource does not exist
+- `ALREADY_EXISTS` - Uniqueness or idempotency violation
+- `ABORTED` - Concurrency conflict (race condition)
+
+**Transient errors** (retry with backoff):
+
+- `DEADLINE_EXCEEDED` - RPC timed out
+- `RESOURCE_EXHAUSTED` - Rate limit, quota, or buffer overflow
+- `UNAVAILABLE` - Transient infrastructure error
+
+**Server/evolution**:
+
+- `UNIMPLEMENTED` - Feature not supported or deployed
+- `INTERNAL` - Unexpected server error (unhandled exception)
+- `CANCELLED` - Call cancelled (client disconnect, abort)
+
+**Migration path**: When `RpcError` is integrated, it will replace `ServerError` and use `details` instead of `context` to match the server-side specification. Until then, use `ServerError` with the understanding that `context` will become `details`.
+
+**Future usage example:**
+
+```typescript
+try {
+  const result = await client.request(GetUser, { id: "123" });
+} catch (err) {
+  if (err instanceof RpcError) {
+    if (err.code === "RESOURCE_EXHAUSTED" && err.retryAfterMs) {
+      // Type-narrowed: retryAfterMs is present
+      await sleep(err.retryAfterMs);
+      // Retry request
+    } else if (err.code === "UNAUTHENTICATED") {
+      redirectToLogin();
+    }
+  }
+}
+```
+
+### WsDisconnectedError (Future)
+
+Enhanced disconnection error with idempotency support. Defined in the codebase but **not yet used** by the client implementation. Future versions will use this for more sophisticated reconnection handling.
+
+```typescript
+class WsDisconnectedError extends Error {
+  constructor(message = "WebSocket disconnected");
+}
+```
+
+**Future behavior:**
+
+When connection closes during an RPC request:
+
+- If `idempotencyKey` is provided, client auto-resends on reconnect within `resendWindowMs` (default 5000ms)
+- This error is only thrown if reconnect happens too late or `idempotencyKey` is not set
+- Without `idempotencyKey`, the current `ConnectionClosedError` is thrown immediately
+
+**Current behavior**: The client currently throws `ConnectionClosedError` for all disconnections during RPC requests. Idempotency-aware reconnection is planned but not yet implemented.
+
 ## Error Patterns
 
 ### Fire-and-Forget (send)
@@ -213,6 +323,12 @@ try {
     console.warn("Timeout - retry or show feedback");
   } else if (err instanceof ServerError) {
     console.error("Server error:", err.code);
+    // Handle specific error codes
+    if (err.code === "UNAUTHENTICATED") {
+      redirectToLogin();
+    } else if (err.code === "NOT_FOUND") {
+      showNotFound();
+    }
   } else if (err instanceof ConnectionClosedError) {
     console.warn("Disconnected - reconnecting...");
   } else if (err instanceof ValidationError) {

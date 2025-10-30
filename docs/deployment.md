@@ -1,6 +1,6 @@
 # Deployment
 
-This guide covers best practices for deploying Bun WebSocket Router applications to production.
+This guide covers best practices for deploying WS-Kit applications to production on Bun, Cloudflare Workers/Durable Objects, and other platforms.
 
 ## Environment Configuration
 
@@ -10,7 +10,6 @@ Use environment variables for production settings:
 // config.ts
 export const config = {
   port: parseInt(process.env.PORT || "3000"),
-  wsPath: process.env.WS_PATH || "/ws",
 
   // Security
   jwtSecret: process.env.JWT_SECRET!,
@@ -34,51 +33,179 @@ if (!config.jwtSecret) {
 }
 ```
 
-## Security Best Practices
+## Deploying to Bun
 
-### 1. Authentication & Authorization
+### Basic Setup with `serve()` Helper
+
+The simplest approach uses the platform-specific `serve()` helper:
 
 ```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
 import jwt from "jsonwebtoken";
+import { config } from "./config";
 
-const router = new WebSocketRouter()
-  .onOpen((ctx) => {
-    // Set auth timeout
-    const authTimer = setTimeout(() => {
-      if (!ctx.ws.data.authenticated) {
-        ctx.ws.close(1008, "Authentication timeout");
+type AppData = {
+  userId?: string;
+  roles?: string[];
+  authenticated?: boolean;
+};
+
+const AuthMessage = message("AUTH", {
+  token: z.string(),
+});
+
+const router = createRouter<AppData>();
+
+// Middleware: require auth for protected messages
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.authenticated && ctx.type !== "AUTH") {
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
+    return;
+  }
+  return next();
+});
+
+router.on(AuthMessage, (ctx) => {
+  try {
+    const decoded = jwt.verify(ctx.payload.token, config.jwtSecret, {
+      algorithms: ["HS256"],
+    });
+
+    ctx.assignData({
+      userId: decoded.sub as string,
+      roles: decoded.roles as string[],
+      authenticated: true,
+    });
+  } catch (error) {
+    ctx.error("UNAUTHENTICATED", "Invalid token");
+  }
+});
+
+// Serve with type-safe handlers
+serve(router, {
+  port: config.port,
+  authenticate(req) {
+    // Optional: authenticate during WebSocket upgrade
+    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, config.jwtSecret);
+        return {
+          userId: decoded.sub as string,
+          roles: decoded.roles as string[],
+          authenticated: true,
+        };
+      } catch {
+        return undefined;
       }
-    }, config.authTimeout);
-
-    ctx.ws.data.authTimer = authTimer;
-  })
-
-  .onMessage(AuthMessage, async (ctx) => {
-    try {
-      // Verify token
-      const decoded = jwt.verify(ctx.payload.token, config.jwtSecret, {
-        algorithms: ["HS256"],
-        maxAge: "24h",
-      });
-
-      // Clear auth timer
-      clearTimeout(ctx.ws.data.authTimer);
-
-      // Set authenticated
-      ctx.ws.data.authenticated = true;
-      ctx.ws.data.userId = decoded.sub;
-      ctx.ws.data.roles = decoded.roles;
-    } catch (error) {
-      ctx.ws.close(1008, "Invalid authentication");
     }
-  });
+  },
+  onError(error, ctx) {
+    console.error(`Error in ${ctx?.type}:`, error);
+  },
+  onOpen(ctx) {
+    console.log(`User ${ctx.ws.data?.userId} connected`);
+  },
+  onClose(ctx) {
+    console.log(`User ${ctx.ws.data?.userId} disconnected`);
+  },
+});
+
+console.log(`Server running on ws://localhost:${config.port}`);
 ```
 
-### 2. Input Validation
+## Deploying to Cloudflare Durable Objects
+
+Cloudflare Durable Objects provide stateful serverless compute for WebSocket connections:
 
 ```typescript
-// Strict schema validation
-const MessageSchema = messageSchema("MESSAGE", {
+import { z, message, createRouter } from "@ws-kit/zod";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+
+type AppData = {
+  userId?: string;
+  roles?: string[];
+};
+
+const AuthMessage = message("AUTH", {
+  token: z.string(),
+});
+
+const router = createRouter<AppData>();
+
+router.use((ctx, next) => {
+  if (!ctx.ws.data?.userId && ctx.type !== "AUTH") {
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
+    return;
+  }
+  return next();
+});
+
+router.on(AuthMessage, (ctx) => {
+  try {
+    // Access environment variable from Cloudflare DO env
+    const jwtSecret = "your-jwt-secret"; // In real app: get from env
+    const decoded = verifyJWT(ctx.payload.token, jwtSecret);
+    ctx.assignData({
+      userId: decoded.sub as string,
+      roles: (decoded.roles as string[]) || [],
+    });
+  } catch {
+    ctx.error("UNAUTHENTICATED", "Invalid token");
+  }
+});
+
+// Export Durable Object class (required by Cloudflare)
+export class ChatRoom {
+  private handler;
+
+  constructor(
+    private state: DurableObjectState,
+    private env: Env,
+  ) {
+    this.handler = createDurableObjectHandler(router, {
+      authenticate(req) {
+        const token = req.headers.get("authorization")?.replace("Bearer ", "");
+        if (token) {
+          try {
+            const jwtSecret = env.JWT_SECRET || "your-jwt-secret";
+            const decoded = verifyJWT(token, jwtSecret);
+            return {
+              userId: decoded.sub as string,
+              roles: (decoded.roles as string[]) || [],
+            };
+          } catch {
+            return undefined;
+          }
+        }
+      },
+      maxConnections: 1000,
+    });
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    return this.handler.fetch(req);
+  }
+}
+```
+
+Deploy to Cloudflare:
+
+```bash
+wrangler deploy
+```
+
+## Security Best Practices
+
+### 1. Input Validation
+
+Use schemas to validate all message payloads:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+
+const MessageSchema = message("MESSAGE", {
   // Limit string lengths
   text: z.string().min(1).max(1000),
 
@@ -86,135 +213,166 @@ const MessageSchema = messageSchema("MESSAGE", {
   email: z.email(),
   url: z.url().startsWith("https://"),
 
-  // Sanitize HTML
-  content: z.string().transform(sanitizeHtml),
-
   // Validate enums
   type: z.enum(["text", "image", "video"]),
 
   // Limit array sizes
   tags: z.array(z.string()).max(10),
 });
+
+const router = createRouter();
+
+router.on(MessageSchema, (ctx) => {
+  // Payload is guaranteed valid—TypeScript knows the shape
+  console.log(`Message type: ${ctx.payload.type}`);
+});
 ```
 
-### 3. Rate Limiting
+### 2. Rate Limiting
+
+Implement per-user rate limiting in middleware:
 
 ```typescript
-import { RateLimiterMemory } from "rate-limiter-flexible";
+const rateLimiters = new Map<string, { count: number; resetAt: number }>();
 
-// Create rate limiters
-const messageLimiter = new RateLimiterMemory({
-  points: config.messageRateLimit,
-  duration: 60, // Per minute
-});
+router.use((ctx, next) => {
+  const userId = ctx.ws.data?.userId || "anonymous";
+  const now = Date.now();
+  const limit = rateLimiters.get(userId);
 
-const connectionLimiter = new RateLimiterMemory({
-  points: config.maxConnectionsPerIP,
-  duration: 0, // No expiry
-});
-
-// Apply rate limiting
-Bun.serve({
-  async fetch(req, server) {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
-
-    try {
-      // Check connection limit
-      await connectionLimiter.consume(ip);
-
-      return router.upgrade(req, { server });
-    } catch {
-      return new Response("Too many connections", { status: 429 });
+  if (limit && now < limit.resetAt) {
+    if (limit.count >= 100) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return;
     }
-  },
+    limit.count++;
+  } else {
+    rateLimiters.set(userId, {
+      count: 1,
+      resetAt: now + 60000, // Reset every minute
+    });
+  }
 
-  websocket: router.websocket,
+  return next();
+});
+```
+
+### 3. Idle Timeout Handling
+
+Track idle connections and close them:
+
+```typescript
+const idleTimeout = 5 * 60 * 1000; // 5 minutes
+const activityMap = new Map<WebSocket<AppData>, number>();
+
+router.onOpen((ctx) => {
+  activityMap.set(ctx.ws, Date.now());
+
+  // Check for idle connections periodically
+  const idleCheck = setInterval(() => {
+    const lastActivity = activityMap.get(ctx.ws);
+    if (lastActivity && Date.now() - lastActivity > idleTimeout) {
+      ctx.ws.close(1000, "Idle timeout");
+      activityMap.delete(ctx.ws);
+      clearInterval(idleCheck);
+    }
+  }, 60000); // Check every minute
+});
+
+router.use((ctx, next) => {
+  activityMap.set(ctx.ws, Date.now());
+  return next();
+});
+
+router.onClose((ctx) => {
+  activityMap.delete(ctx.ws);
 });
 ```
 
 ## Performance Optimization
 
-### 1. Connection Pooling
+### 1. Broadcasting
+
+Type-safe broadcasting with schema validation:
 
 ```typescript
-import { publish } from "bun-ws-router/zod/publish";
-
-// Efficient broadcast using type-safe publish
-router.onMessage(BroadcastMessage, (ctx) => {
-  // Type-safe publish validates message before sending
-  publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
+const RoomUpdate = message("ROOM_UPDATE", {
+  roomId: z.string(),
+  message: z.string(),
 });
 
-// Subscribe clients efficiently
-router.onOpen((ctx) => {
-  ctx.ws.subscribe("global");
-  ctx.ws.subscribe(`user:${ctx.ws.data.clientId}`);
+router.on(SendMessage, (ctx) => {
+  const { text, roomId } = ctx.payload;
+
+  // Type-safe broadcast (validated against schema)
+  router.publish(roomId, RoomUpdate, {
+    roomId,
+    message: text,
+  });
 });
 ```
 
-### 2. Message Compression
+### 2. Backpressure Handling
+
+Bun provides built-in backpressure handling through the `drain` callback:
 
 ```typescript
-// Enable per-message deflate
-const server = Bun.serve({
-  port: process.env.PORT || 3000,
-  fetch: app.fetch, // Your HTTP handler
-  websocket: {
-    ...router.websocket,
+import { createBunHandler } from "@ws-kit/bun";
 
-    // Enable compression
-    perMessageDeflate: {
-      threshold: 1024, // Compress messages > 1KB
-      compress: true,
+const { fetch, websocket } = createBunHandler(router);
+
+// The drain callback is called when the socket's write buffer has been flushed
+// Use this to resume message processing if it was paused due to backpressure
+Bun.serve({
+  fetch,
+  websocket: {
+    ...websocket,
+    drain(ws) {
+      // Called when buffered messages are sent
+      // Resume processing if you paused due to high backpressure
     },
   },
+  port: 3000,
 });
 ```
+
+For high-throughput scenarios, monitor `ws.send()` return value to detect backpressure and pause processing accordingly.
 
 ### 3. Memory Management
 
+Clean up resources on connection close:
+
 ```typescript
-// Clean up resources
-const cleanupManager = new Map<string, () => void>();
+const connectionResources = new Map<WebSocket<AppData>, () => void>();
 
-router
-  .onOpen((ctx) => {
-    const clientId = ctx.ws.data.clientId;
-    const cleanup: Array<() => void> = [];
+router.onOpen((ctx) => {
+  const cleanup: Array<() => void> = [];
 
-    // Initialize activity tracking
-    ctx.ws.data.lastActivity = Date.now();
+  // Track timers for cleanup
+  const idleTimer = setInterval(() => {
+    // Check idle status
+  }, 60000);
 
-    // Set idle timeout
-    const idleTimer = setInterval(() => {
-      if (Date.now() - ctx.ws.data.lastActivity > config.idleTimeout) {
-        ctx.ws.close(1000, "Idle timeout");
-      }
-    }, 60000);
+  cleanup.push(() => clearInterval(idleTimer));
 
-    cleanup.push(() => clearInterval(idleTimer));
-
-    // Store cleanup functions
-    cleanupManager.set(clientId, () => {
-      cleanup.forEach((fn) => fn());
-      cleanupManager.delete(clientId);
-    });
-  })
-
-  .onMessage(AnyMessage, (ctx) => {
-    // Update activity timestamp directly on ws.data
-    ctx.ws.data.lastActivity = Date.now();
-  })
-
-  .onClose((ctx) => {
-    // Run cleanup
-    cleanupManager.get(ctx.ws.data.clientId)?.();
+  // Store cleanup function
+  connectionResources.set(ctx.ws, () => {
+    cleanup.forEach((fn) => fn());
+    connectionResources.delete(ctx.ws);
   });
+});
+
+router.onClose((ctx) => {
+  const cleanup = connectionResources.get(ctx.ws);
+  cleanup?.();
+});
 ```
 
 ## Monitoring & Logging
 
 ### 1. Structured Logging
+
+Log connection lifecycle and message handling:
 
 ```typescript
 import pino from "pino";
@@ -229,137 +387,132 @@ const logger = pino({
   },
 });
 
-router
-  .onOpen((ctx) => {
-    logger.info({
-      event: "ws_connect",
-      clientId: ctx.ws.data.clientId,
-      ip: ctx.ws.data.ip,
-    });
-  })
-
-  .onMessage(AnyMessage, (ctx) => {
-    logger.debug({
-      event: "ws_message",
-      clientId: ctx.ws.data.clientId,
-      type: ctx.type,
-      size: JSON.stringify(ctx.payload).length,
-    });
-  })
-
-  .onError((ws, error) => {
-    logger.error({
-      event: "ws_error",
-      clientId: ws.data.clientId,
-      error: error.message,
-      stack: error.stack,
-    });
+router.onOpen((ctx) => {
+  logger.info({
+    event: "ws_connect",
+    userId: ctx.ws.data?.userId,
+    timestamp: new Date().toISOString(),
   });
+});
+
+router.use((ctx, next) => {
+  logger.debug({
+    event: "ws_message",
+    userId: ctx.ws.data?.userId,
+    type: ctx.type,
+    size: JSON.stringify(ctx.payload).length,
+  });
+  return next();
+});
+
+router.onClose((ctx) => {
+  logger.info({
+    event: "ws_disconnect",
+    userId: ctx.ws.data?.userId,
+  });
+});
 ```
 
 ### 2. Metrics Collection
 
+Track key metrics:
+
 ```typescript
-// Prometheus metrics
-import { register, Counter, Gauge, Histogram } from "prom-client";
-
 const metrics = {
-  connections: new Gauge({
-    name: "ws_connections_total",
-    help: "Total WebSocket connections",
-  }),
-
-  messages: new Counter({
-    name: "ws_messages_total",
-    help: "Total messages processed",
-    labelNames: ["type"],
-  }),
-
-  errors: new Counter({
-    name: "ws_errors_total",
-    help: "Total errors",
-    labelNames: ["code"],
-  }),
-
-  messageSize: new Histogram({
-    name: "ws_message_size_bytes",
-    help: "Message size in bytes",
-    buckets: [100, 1000, 10000, 100000],
-  }),
+  activeConnections: 0,
+  totalMessages: 0,
+  totalErrors: 0,
 };
 
-// Track metrics
-router
-  .onOpen(() => metrics.connections.inc())
-  .onClose(() => metrics.connections.dec())
-  .onMessage(AnyMessage, (ctx) => {
-    const size = JSON.stringify(ctx.payload).length;
-    metrics.messages.inc({ type: ctx.type });
-    metrics.messageSize.observe(size);
-  });
+router.onOpen(() => {
+  metrics.activeConnections++;
+});
 
-// Expose metrics endpoint
-app.get("/metrics", (c) => c.text(register.metrics()));
+router.onClose(() => {
+  metrics.activeConnections--;
+});
+
+router.use((ctx, next) => {
+  try {
+    metrics.totalMessages++;
+    return next();
+  } catch (error) {
+    metrics.totalErrors++;
+    throw error;
+  }
+});
+
+// Expose metrics endpoint (if using HTTP framework)
+app.get("/metrics", (c) => {
+  return c.json(metrics);
+});
 ```
 
 ## Scaling Strategies
 
 ### 1. Horizontal Scaling with Redis
 
+For multi-instance deployments, use the Redis PubSub adapter for automatic cross-instance broadcasting:
+
 ```typescript
-import { createClient } from "redis";
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { createRedisPubSub } from "@ws-kit/redis-pubsub";
 
-const redis = createClient({
-  url: process.env.REDIS_URL,
+type AppData = { userId?: string };
+
+// Create Redis PubSub instance
+const pubsub = createRedisPubSub({
+  url: process.env.REDIS_URL || "redis://localhost:6379",
+  namespace: "myapp:prod", // Optional: isolate channels per environment
 });
 
-await redis.connect();
-
-// Pub/Sub across instances
-router.onMessage(BroadcastMessage, async (ctx) => {
-  // Publish to Redis for cross-instance communication
-  await redis.publish(
-    "broadcast",
-    JSON.stringify({
-      type: "BROADCAST",
-      payload: ctx.payload,
-      origin: process.env.INSTANCE_ID,
-    }),
-  );
-
-  // Also broadcast to local clients using type-safe publish()
-  publish(ctx.ws, "global", BroadcastMessage, ctx.payload);
+// Create router with Redis PubSub for cross-instance broadcasting
+const router = createRouter<AppData>({
+  pubsub,
 });
 
-// Subscribe to Redis broadcasts from other instances
-redis.subscribe("broadcast", (message) => {
-  const data = JSON.parse(message);
-
-  // Skip if from current instance (already broadcasted above)
-  if (data.origin === process.env.INSTANCE_ID) return;
-
-  // Broadcast to local clients using server.publish()
-  // Note: This is raw server-level broadcast (no validation)
-  // Message is already validated by originating instance
-  server.publish("global", JSON.stringify(data));
+const ChatMessage = message("CHAT", {
+  userId: z.string(),
+  text: z.string(),
 });
+
+router.on(ChatMessage, async (ctx) => {
+  // Broadcasts to all instances connected to Redis
+  await router.publish("chat:general", ChatMessage, {
+    userId: ctx.payload.userId,
+    text: ctx.payload.text,
+  });
+});
+
+serve(router, { port: 3000 });
 ```
+
+The Redis adapter handles all cross-instance coordination automatically:
+
+- Messages published via `router.publish()` are broadcast to all instances
+- Each instance delivers messages to its local subscribers
+- Automatic reconnection with exponential backoff
+- Connection pooling for optimal performance
+
+For more details, see the [redis-multi-instance example](https://github.com/kriasoft/ws-kit/tree/main/examples/redis-multi-instance/).
 
 ### 2. Load Balancing
 
-Configure your load balancer for WebSocket support:
+Configure your load balancer for sticky WebSocket sessions:
 
 ```nginx
 # nginx.conf
 upstream websocket {
-    ip_hash;  # Sticky sessions
-    server app1:3000;
-    server app2:3000;
-    server app3:3000;
+    ip_hash;  # Sticky sessions to same backend
+    server app1.internal:3000;
+    server app2.internal:3000;
+    server app3.internal:3000;
 }
 
 server {
-    listen 80;
+    listen 443 ssl http2;
+    server_name api.example.com;
 
     location /ws {
         proxy_pass http://websocket;
@@ -371,7 +524,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Timeouts
+        # Long timeouts for persistent connections
         proxy_connect_timeout 7d;
         proxy_send_timeout 7d;
         proxy_read_timeout 7d;
@@ -379,89 +532,105 @@ server {
 }
 ```
 
-## Health Checks
+## Testing Multiple Runtimes
 
-Implement health check endpoints:
+Before production, test your router under multiple deployment targets. The router is platform-agnostic, so you can test the same routing logic with different adapters.
+
+Example testing approach:
 
 ```typescript
-const healthRouter = new Hono();
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { describe, it, expect } from "bun:test";
 
-healthRouter.get("/health", (c) => {
-  return c.json({
-    status: "healthy",
-    timestamp: Date.now(),
-    connections: connectionCount,
-    uptime: process.uptime(),
+// Create your router once
+const router = createRouter();
+// ... register handlers
+
+describe("Production deployment test", () => {
+  it("works with Bun adapter", async () => {
+    // Start server with Bun adapter
+    serve(router, {
+      port: 3000,
+      authenticate(req) {
+        return { userId: "test" };
+      },
+    });
+
+    // Run client tests against ws://localhost:3000
   });
+
+  // For Cloudflare DO, test with their local dev environment
+  // using `wrangler dev` or integration tests
+});
+```
+
+For complete multi-runtime testing patterns, see [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime).
+
+## Graceful Shutdown
+
+Handle shutdown signals and drain connections gracefully:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import { createBunHandler } from "@ws-kit/bun";
+
+const router = createRouter();
+const { fetch, websocket } = createBunHandler(router);
+
+const ShutdownNotice = message("SERVER_SHUTDOWN", {
+  reason: z.string(),
 });
 
-healthRouter.get("/health/ready", async (c) => {
-  try {
-    // Check dependencies
-    await redis.ping();
+let isShuttingDown = false;
 
-    return c.json({ status: "ready" });
-  } catch (error) {
-    return c.json({ status: "not ready", error: error.message }, 503);
-  }
+async function gracefulShutdown(server: ReturnType<typeof Bun.serve>) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log("Starting graceful shutdown...");
+
+  // Notify clients of shutdown
+  await router.publish("all", ShutdownNotice, {
+    reason: "Server maintenance",
+  });
+
+  // Give clients time to gracefully disconnect
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // Stop accepting new connections
+  server.stop();
+
+  process.exit(0);
+}
+
+const server = Bun.serve({
+  fetch,
+  websocket,
+  port: 3000,
 });
+
+process.on("SIGTERM", () => gracefulShutdown(server));
+process.on("SIGINT", () => gracefulShutdown(server));
 ```
 
 ## Deployment Checklist
 
 Before deploying to production:
 
-- [ ] Set all required environment variables
-- [ ] Enable HTTPS/WSS with valid certificates
-- [ ] Configure rate limiting
-- [ ] Set up monitoring and alerting
-- [ ] Test authentication flow
-- [ ] Configure log aggregation
-- [ ] Set up automated backups
-- [ ] Create runbooks for common issues
+- [ ] Set all required environment variables (JWT_SECRET, etc.)
+- [ ] Enable WSS/HTTPS with valid certificates
+- [ ] Configure rate limiting per user
+- [ ] Set up structured logging and aggregation
+- [ ] Test authentication flow end-to-end
+- [ ] Configure idle timeout handling
 - [ ] Test graceful shutdown
-- [ ] Load test with expected traffic
+- [ ] Load test with expected concurrent connections
+- [ ] Set up monitoring and alerting
+- [ ] Test multi-runtime compatibility (see Advanced guide)
+- [ ] Configure automatic restarts and health checks
 
-## Graceful Shutdown
+## See Also
 
-```typescript
-// Handle shutdown signals
-let isShuttingDown = false;
-
-async function gracefulShutdown() {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-
-  logger.info("Starting graceful shutdown...");
-
-  // Stop accepting new connections
-  server.stop();
-
-  // Notify all clients of shutdown using server.publish()
-  // Note: This is server-level broadcast (no per-connection context)
-  const ShutdownMessage = messageSchema("SERVER_SHUTDOWN", {
-    reason: z.string(),
-  });
-
-  server.publish(
-    "global",
-    JSON.stringify({
-      type: "SERVER_SHUTDOWN",
-      meta: { timestamp: Date.now() },
-      payload: { reason: "Server maintenance" },
-    }),
-  );
-
-  // Give clients time to handle shutdown message
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-
-  // Clean up resources
-  await redis.quit();
-
-  logger.info("Graceful shutdown complete");
-  process.exit(0);
-}
-
-process.on("SIGTERM", gracefulShutdown);
-process.on("SIGINT", gracefulShutdown);
-```
+- [Advanced: Multi-Runtime Harness](./guides/advanced-multi-runtime) — Integration testing across platforms
+- [ADR-006: Multi-Runtime serve()](./adr/006-multi-runtime-serve-with-explicit-selection) — Runtime selection design

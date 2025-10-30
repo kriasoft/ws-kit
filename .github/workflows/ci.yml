@@ -18,6 +18,16 @@ jobs:
     strategy:
       matrix:
         bun-version: [latest, canary]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -26,7 +36,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          key: bun-${{ runner.os }}-${{ matrix.bun-version }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - run: bun test
       - run: bun run tsc --noEmit

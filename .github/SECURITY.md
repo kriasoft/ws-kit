@@ -4,16 +4,18 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.4.x   | :white_check_mark: |
-| < 0.4   | :x:                |
+| 0.x     | :white_check_mark: |
+| < 0.x   | N/A                |
+
+_WS-Kit is in active development (pre-v1). Security updates are released for the latest development version._
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in bun-ws-router, please report it responsibly:
+If you discover a security vulnerability in WS-Kit, please report it responsibly:
 
 **DO NOT** open a public issue for security vulnerabilities.
 
-Instead, please email: security@kriasoft.com
+Instead, please email: [security@kriasoft.com](mailto:security@kriasoft.com)
 
 Include in your report:
 
@@ -30,7 +32,7 @@ Include in your report:
 
 ## Security Considerations
 
-When using bun-ws-router:
+When using WS-Kit:
 
 - **Input validation**: Always validate incoming WebSocket messages with schema validation (Zod/Valibot)
 - **Authentication**: Implement proper authentication during WebSocket upgrade
@@ -47,4 +49,4 @@ When using bun-ws-router:
 
 ## Responsible Disclosure
 
-We appreciate security researchers who help keep bun-ws-router secure. If you report a valid security issue, we'll acknowledge your contribution in the release notes (with your permission) and coordinate disclosure timing with you.
+We appreciate security researchers who help keep WS-Kit secure. If you report a valid security issue, we'll acknowledge your contribution in the release notes (with your permission) and coordinate disclosure timing with you.

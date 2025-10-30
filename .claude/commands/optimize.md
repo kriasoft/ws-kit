@@ -1,6 +1,6 @@
 Analyze the provided code for performance issues and suggest optimizations: $ARGUMENTS
 
-Focus on these areas specific to the bun-ws-router project:
+Focus on these areas specific to the ws-kit project:
 
 ## Performance Analysis Areas
 

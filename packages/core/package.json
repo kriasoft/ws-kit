@@ -1,0 +1,52 @@
+{
+  "name": "@ws-kit/core",
+  "version": "0.0.0",
+  "description": "WS-Kit — Type-safe WebSocket router for Bun and Cloudflare with pluggable validators and zero vendor lock-in",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/core"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "router",
+    "type-safe",
+    "adapter",
+    "validation",
+    "typescript",
+    "real-time",
+    "server",
+    "messaging",
+    "framework",
+    "event-driven",
+    "infrastructure",
+    "websocket-server",
+    "rpc",
+    "pluggable",
+    "pub-sub"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}

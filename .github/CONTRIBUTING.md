@@ -1,4 +1,4 @@
-# Contributing to bun-ws-router
+# Contributing to WS-Kit
 
 Thanks for your interest in contributing! This guide will help you get started.
 
@@ -11,8 +11,8 @@ Thanks for your interest in contributing! This guide will help you get started.
 1. **Fork and clone**:
 
    ```bash
-   git clone https://github.com/your-username/bun-ws-router.git
-   cd bun-ws-router
+   git clone https://github.com/your-username/ws-kit.git
+   cd ws-kit
    ```
 
 2. **Install dependencies**:
@@ -39,13 +39,16 @@ Thanks for your interest in contributing! This guide will help you get started.
 
 2. **Write your code** following existing patterns
 3. **Add tests** for new functionality
-4. **Run checks**:
+4. **Run checks** (before committing):
 
    ```bash
    bun run typecheck   # Type checking
-   bun run format      # Auto-format code
+   bun run lint:fix    # Fix linting issues
+   bun run format      # Auto-format code (optional - runs automatically on commit)
    bun test            # Run tests
    ```
+
+   Pre-commit hooks will automatically format code and run type checks, but it's good practice to run these locally first.
 
 ### Code Standards
 
@@ -81,13 +84,21 @@ Thanks for your interest in contributing! This guide will help you get started.
 ## Project Structure
 
 ```
-shared/             # Core types and utilities
-zod/                # Zod adapter implementation
-valibot/            # Valibot adapter implementation
-index.ts            # Main router exports
-test/               # Test files
-docs/               # VitePress documentation site
-specs/              # Technical specifications and ADRs
+packages/
+├── core/            # Core router implementation
+├── zod/             # Zod validator adapter
+├── valibot/         # Valibot validator adapter
+├── bun/             # Bun platform adapter
+├── cloudflare-do/   # Cloudflare DO platform adapter
+├── redis-pubsub/    # Redis pub/sub adapter
+└── client/          # WebSocket client library
+docs/
+├── specs/           # Technical specifications
+├── adr/             # Architectural Decision Records
+├── blog/            # Blog posts
+└── client-api.md    # Client API documentation
+examples/           # Usage examples
+test/               # Shared test utilities
 ```
 
 ## Types of Contributions
@@ -110,9 +121,9 @@ Follow these key principles:
 
 ## Getting Help
 
-- **Questions**: Open a [discussion](https://github.com/kriasoft/bun-ws-router/discussions)
-- **Bugs**: Check [existing issues](https://github.com/kriasoft/bun-ws-router/issues) first
-- **Documentation**: See [docs site](https://kriasoft.com/bun-ws-router/)
+- **Questions**: Open a [discussion](https://github.com/kriasoft/ws-kit/discussions)
+- **Bugs**: Check [existing issues](https://github.com/kriasoft/ws-kit/issues) first
+- **Documentation**: See [docs site](https://kriasoft.com/ws-kit/)
 
 ## Code of Conduct
 

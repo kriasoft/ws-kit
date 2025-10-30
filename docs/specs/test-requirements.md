@@ -1,0 +1,1663 @@
+# Testing Requirements
+
+**Status**: ✅ Implemented (type-level tests with expectTypeOf)
+
+## Test Organization
+
+Tests are organized by package. Each package owns its test directory:
+
+```text
+packages/
+├── core/test/              # Core router tests + features/
+├── zod/test/               # Zod validator tests + features/
+├── valibot/test/           # Valibot validator tests + features/
+├── bun/test/               # Bun adapter tests
+├── client/test/            # Client tests (runtime/ + types/)
+└── cloudflare-do/test/     # Cloudflare DO adapter tests
+```
+
+### When Adding Tests
+
+- **Core features**: `packages/core/test/features/`
+- **Validator features**: Mirror Zod tests in Valibot with same structure
+- **Type inference tests**: Use `packages/*/test/types/`
+- **Adapters**: Add to respective `packages/*/test/`
+
+### Running Tests
+
+```bash
+bun test                           # All tests
+bun test packages/zod/test         # Specific package
+bun test --grep "pattern"          # By pattern
+bun test --watch                   # Watch mode
+```
+
+## Section Map
+
+Quick navigation for AI tools:
+
+- [#Test-Organization](#test-organization) — Directory structure and running tests
+- [#Router-Testability](#router-testability) — Testing utilities for router state inspection and reset
+- [#Type-Level-Testing](#type-level-testing) — Compile-time validation with expectTypeOf
+- [#Handler-Context-Inference](#handler-context-inference) — Server handler type tests
+- [#Client-Type-Inference](#client-type-inference) — Client handler and request/response tests
+- [#Runtime-Testing](#runtime-testing) — Validation, normalization, and strict schema tests
+- [#Key-Constraints](#key-constraints) — Testing requirements summary
+- **Testing patterns**: See @rules.md for broader testing guidance
+
+## Router Testability
+
+The WebSocketRouter provides three opt-in testing utilities to simplify unit test setup and assertions:
+
+### Testing Mode: Inspect Internal State
+
+Enable testing mode to access internal state without reflection:
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter({ testing: true });
+
+const TestMsg = message("TEST", { id: z.number() });
+router.on(TestMsg, (ctx) => {
+  /* handler */
+});
+
+// Inspect handlers, middleware, and lifecycle handlers
+expect(router._testing?.handlers.size).toBe(1);
+expect(router._testing?.middleware.length).toBe(0);
+expect(router._testing?.openHandlers.length).toBe(0);
+```
+
+**When to use**: Unit testing where you need to verify router configuration without executing handlers.
+
+**Convention**: The `_testing` prefix signals "testing internals" (borrowed from Vitest/Preact). Not part of public API.
+
+### Reset Method: Reuse Router Instance
+
+Clear all handlers and middleware without creating a new router instance:
+
+```typescript
+let router: WebSocketRouter;
+
+beforeEach(() => {
+  if (!router) {
+    router = createRouter();
+  } else {
+    router.reset(); // Clear handlers, keep validator config
+  }
+});
+
+test("first test", () => {
+  router.on(Message1, handler1);
+  expect(router.routes().length).toBe(1);
+});
+
+test("second test", () => {
+  router.reset(); // Clean slate
+  router.on(Message2, handler2);
+  expect(router.routes().length).toBe(1); // Only Message2
+});
+```
+
+**What's cleared**: Message handlers, global middleware, per-route middleware, lifecycle handlers.
+
+**What's preserved**: Validator, platform adapter, heartbeat/limit configuration, active connection states.
+
+**Returns**: `this` for method chaining.
+
+### Validation Bypass: Test Edge Cases
+
+Skip message validation for testing without schema:
+
+```typescript
+const router = createRouter({ testing: true });
+
+// Send message without validation (useful for testing error paths)
+let contextSend: SendFunction;
+router.on(TestMsg, (ctx) => {
+  contextSend = ctx.send;
+});
+
+// In test: call send with invalid payload, skip validation
+const mockWs = createMockWebSocket();
+const sendFn = (router as any).createSendFunction(mockWs);
+sendFn(AnySchema, { invalid: "data" }, { validate: false });
+
+// Message sent as-is, no validation error
+expect(mockWs._getMessages().length).toBe(1);
+```
+
+**When to use**: Testing error handling, message processing pipelines, or edge cases that require bypassing validation.
+
+**Default behavior**: Validation is always ON (production safe). Pass `validate: false` explicitly to disable.
+
+**Metadata preservation**: Other metadata (correlationId, custom fields) is preserved when validation is skipped; only the `validate` flag is filtered out.
+
+## Type-Level Testing
+
+Use `expectTypeOf` from `expect-type` for compile-time validation:
+
+```typescript
+import { expectTypeOf } from "expect-type";
+
+// Test conditional payload typing
+const WithPayload = message("WITH", { id: z.number() });
+const WithoutPayload = message("WITHOUT");
+
+router.on(WithPayload, (ctx) => {
+  expectTypeOf(ctx.payload).toEqualTypeOf<{ id: number }>();
+  expectTypeOf(ctx.payload.id).toBeNumber();
+});
+
+router.on(WithoutPayload, (ctx) => {
+  // @ts-expect-error - payload should not exist
+  ctx.payload;
+});
+```
+
+## Handler Context Inference
+
+```typescript
+// Test inline handler type inference
+router.on(TestMessage, (ctx) => {
+  expectTypeOf(ctx.type).toEqualTypeOf<"TEST">();
+
+  // Server-provided timestamp is always present (server clock)
+  expectTypeOf(ctx.receivedAt).toBeNumber();
+
+  // Client's timestamp in meta is optional (client's clock, untrusted)
+  expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
+
+  // Connection identity is always present in ws.data
+  expectTypeOf(ctx.ws.data).toHaveProperty("clientId");
+  expectTypeOf(ctx.ws.data.clientId).toBeString();
+
+  expectTypeOf(ctx.send).toBeFunction();
+});
+```
+
+## Discriminated Union Testing
+
+```typescript
+const PingMsg = message("PING");
+const PongMsg = message("PONG", { reply: z.string() });
+
+// Test discriminated union creation
+const MessageUnion = z.discriminatedUnion("type", [PingMsg, PongMsg]);
+expectTypeOf(MessageUnion.parse({ type: "PING", meta: {} })).toMatchTypeOf<{
+  type: "PING";
+  meta: MessageMetadata;
+}>();
+```
+
+## Cross-Package Type Compatibility
+
+```typescript
+// Test type inference preserves types across package boundaries
+import { z, message } from "@ws-kit/zod";
+
+const TestSchema = message("TEST", { value: z.number() });
+
+// Should work in discriminated unions
+const union = z.discriminatedUnion("type", [TestSchema]);
+expectTypeOf(union).toMatchTypeOf<z.ZodDiscriminatedUnion<"type", any>>();
+```
+
+## RPC Context Inference Type Tests
+
+**Location**: `packages/core/test/types/rpc-context-inference.test.ts`
+
+**Purpose**: Verify RPC context (via `router.rpc()`) and event context (via `router.on()`) have properly discriminated types with correct inference for RPC-specific methods: `reply()`, `progress()`, `onCancel()`, `deadline`.
+
+**Related**: ADR-001, ADR-002, ADR-015
+
+### Context Type Discrimination
+
+RPC context must have `isRpc: true` and RPC methods; event context must have `isRpc: false` without RPC methods:
+
+```typescript
+router.rpc(GetUser, (ctx) => {
+  expectTypeOf(ctx.isRpc).toEqualTypeOf<true>();
+  expectTypeOf(ctx.reply).toBeFunction();
+  expectTypeOf(ctx.deadline).toBeNumber();
+});
+
+router.on(UserLoggedIn, (ctx) => {
+  expectTypeOf(ctx.isRpc).toEqualTypeOf<false>();
+  // @ts-expect-error - RPC methods should not exist
+  ctx.reply;
+});
+```
+
+### Payload Conditional Typing
+
+Payload presence matches schema in both RPC and event contexts:
+
+```typescript
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_OK", {
+  name: z.string(),
+});
+router.rpc(GetUser, (ctx) => {
+  expectTypeOf(ctx.payload).toEqualTypeOf<{ id: string }>();
+});
+
+const Heartbeat = rpc("HEARTBEAT", undefined, "HEARTBEAT_ACK", undefined);
+router.rpc(Heartbeat, (ctx) => {
+  // @ts-expect-error - no payload
+  ctx.payload;
+});
+```
+
+### Middleware Context Narrowing
+
+Use `isRpc` flag to narrow context in middleware:
+
+```typescript
+router.use((ctx, next) => {
+  if (ctx.isRpc) {
+    ctx.onCancel(() => {
+      /* cleanup */
+    });
+  }
+  return next();
+});
+```
+
+### Test Coverage
+
+The test file verifies:
+
+- Context type discrimination and narrowing
+- Payload conditional typing (RPC & Event)
+- Union type handling (`MessageContext<T>` union)
+- Custom data type preservation
+- Complex generics (discriminated unions, nested payloads)
+- Metadata type safety
+- ADR-002 type override compatibility
+
+## RPC Incomplete Handler Detection Tests
+
+**Location**: `packages/core/test/features/rpc-incomplete-warning.test.ts`
+
+**Purpose**: Verify that the router warns developers when RPC handlers complete without sending a terminal response (reply or error). This helps catch common bugs where `ctx.reply()` or `ctx.error()` is forgotten, causing client timeouts.
+
+**Configuration tested**:
+
+- `warnIncompleteRpc?: boolean` (default: true)
+- Dev-mode only (`NODE_ENV !== "production"`)
+- Configuration flag respected (disabled when false)
+
+### Warning Triggering
+
+Tests verify warnings fire when:
+
+- Sync handler completes without reply or error
+- Async handler completes without reply or error
+- Handler returns early (e.g., without calling error in early-return branches)
+- Progress is sent but terminal response is missing
+
+### No Warning Cases
+
+Tests verify warnings do NOT fire when:
+
+- Handler calls `ctx.reply()` with response
+- Handler calls `ctx.error()` with error code and message
+- Non-RPC messages (event handlers) complete without reply
+- Configuration flag is disabled (`warnIncompleteRpc: false`)
+
+### Warning Message Content
+
+Tests verify warning messages include:
+
+- Message type being handled
+- Correlation ID for request identification
+- Actionable guidance (mention ctx.reply/error)
+- Suggestion to disable warning for legitimate async patterns
+
+### Configuration Behavior
+
+```typescript
+// Enabled by default
+const router = createRouter();
+// Warnings logged in dev mode
+
+// Disabled
+const router = createRouter({ warnIncompleteRpc: false });
+// No warnings even if handlers forget reply
+
+// Custom timeout config (orthogonal to warnings)
+const router = createRouter({
+  rpcTimeoutMs: 5000,
+  warnIncompleteRpc: true,
+});
+```
+
+### Legitimate Async Patterns
+
+The implementation warns for common bugs while providing escape hatch for legitimate async patterns:
+
+```typescript
+// ✅ Will warn (legitimate false positive - pattern should be disabled)
+router.rpc(LongTask, (ctx) => {
+  setTimeout(() => {
+    ctx.reply(Result, { done: true });
+  }, 1000);
+  // Handler completes before setTimeout fires
+});
+
+// Mitigation:
+const router = createRouter({ warnIncompleteRpc: false });
+// Or: configure per-router if needed
+```
+
+## Runtime Testing
+
+```typescript
+test("message validation", () => {
+  const TestMsg = message("TEST", { id: z.number() });
+
+  const valid = TestMsg.safeParse({
+    type: "TEST",
+    meta: { timestamp: Date.now() },
+    payload: { id: 123 },
+  });
+
+  expect(valid.success).toBe(true);
+
+  const invalid = TestMsg.safeParse({
+    type: "TEST",
+    meta: {},
+    payload: { id: "string" },
+  });
+
+  expect(invalid.success).toBe(false);
+});
+
+test("server: inbound normalization strips reserved keys before validation", () => {
+  const TestMsg = message("TEST", { id: z.number() });
+
+  // Client tries to inject reserved keys
+  const malicious = {
+    type: "TEST",
+    meta: { clientId: "fake-id", receivedAt: 999 },
+    payload: { id: 123 },
+  };
+
+  // Server normalization strips reserved keys before validation
+  // Message should pass validation (no unknown keys after stripping)
+  const normalized = normalizeInboundMessage(malicious);
+  expect(TestMsg.safeParse(normalized).success).toBe(true);
+  expect(normalized.meta).not.toHaveProperty("clientId");
+  expect(normalized.meta).not.toHaveProperty("receivedAt");
+});
+
+// See @validation.md#Strict-Mode-Enforcement for strict validation requirements
+test("strict schema rejects unknown keys", () => {
+  const TestMsg = message("TEST", { id: z.number() });
+
+  // Unknown key at root
+  expect(
+    TestMsg.safeParse({
+      type: "TEST",
+      meta: {},
+      payload: { id: 123 },
+      unknown: "bad", // ❌ Should fail
+    }).success,
+  ).toBe(false);
+
+  // Unknown key in meta
+  expect(
+    TestMsg.safeParse({
+      type: "TEST",
+      meta: { junk: "xyz" }, // ❌ Should fail
+      payload: { id: 123 },
+    }).success,
+  ).toBe(false);
+
+  // Unknown key in payload
+  expect(
+    TestMsg.safeParse({
+      type: "TEST",
+      meta: {},
+      payload: { id: 123, extra: "oops" }, // ❌ Should fail
+    }).success,
+  ).toBe(false);
+});
+
+// See @validation.md#Strict-Mode-Enforcement for validation behavior table
+test("strict schema rejects unexpected payload", () => {
+  const NoPayloadMsg = message("NO_PAYLOAD");
+  const WithPayloadMsg = message("WITH_PAYLOAD", { id: z.number() });
+
+  // Schema without payload - must reject if payload key present
+  expect(
+    NoPayloadMsg.safeParse({
+      type: "NO_PAYLOAD",
+      meta: {},
+      payload: {}, // ❌ Should fail - unexpected key
+    }).success,
+  ).toBe(false);
+
+  expect(
+    NoPayloadMsg.safeParse({
+      type: "NO_PAYLOAD",
+      meta: {},
+      payload: undefined, // ❌ Should fail - unexpected key
+    }).success,
+  ).toBe(false);
+
+  // Schema without payload - must accept when payload key absent
+  expect(
+    NoPayloadMsg.safeParse({
+      type: "NO_PAYLOAD",
+      meta: {},
+    }).success,
+  ).toBe(true);
+
+  // Schema with payload - must reject when payload key absent
+  expect(
+    WithPayloadMsg.safeParse({
+      type: "WITH_PAYLOAD",
+      meta: {},
+    }).success,
+  ).toBe(false);
+
+  // Schema with payload - must accept when payload present
+  expect(
+    WithPayloadMsg.safeParse({
+      type: "WITH_PAYLOAD",
+      meta: {},
+      payload: { id: 123 },
+    }).success,
+  ).toBe(true);
+});
+
+test("server logic uses ctx.receivedAt, not meta.timestamp", () => {
+  const TestMsg = message("TEST", { id: z.number() });
+  const before = Date.now();
+
+  router.on(TestMsg, (ctx) => {
+    // ctx.receivedAt is server ingress time (authoritative)
+    expect(ctx.receivedAt).toBeGreaterThanOrEqual(before);
+    expect(ctx.receivedAt).toBeLessThanOrEqual(Date.now());
+
+    // meta.timestamp is optional producer time (untrusted, may be skewed)
+    if (ctx.meta.timestamp !== undefined) {
+      // Server logic MUST NOT rely on meta.timestamp for ordering/rate-limiting
+      expect(typeof ctx.meta.timestamp).toBe("number");
+    }
+  });
+});
+
+test("router.publish() never injects clientId", async () => {
+  const ChatMsg = message("CHAT", { text: z.string() });
+  const router = createRouter();
+
+  let publishedMessage: any;
+  router.pubsub.subscribe("room", (msg) => {
+    publishedMessage = msg;
+  });
+
+  // Publish without custom meta
+  await router.publish("room", ChatMsg, { text: "hi" });
+  expect(publishedMessage.meta).not.toHaveProperty("clientId");
+  expect(publishedMessage.meta).toHaveProperty("timestamp");
+});
+
+test("router.publish() with extended meta for sender tracking", async () => {
+  const ChatMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { senderId: z.string().optional() },
+  );
+  const router = createRouter();
+
+  let publishedMessage: any;
+  router.pubsub.subscribe("room", (msg) => {
+    publishedMessage = msg;
+  });
+
+  // Include sender in extended meta
+  await router.publish(
+    "room",
+    ChatMsg,
+    { text: "hi" },
+    { meta: { senderId: "alice" } },
+  );
+  expect(publishedMessage.meta).toHaveProperty("senderId", "alice");
+  expect(publishedMessage.meta).not.toHaveProperty("clientId");
+});
+
+test("custom metadata merges with auto-injected fields", async () => {
+  const ChatMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { senderId: z.string().optional() },
+  );
+  const router = createRouter();
+
+  let publishedMessage: any;
+  router.pubsub.subscribe("room", (msg) => {
+    publishedMessage = msg;
+  });
+
+  await router.publish(
+    "room",
+    ChatMsg,
+    { text: "hi" },
+    { meta: { senderId: "alice", priority: 5 } },
+  );
+
+  expect(publishedMessage.meta.senderId).toBe("alice");
+  expect(publishedMessage.meta.priority).toBe(5);
+  expect(publishedMessage.meta).toHaveProperty("timestamp"); // Auto-injected
+});
+
+// Client Multi-Handler Tests {#client-multiple-handlers}
+
+test("client: multiple handlers run in order", async () => {
+  const order: number[] = [];
+
+  client.on(TestMsg, () => order.push(1));
+  client.on(TestMsg, () => order.push(2));
+
+  simulateReceive(client, { type: "TEST", meta: {}, payload: {} });
+
+  expect(order).toEqual([1, 2]);
+});
+
+test("client: unsubscribe removes only target handler", async () => {
+  const calls: number[] = [];
+
+  client.on(TestMsg, () => calls.push(1));
+  const unsub2 = client.on(TestMsg, () => calls.push(2));
+  client.on(TestMsg, () => calls.push(3));
+
+  unsub2();
+  simulateReceive(client, { type: "TEST", meta: {}, payload: {} });
+
+  expect(calls).toEqual([1, 3]); // Handler 2 removed
+});
+
+test("client: handler error does not stop remaining handlers", async () => {
+  const calls: number[] = [];
+
+  client.on(TestMsg, () => {
+    throw new Error("boom");
+  });
+  client.on(TestMsg, () => calls.push(2));
+
+  simulateReceive(client, { type: "TEST", meta: {}, payload: {} });
+
+  expect(calls).toEqual([2]); // Handler 2 runs despite handler 1 error
+});
+
+test("schema creation rejects reserved meta keys", () => {
+  expect(() => {
+    message(
+      "TEST",
+      { id: z.number() },
+      {
+        clientId: z.string(), // ❌ Reserved key
+      },
+    );
+  }).toThrow("Reserved meta keys not allowed in schema: clientId");
+
+  expect(() => {
+    message(
+      "TEST",
+      { id: z.number() },
+      {
+        receivedAt: z.number(), // ❌ Reserved key
+      },
+    );
+  }).toThrow("Reserved meta keys not allowed in schema: receivedAt");
+
+  // Multiple reserved keys
+  expect(() => {
+    message(
+      "TEST",
+      { id: z.number() },
+      {
+        clientId: z.string(),
+        receivedAt: z.number(),
+        userId: z.string(), // Valid, but mixed with reserved
+      },
+    );
+  }).toThrow(/clientId.*receivedAt/);
+});
+
+test("request() timeout starts after flush, not enqueue", async () => {
+  const client = createClient({
+    url: "ws://test",
+    wsFactory: (url) => createFakeWS(url),
+    reconnect: { enabled: false },
+  });
+
+  // Don't open yet - message will be queued
+  const startTime = Date.now();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 1000,
+  });
+
+  // Wait 500ms while queued
+  await sleep(500);
+
+  // Now connect (triggers flush)
+  const flushTime = Date.now();
+  await client.connect();
+
+  // Timeout should fire ~1000ms AFTER flush, not from initial request()
+  await expect(reqPromise).rejects.toThrow(TimeoutError);
+
+  const timeoutTime = Date.now();
+  const totalTime = timeoutTime - startTime; // ~1500ms
+  const timeFromFlush = timeoutTime - flushTime; // ~1000ms
+
+  // Verify timeout counted from flush, not enqueue
+  expect(timeFromFlush).toBeGreaterThanOrEqual(950);
+  expect(timeFromFlush).toBeLessThanOrEqual(1100);
+});
+
+test("request() cancels timeout on disconnect", async () => {
+  const client = createClient({ url: "ws://test" });
+  await client.connect();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 5000,
+  });
+
+  // Close connection before response arrives
+  await client.close();
+
+  // Should reject with ConnectionClosedError, not TimeoutError
+  await expect(reqPromise).rejects.toThrow(ConnectionClosedError);
+});
+
+test("request() rejects with StateError when aborted before dispatch", async () => {
+  const client = createClient({ url: "ws://test" });
+  await client.connect();
+
+  const controller = new AbortController();
+  controller.abort(); // Abort before request
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    signal: controller.signal,
+  });
+
+  await expect(reqPromise).rejects.toThrow(StateError);
+  await expect(reqPromise).rejects.toMatchObject({
+    message: expect.stringContaining("Request aborted before dispatch"),
+  });
+});
+
+test("request() rejects with StateError when aborted while pending", async () => {
+  const client = createClient({ url: "ws://test" });
+  await client.connect();
+
+  const controller = new AbortController();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 60000,
+    signal: controller.signal,
+  });
+
+  // Abort while pending
+  controller.abort();
+
+  await expect(reqPromise).rejects.toThrow(StateError);
+  await expect(reqPromise).rejects.toMatchObject({
+    message: expect.stringContaining("Request aborted"),
+  });
+});
+
+test("request() cleans up pending map and cancels timeout on abort", async () => {
+  const client = createClient({ url: "ws://test" });
+  await client.connect();
+
+  const controller = new AbortController();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 60000,
+    signal: controller.signal,
+  });
+
+  const correlationId = extractCorrelationId(reqPromise); // Test helper
+
+  // Abort request
+  controller.abort();
+  await expect(reqPromise).rejects.toThrow(StateError);
+
+  // Server sends late reply (should be ignored - pending map cleaned)
+  simulateReceive(client, {
+    type: "HELLO_OK",
+    meta: { correlationId },
+    payload: { text: "late reply" },
+  });
+
+  // No errors thrown; late reply dropped silently
+});
+
+test("request() rejects on wrong-type reply with matching correlationId", async () => {
+  const client = createClient({ url: "ws://test" });
+  const Hello = message("HELLO", { name: z.string() });
+  const HelloOk = message("HELLO_OK", { text: z.string() });
+  const Goodbye = message("GOODBYE", { message: z.string() });
+
+  await client.connect();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 5000,
+  });
+
+  // Server sends wrong type but correct correlationId
+  const correlationId = extractCorrelationId(reqPromise); // Test helper
+  simulateReceive(client, {
+    type: "GOODBYE", // ❌ Wrong type
+    meta: { correlationId },
+    payload: { message: "bye" },
+  });
+
+  await expect(reqPromise).rejects.toThrow(ValidationError);
+  await expect(reqPromise).rejects.toMatchObject({
+    message: expect.stringContaining("Expected HELLO_OK, got GOODBYE"),
+  });
+});
+
+test("request() rejects on malformed reply with matching correlationId", async () => {
+  const client = createClient({ url: "ws://test" });
+  const Hello = message("HELLO", { name: z.string() });
+  const HelloOk = message("HELLO_OK", { text: z.string() });
+
+  await client.connect();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 5000,
+  });
+
+  // Server sends correct type but invalid payload
+  const correlationId = extractCorrelationId(reqPromise); // Test helper
+  simulateReceive(client, {
+    type: "HELLO_OK", // ✅ Correct type
+    meta: { correlationId },
+    payload: { text: 123 }, // ❌ Invalid: should be string
+  });
+
+  await expect(reqPromise).rejects.toThrow(ValidationError);
+  await expect(reqPromise).rejects.toMatchObject({
+    issues: expect.arrayContaining([
+      expect.objectContaining({
+        path: ["payload", "text"],
+        message: expect.stringContaining("string"),
+      }),
+    ]),
+  });
+});
+
+test("request() ignores duplicate replies with same correlationId", async () => {
+  const client = createClient({ url: "ws://test" });
+  const Hello = message("HELLO", { name: z.string() });
+  const HelloOk = message("HELLO_OK", { text: z.string() });
+
+  await client.connect();
+
+  const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 5000,
+  });
+
+  const correlationId = extractCorrelationId(reqPromise);
+
+  // First reply - settles the promise
+  simulateReceive(client, {
+    type: "HELLO_OK",
+    meta: { correlationId },
+    payload: { text: "first" },
+  });
+
+  const reply = await reqPromise;
+  expect(reply.payload.text).toBe("first");
+
+  // Second reply with same correlationId - dropped silently (no error)
+  simulateReceive(client, {
+    type: "HELLO_OK",
+    meta: { correlationId },
+    payload: { text: "second" }, // Ignored
+  });
+
+  // Third reply - also dropped silently
+  simulateReceive(client, {
+    type: "HELLO_OK",
+    meta: { correlationId },
+    payload: { text: "third" }, // Ignored
+  });
+
+  // No errors thrown; duplicates ignored after first settles
+});
+
+test("send() returns true when sent immediately", async () => {
+  const client = createClient({ url: "ws://test" });
+  await client.connect(); // CONNECTED state
+
+  const sent = client.send(ChatMsg, { text: "hello" });
+
+  expect(sent).toBe(true);
+});
+
+test("send() returns true when queued", () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "drop-newest",
+  });
+  // Not connected yet - will queue
+
+  const sent = client.send(ChatMsg, { text: "hello" });
+
+  expect(sent).toBe(true); // Queued successfully
+});
+
+test("send() returns false with queue: off", () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "off",
+  });
+  // Not connected - will discard
+
+  const sent = client.send(ChatMsg, { text: "hello" });
+
+  expect(sent).toBe(false); // Discarded, not queued
+});
+
+test("send() returns false on queue overflow with drop-newest", async () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "drop-newest",
+    queueSize: 2,
+  });
+  // Not open - messages will queue
+
+  // Fill queue
+  expect(client.send(ChatMsg, { text: "msg1" })).toBe(true);
+  expect(client.send(ChatMsg, { text: "msg2" })).toBe(true);
+
+  // Overflow - should drop new message
+  expect(client.send(ChatMsg, { text: "msg3" })).toBe(false);
+});
+
+test("send() evicts oldest on queue overflow with drop-oldest", async () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "drop-oldest",
+    queueSize: 2,
+  });
+  // Not connected - messages will queue
+
+  // Fill queue
+  expect(client.send(ChatMsg, { text: "msg1" })).toBe(true); // Queue: [msg1]
+  expect(client.send(ChatMsg, { text: "msg2" })).toBe(true); // Queue: [msg1, msg2]
+
+  // Overflow - should evict oldest (msg1), accept new (msg3)
+  expect(client.send(ChatMsg, { text: "msg3" })).toBe(true); // Queue: [msg2, msg3]
+
+  // When connection opens, only msg2 and msg3 are sent
+  await client.connect();
+  // Verify msg1 was dropped (test implementation-specific assertion)
+});
+
+test("send() returns false on invalid payload", () => {
+  const client = createClient({ url: "ws://test" });
+
+  // @ts-expect-error - testing runtime validation
+  const sent = client.send(ChatMsg, { text: 123 }); // Invalid type
+
+  expect(sent).toBe(false); // Validation failure returns false
+});
+
+test("request() rejects with ValidationError on invalid payload", async () => {
+  const client = createClient({ url: "ws://test" });
+  await client.connect();
+
+  // @ts-expect-error - testing runtime validation
+  const promise = client.request(
+    ChatMsg,
+    { text: 123 }, // Invalid type
+    ChatResponse,
+    { timeoutMs: 1000 },
+  );
+
+  await expect(promise).rejects.toThrow(ValidationError);
+});
+
+test("request() rejects with StateError when queue: off and disconnected", async () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "off",
+  });
+  // Not connected - queue disabled
+
+  const promise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 1000,
+  });
+
+  await expect(promise).rejects.toThrow(StateError);
+  await expect(promise).rejects.toMatchObject({
+    message: expect.stringContaining(
+      "Cannot send request while disconnected with queue disabled",
+    ),
+  });
+});
+
+test("request() rejects with StateError when pending limit exceeded", async () => {
+  const client = createClient({
+    url: "ws://test",
+    pendingRequestsLimit: 2,
+    reconnect: { enabled: false },
+  });
+
+  await client.connect();
+
+  // Fill pending queue (server doesn't reply)
+  const req1 = client.request(Hello, { name: "1" }, HelloOk, {
+    timeoutMs: 60000,
+  });
+  const req2 = client.request(Hello, { name: "2" }, HelloOk, {
+    timeoutMs: 60000,
+  });
+
+  // Third request exceeds limit
+  await expect(client.request(Hello, { name: "3" }, HelloOk)).rejects.toThrow(
+    StateError,
+  );
+
+  await expect(
+    client.request(Hello, { name: "3" }, HelloOk),
+  ).rejects.toMatchObject({
+    message: expect.stringContaining("Pending request limit exceeded"),
+  });
+});
+
+test("pending request limit enforced before timeout check", async () => {
+  const client = createClient({
+    url: "ws://test",
+    pendingRequestsLimit: 1,
+  });
+  await client.connect();
+
+  const req1 = client.request(Hello, { name: "1" }, HelloOk, {
+    timeoutMs: 100,
+  });
+
+  // Immediate rejection (does NOT wait for timeout)
+  const startTime = Date.now();
+  await expect(client.request(Hello, { name: "2" }, HelloOk)).rejects.toThrow(
+    StateError,
+  );
+
+  const elapsed = Date.now() - startTime;
+  expect(elapsed).toBeLessThan(50); // Fails fast, doesn't wait for timeout
+});
+
+test("onUnhandled() receives valid messages with no schema handler", async () => {
+  const client = createClient({ url: "ws://test" });
+  const TestMsg = message("TEST", { id: z.number() });
+  const UnknownMsg = message("UNKNOWN", { value: z.string() });
+
+  const handledMessages: any[] = [];
+  const unhandledMessages: any[] = [];
+
+  // Register handler for TEST only
+  client.on(TestMsg, (msg) => {
+    handledMessages.push(msg);
+  });
+
+  // Hook for unhandled messages (receives AnyInboundMessage)
+  client.onUnhandled((msg) => {
+    // Message is structurally valid but type not registered
+    // Treat as readonly (do not mutate)
+    unhandledMessages.push(msg);
+  });
+
+  await client.connect();
+
+  // Simulate receiving messages
+  simulateReceive(client, { type: "TEST", meta: {}, payload: { id: 123 } });
+  simulateReceive(client, {
+    type: "UNKNOWN",
+    meta: {},
+    payload: { value: "hi" },
+  });
+
+  // TEST goes to schema handler
+  expect(handledMessages).toHaveLength(1);
+  expect(handledMessages[0].type).toBe("TEST");
+
+  // UNKNOWN goes to onUnhandled (no schema registered)
+  expect(unhandledMessages).toHaveLength(1);
+  expect(unhandledMessages[0].type).toBe("UNKNOWN");
+});
+
+test("onUnhandled() never receives invalid messages", async () => {
+  const client = createClient({ url: "ws://test" });
+  const unhandledMessages: any[] = [];
+
+  client.onUnhandled((msg) => {
+    unhandledMessages.push(msg);
+  });
+
+  await client.connect();
+
+  // Invalid JSON
+  simulateReceive(client, "not json");
+
+  // Missing type
+  simulateReceive(client, { meta: {}, payload: {} });
+
+  // Invalid structure
+  simulateReceive(client, { type: "TEST", payload: "not an object" });
+
+  // onUnhandled should NOT be called for any invalid message
+  expect(unhandledMessages).toHaveLength(0);
+});
+
+test("schema handlers execute before onUnhandled", async () => {
+  const client = createClient({ url: "ws://test" });
+  const TestMsg = message("TEST", { id: z.number() });
+
+  const executionOrder: string[] = [];
+
+  client.on(TestMsg, (msg) => {
+    executionOrder.push("schema-handler");
+  });
+
+  client.onUnhandled((msg) => {
+    executionOrder.push("onUnhandled");
+  });
+
+  await client.connect();
+
+  // Send message with registered schema
+  simulateReceive(client, { type: "TEST", meta: {}, payload: { id: 123 } });
+
+  // Schema handler executes, onUnhandled does NOT
+  expect(executionOrder).toEqual(["schema-handler"]);
+});
+
+// Auto-Connect Tests
+
+test("autoConnect triggers connection on first send", async () => {
+  const client = createClient({
+    url: "ws://test",
+    autoConnect: true,
+    wsFactory: (url) => createFakeWS(url),
+  });
+
+  expect(client.state).toBe("closed");
+
+  // First send triggers connection
+  client.send(Hello, { name: "test" });
+
+  expect(client.state).toBe("connecting"); // Observable state change
+});
+
+test("autoConnect triggers connection on first request", async () => {
+  const client = createClient({
+    url: "ws://test",
+    autoConnect: true,
+    wsFactory: (url) => createFakeWS(url),
+  });
+
+  expect(client.state).toBe("closed");
+
+  // First request triggers connection
+  const promise = client.request(Hello, { name: "test" }, HelloOk, {
+    timeoutMs: 5000,
+  });
+
+  expect(client.state).toBe("connecting");
+});
+
+test("autoConnect does NOT trigger connection on on()", async () => {
+  const client = createClient({
+    url: "ws://test",
+    autoConnect: true,
+    wsFactory: (url) => createFakeWS(url),
+  });
+
+  expect(client.state).toBe("closed");
+
+  // Registering handler does NOT trigger connection
+  client.on(Hello, (msg) => {});
+
+  expect(client.state).toBe("closed"); // Still closed - connection not started
+
+  // First send() triggers connection
+  client.send(Hello, { name: "test" });
+  expect(client.state).toBe("connecting");
+});
+
+test("autoConnect fails fast on connection error", async () => {
+  const client = createClient({
+    url: "ws://invalid",
+    autoConnect: true,
+    wsFactory: () => {
+      throw new Error("Connection failed");
+    },
+  });
+
+  // send() never throws - returns false on auto-connect failure
+  const sent = client.send(Hello, { name: "test" });
+  expect(sent).toBe(false);
+
+  // request() rejects on auto-connect failure
+  await expect(
+    client.request(Hello, { name: "test" }, HelloOk, { timeoutMs: 1000 }),
+  ).rejects.toThrow("Connection failed");
+});
+
+test("autoConnect + queue: off rejects with connection error (not StateError)", async () => {
+  const client = createClient({
+    url: "ws://invalid",
+    autoConnect: true,
+    queue: "off", // Critical: queue disabled
+    wsFactory: () => {
+      throw new Error("Connection refused");
+    },
+  });
+
+  // Auto-connect triggers but fails
+  // Should reject with connection error, NOT StateError
+  await expect(
+    client.request(Hello, { name: "test" }, HelloOk, { timeoutMs: 1000 }),
+  ).rejects.toThrow("Connection refused");
+
+  // Verify it's NOT a StateError
+  try {
+    await client.request(Hello, { name: "test" }, HelloOk);
+  } catch (err) {
+    expect(err).not.toBeInstanceOf(StateError);
+  }
+});
+
+test("autoConnect failure + queue: off → subsequent requests reject with StateError", async () => {
+  const client = createClient({
+    url: "ws://invalid",
+    autoConnect: true,
+    queue: "off",
+    wsFactory: () => {
+      throw new Error("Connection refused");
+    },
+  });
+
+  // First request fails auto-connect
+  await expect(client.request(Hello, { name: "1" }, HelloOk)).rejects.toThrow(
+    "Connection refused",
+  );
+
+  expect(client.state).toBe("closed");
+
+  // Second request does NOT auto-reconnect (per spec: only on "never connected")
+  // Should reject with StateError (queue: off + disconnected)
+  await expect(client.request(Hello, { name: "2" }, HelloOk)).rejects.toThrow(
+    StateError,
+  );
+  await expect(
+    client.request(Hello, { name: "2" }, HelloOk),
+  ).rejects.toMatchObject({
+    message: expect.stringContaining(
+      "Cannot send request while disconnected with queue disabled",
+    ),
+  });
+});
+
+test("autoConnect does not trigger from closed state after manual close", async () => {
+  const client = createClient({
+    url: "ws://test",
+    autoConnect: true,
+    wsFactory: (url) => createFakeWS(url),
+  });
+
+  await client.connect();
+  await client.close();
+
+  expect(client.state).toBe("closed");
+
+  // send() should not auto-reconnect after manual close
+  const sent = client.send(Hello, { name: "test" });
+  expect(sent).toBe(false); // Dropped (or queued per queue policy)
+  expect(client.state).toBe("closed"); // Still closed
+});
+
+// Extended Meta Tests
+
+test("send() with extended meta (required field)", async () => {
+  const client = createClient({ url: "ws://test" });
+  const RoomMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { roomId: z.string() }, // Required meta field
+  );
+
+  await client.connect();
+
+  // ✅ Provide required meta
+  const sent = client.send(
+    RoomMsg,
+    { text: "hello" },
+    {
+      meta: { roomId: "general" },
+    },
+  );
+
+  expect(sent).toBe(true);
+  // Verify message includes extended meta (test implementation-specific)
+});
+
+test("send() with extended meta type error on missing required field", () => {
+  const RoomMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { roomId: z.string() }, // Required
+  );
+
+  // @ts-expect-error - missing required meta.roomId
+  client.send(RoomMsg, { text: "hello" });
+});
+
+test("send() with optional extended meta", async () => {
+  const OptionalMetaMsg = message(
+    "NOTIFY",
+    { text: z.string() },
+    { priority: z.enum(["low", "high"]).optional() },
+  );
+
+  await client.connect();
+
+  // ✅ Without optional meta
+  expect(client.send(OptionalMetaMsg, { text: "hello" })).toBe(true);
+
+  // ✅ With optional meta
+  expect(
+    client.send(
+      OptionalMetaMsg,
+      { text: "hello" },
+      {
+        meta: { priority: "high" },
+      },
+    ),
+  ).toBe(true);
+});
+
+// Client Outbound Normalization Tests
+// Note: Client does NOT strip inbound messages (server already normalized them)
+// These tests verify client strips reserved/managed keys from OUTBOUND opts.meta
+
+test("client normalization preserves user-provided timestamp", async () => {
+  const TestMsg = message("TEST", { id: z.number() });
+  const capturedMessages: any[] = [];
+
+  // Mock send to capture message
+  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
+
+  const client = createClient({
+    url: "ws://test",
+    wsFactory: () => ({ send: mockSend }) as any,
+  });
+
+  await client.connect();
+
+  // User provides timestamp
+  client.send(TestMsg, { id: 123 }, { meta: { timestamp: 999 } });
+
+  expect(capturedMessages[0].meta.timestamp).toBe(999); // User value preserved
+});
+
+test("client normalization auto-injects timestamp if missing", async () => {
+  const TestMsg = message("TEST", { id: z.number() });
+  const capturedMessages: any[] = [];
+  const beforeSend = Date.now();
+
+  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
+
+  const client = createClient({
+    url: "ws://test",
+    wsFactory: () => ({ send: mockSend }) as any,
+  });
+
+  await client.connect();
+
+  // User does not provide timestamp
+  client.send(TestMsg, { id: 123 });
+
+  const afterSend = Date.now();
+  const sentTimestamp = capturedMessages[0].meta.timestamp;
+
+  expect(sentTimestamp).toBeGreaterThanOrEqual(beforeSend);
+  expect(sentTimestamp).toBeLessThanOrEqual(afterSend);
+});
+
+test("client normalization strips reserved keys from user meta", async () => {
+  const TestMsg = message("TEST", { id: z.number() });
+  const capturedMessages: any[] = [];
+
+  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
+
+  const client = createClient({
+    url: "ws://test",
+    wsFactory: () => ({ send: mockSend }) as any,
+  });
+
+  await client.connect();
+
+  // User tries to spoof reserved keys
+  client.send(
+    TestMsg,
+    { id: 123 },
+    {
+      // @ts-expect-error - reserved keys not in type
+      meta: { clientId: "fake", receivedAt: 999 },
+    },
+  );
+
+  expect(capturedMessages[0].meta).not.toHaveProperty("clientId");
+  expect(capturedMessages[0].meta).not.toHaveProperty("receivedAt");
+  expect(capturedMessages[0].meta).toHaveProperty("timestamp"); // Auto-injected
+});
+
+test("client normalization strips correlationId from user meta", async () => {
+  const TestMsg = message("TEST", { id: z.number() });
+  const capturedMessages: any[] = [];
+
+  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
+
+  const client = createClient({
+    url: "ws://test",
+    wsFactory: () => ({ send: mockSend }) as any,
+  });
+
+  await client.connect();
+
+  // User tries to set correlationId via meta (ignored)
+  client.send(
+    TestMsg,
+    { id: 123 },
+    {
+      // @ts-expect-error - correlationId not allowed in meta
+      meta: { correlationId: "sneaky" },
+      correlationId: "correct", // Only this is used
+    },
+  );
+
+  // Only opts.correlationId is used, meta.correlationId stripped
+  expect(capturedMessages[0].meta.correlationId).toBe("correct");
+});
+
+test("request() with extended meta", async () => {
+  const RoomMsg = message("CHAT", { text: z.string() }, { roomId: z.string() });
+  const RoomMsgOk = message("CHAT_OK", { success: z.boolean() });
+
+  const client = createClient({ url: "ws://test" });
+  await client.connect();
+
+  const promise = client.request(RoomMsg, { text: "hello" }, RoomMsgOk, {
+    meta: { roomId: "general" },
+    correlationId: "req-123",
+  });
+
+  // Simulate reply
+  simulateReceive(client, {
+    type: "CHAT_OK",
+    meta: { correlationId: "req-123" },
+    payload: { success: true },
+  });
+
+  const reply = await promise;
+  expect(reply.payload.success).toBe(true);
+});
+
+test("isConnected getter reflects state === open", async () => {
+  const client = createClient({ url: "ws://test" });
+
+  // Initial state
+  expect(client.state).toBe("closed");
+  expect(client.isConnected).toBe(false);
+
+  // After connect
+  await client.connect();
+  expect(client.state).toBe("open");
+  expect(client.isConnected).toBe(true);
+
+  // After close
+  await client.close();
+  expect(client.state).toBe("closed");
+  expect(client.isConnected).toBe(false);
+});
+
+test("onError fires for parse failures", async () => {
+  const client = createClient({ url: "ws://test" });
+  const errors: Array<{ error: Error; context: any }> = [];
+
+  client.onError((error, context) => {
+    errors.push({ error, context });
+  });
+
+  await client.connect();
+
+  // Simulate invalid JSON from server
+  simulateReceive(client, "not valid json");
+
+  expect(errors).toHaveLength(1);
+  expect(errors[0].context.type).toBe("parse");
+  expect(errors[0].error.message).toContain("JSON");
+});
+
+test("onError fires for validation failures", async () => {
+  const client = createClient({ url: "ws://test" });
+  const TestMsg = message("TEST", { id: z.number() });
+  const errors: Array<{ error: Error; context: any }> = [];
+
+  client.on(TestMsg, (msg) => {});
+
+  client.onError((error, context) => {
+    errors.push({ error, context });
+  });
+
+  await client.connect();
+
+  // Simulate invalid message (wrong payload type)
+  simulateReceive(client, {
+    type: "TEST",
+    meta: {},
+    payload: { id: "string" }, // Should be number
+  });
+
+  expect(errors).toHaveLength(1);
+  expect(errors[0].context.type).toBe("validation");
+  expect(errors[0].context.details).toBeDefined();
+});
+
+test("onError fires for queue overflow", async () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "drop-newest",
+    queueSize: 2,
+  });
+  const errors: Array<{ error: Error; context: any }> = [];
+
+  client.onError((error, context) => {
+    errors.push({ error, context });
+  });
+
+  // Fill queue (not connected)
+  client.send(TestMsg, { id: 1 });
+  client.send(TestMsg, { id: 2 });
+
+  // Overflow
+  client.send(TestMsg, { id: 3 });
+
+  expect(errors).toHaveLength(1);
+  expect(errors[0].context.type).toBe("overflow");
+});
+
+test("onError does NOT fire for request() rejections", async () => {
+  const client = createClient({
+    url: "ws://test",
+    queue: "off",
+  });
+  const errors: Array<{ error: Error; context: any }> = [];
+
+  client.onError((error, context) => {
+    errors.push({ error, context });
+  });
+
+  // request() rejects with StateError (queue off + disconnected)
+  await expect(
+    client.request(Hello, { name: "test" }, HelloOk),
+  ).rejects.toThrow(StateError);
+
+  // onError should NOT fire (caller handles rejection)
+  expect(errors).toHaveLength(0);
+});
+```
+
+## Client Type Inference Tests {#client-type-inference}
+
+**Requirement**: Typed clients (`/zod/client`, `/valibot/client`) MUST provide full inference via type overrides (see ADR-002).
+
+```typescript
+// Client typed handler inference (Zod)
+test("client: typed handler inference with Zod adapter", () => {
+  import { wsClient } from "@ws-kit/client/zod";
+  import { z, message } from "@ws-kit/zod";
+
+  const JoinRoomOK = message("JOIN_ROOM_OK", { roomId: z.string() });
+
+  const client = wsClient({ url: "ws://test" });
+
+  client.on(JoinRoomOK, (msg) => {
+    // ✅ Positive: msg fully typed
+    expectTypeOf(msg).toMatchTypeOf<{
+      type: "JOIN_ROOM_OK";
+      meta: { timestamp?: number; correlationId?: string };
+      payload: { roomId: string };
+    }>();
+    expectTypeOf(msg.payload.roomId).toBeString();
+    expectTypeOf(msg.type).toEqualTypeOf<"JOIN_ROOM_OK">();
+  });
+});
+
+// Negative: no payload for no-payload schemas
+test("client: no payload access for no-payload schema", () => {
+  const NoPayload = message("NO_PAYLOAD");
+  const client = createClient({ url: "ws://test" });
+
+  client.on(NoPayload, (msg) => {
+    expectTypeOf(msg.type).toEqualTypeOf<"NO_PAYLOAD">();
+    expectTypeOf(msg.meta).toBeDefined();
+
+    // @ts-expect-error - payload should not exist
+    msg.payload;
+  });
+});
+
+// Typed request inference
+test("client: typed request inference", async () => {
+  const RequestMsg = message("REQ", { id: z.number() });
+  const ReplyMsg = message("REPLY", { result: z.boolean() });
+
+  const client = createClient({ url: "ws://test" });
+
+  const reply = await client.request(RequestMsg, { id: 42 }, ReplyMsg);
+
+  // ✅ reply fully typed
+  expectTypeOf(reply).toMatchTypeOf<{
+    type: "REPLY";
+    meta: { timestamp?: number; correlationId?: string };
+    payload: { result: boolean };
+  }>();
+  expectTypeOf(reply.payload.result).toBeBoolean();
+});
+
+// Payload conditional typing (overloads)
+test("client: send() overloads enforce payload absence", () => {
+  const NoPayload = message("NO_PAYLOAD");
+  const WithPayload = message("WITH_PAYLOAD", { id: z.number() });
+
+  const client = createClient({ url: "ws://test" });
+
+  // @ts-expect-error - payload param should not exist for no-payload schema
+  client.send(NoPayload, {});
+
+  // @ts-expect-error - payload param should not exist
+  client.send(NoPayload, undefined);
+
+  // ✅ Correct: omit payload param
+  client.send(NoPayload);
+
+  // ✅ Correct: provide payload for with-payload schema
+  client.send(WithPayload, { id: 123 });
+
+  // @ts-expect-error - payload required for with-payload schema
+  client.send(WithPayload);
+});
+
+// Extended meta inference
+test("client: extended meta type enforcement", () => {
+  const RoomMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { roomId: z.string() }, // Required meta field
+  );
+
+  const OptionalMetaMsg = message(
+    "NOTIFY",
+    { text: z.string() },
+    { priority: z.enum(["low", "high"]).optional() },
+  );
+
+  const client = createClient({ url: "ws://test" });
+
+  // @ts-expect-error - missing required meta.roomId
+  client.send(RoomMsg, { text: "hi" });
+
+  // ✅ Correct: provide required meta
+  client.send(RoomMsg, { text: "hi" }, { meta: { roomId: "general" } });
+
+  // ✅ Correct: optional meta can be omitted
+  client.send(OptionalMetaMsg, { text: "hi" });
+
+  // ✅ Correct: optional meta can be provided
+  client.send(OptionalMetaMsg, { text: "hi" }, { meta: { priority: "high" } });
+});
+
+// Generic client (fallback) uses unknown
+test("client: generic client handlers infer as unknown", () => {
+  import { createClient } from "@ws-kit/client"; // Generic client
+
+  const TestMsg = message("TEST", { id: z.number() });
+  const client = createClient({ url: "ws://test" });
+
+  client.on(TestMsg, (msg) => {
+    // ⚠️ msg is unknown in generic client
+    expectTypeOf(msg).toBeUnknown();
+
+    // Manual type assertion required
+    const typed = msg as InferMessage<typeof TestMsg>;
+    expectTypeOf(typed.payload.id).toBeNumber();
+  });
+});
+```
+
+## Key Constraints
+
+> See @rules.md for complete rules. Critical for testing:
+
+1. **Type-level tests** — Use `expectTypeOf` for compile-time validation (positive & negative cases)
+2. **Payload conditional typing** — Test that `ctx.payload` is type error when schema omits it (see ADR-001)
+3. **Client type inference** — Test typed clients provide full inference; generic client uses `unknown` (see ADR-002 and #client-type-inference)
+4. **Discriminated unions** — Verify factory pattern enables union support (see @schema.md#Discriminated-Unions)
+5. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see @schema.md#Strict-Schemas)
+6. **Normalization** — Test reserved key stripping before validation (see normalization test above)
+7. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see @client.md#message-processing-order and @rules.md#inbound-message-routing)
+8. **Client multi-handler** — Test registration order, stable iteration, error isolation (see @client.md#Multiple-Handlers)
+9. **Extended meta support** — Test required/optional meta fields, timestamp preservation, reserved key stripping (see extended meta tests above)
