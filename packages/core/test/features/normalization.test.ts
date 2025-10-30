@@ -12,8 +12,11 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { z, message } from "@ws-kit/zod";
+import type { z as zType } from "zod";
+import * as zodModule from "@ws-kit/zod";
 import { normalizeInboundMessage } from "../../src/normalize.js";
+
+const { z, message } = zodModule;
 
 describe("Message Normalization (Security Boundary)", () => {
   describe("Reserved Key Stripping", () => {
@@ -93,12 +96,12 @@ describe("Message Normalization (Security Boundary)", () => {
       const TestMsg = message("TEST");
 
       // Client omits meta entirely
-      const message = {
+      const rawMessage = {
         type: "TEST",
       };
 
       // Normalize
-      const normalized = normalizeInboundMessage(message);
+      const normalized = normalizeInboundMessage(rawMessage);
 
       // Meta should be defaulted
       expect(normalized).toHaveProperty("meta");
@@ -113,13 +116,13 @@ describe("Message Normalization (Security Boundary)", () => {
       const TestMsg = message("TEST");
 
       // Client sends null meta
-      const message = {
+      const rawMessage = {
         type: "TEST",
         meta: null,
       };
 
       // Normalize
-      const normalized = normalizeInboundMessage(message);
+      const normalized = normalizeInboundMessage(rawMessage);
 
       // Meta should be replaced
       expect(normalized.meta).toEqual({});
@@ -132,13 +135,13 @@ describe("Message Normalization (Security Boundary)", () => {
       const TestMsg = message("TEST");
 
       // Client sends array as meta (invalid structure)
-      const message = {
+      const rawMessage = {
         type: "TEST",
         meta: ["invalid", "array"],
       };
 
       // Normalize
-      const normalized = normalizeInboundMessage(message);
+      const normalized = normalizeInboundMessage(rawMessage);
 
       // Meta should be replaced
       expect(normalized.meta).toEqual({});
@@ -153,14 +156,14 @@ describe("Message Normalization (Security Boundary)", () => {
       const TestMsg = message("TEST", { value: z.string() });
 
       // Message with reserved key and valid data
-      const message = {
+      const rawMessage = {
         type: "TEST",
         meta: { clientId: "spoofed" },
         payload: { value: "test" },
       };
 
       // Step 1: Normalize (strips clientId)
-      const normalized = normalizeInboundMessage(message);
+      const normalized = normalizeInboundMessage(rawMessage);
       expect(normalized.meta).not.toHaveProperty("clientId");
 
       // Step 2: Validate normalized message (should pass)
@@ -172,14 +175,14 @@ describe("Message Normalization (Security Boundary)", () => {
       const TestMsg = message("TEST");
 
       // Message with reserved key
-      const message = {
+      const rawMessage = {
         type: "TEST",
         meta: { clientId: "spoofed" },
       };
 
       // Skip normalization (security violation)
       // Validate raw message directly
-      const result = TestMsg.safeParse(message);
+      const result = TestMsg.safeParse(rawMessage);
 
       // Should FAIL due to unknown key (strict mode)
       expect(result.success).toBe(false);

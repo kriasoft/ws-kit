@@ -139,7 +139,7 @@ router.on(LoginMessage, (ctx) => {
 router.on(QueryMessage, (ctx) => {
   try {
     const result = queryDatabase(ctx.payload.id);
-    ctx.reply(QueryResponse, { data: result });
+    ctx.send(QueryResponse, { data: result });
   } catch (err) {
     ctx.error("INTERNAL_ERROR", "Database query failed");
   }

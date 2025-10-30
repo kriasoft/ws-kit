@@ -155,7 +155,7 @@ const PongMsg = message("PONG", { reply: z.number() });
 // 4. Handle messages (ctx.payload fully typed!)
 router.on(PingMsg, (ctx) => {
   console.log("Received at:", ctx.receivedAt); // Server time (authoritative)
-  ctx.reply(PongMsg, { reply: ctx.payload.value * 2 }); // ✅ No type assertions needed
+  ctx.send(PongMsg, { reply: ctx.payload.value * 2 }); // ✅ No type assertions needed
 });
 
 // 5. Middleware and broadcasting

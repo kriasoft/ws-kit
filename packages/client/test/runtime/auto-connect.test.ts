@@ -55,7 +55,7 @@ describe("Client: Auto-Connect Edge Cases", () => {
 
       // First request fails auto-connect
       await expect(
-        client.request(Hello, { name: "1" }, HelloOk),
+        client.request(Hello, { name: "1" }, HelloOk, {}),
       ).rejects.toThrow("Connection refused");
 
       // Wait for connection attempt to fully complete
@@ -66,11 +66,11 @@ describe("Client: Auto-Connect Edge Cases", () => {
       // Second request does NOT auto-reconnect (per spec: only on "never connected")
       // Should reject with StateError (queue: off + disconnected)
       await expect(
-        client.request(Hello, { name: "2" }, HelloOk),
+        client.request(Hello, { name: "2" }, HelloOk, {}),
       ).rejects.toThrow(StateError);
 
       await expect(
-        client.request(Hello, { name: "3" }, HelloOk),
+        client.request(Hello, { name: "3" }, HelloOk, {}),
       ).rejects.toMatchObject({
         message: expect.stringContaining(
           "Cannot send request while disconnected with queue disabled",
@@ -206,7 +206,7 @@ describe("Client: Auto-Connect Edge Cases", () => {
 
       // First auto-connect fails
       await expect(
-        client.request(Hello, { name: "1" }, HelloOk),
+        client.request(Hello, { name: "1" }, HelloOk, {}),
       ).rejects.toThrow("Connection refused");
 
       expect(connectAttempts).toBe(1);
@@ -235,7 +235,7 @@ describe("Client: Auto-Connect Edge Cases", () => {
       });
 
       try {
-        await client.request(Hello, { name: "test" }, HelloOk);
+        await client.request(Hello, { name: "test" }, HelloOk, {});
       } catch (err) {
         executionOrder.push(
           err instanceof StateError ? "StateError" : "ConnectionError",
@@ -261,7 +261,7 @@ describe("Client: Auto-Connect Edge Cases", () => {
 
       // First request triggers auto-connect
       await expect(
-        client.request(Hello, { name: "1" }, HelloOk),
+        client.request(Hello, { name: "1" }, HelloOk, {}),
       ).rejects.toThrow("Connection refused");
 
       expect(wsFactoryCalls).toBe(1);
@@ -270,7 +270,7 @@ describe("Client: Auto-Connect Edge Cases", () => {
       // Should reject immediately with StateError
       const startTime = Date.now();
       await expect(
-        client.request(Hello, { name: "2" }, HelloOk),
+        client.request(Hello, { name: "2" }, HelloOk, {}),
       ).rejects.toThrow(StateError);
       const elapsed = Date.now() - startTime;
 

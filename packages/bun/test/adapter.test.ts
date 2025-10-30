@@ -26,7 +26,6 @@ describe("createBunAdapter", () => {
     const adapter = createBunAdapter();
 
     // PlatformAdapter has optional pubsub, getServerWebSocket, init, destroy
-    expect(adapter).toHaveProperty("pubsub");
     // getServerWebSocket should be undefined
     expect(adapter.getServerWebSocket).toBeUndefined();
   });

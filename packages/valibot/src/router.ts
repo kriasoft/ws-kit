@@ -115,6 +115,67 @@ export interface TypedValibotRouter<
   off<Schema extends MessageSchemaType>(schema: Schema): this;
 
   /**
+   * Register a type-safe RPC (request/response) handler.
+   *
+   * Sugar method that enforces the schema has a response field.
+   * Handlers receive typed context with `ctx.reply()` and `ctx.progress()` for RPC patterns.
+   *
+   * @typeParam Schema - RPC message schema with response field
+   * @param schema - RPC schema (must have `.response` field)
+   * @param handler - Type-safe handler function
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * const GetUserRpc = rpc(
+   *   "GET_USER",
+   *   { id: v.string() },
+   *   "USER_RESPONSE",
+   *   { name: v.string(), email: v.string() }
+   * );
+   *
+   * router.rpc(GetUserRpc, (ctx) => {
+   *   const user = await db.findUser(ctx.payload.id);
+   *   ctx.reply!(GetUserRpc.response, user);
+   * });
+   * ```
+   */
+  rpc<Schema extends MessageSchemaType>(
+    schema: Schema,
+    handler: MessageHandler<Schema, TData>,
+  ): this;
+
+  /**
+   * Register a handler for a topic (pub/sub) message.
+   *
+   * Sugar method for messages typically published to channels.
+   * Optional handler executes when messages are published, but isn't required.
+   *
+   * @typeParam Schema - Message schema
+   * @param schema - Message schema
+   * @param options - Optional configuration (onPublish handler)
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * const RoomUpdated = message("ROOM_UPDATED", {
+   *   roomId: v.string(),
+   *   message: v.string(),
+   * });
+   *
+   * router.topic(RoomUpdated, {
+   *   onPublish: (ctx) => {
+   *     console.log(`Room ${ctx.payload.roomId} updated`);
+   *   },
+   * });
+   * ```
+   */
+  topic<Schema extends MessageSchemaType>(
+    schema: Schema,
+    options?: { onPublish?: MessageHandler<Schema, TData> },
+  ): this;
+
+  /**
    * Register a handler for WebSocket open events.
    *
    * Called after successful authentication when a client connects.
@@ -276,6 +337,18 @@ export function createValibotRouter<
     // Unregister handler
     off(schema) {
       coreRouter.off(schema);
+      return router;
+    },
+
+    // RPC handler registration (type-safe)
+    rpc(schema, handler) {
+      coreRouter.rpc(schema, handler as any);
+      return router;
+    },
+
+    // Topic handler registration (pub/sub)
+    topic(schema, options) {
+      coreRouter.topic(schema, options as any);
       return router;
     },
 

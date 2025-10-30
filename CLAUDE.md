@@ -6,7 +6,11 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
 **ADRs** (`docs/adr/NNN-slug.md`): Architectural decisions (reference as ADR-NNN)
 **SPECs** (`docs/specs/slug.md`): Component specifications (reference as docs/specs/slug.md)
+**Guides** (`docs/guides/slug.md`): How-to guides and troubleshooting
 
+### Component Specifications
+
+- `docs/adr/README.md`
 - `docs/specs/broadcasting.md`
 - `docs/specs/client.md`
 - `docs/specs/rules.md`
@@ -56,6 +60,37 @@ serve(router, {
   },
 });
 ```
+
+## API Surface
+
+All available methods at a glance:
+
+```typescript
+// Fire-and-forget messaging
+router.on(Message, (ctx) => {
+  ctx.send(schema, data); // Send to current connection (1-to-1)
+  ctx.publish(topic, schema, data); // Broadcast to topic subscribers (1-to-many)
+  ctx.subscribe(topic); // Join topic
+  ctx.unsubscribe(topic); // Leave topic
+});
+
+// Request-response pattern (RPC)
+router.rpc(Request, (ctx) => {
+  ctx.reply(schema, data); // Terminal response (one-shot)
+  ctx.progress(data); // Non-terminal progress updates
+});
+
+// Client-side
+client.send(schema, data); // Fire-and-forget to server
+client.request(schema, data); // RPC call (returns Promise, auto-correlation)
+```
+
+**Naming rationale** (see ADRs):
+
+- `send()` vs `publish()` — one connection vs many (ADR-020)
+- `reply()` vs `send()` — RPC terminal response vs fire-and-forget (ADR-015)
+- `progress()` — non-terminal RPC updates for streaming (ADR-015)
+- `request()` — client-side RPC with auto-correlation (ADR-014)
 
 ## Key Patterns
 
@@ -166,10 +201,10 @@ import { wsClient } from "@ws-kit/client/zod";
 // Define RPC schema - binds request to response type
 const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
 
-// Server side: handler works like any other message
+// Server side: use router.rpc() for type-safe RPC handlers
 const router = createRouter();
-router.on(Ping, (ctx) => {
-  ctx.reply({ reply: `Got: ${ctx.payload.text}` });
+router.rpc(Ping, (ctx) => {
+  ctx.reply(Ping.response, { reply: `Got: ${ctx.payload.text}` });
 });
 
 // Client side: response schema auto-detected
@@ -285,8 +320,7 @@ router.on(LoginMessage, (ctx) => {
 router.on(QueryMessage, (ctx) => {
   try {
     const result = queryDatabase(ctx.payload);
-    // ✅ reply() alias for semantic clarity in request/response pattern
-    ctx.reply(QueryResponse, result);
+    ctx.send(QueryResponse, result);
   } catch (err) {
     ctx.error("INTERNAL_ERROR", "Database query failed");
   }

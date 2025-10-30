@@ -343,52 +343,68 @@ test("server logic uses ctx.receivedAt, not meta.timestamp", () => {
   });
 });
 
-test("publish() never injects clientId", () => {
+test("router.publish() never injects clientId", async () => {
   const ChatMsg = message("CHAT", { text: z.string() });
+  const router = createRouter();
 
-  // Without origin
-  const msg1 = publish(ws, "room", ChatMsg, { text: "hi" });
-  expect(msg1.meta).not.toHaveProperty("clientId");
-  expect(msg1.meta).toHaveProperty("timestamp");
+  let publishedMessage: any;
+  router.pubsub.subscribe("room", (msg) => {
+    publishedMessage = msg;
+  });
 
-  // With origin
-  const msg2 = publish(
-    ws,
-    "room",
-    ChatMsg,
-    { text: "hi" },
-    { origin: "userId" },
-  );
-  expect(msg2.meta).toHaveProperty("senderId", ws.data.userId);
-  expect(msg2.meta).not.toHaveProperty("clientId");
+  // Publish without custom meta
+  await router.publish("room", ChatMsg, { text: "hi" });
+  expect(publishedMessage.meta).not.toHaveProperty("clientId");
+  expect(publishedMessage.meta).toHaveProperty("timestamp");
 });
 
-test("origin option injects from ws.data", () => {
-  const ws = { data: { userId: "alice" } };
-  const msg = publish(
-    ws,
+test("router.publish() with extended meta for sender tracking", async () => {
+  const ChatMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { senderId: z.string().optional() },
+  );
+  const router = createRouter();
+
+  let publishedMessage: any;
+  router.pubsub.subscribe("room", (msg) => {
+    publishedMessage = msg;
+  });
+
+  // Include sender in extended meta
+  await router.publish(
     "room",
     ChatMsg,
     { text: "hi" },
-    { origin: "userId" },
+    { meta: { senderId: "alice" } },
   );
-  expect(msg.meta.senderId).toBe("alice");
+  expect(publishedMessage.meta).toHaveProperty("senderId", "alice");
+  expect(publishedMessage.meta).not.toHaveProperty("clientId");
 });
 
-test("origin with missing field does not inject", () => {
-  // #origin-with-missing-field
-  // Validates @broadcasting.md#Origin-Option no-op behavior when ws.data[origin] undefined
-  const ws = { data: {} };
-  const msg = publish(
-    ws,
+test("custom metadata merges with auto-injected fields", async () => {
+  const ChatMsg = message(
+    "CHAT",
+    { text: z.string() },
+    { senderId: z.string().optional() },
+  );
+  const router = createRouter();
+
+  let publishedMessage: any;
+  router.pubsub.subscribe("room", (msg) => {
+    publishedMessage = msg;
+  });
+
+  await router.publish(
     "room",
     ChatMsg,
     { text: "hi" },
-    { origin: "missing" },
+    { meta: { senderId: "alice", priority: 5 } },
   );
-  expect(msg.meta).not.toHaveProperty("senderId"); // No-op when ws.data.missing undefined
-  expect(msg.meta).toHaveProperty("timestamp"); // Other meta fields still added
-  expect(publish).not.toThrow(); // No error thrown
+
+  expect(publishedMessage.meta.senderId).toBe("alice");
+  expect(publishedMessage.meta.priority).toBe(5);
+  expect(publishedMessage.meta).toHaveProperty("timestamp"); // Auto-injected
 });
 
 // Client Multi-Handler Tests {#client-multiple-handlers}

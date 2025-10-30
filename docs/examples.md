@@ -319,7 +319,7 @@ router.on(Calculate, (ctx) => {
   }
 
   // Send response back to client
-  ctx.reply(CalculateResult, { result });
+  ctx.send(CalculateResult, { result });
 });
 
 serve(router, { port: 3000 });

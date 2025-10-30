@@ -423,7 +423,7 @@ router.onClose((ctx) => {
 - `ctx.type` — Message type literal (e.g., `"JOIN_ROOM"`)
 - `ctx.meta` — Client metadata (correlationId, timestamp)
 - `ctx.receivedAt` — Server receive timestamp
-- `ctx.send()` / `ctx.reply()` — Type-safe send (this client only)
+- `ctx.send()` — Type-safe send to this client only
 - `ctx.assignData()` — Type-safe partial data updates
 - `ctx.subscribe()` / `ctx.unsubscribe()` — Topic management
 - `ctx.error()` — Send type-safe error messages

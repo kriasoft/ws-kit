@@ -21,24 +21,36 @@ export type SendFunction = <Schema extends MessageSchemaType>(
 
 /**
  * Standard error codes for type-safe error handling.
- * These codes represent common error scenarios in WebSocket applications.
+ * These codes represent common error scenarios in WebSocket and RPC applications.
  *
  * Reference: @ws-kit/core/error.ts#ErrorCode for internal error definitions.
  * Use these codes in ctx.error() for consistent error handling.
  *
  * @example
  * ```typescript
- * ctx.error("AUTH_ERROR", "Invalid credentials", { hint: "Check your password" });
- * ctx.error("RATE_LIMIT", "Too many requests");
+ * ctx.error("PERMISSION_DENIED", "Insufficient permissions");
+ * ctx.error("DEADLINE_EXCEEDED", "Request timed out");
  * ctx.error("INTERNAL_ERROR", "Database query failed");
  * ```
  */
-export type ErrorCode =
-  | "VALIDATION_ERROR" // Message failed schema validation
-  | "AUTH_ERROR" // Authentication failed
-  | "INTERNAL_ERROR" // Server-side error occurred
-  | "NOT_FOUND" // Requested resource not found
-  | "RATE_LIMIT"; // Rate limit exceeded
+export type RpcErrorCode =
+  | "INVALID_ARGUMENT" // Message failed schema validation or semantic validation
+  | "DEADLINE_EXCEEDED" // RPC request timed out
+  | "CANCELLED" // Request was cancelled by client or peer
+  | "PERMISSION_DENIED" // Authorization failed (after successful auth)
+  | "NOT_FOUND" // Requested resource doesn't exist
+  | "CONFLICT" // Correlation ID collision or uniqueness constraint violation
+  | "RESOURCE_EXHAUSTED" // Buffer overflow, rate limits, or backpressure
+  | "UNAVAILABLE" // Transient infrastructure error (retriable)
+  | "INTERNAL_ERROR" // Unexpected server error
+  | "VALIDATION_ERROR" // (Deprecated) Use INVALID_ARGUMENT
+  | "AUTH_ERROR" // (Deprecated) Use PERMISSION_DENIED
+  | "RATE_LIMIT"; // (Deprecated) Use RESOURCE_EXHAUSTED
+
+/**
+ * @deprecated Use RpcErrorCode instead (renamed for clarity)
+ */
+export type ErrorCode = RpcErrorCode;
 
 /**
  * Handler context with type-safe payload/meta access from schema definition.
@@ -47,7 +59,7 @@ export type ErrorCode =
  *
  * Includes helper methods for error handling and request/response patterns:
  * - `error()`: Send type-safe error response
- * - `reply()`: Send response (semantically clearer than send() for request/response)
+ * - `send()`: Send response to a single client
  *
  * @see ADR-001 - keyof check for discriminated unions
  */
@@ -84,22 +96,6 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
     message: string,
     details?: Record<string, unknown>,
   ): void;
-  /**
-   * Send a response message to the client.
-   *
-   * Semantic alias for send() with identical type signature.
-   * Use this in request/response patterns to clarify intent.
-   * Functionally equivalent to ctx.send().
-   *
-   * @example
-   * ```typescript
-   * router.on(QueryMessage, (ctx) => {
-   *   const result = await db.query(ctx.payload.id);
-   *   ctx.reply(QueryResponse, result);  // Clearer than ctx.send()
-   * });
-   * ```
-   */
-  reply: SendFunction;
   /**
    * Merge partial data into the connection's custom data object.
    *

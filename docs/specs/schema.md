@@ -226,43 +226,74 @@ const RoomMessage = message(
 
 ### Request-Response Pattern (RPC)
 
-Bind request and response schemas together to eliminate repetition in request-response patterns:
+**Unified pattern**: RPC messages are defined with optional `response` field. Presence of `response` marks the message as RPC.
 
 ```typescript
-import { z, rpc } from "@ws-kit/zod";
+import { z, message, rpc } from "@ws-kit/zod";
 
-// Bind request and response schemas at definition time
+// ✅ RECOMMENDED: Unified config-based syntax (ADR-015)
+const GetUser = message("GET_USER", {
+  payload: { id: z.string() },
+  response: { user: UserSchema },
+});
+
+// Legacy syntax still supported
 const QueryData = rpc("QUERY_DATA", { id: z.string() }, "QUERY_RESULT", {
   data: z.object({ id: z.string(), value: z.any() }),
 });
-
-// Server: Handler works like any other message schema
-const router = createRouter();
-router.on(QueryData, (ctx) => {
-  const result = lookupData(ctx.payload.id);
-  ctx.reply({ data: result });
-});
-
-// Client: Response schema auto-detected from rpc()
-const client = wsClient({ url: "ws://localhost:3000" });
-const response = await client.request(QueryData, { id: "123" });
-// response.type === "QUERY_RESULT"
-// response.payload.data is fully typed
 ```
 
-**Benefits:**
+**Server**: Use `ctx.reply()` for terminal response (RPC-only):
 
-- No schema repetition at call sites
-- Response type automatically inferred by TypeScript
-- Works transparently with router handlers
-- Backward compatible with explicit response schemas
+```typescript
+const router = createRouter();
 
-**Characteristics:**
+router.on(GetUser, (ctx) => {
+  const user = await db.users.findById(ctx.payload.id);
+  if (!user) {
+    ctx.error("NOT_FOUND", "User not found");
+    return;
+  }
+  // ✅ Type-safe to response schema
+  ctx.reply?.({ user });
+});
+```
 
-- `rpc()` returns a valid message schema that works with `router.on()`, `router.use()`, etc.
-- Client detects response schema automatically
-- Optional: `client.request(QueryData, payload, opts?)` - response schema from binding
-- Backward compat: `client.request(QueryData, payload, ExplicitResponse, opts?)` - explicit override
+**Optional: Progress updates before terminal reply**:
+
+```typescript
+router.on(GetUser, (ctx) => {
+  ctx.progress?.({ stage: "loading" });
+  const user = await db.users.findById(ctx.payload.id);
+  ctx.progress?.({ stage: "validating" });
+  ctx.reply?.({ user });
+});
+```
+
+**Client**: Use `call.result()` for terminal, `call.progress()` for stream:
+
+```typescript
+const client = wsClient({ url: "ws://localhost:3000" });
+
+// New dual-surface API (ADR-015)
+const call = client.request(GetUser, { id: "123" });
+
+// Optional: listen to progress updates
+for await (const p of call.progress()) {
+  console.log("progress:", p.stage);
+}
+
+// Wait for terminal response
+const { user } = await call.result();
+```
+
+**Benefits (ADR-015)**:
+
+- One message definition for RPC (no dual schemas)
+- Terminal/progress intent explicit (`ctx.reply()` vs `ctx.progress()`)
+- Type-safe to response schema at compile time
+- Progress updates optional; client may skip them
+- Automatic correlation tracking with one-shot guard
 
 ## Type Inference
 
@@ -288,7 +319,7 @@ router.on(JoinRoom, (ctx) => {
   //   payload: { roomId: string },  // ✅ Required (schema defines it)
   //   receivedAt: number,
   //   send: (schema, payload) => void,
-  //   reply: (schema, payload) => void,
+  //   unicast: (schema, payload) => void,
   //   error: (code, message, details?) => void,
   //   subscribe: (topic) => void,
   //   unsubscribe: (topic) => void,

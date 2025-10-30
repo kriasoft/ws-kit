@@ -25,7 +25,7 @@ This forces developers to:
 Introduce:
 
 1. **`ctx.error(code, message, details)`** — Type-safe error responses to clients
-2. **`ctx.reply(schema, payload)`** — Semantic alias to `ctx.send()` for request/response patterns
+2. **`ctx.send(schema, payload)`** — Send to this client only (request/response or broadcast responses)
 3. **Standard `ErrorMessage` schema** — Predefined error message with discriminated union of codes
 4. **Lifecycle hooks** in `serve()` — `onError`, `onBroadcast`, `onUpgrade`, `onOpen`, `onClose`
 
@@ -50,13 +50,13 @@ interface MessageContext<S extends MessageSchema, TData> {
   error(code: ErrorCode, message: string, details?: Record<string, any>): void;
 
   /**
-   * Send a message to the client (request/response semantics).
-   * Alias to send() for clarity in request/response patterns.
+   * Send a message to this client only.
+   * Use for request/response patterns or broadcast responses.
    */
-  reply<R extends MessageSchema>(schema: R, payload: InferPayload<R>): void;
+  unicast<R extends MessageSchema>(schema: R, payload: InferPayload<R>): void;
 
   /**
-   * Send a message to the client (one-way broadcast).
+   * Send a message to this client only (alias to unicast).
    */
   send<R extends MessageSchema>(schema: R, payload: InferPayload<R>): void;
 }
@@ -190,7 +190,7 @@ router.on(QueryUserMessage, (ctx) => {
     return;
   }
 
-  ctx.reply(UserFoundMessage, user);
+  ctx.send(UserFoundMessage, user);
 });
 ```
 
@@ -418,7 +418,7 @@ router.on(RoomUpdateMessage, (ctx) => {
 router.on(QueryUserMessage, (ctx) => {
   const user = findUserById(ctx.payload.userId);
   // ✅ reply() explicitly signals response to request
-  ctx.reply(QueryUserResponseMessage, user);
+  ctx.send(QueryUserResponseMessage, user);
 });
 ```
 
@@ -451,7 +451,7 @@ const ctx = {
 router.on(ProcessMessage, (ctx) => {
   try {
     const result = processData(ctx.payload);
-    ctx.reply(ProcessedMessage, result);
+    ctx.send(ProcessedMessage, result);
   } catch (err) {
     // Caught error in handler
     ctx.error("INTERNAL_ERROR", "Processing failed", {

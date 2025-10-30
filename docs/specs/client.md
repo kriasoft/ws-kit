@@ -1040,7 +1040,7 @@ import { Hello, HelloOk } from "./shared/schemas";
 
 const router = createRouter();
 router.on(Hello, (ctx) => {
-  ctx.reply(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
+  ctx.send(HelloOk, { text: `Hello, ${ctx.payload.name}!` });
 });
 ```
 

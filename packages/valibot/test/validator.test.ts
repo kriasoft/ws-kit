@@ -295,7 +295,7 @@ describe("@ws-kit/valibot Validator", () => {
         type: "ERROR",
         meta: { timestamp: Date.now() },
         payload: {
-          code: "VALIDATION_FAILED",
+          code: "VALIDATION_ERROR",
           message: "Invalid input",
         },
       });
@@ -304,14 +304,11 @@ describe("@ws-kit/valibot Validator", () => {
 
     it("should support all error codes", () => {
       const codes = [
-        "INVALID_MESSAGE_FORMAT",
-        "VALIDATION_FAILED",
-        "UNSUPPORTED_MESSAGE_TYPE",
-        "AUTHENTICATION_FAILED",
-        "AUTHORIZATION_FAILED",
-        "RESOURCE_NOT_FOUND",
-        "RATE_LIMIT_EXCEEDED",
-        "INTERNAL_SERVER_ERROR",
+        "VALIDATION_ERROR",
+        "AUTH_ERROR",
+        "INTERNAL_ERROR",
+        "NOT_FOUND",
+        "RATE_LIMIT",
       ];
 
       for (const code of codes) {

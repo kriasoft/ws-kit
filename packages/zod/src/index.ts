@@ -58,6 +58,7 @@ export type { AnyMessageSchema, MessageSchema } from "./schema.js";
 export type { TypedZodRouter } from "./router.js";
 export type {
   ErrorCode,
+  RpcErrorCode,
   InferMeta,
   InferMessage,
   InferPayload,

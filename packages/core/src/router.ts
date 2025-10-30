@@ -3,16 +3,25 @@
 
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
-import { RESERVED_META_KEYS, DEFAULT_CONFIG } from "./constants.js";
+import { RpcManager } from "./rpc-manager.js";
+import {
+  RESERVED_META_KEYS,
+  RESERVED_CONTROL_PREFIX,
+  DEFAULT_CONFIG,
+} from "./constants.js";
 import type {
   ServerWebSocket,
   WebSocketData,
   MessageContext,
+  EventMessageContext,
+  RpcMessageContext,
   MessageMeta,
   SendFunction,
   OpenHandler,
   CloseHandler,
   MessageHandler,
+  EventHandler,
+  RpcHandler,
   AuthHandler,
   ErrorHandler,
   Middleware,
@@ -24,6 +33,7 @@ import type {
   PubSub,
   OpenHandlerContext,
   CloseHandlerContext,
+  PublishOptions,
 } from "./types.js";
 
 /**
@@ -112,6 +122,12 @@ export class WebSocketRouter<
 
   // Limits
   private readonly maxPayloadBytes: number;
+  private readonly socketBufferLimitBytes: number;
+  private readonly rpcTimeoutMs: number;
+  private readonly dropProgressOnBackpressure: boolean;
+
+  // RPC state management (encapsulated in RpcManager)
+  readonly #rpc: RpcManager;
 
   // Testing utilities (only available when testing mode is enabled)
   _testing?: TestingUtils<TData>;
@@ -135,6 +151,28 @@ export class WebSocketRouter<
 
     this.maxPayloadBytes =
       options.limits?.maxPayloadBytes ?? DEFAULT_CONFIG.MAX_PAYLOAD_BYTES;
+
+    // Store RPC configuration
+    this.socketBufferLimitBytes =
+      options.socketBufferLimitBytes ??
+      DEFAULT_CONFIG.MAX_QUEUED_BYTES_PER_SOCKET;
+    this.rpcTimeoutMs =
+      options.rpcTimeoutMs ?? DEFAULT_CONFIG.DEFAULT_RPC_TIMEOUT_MS;
+
+    // Store backpressure behavior (default: true = drop progress messages)
+    this.dropProgressOnBackpressure =
+      options.dropProgressOnBackpressure ?? true;
+
+    // Initialize RPC manager with configuration
+    const rpcIdleTimeoutMs =
+      options.rpcIdleTimeoutMs ?? this.rpcTimeoutMs + 10_000; // Default: timeout + 10s
+    this.#rpc = new RpcManager({
+      maxInflightRpcsPerSocket: options.maxInflightRpcsPerSocket ?? 1000,
+      rpcIdleTimeoutMs,
+    });
+
+    // Start idle RPC cleanup timer
+    this.#rpc.start();
 
     // Store heartbeat config only if explicitly provided
     // Heartbeat is opt-in: only initialize if options.heartbeat is set
@@ -180,23 +218,46 @@ export class WebSocketRouter<
   // ———————————————————————————————————————————————————————————————————————————
 
   /**
-   * Register a handler for a specific message type.
+   * Register a handler for a fire-and-forget or pub/sub message.
+   *
+   * Use `on()` for events, notifications, and pub/sub messaging where handlers
+   * don't need to produce a guaranteed response. The handler executes independently
+   * without correlation, timeout, or one-shot guarantees.
+   *
+   * For request/response patterns, use `router.rpc()` instead, which provides:
+   * - One-shot reply guarantee (multiple replies guarded)
+   * - Correlation ID tracking and deadline awareness
+   * - Progress streaming (`ctx.progress()`) before terminal reply
+   * - Cancellation signals and timeout handling
+   *
+   * **Intent signaling**: Calling `router.on()` at the callsite signals to readers
+   * that this is an event listener, not a request/response handler. This clarity
+   * helps with code review, maintenance, and team onboarding.
+   *
+   * See ADR-015 for the design rationale behind separating `on()` and `rpc()`.
    *
    * @param schema - Message schema (format depends on validator adapter)
-   * @param handler - Handler function to call when message arrives
+   * @param handler - Event handler function (receives EventMessageContext, no RPC methods)
    * @returns This router for method chaining
    *
    * @example
    * ```typescript
-   * const PingMessage = message("PING", { text: z.string() });
-   * router.on(PingMessage, (ctx) => {
-   *   console.log("Ping received:", ctx.payload.text);
+   * // Event handler (no response needed)
+   * const UserLoggedIn = message("USER_LOGGED_IN", { userId: z.string() });
+   * router.on(UserLoggedIn, (ctx) => {
+   *   router.publish("notifications", NotifyMessage, { text: "User logged in" });
+   * });
+   *
+   * // Pub/sub handler
+   * const RoomMessage = message("ROOM_MESSAGE", { text: z.string() });
+   * router.on(RoomMessage, (ctx) => {
+   *   router.publish(`room:${roomId}`, RoomMessage, ctx.payload);
    * });
    * ```
    */
   on<Schema extends MessageSchemaType>(
     schema: Schema,
-    handler: MessageHandler<Schema, TData>,
+    handler: EventHandler<Schema, TData>,
   ): this {
     if (!this.validator) {
       throw new Error(
@@ -208,10 +269,31 @@ export class WebSocketRouter<
 
     const messageType = this.validator.getMessageType(schema);
 
+    // Enforce reserved control prefix rule at design time
+    if (messageType.startsWith(RESERVED_CONTROL_PREFIX)) {
+      throw new Error(
+        `Cannot register handler for message type "${messageType}": ` +
+          `Message types cannot use reserved prefix "${RESERVED_CONTROL_PREFIX}". ` +
+          `This prefix is reserved for internal control messages.`,
+      );
+    }
+
     if (this.messageHandlers.has(messageType)) {
       console.warn(
         `[ws] Handler for message type "${messageType}" is being overwritten.`,
       );
+    }
+
+    // Dev-mode warning: RPC schema registered with .on()?
+    if (process.env.NODE_ENV !== "production") {
+      if (schema && typeof schema === "object" && "response" in schema) {
+        console.warn(
+          `[ws] Message schema "${messageType}" has a .response field but is registered with ` +
+            `router.on(). For request/response patterns with guaranteed replies, use ` +
+            `router.rpc() instead. This ensures one-shot semantics, correlation tracking, ` +
+            `and deadline awareness.`,
+        );
+      }
     }
 
     this.messageHandlers.set(messageType, {
@@ -248,6 +330,131 @@ export class WebSocketRouter<
     const messageType = this.validator.getMessageType(schema);
     this.messageHandlers.delete(messageType);
 
+    return this;
+  }
+
+  /**
+   * Register a handler for a request/response (RPC) message.
+   *
+   * Use `router.rpc()` for request/response patterns where the client expects
+   * a guaranteed response with correlation tracking, timeout awareness, and
+   * optional progress streaming.
+   *
+   * Handlers receive RPC-specific context methods:
+   * - `ctx.reply(data)` — Terminal, one-shot reply (multiple calls guarded)
+   * - `ctx.progress(data)` — Non-terminal progress updates before reply
+   * - `ctx.onCancel(cb)` — Register cancellation callbacks
+   * - `ctx.abortSignal` — Standard AbortSignal for cancellation
+   * - `ctx.deadline` — Request timeout deadline (epoch ms)
+   * - `ctx.timeRemaining()` — ms until deadline
+   *
+   * **Intent signaling**: Calling `router.rpc()` at the callsite immediately
+   * signals to readers "this handler produces a guaranteed response." This clarity
+   * is critical for code review (reviewers spot the pattern at a glance) and for
+   * team onboarding (new developers see the method name and understand the contract).
+   *
+   * **Operational surface**: RPC handlers enforce one-shot semantics, correlation
+   * tracking, and deadline awareness. Event handlers (via `router.on()`) don't.
+   * The separate entry point makes this boundary explicit, preventing the common
+   * mistake of "replying" to an event handler via `ctx.send()` as if it's RPC.
+   *
+   * For fire-and-forget or pub/sub patterns, use `router.on()` instead.
+   * See ADR-015 for the design rationale behind separating `on()` and `rpc()`.
+   *
+   * @param schema - RPC message schema (must have `.response` field)
+   * @param handler - RPC handler function receiving RpcMessageContext (must call ctx.reply() or ctx.error())
+   * @returns This router for method chaining
+   * @throws If schema does not have a `.response` field
+   *
+   * @example
+   * ```typescript
+   * // Simple RPC with guaranteed reply
+   * const GetUser = rpc(
+   *   "GET_USER",
+   *   { id: z.string() },
+   *   "USER_RESPONSE",
+   *   { user: UserSchema }
+   * );
+   *
+   * router.rpc(GetUser, async (ctx) => {
+   *   const user = await db.users.findById(ctx.payload.id);
+   *   if (!user) {
+   *     ctx.error("NOT_FOUND", "User not found");
+   *     return;
+   *   }
+   *   ctx.reply(GetUser.response, { user });  // One-shot, guaranteed reply
+   * });
+   *
+   * // RPC with progress streaming
+   * const LongQuery = rpc(
+   *   "LONG_QUERY",
+   *   { query: z.string() },
+   *   "QUERY_RESPONSE",
+   *   { result: z.any() }
+   * );
+   *
+   * router.rpc(LongQuery, async (ctx) => {
+   *   for (const item of largeDataset) {
+   *     ctx.progress({ processed: item.count });
+   *     // Progress updates are non-terminal; client sees them but waits for reply
+   *   }
+   *   ctx.reply(LongQuery.response, { result: finalResult });  // Terminal reply
+   * });
+   * ```
+   */
+  rpc<Schema extends MessageSchemaType>(
+    schema: Schema,
+    handler: RpcHandler<Schema, TData>,
+  ): this {
+    // Enforce that schema has a response field (RPC semantics)
+    if (!schema || typeof schema !== "object" || !("response" in schema)) {
+      throw new Error(
+        "Cannot register RPC handler: schema must have a .response field. " +
+          "Use the rpc() helper to create RPC schemas, or add .response to your schema. " +
+          "For fire-and-forget messaging, use router.on() instead.",
+      );
+    }
+
+    // Delegate to on() for actual registration
+    // The RpcManager will handle one-shot reply guarantee, correlation tracking, and deadlines
+    return this.on(schema, handler);
+  }
+
+  /**
+   * Register a handler for a topic (pub/sub) message.
+   *
+   * Sugar method over `.on()` for messages that are typically published to channels.
+   * Optional handler executes when message is published, but isn't required.
+   *
+   * @param schema - Topic message schema
+   * @param options - Optional configuration (onPublish handler)
+   * @returns This router for method chaining
+   *
+   * @example
+   * ```typescript
+   * const RoomUpdate = message("ROOM_UPDATE", { text: z.string() });
+   *
+   * router.topic(RoomUpdate, {
+   *   onPublish: (ctx) => {
+   *     // Executed when message is published via router.publish()
+   *     console.log(`Room updated: ${ctx.payload.text}`);
+   *   },
+   * });
+   *
+   * // Later: broadcast to subscribers
+   * router.publish("room:123", { text: "Hello all" });
+   * ```
+   */
+  topic<Schema extends MessageSchemaType>(
+    schema: Schema,
+    options?: { onPublish?: MessageHandler<Schema, TData> },
+  ): this {
+    // Register handler if provided
+    if (options?.onPublish) {
+      return this.on(schema, options.onPublish);
+    }
+
+    // No-op if no handler provided (schema is just registered as a type)
     return this;
   }
 
@@ -448,6 +655,7 @@ export class WebSocketRouter<
     this.closeHandlers.length = 0;
     this.authHandlers.length = 0;
     this.errorHandlers.length = 0;
+    // NOTE: RPC state is managed by RpcManager and not cleared on reset
     // NOTE: intentionally preserve heartbeatStates for active connections
     return this;
   }
@@ -601,19 +809,143 @@ export class WebSocketRouter<
   }
 
   /**
-   * Publish a message to a channel.
+   * Publish a typed message to a channel (broadcasts to all subscribers).
    *
-   * Scope depends on PubSub implementation:
+   * **Design** (ADR-019): Single canonical publishing entry point. Validates the payload
+   * against the schema before publishing. Returns Promise<number> for testing/metrics.
+   *
+   * **Type Safety**: Payload is validated against schema. Invalid payloads return 0 and
+   * log errors; valid payloads are broadcast to all subscribers on the topic. This
+   * ensures that subscribers always receive well-formed messages.
+   *
+   * **Validation Semantics**: Reuses the same schema validation as `ctx.send()` to maintain
+   * consistency across send/reply/publish APIs. The message is constructed and validated
+   * before being handed to the PubSub layer, ensuring validation is always enforced
+   * (no way to bypass via raw pubsub calls).
+   *
+   * **Metadata Handling**:
+   * - `timestamp` is auto-injected (producer time, useful for UI display)
+   * - `clientId` is NEVER injected (connection identity, not broadcast metadata)
+   * - Custom meta from `options.meta` is merged in
+   * - Payload is kept separate from meta (schema validation is strict)
+   *
+   * **Security Warning for RPC Handlers**: Do NOT call this to send RPC responses.
+   * Always use `ctx.reply()` for RPC responses, which ensures unicast delivery
+   * to the caller only, preventing accidental data leakage.
+   *
+   * **Authorization Model**: Use subscription routing rules and topic namespaces to
+   * control who receives published messages. This method does not perform authorization
+   * checks; that's delegated to subscription guards (who can subscribe to what topics).
+   * See docs/specs/broadcasting.md for auth patterns.
+   *
+   * **Return Value**: Returns `Promise<number>` indicating matched subscriber count.
+   * - Useful for testing (assert specific fan-out count)
+   * - Useful for metrics/observability (track broadcast scope)
+   * - Current implementation: returns 1 as sentinel (distributed pubsub can override)
+   * - Future: PubSub interface may add subscriberCount() for exact metrics
+   *
+   * **Scope** depends on PubSub implementation:
    * - MemoryPubSub: This process instance only
    * - BunPubSub (Phase 3): Load-balanced cluster (all instances)
    * - DurablePubSub (Phase 6): This DO instance only
    * - RedisPubSub (Phase 8): Multiple instances via Redis
    *
-   * @param channel - Channel name
-   * @param message - Message to publish
+   * **Options** (PublishOptions):
+   * - `excludeSelf`: Future feature for suppressing sender echo (default: false)
+   * - `partitionKey`: Future feature for sharding in distributed systems
+   * - `meta`: Custom metadata to include alongside auto-injected timestamp
+   *
+   * @param channel - Channel/topic name (e.g., "room:123", "user:456", "system:alerts")
+   * @param schema - Message schema (used for validation, identifies message type)
+   * @param payload - Message payload (must match schema; validated)
+   * @param options - Publish options (excludeSelf, partitionKey, meta)
+   * @returns Promise<number> - Resolves to matched subscriber count
+   *
+   * @example
+   * ```typescript
+   * // From handler (use ctx.publish() for ergonomics)
+   * router.on(UserCreated, async (ctx) => {
+   *   const user = await db.create(ctx.payload);
+   *   const count = await ctx.publish(
+   *     `org:${ctx.payload.orgId}:users`,
+   *     UserListInvalidated,
+   *     { orgId: ctx.payload.orgId }
+   *   );
+   *   console.log(`Notified ${count} subscribers`);
+   * });
+   * ```
+   *
+   * ```typescript
+   * // Outside handlers (cron, queue, lifecycle)
+   * const count = await router.publish(
+   *   "system:announcements",
+   *   System.Announcement,
+   *   { text: "Server maintenance at 02:00 UTC" }
+   * );
+   * ```
    */
-  async publish(channel: string, message: unknown): Promise<void> {
-    await this.pubsub.publish(channel, message);
+  async publish(
+    channel: string,
+    schema: MessageSchemaType,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<number> {
+    try {
+      if (!this.validator) {
+        console.warn(
+          "[ws] Cannot publish: no validator configured. " +
+            "Router must be created with a validator adapter.",
+        );
+        return 0;
+      }
+
+      // Extract message type from schema
+      const messageType = this.validator.getMessageType(schema);
+
+      // Build metadata with auto-injected fields
+      // INVARIANT: clientId is NEVER injected here (connection identity ≠ broadcast metadata)
+      const messageMetadata: Record<string, unknown> = {
+        timestamp: Date.now(),
+        ...options?.meta,
+      };
+
+      // Create message object with required structure
+      // Schema validation is strict, so payload is separate from meta
+      const message = {
+        type: messageType,
+        meta: messageMetadata,
+        ...(payload !== undefined && { payload }),
+      };
+
+      // Validate constructed message
+      // This ensures all published messages conform to their schema
+      const validationResult = this.validator.safeParse(schema, message);
+
+      if (!validationResult.success) {
+        console.error(
+          `[ws] Failed to publish message of type "${messageType}": Validation error`,
+          validationResult.success,
+        );
+        return 0;
+      }
+
+      // Publish validated message to pubsub
+      // At this point, message is guaranteed to match schema
+      await this.pubsub.publish(channel, validationResult.data);
+
+      // Return subscriber count estimate
+      // - For MemoryPubSub: Could query subscriberCount() internally
+      // - For distributed pubsub: Count unknown until delivery (return sentinel 1)
+      // - Implementations can override by wrapping PubSub interface
+      // TODO: Consider adding subscriberCount to PubSub interface for better metrics
+      return 1;
+    } catch (error) {
+      console.error(
+        `[ws] Error publishing message to channel "${channel}":`,
+        error,
+      );
+      return 0;
+    }
   }
 
   /**
@@ -759,6 +1091,10 @@ export class WebSocketRouter<
     // Stop heartbeat
     this.stopHeartbeat(clientId);
 
+    // Cancel all in-flight RPCs for this connection (per-socket)
+    // This triggers onCancel callbacks for cleanup
+    this.#rpc.onDisconnect(clientId);
+
     const send = this.createSendFunction(ws);
 
     // Execute close handlers
@@ -844,6 +1180,35 @@ export class WebSocketRouter<
 
       const messageType = (parsedMessage as { type: string }).type;
 
+      // Step 3.5: Handle reserved control frames (internal $ws:* messages)
+      if (messageType.startsWith(RESERVED_CONTROL_PREFIX)) {
+        // Log all control messages for observability
+        console.debug(`[ws] Control message: ${messageType}`);
+
+        // Handle specific control messages
+        if (messageType === "$ws:abort") {
+          const msg = parsedMessage as Record<string, unknown>;
+          const correlationId = (msg.meta as Record<string, unknown>)
+            ?.correlationId;
+          if (typeof correlationId === "string") {
+            console.debug(
+              `[ws] RPC abort received for correlation ${correlationId}`,
+            );
+            this.#rpc.onAbort(clientId, correlationId);
+          }
+        }
+        // Ignore unknown control messages, don't dispatch to handlers
+        return;
+      }
+
+      // Step 3.6: Assert user message types don't use reserved prefix
+      if (messageType.startsWith(RESERVED_CONTROL_PREFIX)) {
+        console.error(
+          `[ws] User message type "${messageType}" uses reserved prefix "${RESERVED_CONTROL_PREFIX}"`,
+        );
+        return;
+      }
+
       // Step 4: Authentication check (first message only)
       const heartbeat = this.heartbeatStates.get(clientId);
       if (heartbeat && !heartbeat.authenticated) {
@@ -891,6 +1256,32 @@ export class WebSocketRouter<
           `[ws] Message validation failed for type "${messageType}" from ${clientId}:`,
           validationResult.error,
         );
+
+        // Check if this is an RPC request (would have .response property if registered as RPC)
+        const isRpcMessage =
+          handlerEntry.schema &&
+          typeof handlerEntry.schema === "object" &&
+          "response" in handlerEntry.schema;
+
+        if (isRpcMessage) {
+          // Send RPC_ERROR for validation failure (socket stays open)
+          const correlationId = (normalized.meta as Record<string, unknown>)
+            ?.correlationId;
+          if (typeof correlationId === "string") {
+            ws.send(
+              JSON.stringify({
+                type: "RPC_ERROR",
+                code: "VALIDATION",
+                message: "Request validation failed",
+                meta: {
+                  timestamp: Date.now(),
+                  correlationId,
+                },
+              }),
+            );
+          }
+        }
+        // For non-RPC, just silently drop (existing behavior)
         return;
       }
 
@@ -904,7 +1295,14 @@ export class WebSocketRouter<
       meta.clientId = clientId;
       meta.receivedAt = receivedAt;
 
-      // Step 8: Handler dispatch with middleware pipeline
+      // Step 8: Pre-compute RPC detection for use in closures
+      // Detect RPC (check if schema has .response property)
+      const isRpc =
+        handlerEntry.schema &&
+        typeof handlerEntry.schema === "object" &&
+        "response" in handlerEntry.schema;
+
+      // Step 9: Handler dispatch with middleware pipeline
       // Create error sending function for type-safe error responses
       const errorSend = (
         code: string,
@@ -919,38 +1317,50 @@ export class WebSocketRouter<
             );
           }
 
-          // Create error message using the standard ERROR type
-          // Error messages have code, message, and optional details fields
-          const errorMessage = {
-            type: "ERROR",
-            meta: {
-              timestamp: Date.now(),
-            },
-            payload: {
-              code,
-              message,
-              ...(details && { details }),
-            },
-          };
+          // For RPC: check one-shot guard and send RPC_ERROR
+          if (isRpc && correlationId) {
+            if (this.#rpc.isTerminal(clientId, correlationId)) {
+              // Already sent terminal, suppress
+              return;
+            }
+            this.#rpc.onTerminal(clientId, correlationId);
 
-          // Validate error message structure (lenient - allow any valid structure)
-          // We don't have the ERROR schema here, so we'll just send it raw after validation
-          const messageType = "ERROR";
+            // Check backpressure
+            if (this.shouldBackpressure(ws)) {
+              console.warn(
+                `[ws] Backpressure on RPC error send, still sending RPC_ERROR`,
+              );
+            }
 
-          // Send error message
-          ws.send(
-            JSON.stringify({
-              type: messageType,
-              meta: {
-                timestamp: Date.now(),
-              },
-              payload: {
+            // Send RPC_ERROR with wire format
+            ws.send(
+              JSON.stringify({
+                type: "RPC_ERROR",
                 code,
                 message,
                 ...(details && { details }),
-              },
-            }),
-          );
+                meta: {
+                  timestamp: Date.now(),
+                  correlationId,
+                },
+              }),
+            );
+          } else {
+            // Non-RPC: send standard ERROR message
+            ws.send(
+              JSON.stringify({
+                type: "ERROR",
+                meta: {
+                  timestamp: Date.now(),
+                },
+                payload: {
+                  code,
+                  message,
+                  ...(details && { details }),
+                },
+              }),
+            );
+          }
         } catch (error) {
           console.error("[ws] Error sending error message:", error);
         }
@@ -985,17 +1395,258 @@ export class WebSocketRouter<
         }
       };
 
+      // Create publish function as bound convenience method for context
+      // **Design** (ADR-019): ctx.publish() is a thin passthrough to router.publish()
+      // for optimal handler ergonomics. Rather than exporting a standalone helper
+      // function that requires passing the router, we bind it to the context for
+      // use within message handlers, middleware, and lifecycle hooks.
+      //
+      // This aligns with ws-kit's design philosophy:
+      // - Factory functions (`message()`, `rpc()`, `createRouter()`) for setup
+      // - Context methods (`ctx.send()`, `ctx.subscribe()`, `ctx.publish()`) for operations
+      //
+      // Ergonomic comparison:
+      // - ✅ ctx.publish(channel, schema, payload) — discoverable, consistent
+      // - ❌ publish(router, channel, schema, payload) — requires param passing
+      // - ❌ router.publish(channel, schema, payload) — less contextual in handlers
+      //
+      // The separation of concerns is maintained: router.publish() is canonical,
+      // ctx.publish() is the ergonomic sugar for the 95% case (handlers).
+      const publish = async (
+        channel: string,
+        schema: MessageSchemaType,
+        payload: any,
+        options?: PublishOptions,
+      ): Promise<number> => {
+        return this.publish(channel, schema, payload, options);
+      };
+
+      // Calculate deadline for RPC requests
+      const timeoutMs =
+        (validatedData.meta?.timeoutMs as number | undefined) ||
+        this.rpcTimeoutMs;
+      const deadline = isRpc ? receivedAt + timeoutMs : undefined;
+
+      // Create onCancel callback registration function
+      // Server-side correlation synthesis: generate UUID if missing for RPC messages
+      let correlationId =
+        typeof validatedData.meta?.correlationId === "string"
+          ? validatedData.meta.correlationId
+          : undefined;
+
+      // Synthesize correlationId for RPC if missing (belt-and-suspenders approach)
+      let syntheticCorrelation = false;
+      if (isRpc && !correlationId) {
+        // Generate UUID v7-like correlation ID for missing ones
+        correlationId = crypto.randomUUID();
+        syntheticCorrelation = true;
+        console.debug(
+          `[ws] Synthesized correlationId for RPC: ${correlationId}`,
+        );
+        // Update meta for downstream usage
+        if (validatedData.meta && typeof validatedData.meta === "object") {
+          (validatedData.meta as any).correlationId = correlationId;
+          (validatedData.meta as any).syntheticCorrelation = true;
+        }
+      }
+
+      // RPC-specific checks and setup
+      if (isRpc && correlationId) {
+        // Check inflight RPC limit per socket
+        if (!this.#rpc.onRequest(clientId, correlationId)) {
+          console.warn(
+            `[ws] RPC inflight limit exceeded for ${clientId}, rejecting ${correlationId}`,
+          );
+          errorSend("RATE_LIMIT", "Too many in-flight RPCs", {
+            retryable: true,
+            retryAfterMs: 100,
+          });
+          return;
+        }
+      }
+
+      const onCancel: ((cb: () => void) => () => void) | undefined = isRpc
+        ? (cb: () => void): (() => void) => {
+            if (!correlationId) {
+              console.warn("[ws] onCancel called but no correlationId");
+              return () => {}; // No-op unregister
+            }
+            return this.#rpc.onCancel(clientId, correlationId, cb);
+          }
+        : undefined;
+
+      // Create timeRemaining function
+      const timeRemaining = (): number => {
+        if (!deadline) return Infinity;
+        return Math.max(0, deadline - Date.now());
+      };
+
+      // Create RPC-aware send wrapper
+      let rpcAwareSend: SendFunction;
+      if (isRpc && correlationId) {
+        // For RPC: wrap send with one-shot guard and backpressure checks
+        rpcAwareSend = (
+          schema: MessageSchemaType,
+          payload: any,
+          options: any = {},
+        ) => {
+          // Check if terminal already sent (suppress further sends)
+          if (this.#rpc.isTerminal(clientId, correlationId)) {
+            console.debug(
+              `[ws] Suppressing send after terminal for RPC ${correlationId}`,
+            );
+            return;
+          }
+
+          // Check for backpressure on non-progress sends (terminal replies)
+          const msgType = this.validator?.getMessageType(schema) ?? "";
+          const isProgressMsg =
+            msgType !==
+            (handlerEntry.schema && (handlerEntry.schema as any).response
+              ? this.validator?.getMessageType(
+                  (handlerEntry.schema as any).response,
+                )
+              : "");
+
+          if (!isProgressMsg && this.shouldBackpressure(ws)) {
+            console.warn(
+              `[ws] Backpressure exceeded on RPC terminal send for ${correlationId}`,
+            );
+            // Send BACKPRESSURE error instead
+            errorSend("BACKPRESSURE", "Socket buffer exceeded capacity", {
+              retryable: true,
+              retryAfterMs: 100,
+            });
+            return;
+          }
+
+          // Auto-copy correlationId if not present
+          if (!options.correlationId) {
+            options = { ...options, correlationId };
+          }
+
+          // Mark as terminal if this is the response message
+          if (
+            msgType ===
+            this.validator?.getMessageType(
+              (handlerEntry.schema as any).response,
+            )
+          ) {
+            this.#rpc.onTerminal(clientId, correlationId);
+          }
+
+          // Call original send
+          send(schema, payload, options);
+        };
+      } else {
+        rpcAwareSend = send;
+      }
+
+      // Implement reply() for RPC terminal responses
+      const reply = (
+        responseSchema: MessageSchemaType,
+        data: any,
+        options: any = {},
+      ): void => {
+        if (!isRpc || !correlationId) {
+          console.warn("[ws] reply() called on non-RPC message, ignoring");
+          return;
+        }
+
+        // Check one-shot guard
+        if (this.#rpc.isTerminal(clientId, correlationId)) {
+          console.debug(
+            `[ws] Suppressing reply after terminal for RPC ${correlationId}`,
+          );
+          return;
+        }
+
+        // Mark as terminal
+        this.#rpc.onTerminal(clientId, correlationId);
+
+        // Check if backpressured (log warning but still send)
+        if (this.shouldBackpressure(ws)) {
+          console.warn(
+            `[ws] Backpressure on RPC reply for ${correlationId}, still sending`,
+          );
+        }
+
+        // Auto-copy correlationId if not present
+        if (!options.correlationId) {
+          options = { ...options, correlationId };
+        }
+
+        // Send via the standard send function
+        send(responseSchema, data, options);
+      };
+
+      // Implement progress() for RPC streaming updates
+      const progress = (data?: unknown): void => {
+        if (!isRpc || !correlationId) {
+          console.warn("[ws] progress() called on non-RPC message, ignoring");
+          return;
+        }
+
+        // Check one-shot guard - don't send if terminal already sent
+        if (this.#rpc.isTerminal(clientId, correlationId)) {
+          console.debug(
+            `[ws] Suppressing progress after terminal for RPC ${correlationId}`,
+          );
+          return;
+        }
+
+        // Update activity timestamp
+        this.#rpc.onProgress(clientId, correlationId);
+
+        // Check backpressure
+        if (this.shouldBackpressure(ws)) {
+          if (this.dropProgressOnBackpressure) {
+            // Silently drop progress message
+            console.debug(
+              `[ws] Dropping progress on backpressure for RPC ${correlationId}`,
+            );
+            return;
+          }
+          // Otherwise, log warning and send anyway
+          console.warn(
+            `[ws] Backpressure on RPC progress for ${correlationId}, still sending`,
+          );
+        }
+
+        // Send RPC_PROGRESS control message
+        try {
+          ws.send(
+            JSON.stringify({
+              type: "$ws:rpc-progress",
+              data,
+              meta: {
+                timestamp: Date.now(),
+                correlationId,
+              },
+            }),
+          );
+        } catch (error) {
+          console.error("[ws] Error sending RPC progress:", error);
+        }
+      };
+
       const context: MessageContext<MessageSchemaType, TData> = {
         ws,
         type: messageType,
         meta: validatedData.meta,
         receivedAt: receivedAt,
-        send,
+        send: rpcAwareSend,
         error: errorSend,
-        reply: send, // Semantic alias for send() in request/response patterns
         assignData,
         subscribe,
         unsubscribe,
+        publish,
+        ...(isRpc && { onCancel }),
+        ...(isRpc && { deadline }),
+        ...(isRpc && { reply }),
+        ...(isRpc && { progress }),
+        timeRemaining,
+        isRpc,
         ...(validatedData.payload !== undefined && {
           payload: validatedData.payload,
         }),
@@ -1240,10 +1891,12 @@ export class WebSocketRouter<
       receivedAt,
       send,
       error: errorSend,
-      reply: send, // Semantic alias for send() in request/response patterns
+      reply: send as any, // Semantic alias (may not be RPC in all contexts)
       assignData,
       subscribe,
       unsubscribe,
+      timeRemaining: () => Infinity, // No deadline in non-RPC contexts
+      isRpc: false, // Not an RPC by default in this context factory
     };
   }
 
@@ -1395,5 +2048,27 @@ export class WebSocketRouter<
       heartbeat.ws.close(4000, "HEARTBEAT_TIMEOUT");
       this.stopHeartbeat(clientId);
     }, timeoutMs) as unknown as ReturnType<typeof setTimeout>;
+  }
+
+  /**
+   * Get buffered bytes for backpressure check.
+   * Uses platform adapter if available, otherwise ws.bufferedAmount.
+   */
+  private getBufferedBytes(ws: ServerWebSocket<TData>): number {
+    if (this.platform?.getBufferedBytes) {
+      return this.platform.getBufferedBytes(ws);
+    }
+    // Fallback: check ws.bufferedAmount if available (Bun, browsers)
+    return (ws as any).bufferedAmount ?? 0;
+  }
+
+  /**
+   * Check if we should backpressure (buffer is full).
+   */
+  private shouldBackpressure(ws: ServerWebSocket<TData>): boolean {
+    if (this.socketBufferLimitBytes === Infinity) {
+      return false; // Backpressure disabled
+    }
+    return this.getBufferedBytes(ws) > this.socketBufferLimitBytes;
   }
 }

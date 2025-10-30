@@ -59,18 +59,31 @@ export interface MessageMeta {
   /** Optional correlation ID for request/response patterns */
   correlationId?: string;
 
+  /** Optional timeout in milliseconds (for RPC requests) */
+  timeoutMs?: number;
+
+  /** Optional idempotency key (for safe retries on reconnect) */
+  idempotencyKey?: string;
+
   /** Platform-specific metadata (may be extended by adapters) */
   [key: string]: unknown;
 }
 
 /**
- * Context passed to message handlers.
+ * Context passed to fire-and-forget message handlers (via router.on()).
+ *
+ * Event handlers don't produce a guaranteed response, so they have access to:
+ * - `ctx.send()` for one-off side-effect messages (fire-and-forget)
+ * - `ctx.publish()` for pub/sub broadcasts
+ * - `ctx.subscribe()` / `ctx.unsubscribe()` for topic management
+ *
+ * RPC-specific methods (reply, progress, onCancel, deadline) are NOT available.
+ * For request/response patterns, use router.rpc() instead.
  *
  * Generic parameter TSchema is used for type inference only (for IDE and TypeScript
  * type checking). The actual schema information comes from the router's ValidatorAdapter.
- * See ADR-001 for the conditional payload typing strategy.
  */
-export interface MessageContext<
+export interface EventMessageContext<
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   TSchema extends MessageSchemaType = MessageSchemaType,
   TData extends WebSocketData = WebSocketData,
@@ -87,7 +100,7 @@ export interface MessageContext<
   /** Server receive timestamp (milliseconds since epoch) */
   receivedAt: number;
 
-  /** Type-safe send function for validated messages */
+  /** Type-safe send function for validated messages (fire-and-forget) */
   send: SendFunction;
 
   /**
@@ -99,31 +112,8 @@ export interface MessageContext<
    * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
    * @param message - Human-readable error description
    * @param details - Optional error context/details
-   *
-   * @example
-   * ```typescript
-   * ctx.error("AUTH_ERROR", "Invalid credentials", { hint: "Check your password" });
-   * ctx.error("NOT_FOUND", "User not found");
-   * ```
    */
   error(code: string, message: string, details?: Record<string, unknown>): void;
-
-  /**
-   * Send a response message to the client.
-   *
-   * Semantic alias for send() with the same signature.
-   * Use this for request/response patterns to clarify intent.
-   * Functionally equivalent to ctx.send().
-   *
-   * @example
-   * ```typescript
-   * router.on(QueryMessage, (ctx) => {
-   *   const result = await queryDatabase(ctx.payload);
-   *   ctx.reply(QueryResponse, result);  // Clearer than ctx.send()
-   * });
-   * ```
-   */
-  reply: SendFunction;
 
   /**
    * Merge partial data into the connection's custom data object.
@@ -132,14 +122,6 @@ export interface MessageContext<
    * Calls Object.assign(ctx.ws.data, partial) internally.
    *
    * @param partial - Partial object to merge into ctx.ws.data
-   *
-   * @example
-   * ```typescript
-   * router.use((ctx, next) => {
-   *   ctx.assignData({ userId: "123", roles: ["admin"] });
-   *   return next();
-   * });
-   * ```
    */
   assignData(partial: Partial<TData>): void;
 
@@ -147,17 +129,8 @@ export interface MessageContext<
    * Subscribe this connection to a pubsub topic/channel.
    *
    * The connection will receive messages published to this topic via router.publish().
-   * This is a convenience method that delegates to ctx.ws.subscribe(channel).
    *
    * @param channel - Topic/channel name to subscribe to
-   *
-   * @example
-   * ```typescript
-   * router.on(JoinRoom, (ctx) => {
-   *   const { roomId } = ctx.payload;
-   *   ctx.subscribe(`room:${roomId}`);
-   * });
-   * ```
    */
   subscribe(channel: string): void;
 
@@ -165,21 +138,43 @@ export interface MessageContext<
    * Unsubscribe this connection from a pubsub topic/channel.
    *
    * The connection will no longer receive messages published to this topic.
-   * This is a convenience method that delegates to ctx.ws.unsubscribe(channel).
    *
    * @param channel - Topic/channel name to unsubscribe from
-   *
-   * @example
-   * ```typescript
-   * router.onClose((ctx) => {
-   *   const roomId = ctx.ws.data?.roomId;
-   *   if (roomId) {
-   *     ctx.unsubscribe(`room:${roomId}`);
-   *   }
-   * });
-   * ```
    */
   unsubscribe(channel: string): void;
+
+  /**
+   * Publish a typed message to a channel/topic (convenience method).
+   *
+   * Validates the payload against the schema and broadcasts to all subscribers.
+   * This is a bound passthrough to router.publish() optimized for use within handlers.
+   *
+   * @param channel - Topic/channel name to publish to
+   * @param schema - Message schema (validated before broadcast)
+   * @param payload - Message payload (must match schema)
+   * @param options - Publish options (excludeSelf, partitionKey, meta)
+   * @returns Promise resolving to number of recipients matched
+   */
+  publish(
+    channel: string,
+    schema: MessageSchemaType,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<number>;
+
+  /**
+   * Milliseconds remaining until the deadline (returns Infinity for events).
+   *
+   * @returns Infinity for event messages (no deadline)
+   */
+  timeRemaining(): number;
+
+  /**
+   * Flag indicating this is an event (not an RPC).
+   *
+   * Set to false for fire-and-forget messages.
+   */
+  isRpc: false;
 
   /** Payload data (conditionally present if schema defines payload) */
   payload?: unknown;
@@ -189,6 +184,190 @@ export interface MessageContext<
 }
 
 /**
+ * Context passed to request/response message handlers (via router.rpc()).
+ *
+ * RPC handlers produce a guaranteed, one-shot response with correlation tracking,
+ * deadline awareness, and optional progress streaming. All RPC-specific methods are
+ * guaranteed to be present.
+ *
+ * Generic parameter TSchema is used for type inference only (for IDE and TypeScript
+ * type checking). The actual schema information comes from the router's ValidatorAdapter.
+ */
+export interface RpcMessageContext<
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  TSchema extends MessageSchemaType = MessageSchemaType,
+  TData extends WebSocketData = WebSocketData,
+> {
+  /** WebSocket connection with custom application data */
+  ws: ServerWebSocket<TData>;
+
+  /** Message type (e.g., "GET_USER", "QUERY_DB") */
+  type: string;
+
+  /** Message metadata including clientId, receivedAt, and correlationId */
+  meta: MessageMeta;
+
+  /** Server receive timestamp (milliseconds since epoch) */
+  receivedAt: number;
+
+  /** Type-safe send function for validated messages (side effects during RPC) */
+  send: SendFunction;
+
+  /**
+   * Send a type-safe error response to the client (RPC error).
+   *
+   * Creates and sends an RPC_ERROR message with standard error structure.
+   * One-shot guarded: first error wins, subsequent calls are suppressed.
+   *
+   * @param code - Standard error code (e.g., "AUTH_ERROR", "NOT_FOUND")
+   * @param message - Human-readable error description
+   * @param details - Optional error context/details
+   */
+  error(code: string, message: string, details?: Record<string, unknown>): void;
+
+  /**
+   * Merge partial data into the connection's custom data object.
+   *
+   * Safe way to update connection data without replacing it entirely.
+   *
+   * @param partial - Partial object to merge into ctx.ws.data
+   */
+  assignData(partial: Partial<TData>): void;
+
+  /**
+   * Subscribe this connection to a pubsub topic/channel.
+   *
+   * The connection will receive messages published to this topic via router.publish().
+   *
+   * @param channel - Topic/channel name to subscribe to
+   */
+  subscribe(channel: string): void;
+
+  /**
+   * Unsubscribe this connection from a pubsub topic/channel.
+   *
+   * The connection will no longer receive messages published to this topic.
+   *
+   * @param channel - Topic/channel name to unsubscribe from
+   */
+  unsubscribe(channel: string): void;
+
+  /**
+   * Publish a typed message to a channel/topic (convenience method).
+   *
+   * Validates the payload against the schema and broadcasts to all subscribers.
+   * This is a bound passthrough to router.publish() optimized for use within handlers.
+   *
+   * @param channel - Topic/channel name to publish to
+   * @param schema - Message schema (validated before broadcast)
+   * @param payload - Message payload (must match schema)
+   * @param options - Publish options (excludeSelf, partitionKey, meta)
+   * @returns Promise resolving to number of recipients matched
+   */
+  publish(
+    channel: string,
+    schema: MessageSchemaType,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<number>;
+
+  /**
+   * Register a callback to be invoked when this RPC is cancelled.
+   *
+   * Called when:
+   * - Client sends RPC_ABORT (due to AbortSignal)
+   * - Client disconnects during an RPC
+   *
+   * Useful for cleanup (cancel DB queries, stop timers, release resources).
+   * Multiple callbacks can be registered; all are invoked in registration order.
+   *
+   * @param cb - Callback invoked on cancellation
+   * @returns Function to unregister this callback
+   */
+  onCancel(cb: () => void): () => void;
+
+  /**
+   * Standard AbortSignal that fires when this RPC is cancelled or the client disconnects.
+   *
+   * Provides seamless integration with APIs that accept AbortSignal:
+   * - fetch() requests
+   * - Database drivers with timeout support
+   * - Async operations that respect cancellation
+   */
+  abortSignal: AbortSignal;
+
+  /**
+   * Send a progress update for an RPC request (non-terminal).
+   *
+   * Sends a unicast message with the same correlation ID as the RPC.
+   * Safe no-op if backpressured (skipped silently if buffer is full).
+   *
+   * Use this for streaming results or long-running operations:
+   * - Progress updates (e.g., "50% complete")
+   * - Partial results before the final reply
+   * - Status messages during processing
+   *
+   * Terminal reply must be sent via `ctx.reply()`.
+   * Progress messages are optional; client may not wait for them.
+   *
+   * @param data - Optional progress data (if undefined, sends lightweight ping)
+   */
+  progress(data?: unknown): void;
+
+  /**
+   * Send a terminal reply for an RPC request (type-safe, one-shot).
+   *
+   * Automatically enforces that the response matches the bound response schema.
+   * One-shot guarded: multiple calls are suppressed (logged in dev mode).
+   *
+   * @param responseSchema - The response message schema
+   * @param data - Response data (must match the response schema)
+   * @param options - Optional metadata and send options
+   */
+  reply(responseSchema: MessageSchemaType, data: unknown, options?: any): void;
+
+  /**
+   * Server-derived deadline for this RPC request (milliseconds since epoch).
+   *
+   * Computed as `receivedAt + (meta.timeoutMs ?? router.defaultTimeoutMs)`.
+   * Allows handlers to check remaining time without knowing client timeout.
+   */
+  deadline: number;
+
+  /**
+   * Milliseconds remaining until the deadline (never negative).
+   *
+   * Calculated as `Math.max(0, deadline - Date.now())`.
+   *
+   * @returns Milliseconds remaining (0 means deadline passed)
+   */
+  timeRemaining(): number;
+
+  /**
+   * Flag indicating this is an RPC (request/response) message.
+   *
+   * Always true for RPC handlers. Useful in middleware to apply RPC-specific logic.
+   */
+  isRpc: true;
+
+  /** Payload data (conditionally present if schema defines payload) */
+  payload?: unknown;
+
+  /** Additional properties may be added by adapters or extensions */
+  [key: string]: unknown;
+}
+
+/**
+ * Union type for message contexts (used in middleware and type-agnostic code).
+ *
+ * Use EventMessageContext or RpcMessageContext for specific handler types.
+ */
+export type MessageContext<
+  TSchema extends MessageSchemaType = MessageSchemaType,
+  TData extends WebSocketData = WebSocketData,
+> = EventMessageContext<TSchema, TData> | RpcMessageContext<TSchema, TData>;
+
+/**
  * Options for sending a message.
  */
 export interface SendOptions {
@@ -196,6 +375,59 @@ export interface SendOptions {
   [key: string]: unknown;
   /** Skip validation of the message payload (default: false). Use only in tests. */
   validate?: boolean;
+}
+
+/**
+ * Options for publishing a message to a channel/topic.
+ *
+ * Allows fine-tuning publish behavior and future routing capabilities.
+ *
+ * **Design note** (ADR-019): These options are reserved for extensibility without breaking
+ * API changes. Current implementations use only `meta`; `excludeSelf` and `partitionKey`
+ * are placeholders for future distributed pubsub and sharding features.
+ */
+export interface PublishOptions {
+  /**
+   * Exclude the sender from receiving the published message (default: false).
+   *
+   * When false (default), the sender is included in the subscriber list.
+   * When true, the sender will not receive their own published message.
+   *
+   * **Default: false** to avoid surprises — sender usually wants to know the state changed.
+   * This aligns with the principle of least surprise in pub/sub systems.
+   *
+   * **Future use case**: In clustered systems where the sender cannot be uniquely
+   * identified across shards, this may be used for server-initiated broadcasts to
+   * suppress redundant echoes.
+   */
+  excludeSelf?: boolean;
+
+  /**
+   * Partition key for future sharding/fanout routing (optional).
+   *
+   * Reserved for future use in distributed PubSub implementations.
+   * Allows steering message routing without breaking the API.
+   *
+   * **Current behavior**: Ignored by MemoryPubSub and most adapters.
+   *
+   * **Future use case**: In Kafka, Redis Cluster, or custom sharded pubsub backends,
+   * this can direct messages to specific partitions for scaling and consistency.
+   *
+   * @example "user:123" for per-user partitioning in multi-shard setup
+   * @example "room:456" for room-affinity in horizontally scaled systems
+   */
+  partitionKey?: string;
+
+  /**
+   * Additional metadata to include in the published message.
+   *
+   * Merged into the message meta alongside auto-injected fields (timestamp).
+   * Use this to include application-specific metadata that doesn't belong in the payload.
+   *
+   * @example { origin: "admin", reason: "bulk-sync" }
+   * @example { correlationId: "req-123", source: "cron" }
+   */
+  meta?: Record<string, unknown>;
 }
 
 /**
@@ -260,17 +492,47 @@ export type CloseHandler<TData extends WebSocketData = WebSocketData> = (
 ) => void | Promise<void>;
 
 /**
- * Handler for WebSocket messages.
+ * Handler for fire-and-forget message events (registered via router.on()).
  *
- * Called when a validated message of the registered type arrives. The generic
- * TSchema parameter enables type-safe access to ctx.payload.
+ * Called when a validated fire-and-forget message arrives.
+ * The generic TSchema parameter enables type-safe access to ctx.payload.
  *
- * @param context - Message context with ws, type, meta, payload, send
+ * Event handlers do NOT have access to RPC methods (reply, progress, onCancel, deadline).
+ * Use ctx.send() for side-effect messages or ctx.publish() for pub/sub broadcasts.
+ *
+ * @param context - Event message context (no RPC methods)
+ */
+export type EventHandler<
+  TSchema extends MessageSchemaType = MessageSchemaType,
+  TData extends WebSocketData = WebSocketData,
+> = (context: EventMessageContext<TSchema, TData>) => void | Promise<void>;
+
+/**
+ * Handler for request/response RPC messages (registered via router.rpc()).
+ *
+ * Called when a validated RPC request arrives.
+ * The generic TSchema parameter enables type-safe access to ctx.payload.
+ *
+ * RPC handlers MUST call ctx.reply() or ctx.error() to send a terminal response.
+ * Optional: call ctx.progress() for streaming updates before terminal reply.
+ *
+ * @param context - RPC message context (has reply, progress, onCancel, deadline)
+ */
+export type RpcHandler<
+  TSchema extends MessageSchemaType = MessageSchemaType,
+  TData extends WebSocketData = WebSocketData,
+> = (context: RpcMessageContext<TSchema, TData>) => void | Promise<void>;
+
+/**
+ * Generic handler type (union of event and RPC handlers).
+ *
+ * Used internally when dispatching messages. For specific handler types,
+ * use EventHandler or RpcHandler.
  */
 export type MessageHandler<
   TSchema extends MessageSchemaType = MessageSchemaType,
   TData extends WebSocketData = WebSocketData,
-> = (context: MessageContext<TSchema, TData>) => void | Promise<void>;
+> = EventHandler<TSchema, TData> | RpcHandler<TSchema, TData>;
 
 /**
  * Handler for authentication events.
@@ -483,6 +745,37 @@ export interface WebSocketRouterOptions<
   limits?: LimitsConfig;
 
   /**
+   * Socket buffer limit in bytes before backpressure (default: 1000000).
+   *
+   * When socket buffer exceeds this threshold during RPC replies,
+   * the router sends an RPC_ERROR with code "BACKPRESSURE" instead of buffering unbounded.
+   * Helps prevent memory exhaustion under high throughput.
+   *
+   * Set to Infinity to disable backpressure checks.
+   */
+  socketBufferLimitBytes?: number;
+
+  /**
+   * Default timeout in milliseconds for RPC requests (default: 30000).
+   *
+   * Used as default `meta.timeoutMs` if client doesn't specify one.
+   * Affects `ctx.deadline` calculation on server side.
+   */
+  rpcTimeoutMs?: number;
+
+  /**
+   * Drop progress messages when buffer is full (default: true).
+   *
+   * When enabled, progress updates are silently skipped if the socket
+   * buffer exceeds socketBufferLimitBytes. This prevents backpressure
+   * from blocking terminal RPC responses on long-running operations.
+   *
+   * Terminal RPC responses (reply) are NEVER dropped regardless of this setting.
+   * Set to false to queue progress messages even under backpressure.
+   */
+  dropProgressOnBackpressure?: boolean;
+
+  /**
    * Logger adapter for structured logging (optional).
    *
    * If not provided, router will use default console logging.
@@ -503,6 +796,24 @@ export interface WebSocketRouterOptions<
    * ```
    */
   logger?: any; // LoggerAdapter - use 'any' to avoid circular dependency
+
+  /**
+   * Maximum in-flight (non-terminal) RPC requests per socket (default: 1000).
+   *
+   * When a socket exceeds this limit, new RPC requests are rejected with
+   * RPC_ERROR code "RATE_LIMIT". Helps prevent resource exhaustion from
+   * misbehaving clients sending unbounded concurrent RPC requests.
+   */
+  maxInflightRpcsPerSocket?: number;
+
+  /**
+   * Timeout for orphaned/idle RPC cleanup in milliseconds (default: rpcTimeoutMs + 10000).
+   *
+   * RPC state that hasn't had activity (request or cancel) for this duration
+   * is automatically cleaned up to prevent memory leaks. Useful for handling
+   * client disconnects that don't fire close handler or network partitions.
+   */
+  rpcIdleTimeoutMs?: number;
 }
 
 /**
@@ -576,6 +887,9 @@ export interface PlatformAdapter {
   /** Optional: Wrap a platform-specific WebSocket to conform to ServerWebSocket interface */
   getServerWebSocket?(ws: unknown): ServerWebSocket;
 
+  /** Optional: Get buffered bytes for a WebSocket (for backpressure checks) */
+  getBufferedBytes?(ws: ServerWebSocket): number;
+
   /** Optional: Platform-specific initialization */
   init?(): Promise<void>;
 
@@ -621,4 +935,44 @@ export interface PubSub {
     channel: string,
     handler: (message: unknown) => void | Promise<void>,
   ): void;
+}
+
+/**
+ * RPC abort control message (internal protocol).
+ *
+ * Sent by client when AbortSignal is triggered or socket closes.
+ * Informs server to cancel the RPC and trigger onCancel callbacks.
+ * Not exposed to users; handled internally by the router.
+ */
+export interface RpcAbortWire {
+  type: "RPC_ABORT";
+  meta: {
+    correlationId: string;
+  };
+}
+
+/**
+ * RPC error wire format (sent to client on RPC failure).
+ *
+ * Standard structure for RPC errors allowing typed client handling.
+ * Extensible error codes support app-specific codes via APP_${string}.
+ */
+export interface RpcErrorWire {
+  type: "RPC_ERROR";
+  code:
+    | "VALIDATION"
+    | "AUTH"
+    | "NOT_FOUND"
+    | "RATE_LIMIT"
+    | "BACKPRESSURE"
+    | "CONFLICT"
+    | "INTERNAL"
+    | `APP_${string}`;
+  message: string;
+  details?: unknown;
+  retryable?: boolean;
+  retryAfterMs?: number;
+  meta: {
+    correlationId: string;
+  };
 }

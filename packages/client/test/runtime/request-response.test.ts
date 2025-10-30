@@ -493,7 +493,7 @@ describe("Client: Request/Response Correlation", () => {
       await client.connect();
 
       // Use RPC schema but provide explicit response (for testing edge cases)
-      const ExplicitPong = messageSchema("PONG", {
+      const ExplicitPong = message("PONG", {
         reply: z.string(),
         extra: z.string().optional(),
       });

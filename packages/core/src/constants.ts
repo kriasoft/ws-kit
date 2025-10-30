@@ -2,6 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 /**
+ * Reserved control message type prefix.
+ *
+ * All internal control messages use this prefix (e.g., `$ws:abort`).
+ * User-defined message types cannot start with this prefix.
+ * Enforced at design-time (schema creation) and runtime (message dispatch).
+ *
+ * Reference: @docs/specs/rules.md#reserved-types
+ */
+export const RESERVED_CONTROL_PREFIX = "$ws:";
+
+/**
  * Reserved server-only meta keys.
  *
  * These keys are used for server-controlled metadata and cannot be overridden
@@ -44,4 +55,13 @@ export const DEFAULT_CONFIG = {
 
   /** Default server ingress timestamp field in meta */
   TIMESTAMP_FIELD: "receivedAt",
+
+  /** Default max queued bytes per socket before backpressure (1 MB) */
+  MAX_QUEUED_BYTES_PER_SOCKET: 1_000_000,
+
+  /** Default RPC request timeout (30 seconds) */
+  DEFAULT_RPC_TIMEOUT_MS: 30_000,
+
+  /** Default client resend window after reconnect (5 seconds) */
+  RESEND_WINDOW_MS: 5_000,
 } as const;

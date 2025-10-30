@@ -124,10 +124,18 @@ export function createMessageSchema(valibot: ValibotLike) {
 
   // Use canonical ErrorCode enum from core
   const ErrorCode = valibot.picklist([
+    "INVALID_ARGUMENT",
+    "DEADLINE_EXCEEDED",
+    "CANCELLED",
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "CONFLICT",
+    "RESOURCE_EXHAUSTED",
+    "UNAVAILABLE",
+    "INTERNAL_ERROR",
+    // Legacy codes for backwards compatibility
     "VALIDATION_ERROR",
     "AUTH_ERROR",
-    "INTERNAL_ERROR",
-    "NOT_FOUND",
     "RATE_LIMIT",
   ]);
 
@@ -209,14 +217,54 @@ export function createMessageSchema(valibot: ValibotLike) {
       | ObjectSchema<Record<string, GenericSchema>, undefined>
       | undefined = undefined,
     M extends Record<string, GenericSchema> = Record<string, never>,
-  >(messageType: T, payload?: P, meta?: M) {
+  >(
+    messageType: T,
+    payloadOrConfig?:
+      | P
+      | {
+          payload?: P;
+          response?: GenericSchema;
+          meta?: Record<string, GenericSchema>;
+        },
+    meta?: M,
+  ) {
+    // Support both legacy positional args and new config-based API
+    let actualPayload: P | undefined;
+    let actualMeta: Record<string, GenericSchema> | undefined;
+    let responseSchema: GenericSchema | undefined;
+
+    if (
+      payloadOrConfig &&
+      typeof payloadOrConfig === "object" &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payloadOrConfig as any).type !== "object" &&
+      !Array.isArray(payloadOrConfig) &&
+      ("payload" in payloadOrConfig ||
+        "response" in payloadOrConfig ||
+        "meta" in payloadOrConfig)
+    ) {
+      // Config object pattern: { payload?, response?, meta? }
+      const config = payloadOrConfig as {
+        payload?: P;
+        response?: GenericSchema;
+        meta?: Record<string, GenericSchema>;
+      };
+      actualPayload = config.payload;
+      responseSchema = config.response;
+      actualMeta = config.meta;
+    } else {
+      // Legacy positional pattern: (type, payload?, meta?)
+      actualPayload = payloadOrConfig as P | undefined;
+      actualMeta = meta;
+    }
+
     // Validate that extended meta doesn't use reserved keys (fail-fast at schema creation)
-    validateMetaSchema(meta);
+    validateMetaSchema(actualMeta);
 
     // Meta schema is strict to prevent client spoofing of server-controlled fields.
     // The router injects clientId and receivedAt AFTER validation (not before),
     // so the schema doesn't need to allow these fields.
-    const metaSchema = meta
+    const metaSchema = actualMeta
       ? valibot.strictObject({
           timestamp: valibot.optional(
             valibot.pipe(
@@ -226,7 +274,7 @@ export function createMessageSchema(valibot: ValibotLike) {
             ),
           ),
           correlationId: valibot.optional(valibot.string()),
-          ...meta,
+          ...actualMeta,
         })
       : valibot.strictObject({
           timestamp: valibot.optional(
@@ -239,7 +287,7 @@ export function createMessageSchema(valibot: ValibotLike) {
           correlationId: valibot.optional(valibot.string()),
         });
 
-    const baseSchema = {
+    const baseSchema: any = {
       type: valibot.literal(messageType),
       meta: metaSchema,
     };
@@ -247,15 +295,20 @@ export function createMessageSchema(valibot: ValibotLike) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let schema: ObjectSchema<any, undefined>;
 
-    if (payload === undefined) {
+    if (actualPayload === undefined) {
       schema = valibot.strictObject(baseSchema);
     } else {
       // Payloads can be a Valibot object or a raw shape
       const payloadSchema =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (payload as any).type === "object"
-          ? (payload as ObjectSchema<Record<string, GenericSchema>, undefined>)
-          : valibot.strictObject(payload as Record<string, GenericSchema>);
+        (actualPayload as any).type === "object"
+          ? (actualPayload as ObjectSchema<
+              Record<string, GenericSchema>,
+              undefined
+            >)
+          : valibot.strictObject(
+              actualPayload as Record<string, GenericSchema>,
+            );
 
       schema = valibot.strictObject({
         ...baseSchema,
@@ -275,6 +328,16 @@ export function createMessageSchema(valibot: ValibotLike) {
       };
     };
 
+    // Attach response schema if provided (for RPC messages)
+    if (responseSchema) {
+      Object.defineProperty(schema, "response", {
+        value: responseSchema,
+        enumerable: false,
+        configurable: true,
+        writable: true,
+      });
+    }
+
     // Mark schema with validator identity for runtime compatibility checks
     // This allows the router to detect mismatched validators at registration time
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -288,6 +351,7 @@ export function createMessageSchema(valibot: ValibotLike) {
     code: ErrorCode,
     message: valibot.optional(valibot.string()),
     details: valibot.optional(valibot.record(valibot.string(), valibot.any())),
+    retryable: valibot.optional(valibot.boolean()),
   });
 
   // Client-side helper: validates and creates messages for sending
@@ -323,6 +387,7 @@ export function createMessageSchema(valibot: ValibotLike) {
    * @param responseType - Message type for the response
    * @param responsePayload - Validation schema for response payload
    * @returns Message schema with attached .response property
+   * @throws Error if requestType or responseType uses reserved prefix ($ws:)
    *
    * @example
    * ```typescript
@@ -332,8 +397,8 @@ export function createMessageSchema(valibot: ValibotLike) {
    * const result = await client.request(ping, { text: "hello" });
    *
    * // Use with router - still works like a normal message schema
-   * router.on(ping, (ctx) => {
-   *   ctx.reply({ reply: `Got: ${ctx.payload.text}` });
+   * router.rpc(ping, (ctx) => {
+   *   ctx.reply!(ping.response, { reply: `Got: ${ctx.payload.text}` });
    * });
    * ```
    */
@@ -354,6 +419,23 @@ export function createMessageSchema(valibot: ValibotLike) {
     responseType: ResT,
     responsePayload: ResP,
   ) {
+    // Validate reserved prefix at definition time (fail-fast)
+    const RESERVED_PREFIX = "$ws:";
+    if (requestType.startsWith(RESERVED_PREFIX)) {
+      throw new Error(
+        `Reserved prefix "${RESERVED_PREFIX}" not allowed in message type. ` +
+          `RequestType "${requestType}" uses reserved prefix. ` +
+          `See docs/adr/012-rpc-minimal-reliable.md#reserved-control-prefix`,
+      );
+    }
+    if (responseType.startsWith(RESERVED_PREFIX)) {
+      throw new Error(
+        `Reserved prefix "${RESERVED_PREFIX}" not allowed in message type. ` +
+          `ResponseType "${responseType}" uses reserved prefix. ` +
+          `See docs/adr/012-rpc-minimal-reliable.md#reserved-control-prefix`,
+      );
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const requestSchema = messageSchema(
       requestType,

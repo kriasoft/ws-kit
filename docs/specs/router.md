@@ -38,7 +38,7 @@ router.on(PingMessage, (ctx) => {
   console.log("Ping from:", ctx.ws.data.clientId);
   console.log("Received at:", ctx.receivedAt);
   // ✅ ctx.payload is fully typed - no 'as any' needed!
-  ctx.reply(PongMessage, { reply: ctx.payload.value * 2 });
+  ctx.send(PongMessage, { reply: ctx.payload.value * 2 });
 });
 
 serve(router, {
@@ -253,6 +253,59 @@ const m = "on";
 (router as any)[m](schema, handler); // Bypasses type safety
 ```
 
+## When to Use `on()` vs `rpc()`
+
+Use **`router.on()`** for:
+
+- Fire-and-forget messages (notifications, events, side effects)
+- Pub/Sub messaging (publish to topics, broadcast to subscribers)
+- One-to-many messaging (one sender, multiple receivers)
+- Messages where the sender doesn't need a guaranteed response
+
+Use **`router.rpc()`** (or message schemas with `response` field) for:
+
+- Request/response patterns (client needs to wait for answer)
+- Operations that require correlation tracking and timeouts
+- Handlers that must reply exactly once (one-shot guarantee)
+- Handlers that support progress streaming (non-terminal updates before final reply)
+
+**Rule of thumb**: If your handler uses `ctx.reply()` or `ctx.progress()`, it must be registered with `router.rpc()` or define a message schema with a `response` field. If it only uses `ctx.send()` or `ctx.publish()`, use `router.on()`.
+
+**Example Pattern**:
+
+```typescript
+// ✅ Event: fire-and-forget notification
+router.on(UserLoggedIn, (ctx) => {
+  router.publish("notifications", NotificationMessage, {
+    text: `User ${ctx.ws.data?.userId} logged in`,
+  });
+});
+
+// ✅ RPC: request/response with guaranteed reply
+router.rpc(GetUser, (ctx) => {
+  const user = findUser(ctx.payload.id);
+  if (!user) {
+    ctx.error?.("NOT_FOUND", "User not found");
+    return;
+  }
+  ctx.reply?.({ user }); // Terminal, one-shot reply
+});
+
+// ❌ WRONG: Event handler trying to "reply" (no guarantee)
+router.on(QueryData, (ctx) => {
+  const result = queryDatabase(ctx.payload);
+  ctx.send(QueryResponse, result); // Not guaranteed to reach client
+});
+
+// ✅ RIGHT: Use RPC for queries that need guaranteed responses
+router.rpc(QueryData, (ctx) => {
+  const result = queryDatabase(ctx.payload);
+  ctx.reply?.({ result }); // Guaranteed, one-shot reply
+});
+```
+
+See [ADR-015: Unified RPC API Design](../adr/015-unified-rpc-api-design.md#why-separate-onand-rpc-entry-points) for the design rationale behind this separation.
+
 ## Router API
 
 ### Message Handlers
@@ -273,12 +326,22 @@ type MessageContext<Schema, Data> = {
   meta: z.infer<Schema["shape"]["meta"]>; // Validated client metadata
   payload: z.infer<Schema["shape"]["payload"]>; // Only if schema defines it
   receivedAt: number; // Server receive timestamp (Date.now())
-  send: SendFunction; // Type-safe send function (broadcast/one-way)
-  reply: ReplyFunction; // Semantic alias to send() for request/response patterns
+
+  // All handlers
+  send: SendFunction; // Type-safe send to current connection (1-to-1, fire-and-forget)
   error: ErrorFunction; // Type-safe error responses (see ADR-009)
   assignData: AssignDataFunction; // Merge partial data into ctx.ws.data
   subscribe: SubscribeFunction; // Subscribe to a channel
   unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
+
+  // RPC handlers only (when message has response schema)
+  reply?: (data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
+  progress?: (data?: unknown) => void; // Progress update (non-terminal, optional)
+  abortSignal?: AbortSignal; // Fires on client cancel/disconnect (ADR-015)
+  onCancel?: (cb: () => void) => () => void; // Register cancel callback
+  deadline?: number; // Server-derived deadline (epoch ms)
+  timeRemaining?: () => number; // ms until deadline
+  isRpc?: boolean; // Flag: is this an RPC message?
 };
 ```
 
@@ -286,6 +349,30 @@ type MessageContext<Schema, Data> = {
 
 - `ctx.ws.data.clientId`: Connection identity (UUID v7, generated during upgrade)
 - `ctx.receivedAt`: Server receive timestamp (milliseconds since epoch)
+- `ctx.deadline`: Derived from `meta.timeoutMs` (RPC only)
+- `ctx.isRpc`: True if message has response schema (see ADR-015)
+
+**RPC-specific methods** (optional; only present when message defines `response` schema):
+
+```typescript
+// Terminal reply (one-shot, schema-enforced)
+ctx.reply?.({ userId: "123", email: "user@example.com" });
+
+// Progress updates before reply (optional)
+ctx.progress?.({ loaded: 50 });
+ctx.progress?.({ loaded: 100 });
+ctx.reply?.({ data: result });
+
+// Abort signal for cancellation
+const result = await fetch(url, { signal: ctx.abortSignal });
+
+// Cancel callback (alternative to abortSignal)
+ctx.onCancel?.(() => {
+  console.log("RPC was cancelled");
+});
+```
+
+See [ADR-015: Unified RPC API](../adr/015-unified-rpc-api-design.md) for design rationale.
 
 **Type Safety**: `ctx.payload` exists only when schema defines it:
 
@@ -506,7 +593,7 @@ router.on(SomeMessage, (ctx) => {
 
 ### Request/Response Pattern
 
-Use `ctx.reply()` for semantic clarity when responding to a request:
+Use `ctx.send()` for fire-and-forget message responses, or `ctx.reply()` for RPC patterns (see ADR-015):
 
 ```typescript
 const QueryMessage = message("QUERY", { id: z.string() });
@@ -514,13 +601,13 @@ const QueryResponse = message("QUERY_RESPONSE", { result: z.any() });
 
 router.on(QueryMessage, (ctx) => {
   const result = database.query(ctx.payload.id);
-  ctx.reply(QueryResponse, { result }); // ✅ Semantically clear: responding to a request
+  ctx.send(QueryResponse, { result }); // ✅ Send message to current connection
 });
 ```
 
-**Note**: `ctx.reply()` and `ctx.send()` are identical at runtime; use `reply()` to clarify intent in request/response patterns.
+**RPC Pattern**: For request/response with guaranteed responses and timeouts, define RPC schemas and use `ctx.reply()` instead (see ADR-015 for RPC design).
 
-**Outbound metadata**: Both `ctx.send()` and `ctx.reply()` automatically add `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
+**Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
 
 **For broadcasting to multiple clients**, see @broadcasting.md for multicast patterns using Bun's native pubsub.
 
@@ -677,7 +764,7 @@ router.on(LoginMessage, (ctx) => {
 router.on(QueryMessage, (ctx) => {
   try {
     const result = queryDatabase(ctx.payload);
-    ctx.reply(QueryResponse, result);
+    ctx.send(QueryResponse, result);
   } catch (error) {
     ctx.error("INTERNAL_ERROR", "Database query failed", {
       reason: String(error),

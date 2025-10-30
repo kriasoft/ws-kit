@@ -12,9 +12,33 @@ Broadcasting enables multicast messaging to multiple WebSocket clients via topic
 - **Multicast**: `publish()` broadcasts to topic subscribers (this spec)
 - **Throttled Broadcast**: Coalesce rapid publishes to reduce bandwidth 80-95% (see @patterns.md#Throttled-Broadcast-Pattern, ADR-010)
 
-## Type-Safe Publishing with `router.publish()`
+## Type-Safe Publishing
 
-The router provides a type-safe `publish()` method for broadcasting validated messages:
+The router provides high-level APIs for validated message broadcasting. Lower-level utilities are available
+for backward compatibility and special cases (see API Comparison below).
+
+### High-Level APIs (Recommended)
+
+### `router.publish()` — Canonical Entry Point
+
+Use outside handlers for system-initiated broadcasts (cron jobs, queues, lifecycle hooks):
+
+```typescript
+import { createRouter, message } from "@ws-kit/zod";
+
+const Announcement = message("ANNOUNCEMENT", { text: z.string() });
+const router = createRouter<AppData>();
+
+// In a scheduled job or one-time init
+const recipients = await router.publish("system:announcements", Announcement, {
+  text: "Server maintenance at 02:00 UTC",
+});
+console.log(`Notified ${recipients} subscribers`);
+```
+
+### `ctx.publish()` — Handler Convenience
+
+Use within message handlers for ergonomic broadcasting (most common case):
 
 ```typescript
 import { createRouter, message } from "@ws-kit/zod";
@@ -28,10 +52,11 @@ router.on(JoinRoom, (ctx) => {
   // Subscribe to topic (adapter-dependent)
   ctx.subscribe(roomId);
 
-  // Publish type-safe message to topic
-  router.publish(roomId, UserJoined, {
+  // Publish type-safe message to topic (ergonomic in handlers)
+  const recipients = await ctx.publish(roomId, UserJoined, {
     roomId,
   });
+  console.log(`Notified ${recipients} subscribers`);
 });
 
 router.onClose((ctx) => {
@@ -42,6 +67,32 @@ router.onClose((ctx) => {
   }
 });
 ```
+
+**Design Note** (ADR-019): `ctx.publish()` is a thin passthrough to `router.publish()` for optimal
+developer experience. Both enforce schema validation before broadcasting. Use `ctx.publish()` in handlers
+(discoverable via IDE autocomplete, consistent with `ctx.send()`, `ctx.subscribe()`). Use `router.publish()`
+outside handlers (systems, jobs, one-time setup).
+
+### API Comparison
+
+Two canonical publishing patterns exist for different use cases:
+
+| API                    | Location        | Use Case                        | Return            | Validation  | Notes                  |
+| ---------------------- | --------------- | ------------------------------- | ----------------- | ----------- | ---------------------- |
+| **`ctx.publish()`**    | Handler context | In message handlers             | `Promise<number>` | ✅ Enforced | Recommended: ergonomic |
+| **`router.publish()`** | Router instance | Outside handlers (cron, queues) | `Promise<number>` | ✅ Enforced | Recommended: canonical |
+
+Both enforce strict schema validation. Choose based on context: `ctx.publish()` in handlers (ergonomic), `router.publish()` for system-initiated operations.
+
+### Naming: "publish" not "broadcast"
+
+All publishing methods use `publish()` (not `broadcast()`) to signal:
+
+- **Schema validation** — Messages are validated before broadcast
+- **Industry standard** — Aligns with pub/sub terminology (RabbitMQ, Redis, Kafka, NATS)
+- **Semantic clarity** — Avoids conflation with raw WebSocket broadcast APIs
+
+See ADR-018 and ADR-019 for full naming rationale.
 
 ## Context Methods: Subscribe / Unsubscribe
 

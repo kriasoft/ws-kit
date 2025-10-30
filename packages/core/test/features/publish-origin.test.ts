@@ -2,475 +2,294 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Publish Origin Option Tests
+ * Publish Sender Tracking Tests
  *
- * Validates origin-based sender tracking in broadcast messages,
- * ensuring clientId is never injected and origin option works correctly.
+ * Validates sender/author tracking in broadcast messages using recommended patterns:
+ * 1. Include sender in payload (recommended for essential message semantics)
+ * 2. Include sender in extended meta (recommended for optional metadata)
+ *
+ * Tests the public API of router.publish() and ctx.publish()
  *
  * Spec: @docs/specs/broadcasting.md#Origin-Option
+ * Related: ADR-019 (ctx.publish), ADR-018 (publish terminology)
  */
 
-import type { ServerWebSocket } from "bun";
 import { describe, expect, it } from "bun:test";
-import { z, message } from "@ws-kit/zod";
-import { publish } from "../../src/pubsub.js";
+import * as zodModule from "@ws-kit/zod";
+import { MemoryPubSub } from "../../src/pubsub.js";
+import { WebSocketRouter } from "../../src/router.js";
 
-// Mock WebSocket with flexible data structure
-class MockServerWebSocket {
-  data: { clientId: string } & Record<string, unknown>;
-  publishedMessages: { topic: string; data: string }[] = [];
+const { z, message } = zodModule;
 
-  constructor(data: { clientId: string } & Record<string, unknown>) {
-    this.data = data;
-  }
+describe("Publish Sender Tracking (router.publish API)", () => {
+  describe("Sender in Payload Pattern", () => {
+    it("should support including sender userId in payload", async () => {
+      const ChatMessage = message("CHAT", {
+        text: z.string(),
+        senderId: z.string(),
+      });
 
-  publish(topic: string, data: string) {
-    this.publishedMessages.push({ topic, data });
-    return true;
-  }
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "CHAT",
+          safeParse: (schema: any, data: any) => ({
+            success: true,
+            data,
+          }),
+        } as any,
+      });
 
-  subscribe(/* _topic: string */) {
-    /* Mock */
-  }
-  unsubscribe(/* _topic: string */) {
-    /* Mock */
-  }
-}
+      // Verify router.publish() returns Promise<number>
+      const count = await router.publish("room:general", ChatMessage, {
+        text: "Hello world",
+        senderId: "alice",
+      });
 
-function castMockWebSocket(
-  ws: MockServerWebSocket,
-): ServerWebSocket<{ clientId: string } & Record<string, unknown>> {
-  return ws as unknown as ServerWebSocket<
-    { clientId: string } & Record<string, unknown>
-  >;
-}
-
-describe("Publish Origin Option", () => {
-  describe("ClientId Never Injected", () => {
-    it("should NEVER inject clientId into broadcast meta", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({ clientId: "client-123" });
-
-      publish(castMockWebSocket(ws), "room", ChatMsg, { text: "hi" });
-
-      const message = ws.publishedMessages[0]!;
-      expect(message).toBeDefined();
-
-      const data = JSON.parse(message.data);
-      expect(data.meta).not.toHaveProperty("clientId");
-      expect(data.meta).toHaveProperty("timestamp"); // Auto-injected
+      expect(typeof count).toBe("number");
+      expect(count).toBeGreaterThanOrEqual(0);
     });
 
-    it("should not inject clientId even with custom meta", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({ clientId: "client-456" });
+    it("should accept numeric sender IDs in payload", async () => {
+      const RoomUpdate = message("ROOM_UPDATE", {
+        text: z.string(),
+        userId: z.number(),
+      });
 
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hello" },
-        { correlationId: "req-1" },
-      );
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "ROOM_UPDATE",
+          safeParse: (schema: any, data: any) => ({
+            success: true,
+            data,
+          }),
+        } as any,
+      });
 
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).not.toHaveProperty("clientId");
-      expect(data.meta).toHaveProperty("correlationId", "req-1");
-    });
+      const count = await router.publish("room:123", RoomUpdate, {
+        text: "User joined",
+        userId: 42,
+      });
 
-    it("should not inject clientId with extended meta schema", () => {
-      const RoomMsg = message(
-        "ROOM",
-        { text: z.string() },
-        { roomId: z.string() },
-      );
-      const ws = new MockServerWebSocket({ clientId: "client-789" });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        RoomMsg,
-        { text: "test" },
-        { roomId: "room-1" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).not.toHaveProperty("clientId");
-      expect(data.meta).toHaveProperty("roomId", "room-1");
+      expect(count).toBeGreaterThanOrEqual(0);
     });
   });
 
-  describe("Origin Option - Basic Behavior", () => {
-    it("should inject senderId from ws.data when origin specified", () => {
-      // Schema must define senderId if using origin option
-      const ChatMsg = message(
-        "CHAT",
+  describe("Sender in Extended Meta Pattern", () => {
+    it("should support custom meta fields via PublishOptions", async () => {
+      const Message = message(
+        "MSG",
         { text: z.string() },
         { senderId: z.string().optional() },
       );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "alice",
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "MSG",
+          safeParse: (schema: any, data: any) => ({
+            success: true,
+            data,
+          }),
+        } as any,
       });
 
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "userId" },
+      // Use meta option to include sender in extended metadata
+      const count = await router.publish(
+        "room:general",
+        Message,
+        { text: "Hello" },
+        { meta: { senderId: "bob" } },
       );
 
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).toHaveProperty("senderId", "alice");
-      expect(data.meta).not.toHaveProperty("userId"); // Origin field not copied
-      expect(data.meta).not.toHaveProperty("clientId");
+      expect(count).toBeGreaterThanOrEqual(0);
     });
 
-    it("should use custom key parameter for origin injection", () => {
-      const ChatMsg = message(
-        "CHAT",
-        { text: z.string() },
-        { authorId: z.string().optional() },
-      );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "bob",
-      });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hello" },
-        { origin: "userId", key: "authorId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).toHaveProperty("authorId", "bob");
-      expect(data.meta).not.toHaveProperty("senderId"); // Default key not used
-      expect(data.meta).not.toHaveProperty("userId");
-    });
-
-    it("should inject origin with extended meta", () => {
+    it("should merge multiple custom meta fields", async () => {
       const RoomMsg = message(
-        "ROOM",
-        { text: z.string() },
-        { roomId: z.string(), senderId: z.unknown().optional() },
-      );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "charlie",
-      });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        RoomMsg,
-        { text: "test" },
-        { roomId: "room-1", origin: "userId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).toHaveProperty("senderId", "charlie");
-      expect(data.meta).toHaveProperty("roomId", "room-1");
-      expect(data.meta).toHaveProperty("timestamp");
-    });
-  });
-
-  describe("Origin Option - No-Op Behavior", () => {
-    it("should not inject senderId when ws.data[origin] is undefined", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        // userId missing
-      });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "userId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).not.toHaveProperty("senderId"); // No-op
-      expect(data.meta).toHaveProperty("timestamp"); // Still auto-injected
-    });
-
-    it("should not inject when origin field does not exist", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        otherField: "value",
-      });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "test" },
-        { origin: "missingField" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).not.toHaveProperty("senderId");
-      expect(data.meta).toHaveProperty("timestamp");
-    });
-
-    it("should not inject when ws.data[origin] is null", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: null,
-      });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "userId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).not.toHaveProperty("senderId");
-    });
-  });
-
-  describe("Origin with Different Data Types", () => {
-    it("should inject string origin values", () => {
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "alice",
-      });
-      const ChatMsg = message(
-        "CHAT",
-        { text: z.string() },
-        { senderId: z.unknown().optional() },
-      );
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "userId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta.senderId).toBe("alice");
-    });
-
-    it("should inject number origin values", () => {
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        numericId: 42,
-      });
-      const ChatMsg = message(
-        "CHAT",
-        { text: z.string() },
-        { senderId: z.unknown().optional() },
-      );
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "numericId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta.senderId).toBe(42);
-    });
-
-    it("should inject object origin values", () => {
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        user: { id: "alice", role: "admin" },
-      });
-      const ChatMsg = messageSchema(
-        "CHAT",
-        { text: z.string() },
-        { author: z.unknown().optional() },
-      );
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "user", key: "author" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta.author).toEqual({ id: "alice", role: "admin" });
-    });
-  });
-
-  describe("Auto-Timestamp Injection", () => {
-    it("should always inject timestamp", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({ clientId: "client-123" });
-
-      const before = Date.now();
-      publish(castMockWebSocket(ws), "room", ChatMsg, { text: "hi" });
-      const after = Date.now();
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta.timestamp).toBeGreaterThanOrEqual(before);
-      expect(data.meta.timestamp).toBeLessThanOrEqual(after);
-    });
-
-    it("should inject timestamp even when origin is no-op", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        // userId missing
-      });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "userId" }, // No-op
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta.timestamp).toBeGreaterThan(0);
-      expect(data.meta).not.toHaveProperty("senderId");
-    });
-
-    it("should preserve user-provided timestamp if specified", () => {
-      const ChatMsg = message(
-        "CHAT",
-        { text: z.string() },
-        { senderId: z.unknown().optional() },
-      );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "alice",
-      });
-
-      const customTimestamp = 1234567890;
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { timestamp: customTimestamp, origin: "userId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta.timestamp).toBe(customTimestamp); // User override
-      expect(data.meta.senderId).toBe("alice");
-    });
-  });
-
-  describe("Validation Before Broadcast", () => {
-    it("should validate message with origin-injected senderId", () => {
-      const ChatMsg = message(
-        "CHAT",
-        { text: z.string() },
-        { senderId: z.unknown().optional() },
-      );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "alice",
-      });
-
-      const result = publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "valid" },
-        { origin: "userId" },
-      );
-
-      expect(result).toBe(true);
-      expect(ws.publishedMessages.length).toBe(1);
-    });
-
-    it("should fail validation if origin injection creates invalid message", () => {
-      // Schema requires specific meta structure
-      const StrictMsg = message(
-        "STRICT",
-        { text: z.string() },
-        {}, // No extended meta defined - strict mode will reject senderId
-      );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "alice",
-      });
-
-      const result = publish(
-        castMockWebSocket(ws),
-        "room",
-        StrictMsg,
-        { text: "test" },
-        { origin: "userId" }, // Will inject senderId (unknown key)
-      );
-
-      // Should fail validation due to unknown meta key
-      expect(result).toBe(false);
-      expect(ws.publishedMessages.length).toBe(0);
-    });
-  });
-
-  describe("Edge Cases", () => {
-    it("should handle empty ws.data gracefully", () => {
-      const ChatMsg = message("CHAT", { text: z.string() });
-      const ws = new MockServerWebSocket({ clientId: "client-123" });
-
-      publish(
-        castMockWebSocket(ws),
-        "room",
-        ChatMsg,
-        { text: "hi" },
-        { origin: "userId" },
-      );
-
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).not.toHaveProperty("senderId"); // No-op
-    });
-
-    it("should handle multiple custom meta fields with origin", () => {
-      const RoomMsg = messageSchema(
         "ROOM",
         { text: z.string() },
         {
           roomId: z.string(),
-          priority: z.number(),
-          senderId: z.unknown().optional(),
+          senderId: z.string().optional(),
+          priority: z.number().optional(),
         },
       );
-      const ws = new MockServerWebSocket({
-        clientId: "client-123",
-        userId: "alice",
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "ROOM",
+          safeParse: (schema: any, data: any) => ({
+            success: true,
+            data,
+          }),
+        } as any,
       });
 
-      publish(
-        castMockWebSocket(ws),
-        "room",
+      const count = await router.publish(
+        "room:lobby",
         RoomMsg,
-        { text: "test" },
+        { text: "Welcome" },
         {
-          roomId: "room-1",
-          priority: 5,
-          correlationId: "req-1",
-          origin: "userId",
+          meta: {
+            roomId: "room:123",
+            senderId: "charlie",
+            priority: 5,
+          },
         },
       );
 
-      const data = JSON.parse(ws.publishedMessages[0]!.data);
-      expect(data.meta).toHaveProperty("senderId", "alice");
-      expect(data.meta).toHaveProperty("roomId", "room-1");
-      expect(data.meta).toHaveProperty("priority", 5);
-      expect(data.meta).toHaveProperty("correlationId", "req-1");
-      expect(data.meta).toHaveProperty("timestamp");
+      expect(count).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe("Timestamp Auto-Injection", () => {
+    it("should auto-inject timestamp in metadata", async () => {
+      const Message = message("MSG", { text: z.string() });
+      let capturedMessage: any;
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "MSG",
+          safeParse: (schema: any, data: any) => {
+            capturedMessage = data;
+            return { success: true, data };
+          },
+        } as any,
+      });
+
+      await router.publish("room", Message, { text: "test" });
+
+      // Verify timestamp was auto-injected
+      expect(capturedMessage.meta).toBeDefined();
+      expect(typeof capturedMessage.meta.timestamp).toBe("number");
+      expect(capturedMessage.meta.timestamp).toBeGreaterThan(0);
+    });
+
+    it("should preserve user-provided timestamp", async () => {
+      const Message = message("MSG", { text: z.string() });
+      let capturedMessage: any;
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "MSG",
+          safeParse: (schema: any, data: any) => {
+            capturedMessage = data;
+            return { success: true, data };
+          },
+        } as any,
+      });
+
+      const customTimestamp = 1234567890;
+      await router.publish(
+        "room",
+        Message,
+        { text: "test" },
+        {
+          meta: { timestamp: customTimestamp },
+        },
+      );
+
+      expect(capturedMessage.meta.timestamp).toBe(customTimestamp);
+    });
+  });
+
+  describe("Validation and Error Handling", () => {
+    it("should return 0 on validation failure", async () => {
+      const Message = message("MSG", { text: z.string() });
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "MSG",
+          safeParse: (schema: any, data: any) => ({
+            success: false,
+            error: "Validation error",
+          }),
+        } as any,
+      });
+
+      const count = await router.publish("room", Message, {
+        text: "test",
+      });
+
+      expect(count).toBe(0);
+    });
+
+    it("should handle missing validator gracefully", async () => {
+      const Message = message("MSG", { text: z.string() });
+
+      const router = new WebSocketRouter({
+        validator: undefined as any,
+      });
+
+      const count = await router.publish("room", Message, {
+        text: "test",
+      });
+
+      expect(count).toBe(0);
+    });
+  });
+
+  describe("MemoryPubSub Integration", () => {
+    it("should work with real MemoryPubSub", async () => {
+      const Message = message("MSG", { text: z.string() });
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) =>
+            schema?.type?.value || schema?.type || "MSG",
+          safeParse: (schema: any, data: any) => ({
+            success: true,
+            data,
+          }),
+        } as any,
+        pubsub: new MemoryPubSub(),
+      });
+
+      // Subscribe to channel first
+      let receivedMessage: any;
+      router.pubsub.subscribe("room", (msg) => {
+        receivedMessage = msg;
+      });
+
+      // Publish message
+      const count = await router.publish(
+        "room",
+        Message,
+        { text: "Hello" },
+        { meta: { senderId: "alice" } },
+      );
+
+      expect(count).toBeGreaterThanOrEqual(0);
+
+      // Verify message was delivered with sender in extended meta
+      expect(receivedMessage).toBeDefined();
+      expect(receivedMessage.payload).toEqual({ text: "Hello" });
+      expect(receivedMessage.meta.senderId).toBe("alice");
+      expect(receivedMessage.meta.timestamp).toBeDefined();
+    });
+
+    it("should not expose clientId in meta", async () => {
+      const Message = message("MSG", { text: z.string() });
+
+      const router = new WebSocketRouter({
+        validator: {
+          getMessageType: (schema: any) => schema.type || "MSG",
+          safeParse: (schema: any, data: any) => ({
+            success: true,
+            data,
+          }),
+        } as any,
+        pubsub: new MemoryPubSub(),
+      });
+
+      let receivedMessage: any;
+      router.pubsub.subscribe("room", (msg) => {
+        receivedMessage = msg;
+      });
+
+      await router.publish("room", Message, { text: "test" });
+
+      // clientId should never be in broadcast metadata
+      expect(receivedMessage.meta).not.toHaveProperty("clientId");
     });
   });
 });

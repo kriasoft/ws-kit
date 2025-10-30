@@ -146,7 +146,6 @@ export default {
 ### Messaging
 
 - **ALWAYS** use `ctx.send()` for unicast → @router.md#Type-Safe-Sending
-- **ALWAYS** use `ctx.reply()` as alias for `ctx.send()` when responding to requests → @router.md#Type-Safe-Sending
 - **ALWAYS** use `router.publish()` for multicast (validates before broadcast) → @broadcasting.md
 - **ALWAYS** use `ctx.error()` for sending error messages to clients → @error-handling.md
 - **NEVER** inject `clientId` into meta (use `origin` option for sender tracking) → @broadcasting.md#Origin-Option
@@ -289,7 +288,7 @@ See @client.md#Multiple-Handlers for client multi-handler semantics.
 - **Use `createRouter()`** to create a new router instance → ADR-007
 - **Use `ctx.assignData()`** for incremental connection data updates (write-partial pattern) → @router.md#Modifying-Connection-Data
 - **Use `ctx.error()`** for type-safe error responses with discriminated union codes → ADR-009
-- **Use `ctx.reply()`** as semantic alias to `ctx.send()` for request/response patterns → ADR-009
+- **Use `ctx.send()`** for type-safe unicast messaging to the current client → ADR-020
 - **Use lifecycle hooks** (`onOpen`, `onClose`, `onError`, etc.) for observability → ADR-009
 
 ## Client-Side Development Patterns

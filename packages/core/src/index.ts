@@ -30,12 +30,16 @@ export type {
   WebSocketData,
   MessageMeta,
   MessageContext,
+  EventMessageContext,
+  RpcMessageContext,
   SendFunction,
   OpenHandlerContext,
   OpenHandler,
   CloseHandlerContext,
   CloseHandler,
   MessageHandler,
+  EventHandler,
+  RpcHandler,
   AuthHandler,
   ErrorHandler,
   Middleware,
@@ -82,7 +86,7 @@ export type { ReservedMetaKey } from "./constants.js";
  *
  * Use platform-specific adapters for production deployments.
  */
-export { MemoryPubSub, publish } from "./pubsub.js";
+export { MemoryPubSub } from "./pubsub.js";
 
 // ============================================================================
 // Message Normalization & Validation
@@ -147,6 +151,30 @@ export type { ThrottledBroadcastConfig } from "./throttle.js";
  */
 export { createLogger, DefaultLoggerAdapter, LOG_CONTEXT } from "./logger.js";
 export type { LoggerAdapter, LoggerOptions } from "./logger.js";
+
+/**
+ * RPC utilities for idempotency key generation and payload canonicalization.
+ *
+ * @example
+ * ```typescript
+ * import { stableStringify, idempotencyKey } from "@ws-kit/core";
+ * import crypto from "node:crypto";
+ *
+ * const payload = { user: "alice", action: "purchase" };
+ * const hash = crypto
+ *   .createHash("sha256")
+ *   .update(stableStringify(payload))
+ *   .digest("hex");
+ * const key = idempotencyKey({
+ *   tenant: "acme",
+ *   user: "alice",
+ *   type: "PURCHASE_ORDER",
+ *   hash,
+ * });
+ * ```
+ */
+export { stableStringify, idempotencyKey } from "./utils.js";
+export type { IdempotencyKeyOpts } from "./utils.js";
 
 // ============================================================================
 // Router Implementation

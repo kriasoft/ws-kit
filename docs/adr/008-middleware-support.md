@@ -219,7 +219,7 @@ router.use(QueryMessage, (ctx, next) => {
 router.on(QueryMessage, (ctx) => {
   const query = (ctx.ws.data as any)?.query; // Pre-validated by middleware
   const results = database.search(query);
-  ctx.reply(QueryResultsMessage, { results });
+  ctx.send(QueryResultsMessage, { results });
 });
 ```
 

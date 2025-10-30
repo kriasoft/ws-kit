@@ -41,14 +41,24 @@ import { z, message } from "@ws-kit/zod";
 
 const ErrorMessage = message("ERROR", {
   code: z.enum([
+    // RPC-standard codes (ADR-015)
+    "INVALID_ARGUMENT",
+    "DEADLINE_EXCEEDED",
+    "CANCELLED",
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "CONFLICT",
+    "RESOURCE_EXHAUSTED",
+    "UNAVAILABLE",
+    "INTERNAL_ERROR",
+    // Legacy codes (deprecated)
     "VALIDATION_ERROR",
     "AUTH_ERROR",
-    "INTERNAL_ERROR",
-    "NOT_FOUND",
     "RATE_LIMIT",
   ]),
   message: z.string(),
   details: z.record(z.any()).optional(),
+  retryable: z.boolean().optional(),
 });
 
 // Schema structure:
@@ -58,25 +68,47 @@ const ErrorMessage = message("ERROR", {
 //   payload: {
 //     code: ErrorCode,
 //     message: string,
-//     details?: Record<string, any>
+//     details?: Record<string, any>,
+//     retryable?: boolean
 //   }
 // }
 ```
 
 ## Standard Error Codes {#error-code-enum}
 
-**Base error codes for common scenarios:**
+**RPC-standard codes (aligned with gRPC conventions)**:
 
 ```typescript
-type ErrorCode =
-  | "VALIDATION_ERROR" // Invalid payload or schema mismatch
-  | "AUTH_ERROR" // Authentication failed
-  | "INTERNAL_ERROR" // Server error
-  | "NOT_FOUND" // Resource not found
-  | "RATE_LIMIT"; // Rate limit exceeded
+type RpcErrorCode =
+  | "INVALID_ARGUMENT" // Schema validation or semantic validation failed
+  | "DEADLINE_EXCEEDED" // RPC request timed out
+  | "CANCELLED" // Request was cancelled by client or peer
+  | "PERMISSION_DENIED" // Authorization failed (after successful auth)
+  | "NOT_FOUND" // Requested resource doesn't exist
+  | "CONFLICT" // Correlation ID collision or uniqueness constraint
+  | "RESOURCE_EXHAUSTED" // Buffer overflow, rate limits, or backpressure
+  | "UNAVAILABLE" // Transient infrastructure error (retriable)
+  | "INTERNAL_ERROR" // Unexpected server error (unhandled exception)
+  | "VALIDATION_ERROR" // @deprecated Use INVALID_ARGUMENT
+  | "AUTH_ERROR" // @deprecated Use PERMISSION_DENIED
+  | "RATE_LIMIT"; // @deprecated Use RESOURCE_EXHAUSTED
 ```
 
-Use `ctx.error(code, message, details)` for type-safe error responses. The framework logs all errors with connection identity for traceability.
+**Quick Error Selection (ADR-015)**:
+
+| Scenario                    | Code                 | Retryable           | Example                                        |
+| --------------------------- | -------------------- | ------------------- | ---------------------------------------------- |
+| Schema validation failed    | `INVALID_ARGUMENT`   | No                  | Missing field, wrong type                      |
+| Timeout                     | `DEADLINE_EXCEEDED`  | Yes (with backoff)  | RPC didn't complete in time                    |
+| Client aborted              | `CANCELLED`          | Yes (if idempotent) | `AbortSignal` fired                            |
+| Not authorized              | `PERMISSION_DENIED`  | No                  | Insufficient role/scope                        |
+| Not found                   | `NOT_FOUND`          | No                  | User/resource deleted                          |
+| Collision                   | `CONFLICT`           | No                  | Duplicate correlation ID, constraint violation |
+| Rate limited or buffer full | `RESOURCE_EXHAUSTED` | Yes                 | Too many requests, server backpressure         |
+| Network/transient error     | `UNAVAILABLE`        | Yes                 | Server temporarily unreachable                 |
+| Unhandled exception         | `INTERNAL_ERROR`     | No                  | Database crash, bug                            |
+
+Use `ctx.error(code, message, details, { retryable })` for type-safe responses. The framework logs all errors with connection identity for traceability.
 
 ### Extending Error Codes
 
@@ -164,7 +196,7 @@ router.on(AsyncMessage, async (ctx) => {
   // This error will be caught by the router
   // and onError(error, { type: "ASYNC_MESSAGE", userId: "..." }) will be called
   const result = await unstableAPI();
-  ctx.reply(AsyncResponse, result);
+  ctx.send(AsyncResponse, result);
 });
 ```
 

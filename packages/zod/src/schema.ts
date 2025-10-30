@@ -72,6 +72,31 @@ type MessageWithPayloadAndMetaShape<
   payload: P;
 };
 
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+type MessageWithResponseShape<T extends string, R extends ZodType> = {
+  type: zType.ZodLiteral<T>;
+  meta: ZodObject<{
+    timestamp: zType.ZodOptional<zType.ZodNumber>;
+    correlationId: zType.ZodOptional<zType.ZodString>;
+  }>;
+  response: R;
+};
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+type MessageWithPayloadAndResponseShape<
+  T extends string,
+  P extends ZodType,
+  R extends ZodType,
+> = {
+  type: zType.ZodLiteral<T>;
+  meta: ZodObject<{
+    timestamp: zType.ZodOptional<zType.ZodNumber>;
+    correlationId: zType.ZodOptional<zType.ZodString>;
+  }>;
+  payload: P;
+  response: R;
+};
+
 /**
  * @internal Internal implementation detail.
  *
@@ -97,6 +122,10 @@ export function createMessageSchema(zod: ZodLike) {
   /**
    * Creates a type-safe WebSocket message schema with simplified overloads
    * for better cross-package type compatibility.
+   *
+   * Supports two patterns:
+   * 1. Legacy positional arguments: message(type, payload?, meta?)
+   * 2. New config-based: message(type, { payload?, response?, meta? })
    */
   function messageSchema<T extends string>(
     messageType: T,
@@ -138,35 +167,104 @@ export function createMessageSchema(zod: ZodLike) {
     meta: M,
   ): ZodObject<MessageWithPayloadAndMetaShape<T, ZodObject<P>, M>>;
 
+  // New config-based overloads for unified message + RPC API
+  function messageSchema<T extends string, R extends ZodType>(
+    messageType: T,
+    config: { response: R },
+  ): ZodObject<MessageWithResponseShape<T, R>>;
+
+  function messageSchema<
+    T extends string,
+    P extends ZodObject<ZodRawShape>,
+    R extends ZodType,
+  >(
+    messageType: T,
+    config: { payload: P; response: R },
+  ): ZodObject<MessageWithPayloadAndResponseShape<T, P, R>>;
+
+  function messageSchema<
+    T extends string,
+    P extends ZodRawShape,
+    R extends ZodType,
+  >(
+    messageType: T,
+    config: { payload: P; response: R },
+  ): ZodObject<MessageWithPayloadAndResponseShape<T, ZodObject<P>, R>>;
+
+  function messageSchema<
+    T extends string,
+    P extends ZodObject<ZodRawShape> | ZodRawShape | undefined,
+  >(
+    messageType: T,
+    config: { payload?: P; response?: never; meta?: ZodRawShape },
+  ): ZodObject<any>;
+
   function messageSchema<
     T extends string,
     P extends ZodRawShape | ZodObject<ZodRawShape> | undefined = undefined,
     M extends ZodRawShape = Record<string, never>,
-  >(messageType: T, payload?: P, meta?: M) {
+  >(
+    messageType: T,
+    payloadOrConfig?:
+      | P
+      | { payload?: P; response?: ZodType; meta?: ZodRawShape },
+    meta?: M,
+  ) {
+    // Support both legacy positional args and new config-based API
+    let actualPayload: P | undefined;
+    let actualMeta: ZodRawShape | undefined;
+    let responseSchema: ZodType | undefined;
+
+    if (
+      payloadOrConfig &&
+      typeof payloadOrConfig === "object" &&
+      !("_def" in payloadOrConfig) &&
+      !Array.isArray(payloadOrConfig) &&
+      ("payload" in payloadOrConfig ||
+        "response" in payloadOrConfig ||
+        "meta" in payloadOrConfig)
+    ) {
+      // Config object pattern: { payload?, response?, meta? }
+      const config = payloadOrConfig as {
+        payload?: P;
+        response?: ZodType;
+        meta?: ZodRawShape;
+      };
+      actualPayload = config.payload;
+      responseSchema = config.response;
+      actualMeta = config.meta;
+    } else {
+      // Legacy positional pattern: (type, payload?, meta?)
+      actualPayload = payloadOrConfig as P | undefined;
+      actualMeta = meta;
+    }
+
     // Validate that extended meta doesn't use reserved keys (fail-fast at schema creation)
-    validateMetaSchema(meta);
+    validateMetaSchema(actualMeta);
 
     // Meta schema is strict to prevent client spoofing of server-controlled fields.
     // The router injects clientId and receivedAt AFTER validation (not before),
     // so the schema doesn't need to allow these fields.
     const metaSchema = (
-      meta ? MessageMetadataSchema.extend(meta) : MessageMetadataSchema
+      actualMeta
+        ? MessageMetadataSchema.extend(actualMeta)
+        : MessageMetadataSchema
     ).strict();
 
-    const baseSchema = {
+    const baseSchema: any = {
       type: zod.literal(messageType),
       meta: metaSchema,
     };
 
     let schema: any;
-    if (payload === undefined) {
+    if (actualPayload === undefined) {
       schema = zod.object(baseSchema).strict();
     } else {
       // Payloads can be a Zod object or a raw shape
       const payloadSchema = (
-        (payload as { _def?: unknown })._def
-          ? (payload as ZodObject<ZodRawShape>)
-          : zod.object(payload as ZodRawShape)
+        (actualPayload as { _def?: unknown })._def
+          ? (actualPayload as ZodObject<ZodRawShape>)
+          : zod.object(actualPayload as ZodRawShape)
       ).strict(); // Payload must also be strict
 
       schema = zod
@@ -175,6 +273,16 @@ export function createMessageSchema(zod: ZodLike) {
           payload: payloadSchema,
         })
         .strict();
+    }
+
+    // Attach response schema if provided (for RPC messages)
+    if (responseSchema) {
+      Object.defineProperty(schema, "response", {
+        value: responseSchema,
+        enumerable: false,
+        configurable: true,
+        writable: true,
+      });
     }
 
     // Mark schema with validator identity for runtime compatibility checks
@@ -189,6 +297,7 @@ export function createMessageSchema(zod: ZodLike) {
     code: ErrorCode,
     message: zod.string().optional(),
     details: zod.record(zod.string(), zod.any()).optional(),
+    retryable: zod.boolean().optional(),
   });
 
   // Client-side helper: validates and creates messages for sending
@@ -219,6 +328,7 @@ export function createMessageSchema(zod: ZodLike) {
    * @param responseType - Message type for the response
    * @param responsePayload - Validation schema for response payload
    * @returns Message schema with attached .response property
+   * @throws Error if requestType or responseType uses reserved prefix ($ws:)
    *
    * @example
    * ```typescript
@@ -228,8 +338,8 @@ export function createMessageSchema(zod: ZodLike) {
    * const result = await client.request(ping, { text: "hello" });
    *
    * // Use with router - still works like a normal message schema
-   * router.on(ping, (ctx) => {
-   *   ctx.reply({ reply: `Got: ${ctx.payload.text}` });
+   * router.rpc(ping, (ctx) => {
+   *   ctx.reply!(ping.response, { reply: `Got: ${ctx.payload.text}` });
    * });
    * ```
    */
@@ -244,6 +354,23 @@ export function createMessageSchema(zod: ZodLike) {
     responseType: ResT,
     responsePayload: ResP,
   ) {
+    // Validate reserved prefix at definition time (fail-fast)
+    const RESERVED_PREFIX = "$ws:";
+    if (requestType.startsWith(RESERVED_PREFIX)) {
+      throw new Error(
+        `Reserved prefix "${RESERVED_PREFIX}" not allowed in message type. ` +
+          `RequestType "${requestType}" uses reserved prefix. ` +
+          `See docs/adr/012-rpc-minimal-reliable.md#reserved-control-prefix`,
+      );
+    }
+    if (responseType.startsWith(RESERVED_PREFIX)) {
+      throw new Error(
+        `Reserved prefix "${RESERVED_PREFIX}" not allowed in message type. ` +
+          `ResponseType "${responseType}" uses reserved prefix. ` +
+          `See docs/adr/012-rpc-minimal-reliable.md#reserved-control-prefix`,
+      );
+    }
+
     const requestSchema = (
       requestPayload === undefined
         ? messageSchema(requestType)
