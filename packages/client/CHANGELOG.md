@@ -1,5 +1,17 @@
 # @ws-kit/client
 
+## 0.1.0
+
+### Minor Changes
+
+- [#25](https://github.com/kriasoft/ws-kit/pull/25) [`5e5768d`](https://github.com/kriasoft/ws-kit/commit/5e5768dbe734924c1dd02a1d8fae4df7a7d98d8f) Thanks [@koistya](https://github.com/koistya)! - Stabilize client with typed adapters and full type inference
+
+### Patch Changes
+
+- Updated dependencies [[`5e5768d`](https://github.com/kriasoft/ws-kit/commit/5e5768dbe734924c1dd02a1d8fae4df7a7d98d8f)]:
+  - @ws-kit/valibot@0.1.0
+  - @ws-kit/zod@0.1.0
+
 ## 0.0.1
 
 ### Patch Changes
