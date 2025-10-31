@@ -33,12 +33,19 @@ Introduce:
 
 ```typescript
 type ErrorCode =
-  | "INVALID_ARGUMENT"
   | "UNAUTHENTICATED"
   | "PERMISSION_DENIED"
-  | "INTERNAL"
+  | "INVALID_ARGUMENT"
+  | "FAILED_PRECONDITION"
   | "NOT_FOUND"
-  | "RESOURCE_EXHAUSTED";
+  | "ALREADY_EXISTS"
+  | "ABORTED"
+  | "DEADLINE_EXCEEDED"
+  | "RESOURCE_EXHAUSTED"
+  | "UNAVAILABLE"
+  | "UNIMPLEMENTED"
+  | "INTERNAL"
+  | "CANCELLED";
 
 interface MessageContext<S extends MessageSchema, TData> {
   /**

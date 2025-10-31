@@ -242,7 +242,7 @@ describe("ErrorCode", () => {
 describe("WebSocketError", () => {
   it("should be constructible with code and message", () => {
     const error = new WebSocketError(
-      ErrorCode.VALIDATION_FAILED,
+      ErrorCode.INVALID_ARGUMENT,
       "Invalid payload",
     );
 
@@ -253,7 +253,7 @@ describe("WebSocketError", () => {
 
   it("should have toPayload method", () => {
     const error = new WebSocketError(
-      ErrorCode.VALIDATION_FAILED,
+      ErrorCode.INVALID_ARGUMENT,
       "Invalid payload",
     );
 

@@ -29,4 +29,5 @@ declare module "valibot" {
   export function record(schema: any): any;
   export function any(): any;
   export function picklist(values: any[]): any;
+  export function flatten(issues: any[]): any;
 }

@@ -132,7 +132,7 @@ describe("Per-route middleware typing", () => {
         ctx.ws.data.user?.permissions.includes("admin") ?? false;
 
       if (!hasAdminPermission) {
-        ctx.error("AUTHORIZATION_FAILED", "Admin access required");
+        ctx.error("PERMISSION_DENIED", "Admin access required");
         return;
       }
 
@@ -395,7 +395,7 @@ describe("Error handling in middleware", () => {
       expectTypeOf(ctx.error).toBeFunction();
 
       // Should be callable with code and message
-      ctx.error("VALIDATION_FAILED", "Invalid input");
+      ctx.error("INVALID_ARGUMENT", "Invalid input");
       return;
     };
 
@@ -407,12 +407,12 @@ describe("Error handling in middleware", () => {
 
     const validate: ValidationMiddleware = (ctx, next) => {
       if (!ctx.meta) {
-        ctx.error("INVALID_MESSAGE_FORMAT", "Missing metadata");
+        ctx.error("INVALID_ARGUMENT", "Missing metadata");
         return;
       }
 
       if (!ctx.type) {
-        ctx.error("UNSUPPORTED_MESSAGE_TYPE", "Unknown message type");
+        ctx.error("INVALID_ARGUMENT", "Unknown message type");
         return;
       }
 

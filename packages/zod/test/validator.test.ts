@@ -276,6 +276,29 @@ describe("@ws-kit/zod Validator", () => {
         msg,
       );
       expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.error?.issues).toBeDefined();
+      expect(result.error?.formatted).toBeDefined();
+      expect(typeof result.error?.formatted).toBe("string");
+      expect(result.error?.formatted).toContain("string");
+    });
+
+    it("should include formatted error message for invalid data", () => {
+      const ChatSchema = message("CHAT", { text: z.string() });
+      const msg = {
+        type: "CHAT",
+        meta: { timestamp: Date.now() },
+        payload: { text: 123 },
+      };
+
+      const result = validator.safeParse(
+        ChatSchema as unknown as MessageSchemaType,
+        msg,
+      );
+      expect(result.success).toBe(false);
+      expect(result.error?.formatted).toBeDefined();
+      expect(result.error?.formatted).toContain("expected string");
+      expect(result.error?.formatted).toContain("received number");
     });
 
     it("should infer schema type", () => {

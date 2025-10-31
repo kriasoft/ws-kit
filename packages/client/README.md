@@ -43,8 +43,7 @@ client.on(PongMessage, (msg) => {
 ### With Valibot Schema Inference
 
 ```typescript
-import * as v from "valibot";
-import { message, wsClient } from "@ws-kit/client/valibot";
+import { v, message, wsClient } from "@ws-kit/client/valibot";
 
 const PingMessage = message("PING", { text: v.string() });
 const PongMessage = message("PONG", { reply: v.string() });
@@ -73,8 +72,8 @@ client.on(unknownSchema, (msg: unknown) => {
 ## Dependencies
 
 - **Core**: None (universal)
-- **`/zod` variant**: `zod` (peer), `@ws-kit/core` (shared interface)
-- **`/valibot` variant**: `valibot` (peer), `@ws-kit/core` (shared interface)
+- **`/zod` variant**: `zod` (peer)
+- **`/valibot` variant**: `valibot` (peer)
 
 ## Design Philosophy
 

@@ -1,0 +1,214 @@
+<svg viewBox="100 50 600 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      /* Light mode colors */
+      .light-mode {
+        --primary: #3c8772;
+        --accent: #5a9f8f;
+        --bg-light: #f5f5f5;
+        --line: #d0d0d0;
+        --glow: rgba(60, 135, 114, 0.3);
+      }
+
+      /* Dark mode colors */
+      .dark-mode {
+        --primary: #4fa896;
+        --accent: #67b8a3;
+        --bg-light: #2a2a2a;
+        --line: #444;
+        --glow: rgba(79, 168, 150, 0.4);
+      }
+
+      /* Determine mode based on body class */
+      @media (prefers-color-scheme: light) {
+        svg {
+          --primary: #3c8772;
+          --accent: #5a9f8f;
+          --bg-light: #f5f5f5;
+          --line: #d0d0d0;
+          --glow: rgba(60, 135, 114, 0.3);
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        svg {
+          --primary: #4fa896;
+          --accent: #67b8a3;
+          --bg-light: #2a2a2a;
+          --line: #444;
+          --glow: rgba(79, 168, 150, 0.4);
+        }
+      }
+
+      /* Connection lines */
+      .connection {
+        stroke: var(--line);
+        stroke-width: 2;
+        fill: none;
+      }
+
+      .connection-active {
+        stroke: var(--primary);
+        stroke-width: 2;
+        fill: none;
+        opacity: 0;
+        animation: flowPulse 3s ease-in-out infinite;
+      }
+
+      /* Node circles */
+      .node {
+        fill: var(--primary);
+        opacity: 0.8;
+      }
+
+      .node-center {
+        fill: var(--primary);
+        opacity: 1;
+      }
+
+      .node-glow {
+        fill: none;
+        stroke: var(--primary);
+        stroke-width: 2;
+        opacity: 0;
+        animation: nodePulse 2.5s ease-in-out infinite;
+      }
+
+      .node-center-glow {
+        fill: none;
+        stroke: var(--primary);
+        stroke-width: 2.5;
+        opacity: 0;
+        animation: centerPulse 2.5s ease-in-out infinite;
+      }
+
+      /* Animations */
+      @keyframes nodePulse {
+        0%, 100% {
+          r: 20px;
+          opacity: 0;
+        }
+        50% {
+          r: 35px;
+          opacity: 0.6;
+        }
+      }
+
+      @keyframes centerPulse {
+        0%, 100% {
+          r: 28px;
+          opacity: 0;
+        }
+        50% {
+          r: 45px;
+          opacity: 0.5;
+        }
+      }
+
+      @keyframes flowPulse {
+        0% {
+          stroke-dashoffset: 0;
+          opacity: 0;
+        }
+        10% {
+          opacity: 0.8;
+        }
+        90% {
+          opacity: 0.8;
+        }
+        100% {
+          stroke-dashoffset: 0;
+          opacity: 0;
+        }
+      }
+
+      /* Accent glow for center node */
+      .accent-glow {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 1.5;
+        opacity: 0.3;
+        animation: accentPulse 4s ease-in-out infinite;
+      }
+
+      @keyframes accentPulse {
+        0%, 100% {
+          r: 28px;
+          opacity: 0;
+        }
+        50% {
+          r: 50px;
+          opacity: 0.3;
+        }
+      }
+    </style>
+  </defs>
+
+  <!-- Background subtle gradient -->
+  <defs>
+    <radialGradient id="bgGradient" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color: var(--primary); stop-opacity: 0.05" />
+      <stop offset="100%" style="stop-color: var(--primary); stop-opacity: 0" />
+    </radialGradient>
+  </defs>
+  <circle cx="400" cy="200" r="200" fill="url(#bgGradient)" />
+
+  <!-- Connection lines (static) -->
+  <line x1="400" y1="200" x2="200" y2="100" class="connection" />
+  <line x1="400" y1="200" x2="150" y2="200" class="connection" />
+  <line x1="400" y1="200" x2="200" y2="300" class="connection" />
+  <line x1="400" y1="200" x2="600" y2="100" class="connection" />
+  <line x1="400" y1="200" x2="650" y2="200" class="connection" />
+  <line x1="400" y1="200" x2="600" y2="300" class="connection" />
+
+  <!-- Connection lines (animated pulse flow) -->
+  <defs>
+    <linearGradient id="flowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color: var(--primary); stop-opacity: 0" />
+      <stop offset="50%" style="stop-color: var(--primary); stop-opacity: 1" />
+      <stop offset="100%" style="stop-color: var(--primary); stop-opacity: 0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Animated flow on connections -->
+  <line x1="400" y1="200" x2="200" y2="100" class="connection-active" style="animation-delay: 0s;" />
+  <line x1="400" y1="200" x2="150" y2="200" class="connection-active" style="animation-delay: 0.5s;" />
+  <line x1="400" y1="200" x2="200" y2="300" class="connection-active" style="animation-delay: 1s;" />
+  <line x1="400" y1="200" x2="600" y2="100" class="connection-active" style="animation-delay: 1.5s;" />
+  <line x1="400" y1="200" x2="650" y2="200" class="connection-active" style="animation-delay: 2s;" />
+  <line x1="400" y1="200" x2="600" y2="300" class="connection-active" style="animation-delay: 2.5s;" />
+
+  <!-- Peripheral nodes -->
+  <!-- Top left -->
+  <circle cx="200" cy="100" r="20" class="node" />
+  <circle cx="200" cy="100" r="20" class="node-glow" />
+
+  <!-- Left -->
+  <circle cx="150" cy="200" r="20" class="node" />
+  <circle cx="150" cy="200" r="20" class="node-glow" />
+
+  <!-- Bottom left -->
+  <circle cx="200" cy="300" r="20" class="node" />
+  <circle cx="200" cy="300" r="20" class="node-glow" />
+
+  <!-- Top right -->
+  <circle cx="600" cy="100" r="20" class="node" />
+  <circle cx="600" cy="100" r="20" class="node-glow" />
+
+  <!-- Right -->
+  <circle cx="650" cy="200" r="20" class="node" />
+  <circle cx="650" cy="200" r="20" class="node-glow" />
+
+  <!-- Bottom right -->
+  <circle cx="600" cy="300" r="20" class="node" />
+  <circle cx="600" cy="300" r="20" class="node-glow" />
+
+  <!-- Center node (router hub) -->
+  <circle cx="400" cy="200" r="28" class="node-center" />
+  <circle cx="400" cy="200" r="28" class="node-center-glow" />
+  <circle cx="400" cy="200" r="28" class="accent-glow" />
+</svg>
