@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSub } from "@ws-kit/core";
+import type { PubSub, PubSubPublishOptions } from "@ws-kit/core";
 import type { Server } from "bun";
 
 /**
@@ -48,10 +48,24 @@ export class BunPubSub implements PubSub {
    * - Objects are JSON-stringified
    * - Buffers/Uint8Array pass through unchanged
    *
+   * **Note**: BunPubSub does not support `excludeSubscriber` option since Bun's
+   * pub/sub delivers to all subscribers without filtering. Use MemoryPubSub or
+   * implement client-side filtering for excludeSelf behavior.
+   *
    * @param channel - Channel name
    * @param message - Message to broadcast
+   * @param options - Publish options (partitionKey ignored, excludeSubscriber not supported)
    */
-  async publish(channel: string, message: unknown): Promise<void> {
+  async publish(
+    channel: string,
+    message: unknown,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    options?: PubSubPublishOptions,
+  ): Promise<void> {
+    // Note: options are accepted for interface compatibility but mostly ignored
+    // partitionKey is not applicable to Bun's single-instance pub/sub
+    // excludeSubscriber is not supported by Bun's native pub/sub
+
     // Serialize message if needed
     let data: string | ArrayBuffer | Uint8Array;
 

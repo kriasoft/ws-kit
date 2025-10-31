@@ -14,6 +14,7 @@ interface ZodLike {
   object: (...args: any[]) => any;
   string: (...args: any[]) => any;
   number: (...args: any[]) => any;
+  boolean: (...args: any[]) => any;
   literal: (...args: any[]) => any;
   union: (...args: any[]) => any;
   discriminatedUnion: (...args: any[]) => any;

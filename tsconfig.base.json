@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "moduleDetection": "force",
     "verbatimModuleSyntax": true,
     "lib": ["ES2022"],
@@ -14,6 +14,7 @@
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
+    "ignoreDeprecations": "5.0",
 
     "declaration": true,
     "declarationMap": true,
@@ -37,7 +38,7 @@
       "@ws-kit/client/valibot": ["packages/client/valibot/src/index.ts"]
     },
 
-    "types": []
+    "types": ["bun"]
   },
   "exclude": ["**/dist", "**/.turbo", "**/node_modules", "examples"]
 }

@@ -34,7 +34,6 @@
  */
 
 // Import Valibot as canonical instance
-// @ts-expect-error - valibot types not found by TypeScript, but they work at runtime
 import * as v from "valibot";
 import { createMessageSchema } from "./schema.js";
 

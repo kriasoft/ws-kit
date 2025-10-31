@@ -35,6 +35,8 @@ import type {
   MessageContext,
   Middleware,
   OpenHandler,
+  PublishOptions,
+  PublishResult,
   WebSocketData,
   WebSocketRouterOptions,
 } from "@ws-kit/core";
@@ -261,24 +263,35 @@ export interface TypedValibotRouter<
   merge(router: TypedValibotRouter<TData>): this;
 
   /**
-   * Publish a message to all subscribers on a channel.
+   * Publish a type-safe message to all subscribers on a channel.
    *
+   * Validates the payload against the schema before broadcasting.
    * Scope depends on the platform adapter (Bun: process-wide, Cloudflare DO: instance-wide).
    *
+   * @typeParam Schema - Message schema (inferred from parameter)
    * @param channel - Channel name to publish to
-   * @param message - Message object with type, meta, and payload
-   * @returns Promise that resolves when broadcast is sent
+   * @param schema - Message schema defining type and payload structure
+   * @param payload - Message payload to validate and broadcast
+   * @param options - Optional metadata and publishing options
+   * @returns Promise that resolves with PublishResult containing delivery information
    *
    * @example
    * ```typescript
-   * await router.publish("notifications", {
-   *   type: "NOTIFICATION",
-   *   meta: {},
-   *   payload: { message: "Hello all!" },
+   * const Announcement = message("ANNOUNCEMENT", { text: v.string() });
+   * const result = await router.publish("notifications", Announcement, {
+   *   text: "Server maintenance at 02:00 UTC",
    * });
+   * if (result.ok) {
+   *   console.log(`Notified ${result.matched} subscribers (${result.capability})`);
+   * }
    * ```
    */
-  publish(channel: string, message: unknown): Promise<void>;
+  publish<Schema extends MessageSchemaType>(
+    channel: string,
+    schema: Schema,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<PublishResult>;
 
   /**
    * Access the underlying core router for advanced introspection.
@@ -395,8 +408,13 @@ export function createValibotRouter<
     },
 
     // Publishing
-    publish(channel, message) {
-      return coreRouter.publish(channel, message);
+    publish<Schema extends MessageSchemaType>(
+      channel: string,
+      schema: Schema,
+      payload: unknown,
+      options?: PublishOptions,
+    ) {
+      return coreRouter.publish(channel, schema, payload, options);
     },
 
     // Stable escape hatch for advanced introspection (following React convention)

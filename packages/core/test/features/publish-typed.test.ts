@@ -57,8 +57,8 @@ const RoomNotification = message("ROOM_NOTIFICATION", {
 });
 
 describe("Type-Safe Publishing", () => {
-  describe("router.publish()", () => {
-    it("should publish valid payload successfully", async () => {
+  describe("router.publish() - PublishResult API", () => {
+    it("should publish valid payload and return PublishResult", async () => {
       const router = createRouter();
       router.on(UserUpdated, () => {});
 
@@ -67,10 +67,11 @@ describe("Type-Safe Publishing", () => {
         userId: "123",
         name: "Alice",
       });
-      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
+      expect(result.ok === true && result.capability).toBeDefined();
     });
 
-    it("should return number (result count)", async () => {
+    it("should return PublishResult with capability and matched count", async () => {
       const router = createRouter();
       router.on(UserUpdated, () => {});
 
@@ -79,11 +80,14 @@ describe("Type-Safe Publishing", () => {
         name: "Bob",
       });
 
-      expect(typeof result).toBe("number");
-      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
+      expect(result.ok === true && result.capability).toBe("exact");
+      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
+        "number",
+      );
     });
 
-    it("should return Promise<number>", async () => {
+    it("should return Promise<PublishResult>", async () => {
       const router = createRouter();
 
       const result = router.publish("test", UserUpdated, {
@@ -92,28 +96,33 @@ describe("Type-Safe Publishing", () => {
       });
 
       expect(result instanceof Promise).toBe(true);
-      const num = await result;
-      expect(typeof num).toBe("number");
+      const publishResult = await result;
+      expect(publishResult.ok).toBeDefined();
+      expect(
+        publishResult.ok === true && publishResult.capability,
+      ).toBeDefined();
     });
 
-    it("should handle PublishOptions.excludeSelf", async () => {
+    it("should report capability when publishing", async () => {
       const router = createRouter();
 
-      // Should accept excludeSelf option without error
-      const result = await router.publish(
-        "room:123",
-        RoomNotification,
-        { roomId: "123", message: "Test" },
-        { excludeSelf: true },
-      );
+      // MemoryPubSub has exact capability
+      const result = await router.publish("room:123", RoomNotification, {
+        roomId: "123",
+        message: "Test",
+      });
 
-      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
+      expect(result.ok === true && result.capability).toBe("exact");
+      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
+        "number",
+      );
     });
 
     it("should handle PublishOptions.partitionKey", async () => {
       const router = createRouter();
 
-      // Should accept partitionKey for future sharding
+      // partitionKey should be accepted (but may be ignored by adapter)
       const result = await router.publish(
         "room:123",
         RoomNotification,
@@ -121,21 +130,42 @@ describe("Type-Safe Publishing", () => {
         { partitionKey: "user:456" },
       );
 
-      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
     });
 
     it("should handle PublishOptions.meta", async () => {
+      // Define a message with explicit meta schema to support custom fields
+      const MessageWithMeta = message(
+        "MESSAGE_WITH_META",
+        { text: z.string() },
+        { origin: z.string(), reason: z.string() },
+      );
+
       const router = createRouter();
 
-      // Should accept custom meta
+      // Custom meta should be merged with auto-injected timestamp
       const result = await router.publish(
         "room:123",
-        RoomNotification,
-        { roomId: "123", message: "Test" },
+        MessageWithMeta,
+        { text: "Test" },
         { meta: { origin: "admin", reason: "sync" } },
       );
 
-      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
+    });
+
+    it("should return error on validation failure", async () => {
+      const router = createRouter();
+
+      // Invalid payload (missing required fields)
+      const result = await router.publish(
+        "room:123",
+        RoomNotification,
+        { roomId: "123" }, // missing "message"
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reason).toBe("validation");
     });
   });
 
@@ -156,10 +186,10 @@ describe("Type-Safe Publishing", () => {
       expect(publishable === true || publishable === false).toBe(true);
     });
 
-    it("ctx.publish should return Promise<number>", async () => {
+    it("ctx.publish should return Promise<PublishResult>", async () => {
       const router = createRouter();
 
-      // Verify that router.publish (which ctx.publish delegates to) returns Promise<number>
+      // Verify that router.publish (which ctx.publish delegates to) returns PublishResult
       const publishPromise = router.publish("test", UserUpdated, {
         userId: "123",
         name: "Test",
@@ -168,7 +198,8 @@ describe("Type-Safe Publishing", () => {
       expect(publishPromise instanceof Promise).toBe(true);
 
       const result = await publishPromise;
-      expect(typeof result).toBe("number");
+      expect(result.ok).toBeDefined();
+      expect(result.ok === true && result.capability).toBeDefined();
     });
   });
 
@@ -186,7 +217,23 @@ describe("Type-Safe Publishing", () => {
         name: "Alice",
       });
 
-      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
+    });
+
+    it("should return exact capability for MemoryPubSub", async () => {
+      const router = createRouter();
+
+      // MemoryPubSub should report exact capability
+      const result = await router.publish("test-channel", UserUpdated, {
+        userId: "123",
+        name: "Test",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.ok === true && result.capability).toBe("exact");
+      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
+        "number",
+      );
     });
   });
 });

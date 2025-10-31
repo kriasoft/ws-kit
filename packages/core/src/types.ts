@@ -155,14 +155,14 @@ export interface EventMessageContext<
    * @param schema - Message schema (validated before broadcast)
    * @param payload - Message payload (must match schema)
    * @param options - Publish options (excludeSelf, partitionKey, meta)
-   * @returns Promise resolving to number of recipients matched
+   * @returns Promise resolving to PublishResult with delivery information and capability
    */
   publish(
     channel: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
-  ): Promise<number>;
+  ): Promise<PublishResult>;
 
   /**
    * Milliseconds remaining until the deadline (returns Infinity for events).
@@ -264,14 +264,14 @@ export interface RpcMessageContext<
    * @param schema - Message schema (validated before broadcast)
    * @param payload - Message payload (must match schema)
    * @param options - Publish options (excludeSelf, partitionKey, meta)
-   * @returns Promise resolving to number of recipients matched
+   * @returns Promise resolving to PublishResult with delivery information and capability
    */
   publish(
     channel: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
-  ): Promise<number>;
+  ): Promise<PublishResult>;
 
   /**
    * Register a callback to be invoked when this RPC is cancelled.
@@ -402,21 +402,19 @@ export interface PublishOptions {
    * **Default: false** to avoid surprises — sender usually wants to know the state changed.
    * This aligns with the principle of least surprise in pub/sub systems.
    *
-   * **Future use case**: In clustered systems where the sender cannot be uniquely
-   * identified across shards, this may be used for server-initiated broadcasts to
-   * suppress redundant echoes.
+   * **Implementation**: When called from within a handler context (with clientId),
+   * excludeSelf filters out that specific sender. Server-initiated calls (no clientId)
+   * ignore this option as there is no sender to exclude.
    */
   excludeSelf?: boolean;
 
   /**
    * Partition key for future sharding/fanout routing (optional).
    *
-   * Reserved for future use in distributed PubSub implementations.
-   * Allows steering message routing without breaking the API.
+   * Allows steering message routing for distributed PubSub implementations.
+   * In adapters that don't support partitioning, this is accepted but ignored.
    *
-   * **Current behavior**: Ignored by MemoryPubSub and most adapters.
-   *
-   * **Future use case**: In Kafka, Redis Cluster, or custom sharded pubsub backends,
+   * **Use case**: In Kafka, Redis Cluster, or custom sharded pubsub backends,
    * this can direct messages to specific partitions for scaling and consistency.
    *
    * @example "user:123" for per-user partitioning in multi-shard setup
@@ -435,6 +433,39 @@ export interface PublishOptions {
    */
   meta?: Record<string, unknown>;
 }
+
+/**
+ * Result of publishing a message to a channel/topic.
+ *
+ * Provides honest semantics about what was delivered, since subscriber counts
+ * can vary widely across implementations (exact for in-process, estimates for
+ * distributed, unknown for some adapters).
+ *
+ * **Capabilities**:
+ * - `ok: true; capability: "exact"` — Exact recipient count (e.g., MemoryPubSub)
+ * - `ok: true; capability: "estimate"` — Best-effort estimate (e.g., Redis)
+ * - `ok: true; capability: "unknown"` — Delivery not tracked (e.g., some adapters)
+ * - `ok: false` — Delivery failed due to validation, ACL, or adapter error
+ *
+ * **Backward Compatibility**: The legacy `Promise<number>` return type is still supported
+ * via method overloading. New code should use the `PublishResult` return type for accurate
+ * semantics and error handling.
+ */
+export type PublishResult =
+  | {
+      ok: true;
+      /** "exact": MemoryPubSub or other adapters with precise subscription tracking */
+      capability: "exact" | "estimate" | "unknown";
+      /** Matched subscriber count (undefined if capability is "unknown") */
+      matched?: number;
+    }
+  | {
+      ok: false;
+      /** Reason for failure: validation error, ACL denial, or adapter error */
+      reason: "validation" | "acl" | "adapter_error";
+      /** Optional error details for debugging */
+      error?: unknown;
+    };
 
 /**
  * Type-safe send function for sending validated messages to the client.
@@ -953,6 +984,20 @@ export interface PlatformAdapter {
 }
 
 /**
+ * Options for publishing a message via PubSub.
+ *
+ * Allows adapters to customize publication behavior without breaking the interface.
+ * Adapters that don't support specific options simply ignore them.
+ */
+export interface PubSubPublishOptions {
+  /** Partition key for distributed routing (adapter-specific behavior) */
+  partitionKey?: string;
+
+  /** Exclude a specific subscriber handler from receiving this message */
+  excludeSubscriber?: (message: unknown) => void | Promise<void>;
+}
+
+/**
  * Pub/Sub interface for broadcasting messages to subscribed channels.
  *
  * Implementations may be in-memory, Redis-based, or platform-native
@@ -962,12 +1007,18 @@ export interface PubSub {
   /**
    * Publish a message to a channel.
    *
-   * Subscribers to this channel will receive the message.
+   * Subscribers to this channel will receive the message, except for the
+   * excluded handler (if specified in options).
    *
    * @param channel - Channel name
    * @param message - Message data (typically JSON-serializable)
+   * @param options - Optional: partitionKey for routing, excludeSubscriber to filter
    */
-  publish(channel: string, message: unknown): Promise<void>;
+  publish(
+    channel: string,
+    message: unknown,
+    options?: PubSubPublishOptions,
+  ): Promise<void>;
 
   /**
    * Subscribe to a channel.
