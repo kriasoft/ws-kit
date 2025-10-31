@@ -24,14 +24,42 @@ export class ValibotValidatorAdapter implements ValidatorAdapter {
 
   // Validate incoming message data and normalize the result format.
   // NOTE: Valibot uses 'output' instead of Zod's 'data' for parsed results.
-  // Error format is simpler - just the issues array without prettification.
+  // Includes prettified error for consistent error reporting with Zod adapter.
   safeParse(schema: MessageSchemaType, data: unknown) {
     const result = v.safeParse(schema, data);
     return {
       success: result.success,
       data: result.success ? result.output : undefined,
-      error: result.success ? undefined : result.issues,
+      error: result.success
+        ? undefined
+        : {
+            issues: result.issues,
+            formatted: this.formatError(result.issues),
+          },
     };
+  }
+
+  // Format validation issues into a human-readable string for debugging.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private formatError(issues: any[]): string {
+    const flattened = v.flatten(issues);
+    const errors: string[] = [];
+
+    // Add root-level errors if present
+    if (flattened.root) {
+      errors.push(...flattened.root);
+    }
+
+    // Add nested field errors
+    if (flattened.nested) {
+      for (const [field, fieldErrors] of Object.entries(flattened.nested)) {
+        if (Array.isArray(fieldErrors)) {
+          errors.push(...fieldErrors.map((err: string) => `${field}: ${err}`));
+        }
+      }
+    }
+
+    return errors.length > 0 ? errors.join("\n") : "Validation failed";
   }
 
   // Type helper for TypeScript inference - not used at runtime.
