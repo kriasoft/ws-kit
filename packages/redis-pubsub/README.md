@@ -25,14 +25,14 @@ Use this adapter when you need to broadcast messages across multiple WS-Kit serv
 ## Installation
 
 ```bash
-npm install @ws-kit/core @ws-kit/redis-pubsub redis
+bun add @ws-kit/core @ws-kit/redis-pubsub redis
 ```
 
 Both `@ws-kit/redis-pubsub` and `redis` are required:
 
 - `@ws-kit/core` - Core router and types
 - `@ws-kit/redis-pubsub` - This adapter
-- `redis` - Redis client (v4.6.0+)
+- `redis` - Redis client (v5.9.0+)
 
 ## Quick Start
 
