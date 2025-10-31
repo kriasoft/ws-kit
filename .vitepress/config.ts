@@ -6,7 +6,7 @@ import { defineConfig } from "vitepress";
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   base: "/ws-kit/",
-  title: "WebSocket Kit",
+  title: "WS-Kit",
   description:
     "Schema-first WebSocket message router for Bun with TypeScript validation",
   lang: "en-US",
@@ -109,6 +109,9 @@ export default defineConfig({
 
     socialLinks: [
       { icon: "github", link: "https://github.com/kriasoft/ws-kit" },
+      { icon: "discord", link: "https://discord.gg/aW29wXyb7w" },
+      { icon: "x", link: "https://x.com/kriasoft" },
+      { icon: "bluesky", link: "https://bsky.app/profile/kriasoft.com" },
     ],
 
     footer: {

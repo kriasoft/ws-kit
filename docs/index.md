@@ -3,9 +3,12 @@
 layout: home
 
 hero:
-  name: "WS-Kit"
-  text: "Type-Safe WebSocket router for Bun and Cloudflare"
-  tagline: Type-safe message routing with pluggable validators and platform adapters
+  name: "WebSocket Toolkit"
+  text: "Build type-safe WebSocket APIs with confidence"
+  tagline: "Message routing, RPC, and broadcasting with Zod or Valibot validation for Bun, Cloudflare, browsers"
+  image:
+    src: /hero.svg
+    alt: WS-Kit
   actions:
     - theme: brand
       text: Getting Started
@@ -34,3 +37,59 @@ features:
     title: Structured Error Handling
     details: 13 gRPC-aligned error codes with WsKitError class following WHATWG Error standard. Automatic error responses, cause chaining, and JSON serialization for observability tools
 ---
+
+## Quick Start
+
+Build a collaborative chat room in minutes with type-safe messages and broadcasting:
+
+```typescript
+import { z, message, createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+
+// Define message schemas — fully typed end-to-end
+const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const SendMessage = message("SEND_MESSAGE", { text: z.string() });
+const RoomUpdate = message("ROOM_UPDATE", {
+  userId: z.string(),
+  action: z.enum(["joined", "left"]),
+  messageCount: z.number(),
+});
+
+// Create type-safe router with user context
+type AppData = { userId?: string; roomId?: string };
+const router = createRouter<AppData>();
+
+// Handle room joins with pub/sub
+router.on(JoinRoom, (ctx) => {
+  ctx.assignData({ roomId: ctx.payload.roomId });
+  ctx.subscribe(ctx.payload.roomId); // Join topic
+
+  // Broadcast to all room subscribers (type-safe!)
+  router.publish(ctx.payload.roomId, RoomUpdate, {
+    userId: ctx.ws.data.userId || "anonymous",
+    action: "joined",
+    messageCount: 1,
+  });
+});
+
+// Handle messages with full type inference
+router.on(SendMessage, (ctx) => {
+  const roomId = ctx.ws.data?.roomId;
+  router.publish(roomId, RoomUpdate, {
+    userId: ctx.ws.data?.userId || "anonymous",
+    action: "joined",
+    messageCount: 2, // In real app, track actual count
+  });
+});
+
+// Authenticate and serve
+serve(router, {
+  port: 3000,
+  authenticate(req) {
+    const userId = req.headers.get("x-user-id");
+    return userId ? { userId } : undefined;
+  },
+});
+```
+
+Type-safe messaging, pub/sub broadcasting, and authentication — all built-in. [Explore more examples →](/examples)
