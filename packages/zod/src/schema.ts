@@ -23,7 +23,6 @@ interface ZodLike {
   any: (...args: any[]) => any;
   enum: (...args: any[]) => any;
   instanceof: (...args: any[]) => any;
-  ZodType?: any;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
