@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-// @ts-expect-error - valibot types not found by TypeScript, but they work at runtime
 import * as v from "valibot";
 import type { ValidatorAdapter } from "@ws-kit/core";
 import type { MessageSchemaType } from "./types.js";

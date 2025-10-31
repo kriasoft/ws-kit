@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "@ws-kit/core";
-// @ts-expect-error - valibot types not found by TypeScript, but they work at runtime
 import type { InferOutput, ObjectSchema } from "valibot";
 
 /**

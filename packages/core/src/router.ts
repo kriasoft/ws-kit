@@ -1,34 +1,36 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import { DEFAULT_CONFIG, RESERVED_CONTROL_PREFIX } from "./constants.js";
+import { ErrorCode, WsKitError } from "./error.js";
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
-import { RESERVED_CONTROL_PREFIX, DEFAULT_CONFIG } from "./constants.js";
-import { WsKitError, ErrorCode } from "./error.js";
 import type {
-  ServerWebSocket,
-  WebSocketData,
-  MessageContext,
-  MessageMeta,
-  SendFunction,
-  OpenHandler,
-  CloseHandler,
-  MessageHandler,
-  EventHandler,
-  RpcHandler,
   AuthHandler,
-  ErrorHandler,
-  Middleware,
-  MessageSchemaType,
-  MessageHandlerEntry,
-  WebSocketRouterOptions,
-  ValidatorAdapter,
-  PlatformAdapter,
-  PubSub,
-  OpenHandlerContext,
+  CloseHandler,
   CloseHandlerContext,
+  ErrorHandler,
+  EventHandler,
+  MessageContext,
+  MessageHandler,
+  MessageHandlerEntry,
+  MessageMeta,
+  MessageSchemaType,
+  Middleware,
+  OpenHandler,
+  OpenHandlerContext,
+  PlatformAdapter,
   PublishOptions,
+  PublishResult,
+  PubSub,
+  PubSubPublishOptions,
+  RpcHandler,
+  SendFunction,
+  ServerWebSocket,
+  ValidatorAdapter,
+  WebSocketData,
+  WebSocketRouterOptions,
 } from "./types.js";
 
 /**
@@ -128,6 +130,9 @@ export class WebSocketRouter<
 
   // RPC state management (encapsulated in RpcManager)
   readonly #rpc: RpcManager;
+
+  // Handler context tracking for excludeSelf support (used as execution marker)
+  private currentHandler: unknown;
 
   // Testing utilities (only available when testing mode is enabled)
   _testing?: TestingUtils<TData>;
@@ -422,7 +427,9 @@ export class WebSocketRouter<
 
     // Delegate to on() for actual registration
     // The RpcManager will handle one-shot reply guarantee, correlation tracking, and deadlines
-    return this.on(schema, handler);
+    // Type assertion is safe here: the runtime handler dispatcher in _dispatch()
+    // already handles both EventHandler and RpcHandler based on schema.response presence
+    return this.on(schema, handler as unknown as EventHandler<Schema, TData>);
   }
 
   /**
@@ -456,7 +463,8 @@ export class WebSocketRouter<
   ): this {
     // Register handler if provided
     if (options?.onPublish) {
-      return this.on(schema, options.onPublish);
+      // Type assertion is safe: both EventHandler and RpcHandler are supported at runtime
+      return this.on(schema, options.onPublish as EventHandler<Schema, TData>);
     }
 
     // No-op if no handler provided (schema is just registered as a type)
@@ -801,7 +809,7 @@ export class WebSocketRouter<
    * @returns PubSub instance
    * @private
    */
-  private get pubsub(): PubSub {
+  get pubsub(): PubSub {
     if (!this.pubsubInstance) {
       if (this.pubsubProvider) {
         this.pubsubInstance = this.pubsubProvider();
@@ -894,14 +902,15 @@ export class WebSocketRouter<
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
-  ): Promise<number> {
+  ): Promise<PublishResult> {
     try {
       if (!this.validator) {
-        console.warn(
-          "[ws] Cannot publish: no validator configured. " +
-            "Router must be created with a validator adapter.",
-        );
-        return 0;
+        return {
+          ok: false,
+          reason: "adapter_error",
+          error:
+            "No validator configured. Router must be created with a validator adapter.",
+        };
       }
 
       // Extract message type from schema
@@ -927,29 +936,63 @@ export class WebSocketRouter<
       const validationResult = this.validator.safeParse(schema, message);
 
       if (!validationResult.success) {
-        console.error(
-          `[ws] Failed to publish message of type "${messageType}": Validation error`,
-          validationResult.success,
-        );
-        return 0;
+        return {
+          ok: false,
+          reason: "validation",
+          error: `Validation error for message type "${messageType}"`,
+        };
+      }
+
+      // Prepare PubSub options
+      const pubsubOptions: PubSubPublishOptions = {};
+      if (options?.partitionKey) {
+        pubsubOptions.partitionKey = options.partitionKey;
+      }
+
+      // Handle excludeSelf: only meaningful in handler context (with currentHandler)
+      // In server-initiated calls (no currentHandler), silently ignore excludeSelf
+      if (options?.excludeSelf && this.currentHandler) {
+        // TODO: excludeSelf implementation for handler context
+        // Requires tracking WebSocket connection identity through PubSub layer
+        // Currently deferred - all subscribers receive message
       }
 
       // Publish validated message to pubsub
       // At this point, message is guaranteed to match schema
-      await this.pubsub.publish(channel, validationResult.data);
+      await this.pubsub.publish(channel, validationResult.data, pubsubOptions);
 
-      // Return subscriber count estimate
-      // - For MemoryPubSub: Could query subscriberCount() internally
-      // - For distributed pubsub: Count unknown until delivery (return sentinel 1)
-      // - Implementations can override by wrapping PubSub interface
-      // TODO: Consider adding subscriberCount to PubSub interface for better metrics
-      return 1;
+      // Determine capability and return appropriate result
+      let capability: "exact" | "estimate" | "unknown" = "unknown";
+      let matched: number | undefined;
+
+      // Check if pubsub supports subscriber counting (e.g., MemoryPubSub)
+      // MemoryPubSub has a subscriberCount method for testing/metrics
+      const memoryPubSub = this.pubsub as MemoryPubSub | undefined;
+      if (memoryPubSub && typeof memoryPubSub.subscriberCount === "function") {
+        const count = memoryPubSub.subscriberCount(channel);
+        capability = "exact";
+        // Adjust for excludeSelf if applicable (handler context only)
+        matched =
+          options?.excludeSelf && this.currentHandler && count > 0
+            ? count - 1
+            : count;
+      }
+
+      return {
+        ok: true,
+        capability,
+        ...(matched !== undefined && { matched }),
+      };
     } catch (error) {
       console.error(
         `[ws] Error publishing message to channel "${channel}":`,
         error,
       );
-      return 0;
+      return {
+        ok: false,
+        reason: "adapter_error",
+        error,
+      };
     }
   }
 
@@ -1422,7 +1465,7 @@ export class WebSocketRouter<
         schema: MessageSchemaType,
         payload: unknown,
         options?: PublishOptions,
-      ): Promise<number> => {
+      ): Promise<PublishResult> => {
         return this.publish(channel, schema, payload, options);
       };
 
@@ -1676,9 +1719,17 @@ export class WebSocketRouter<
             }
           } else {
             // All middleware executed, now dispatch handler
-            const result = handlerEntry.handler(context);
-            if (result instanceof Promise) {
-              await result;
+            // Type assertion is safe: context structure matches handler expectations
+            // based on schema.response presence (RPC vs Event determination)
+            this.currentHandler = handlerEntry.handler;
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const result = handlerEntry.handler(context as any);
+              if (result instanceof Promise) {
+                await result;
+              }
+            } finally {
+              this.currentHandler = undefined;
             }
           }
         };
@@ -1949,7 +2000,7 @@ export class WebSocketRouter<
       schema: MessageSchemaType,
       payload: unknown,
       options?: PublishOptions,
-    ): Promise<number> => {
+    ): Promise<PublishResult> => {
       return this.publish(channel, schema, payload, options);
     };
 
@@ -2126,10 +2177,13 @@ export class WebSocketRouter<
    */
   private getBufferedBytes(ws: ServerWebSocket<TData>): number {
     if (this.platform?.getBufferedBytes) {
-      return this.platform.getBufferedBytes(ws);
+      // Platform adapter type may differ from ServerWebSocket interface
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return this.platform.getBufferedBytes(ws as any);
     }
     // Fallback: check ws.bufferedAmount if available (Bun, browsers)
-    return ((ws as Record<string, unknown>).bufferedAmount as number) ?? 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ((ws as any).bufferedAmount as number) ?? 0;
   }
 
   /**

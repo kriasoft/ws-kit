@@ -39,14 +39,14 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         } as any,
       });
 
-      // Verify router.publish() returns Promise<number>
-      const count = await router.publish("room:general", ChatMessage, {
+      // Verify router.publish() returns PublishResult
+      const result = await router.publish("room:general", ChatMessage, {
         text: "Hello world",
         senderId: "alice",
       });
 
-      expect(typeof count).toBe("number");
-      expect(count).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
+      expect(result.ok === true && result.capability).toBeDefined();
     });
 
     it("should accept numeric sender IDs in payload", async () => {
@@ -65,12 +65,12 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         } as any,
       });
 
-      const count = await router.publish("room:123", RoomUpdate, {
+      const result = await router.publish("room:123", RoomUpdate, {
         text: "User joined",
         userId: 42,
       });
 
-      expect(count).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -93,14 +93,14 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       });
 
       // Use meta option to include sender in extended metadata
-      const count = await router.publish(
+      const result = await router.publish(
         "room:general",
         Message,
         { text: "Hello" },
         { meta: { senderId: "bob" } },
       );
 
-      expect(count).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
     });
 
     it("should merge multiple custom meta fields", async () => {
@@ -124,7 +124,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         } as any,
       });
 
-      const count = await router.publish(
+      const result = await router.publish(
         "room:lobby",
         RoomMsg,
         { text: "Welcome" },
@@ -137,7 +137,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         },
       );
 
-      expect(count).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -206,11 +206,12 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         } as any,
       });
 
-      const count = await router.publish("room", Message, {
+      const result = await router.publish("room", Message, {
         text: "test",
       });
 
-      expect(count).toBe(0);
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reason).toBe("validation");
     });
 
     it("should handle missing validator gracefully", async () => {
@@ -220,11 +221,12 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         validator: undefined as any,
       });
 
-      const count = await router.publish("room", Message, {
+      const result = await router.publish("room", Message, {
         text: "test",
       });
 
-      expect(count).toBe(0);
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reason).toBe("adapter_error");
     });
   });
 
@@ -251,14 +253,14 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       });
 
       // Publish message
-      const count = await router.publish(
+      const result = await router.publish(
         "room",
         Message,
         { text: "Hello" },
         { meta: { senderId: "alice" } },
       );
 
-      expect(count).toBeGreaterThanOrEqual(0);
+      expect(result.ok).toBe(true);
 
       // Verify message was delivered with sender in extended meta
       expect(receivedMessage).toBeDefined();

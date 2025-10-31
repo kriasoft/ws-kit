@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSub } from "./types.js";
+import type { PubSub, PubSubPublishOptions } from "./types.js";
 
 /**
  * In-memory Pub/Sub implementation suitable for testing and single-server deployments.
@@ -30,19 +30,31 @@ export class MemoryPubSub implements PubSub {
   /**
    * Publish a message to a channel.
    *
-   * All subscribers to this channel receive the message immediately.
+   * All subscribers to this channel receive the message immediately, except
+   * for the excluded handler (if specified in options).
    * If a handler throws, the error is logged but doesn't stop other handlers.
    *
    * @param channel - Channel name
    * @param message - Message to publish
+   * @param options - Optional publication options (excludeSubscriber, partitionKey)
    */
-  async publish(channel: string, message: unknown): Promise<void> {
+  async publish(
+    channel: string,
+    message: unknown,
+    options?: PubSubPublishOptions,
+  ): Promise<void> {
     const handlers = this.channels.get(channel);
     if (!handlers) return;
 
     const promises: Promise<void>[] = [];
+    const excludeSubscriber = options?.excludeSubscriber;
 
     for (const handler of handlers) {
+      // Skip excluded subscriber (for excludeSelf option)
+      if (excludeSubscriber && handler === excludeSubscriber) {
+        continue;
+      }
+
       try {
         const result = handler(message);
         if (result instanceof Promise) {

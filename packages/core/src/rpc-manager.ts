@@ -36,7 +36,8 @@ export class RpcManager {
   private readonly recentlyTerminated = new Set<string>();
 
   // Idle cleanup interval handle
-  private idleCleanupHandle?: ReturnType<typeof setInterval>;
+  private idleCleanupHandle: ReturnType<typeof setInterval> | undefined =
+    undefined;
 
   // Configuration
   private readonly maxInflightPerSocket: number;

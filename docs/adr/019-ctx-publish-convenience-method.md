@@ -120,14 +120,31 @@ interface PublishOptions {
 - **Current**: Only `meta` is used; validation enforced for all options
 - **Future**: `excludeSelf` and `partitionKey` enable distributed pubsub without breaking API
 
-## Return Value: Promise&lt;number&gt;
+## Return Value: Promise&lt;PublishResult&gt;
 
-Returns matched subscriber count:
+Returns honest delivery semantics with capability information:
 
-- **Testing**: Assert specific fan-out count
-- **Metrics**: Track broadcast scope
-- **Current**: Returns 1 as sentinel (implementations can override)
-- **Future**: PubSub interface may add `subscriberCount()` for exact metrics
+```typescript
+type PublishResult =
+  | {
+      ok: true;
+      capability: "exact" | "estimate" | "unknown";
+      matched?: number; // undefined if capability is "unknown"
+    }
+  | {
+      ok: false;
+      reason: "validation" | "acl" | "adapter_error";
+      error?: unknown;
+    };
+```
+
+**Improvements over `Promise<number>`**:
+
+- **Honest reporting**: No sentinel values (always `1`). MemoryPubSub returns exact count, distributed systems return "unknown"
+- **Error handling**: Distinguish validation failures, ACL denial, and adapter errors
+- **Feature negotiation**: Know if `excludeSelf` or `partitionKey` are supported before using
+- **Testing**: Assert specific fan-out count only when capability is "exact"
+- **Metrics**: Track broadcast scope and delivery capability together
 
 ## Consequences
 
@@ -158,13 +175,19 @@ Returns matched subscriber count:
 ```typescript
 router.on(UserCreated, async (ctx) => {
   const user = await db.users.create(ctx.payload);
-  const recipients = await ctx.publish(
+  const result = await ctx.publish(
     `org:${ctx.payload.orgId}:users`,
     UserListInvalidated,
     { orgId: ctx.payload.orgId },
-    { excludeSelf: true },
   );
-  ctx.log.debug(`Notified ${recipients} subscribers`);
+
+  if (result.ok) {
+    ctx.log.debug(
+      `Notified ${result.matched ?? "?"} subscribers (${result.capability})`,
+    );
+  } else {
+    ctx.log.error(`Failed to notify: ${result.reason}`, result.error);
+  }
 });
 ```
 
@@ -172,11 +195,17 @@ router.on(UserCreated, async (ctx) => {
 
 ```typescript
 // In cron, queue, lifecycle
-const count = await router.publish(
+const result = await router.publish(
   "system:announcements",
   System.Announcement,
   { text: "Maintenance at 02:00 UTC" },
 );
+
+if (result.ok) {
+  console.log(`Published to ${result.matched ?? "subscribers"}`);
+} else {
+  console.error(`Failed to publish`, result.error);
+}
 ```
 
 ## Naming: "publish" vs "broadcast"
@@ -199,12 +228,12 @@ const count = await router.publish(
 
 ws-kit provides two complementary publishing patterns for different use cases:
 
-| API                       | Location        | Use Case                     | Returns                 |
-| ------------------------- | --------------- | ---------------------------- | ----------------------- |
-| **`ctx.publish(...)`**    | Message context | Handlers; ergonomic sugar    | `Promise&lt;number&gt;` |
-| **`router.publish(...)`** | Router instance | System jobs, cron, lifecycle | `Promise&lt;number&gt;` |
+| API                       | Location        | Use Case                     | Returns                  |
+| ------------------------- | --------------- | ---------------------------- | ------------------------ |
+| **`ctx.publish(...)`**    | Message context | Handlers; ergonomic sugar    | `Promise<PublishResult>` |
+| **`router.publish(...)`** | Router instance | System jobs, cron, lifecycle | `Promise<PublishResult>` |
 
-Both are high-level, type-safe, schema-validated APIs with identical semantics.
+Both are high-level, type-safe, schema-validated APIs with identical return semantics.
 Choose based on context: use `ctx.publish()` in handlers (ergonomic), `router.publish()` outside handlers (canonical).
 
 ## Summary

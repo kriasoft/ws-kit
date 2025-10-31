@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-// @ts-expect-error - uuid types not found by TypeScript, but they work at runtime
 import * as uuid from "uuid";
 const { v7: uuidv7 } = uuid;
 import type {
   WebSocketRouter,
   ServerWebSocket,
   WebSocketData,
+  ValidatorAdapter,
 } from "@ws-kit/core";
 import type {
   DurableObjectHandler,
@@ -51,7 +51,7 @@ import type {
 export function createDurableObjectHandler<
   TData extends WebSocketData = WebSocketData,
 >(
-  router: WebSocketRouter<unknown, TData>,
+  router: WebSocketRouter<ValidatorAdapter, TData>,
   options?: {
     authenticate?: (
       req: Request,

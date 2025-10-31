@@ -53,10 +53,22 @@ router.on(JoinRoom, (ctx) => {
   ctx.subscribe(roomId);
 
   // Publish type-safe message to topic (ergonomic in handlers)
-  const recipients = await ctx.publish(roomId, UserJoined, {
+  const result = await ctx.publish(roomId, UserJoined, {
     roomId,
   });
-  console.log(`Notified ${recipients} subscribers`);
+
+  // Handle the result with honest semantics
+  if (result.ok) {
+    if (result.capability === "exact") {
+      console.log(`Notified ${result.matched} subscribers (exact count)`);
+    } else if (result.capability === "estimate") {
+      console.log(`Notified ~${result.matched} subscribers (estimate)`);
+    } else {
+      console.log(`Message published (delivery tracking unavailable)`);
+    }
+  } else {
+    console.error(`Failed to publish: ${result.reason}`, result.error);
+  }
 });
 
 router.onClose((ctx) => {
@@ -77,12 +89,45 @@ outside handlers (systems, jobs, one-time setup).
 
 Two canonical publishing patterns exist for different use cases:
 
-| API                    | Location        | Use Case                        | Return            | Validation  | Notes                  |
-| ---------------------- | --------------- | ------------------------------- | ----------------- | ----------- | ---------------------- |
-| **`ctx.publish()`**    | Handler context | In message handlers             | `Promise<number>` | ✅ Enforced | Recommended: ergonomic |
-| **`router.publish()`** | Router instance | Outside handlers (cron, queues) | `Promise<number>` | ✅ Enforced | Recommended: canonical |
+| API                    | Location        | Use Case                        | Return                   | Validation  | Notes                  |
+| ---------------------- | --------------- | ------------------------------- | ------------------------ | ----------- | ---------------------- |
+| **`ctx.publish()`**    | Handler context | In message handlers             | `Promise<PublishResult>` | ✅ Enforced | Recommended: ergonomic |
+| **`router.publish()`** | Router instance | Outside handlers (cron, queues) | `Promise<PublishResult>` | ✅ Enforced | Recommended: canonical |
 
-Both enforce strict schema validation. Choose based on context: `ctx.publish()` in handlers (ergonomic), `router.publish()` for system-initiated operations.
+Both enforce strict schema validation and return honest delivery information. Choose based on context: `ctx.publish()` in handlers (ergonomic), `router.publish()` for system-initiated operations.
+
+### Return Type: `PublishResult`
+
+The `publish()` method returns a discriminated union that provides honest semantics about delivery:
+
+```typescript
+type PublishResult =
+  | {
+      ok: true;
+      /** "exact": exact count (MemoryPubSub)
+       *  "estimate": best-effort count (distributed systems)
+       *  "unknown": delivery not tracked (platform adapters) */
+      capability: "exact" | "estimate" | "unknown";
+      /** Matched subscriber count (undefined if capability is "unknown") */
+      matched?: number;
+    }
+  | {
+      ok: false;
+      /** "validation": payload validation failed
+       *  "acl": access control denied
+       *  "adapter_error": adapter-specific error or unsupported option */
+      reason: "validation" | "acl" | "adapter_error";
+      /** Optional error details for debugging */
+      error?: unknown;
+    };
+```
+
+**Benefits**:
+
+- **Honest delivery reporting** — No more sentinel values (always `1`). Different adapters report what they actually know.
+- **Error handling** — Distinguish between validation failures, permission denials, and adapter errors.
+- **Feature negotiation** — Know if `excludeSelf` or `partitionKey` are supported before attempting.
+- **Debugging** — Detailed error messages for failed publishes.
 
 ### Naming: "publish" not "broadcast"
 

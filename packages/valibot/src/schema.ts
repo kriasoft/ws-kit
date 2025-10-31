@@ -8,7 +8,6 @@ import type {
   ObjectSchema,
   OptionalSchema,
   StringSchema,
-  // @ts-expect-error - valibot types not found by TypeScript, but they work at runtime
 } from "valibot";
 import { validateMetaSchema } from "@ws-kit/core";
 
@@ -39,6 +38,7 @@ interface ValibotLike {
   strictObject: (...args: any[]) => any;
   string: (...args: any[]) => any;
   number: (...args: any[]) => any;
+  boolean: (...args: any[]) => any;
   literal: (...args: any[]) => any;
   union: (...args: any[]) => any;
   optional: (...args: any[]) => any;
@@ -444,12 +444,23 @@ export function createMessageSchema(valibot: ValibotLike) {
       );
     }
 
-    const requestSchema = messageSchema(
-      requestType,
-      requestPayload as ReqP,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ) as any;
-    const responseSchema = messageSchema(responseType, responsePayload as ResP);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const requestSchema: any =
+      requestPayload === undefined
+        ? messageSchema(requestType)
+        : messageSchema(
+            requestType,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            requestPayload as any,
+          );
+    const responseSchema =
+      responsePayload === undefined
+        ? messageSchema(responseType)
+        : messageSchema(
+            responseType,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            responsePayload as any,
+          );
 
     // Attach response schema as non-enumerable property to avoid breaking schema iteration
     Object.defineProperty(requestSchema, "response", {

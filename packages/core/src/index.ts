@@ -52,6 +52,9 @@ export type {
   ValidatorAdapter,
   PlatformAdapter,
   PubSub,
+  PubSubPublishOptions,
+  PublishOptions,
+  PublishResult,
 } from "./types.js";
 
 // ============================================================================

@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-// @ts-expect-error - uuid types not found by TypeScript, but they work at runtime
 import * as uuid from "uuid";
 const { v7: uuidv7 } = uuid;
 import type {

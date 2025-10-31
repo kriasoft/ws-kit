@@ -246,7 +246,6 @@ export class RedisPubSub implements PubSub {
     // Dynamically import redis module (peer dependency)
     let createClient;
     try {
-      // @ts-expect-error - redis types not found by TypeScript, but they work at runtime
       const redisModule = await import("redis");
       createClient = redisModule.createClient;
     } catch {
@@ -277,7 +276,8 @@ export class RedisPubSub implements PubSub {
       }
     }
 
-    const client = createClient(clientOptions) as RedisClient;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = createClient(clientOptions) as any as RedisClient;
     await client.connect?.();
     return client;
   }
@@ -288,10 +288,11 @@ export class RedisPubSub implements PubSub {
   private setupSubscriptionHandlers(): void {
     if (!this.subscribeClient) return;
 
-    this.subscribeClient.on?.("message", ((
-      channel: string,
-      message: string,
-    ) => {
+    // Redis pub/sub emits "message" event with (channel, message) signature
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = this.subscribeClient as any;
+
+    client.on("message", (channel: string, message: string) => {
       const handlers = this.subscriptions.get(channel);
       if (handlers) {
         try {
@@ -311,16 +312,16 @@ export class RedisPubSub implements PubSub {
           );
         }
       }
-    }) as (channel: string, message: string) => void);
+    });
 
-    this.subscribeClient.on?.("error", (error: unknown) => {
+    client.on("error", (error: unknown) => {
       const err = error instanceof Error ? error : new Error(String(error));
       this.connected = false;
       this.options.onError?.(err);
       this.handleConnectionError(err);
     });
 
-    this.subscribeClient.on?.("end", () => {
+    client.on("end", () => {
       this.connected = false;
       this.subscribeClient = null;
       this.options.onDisconnect?.();
