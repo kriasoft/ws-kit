@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/cloudflare-do",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Cloudflare Durable Objects adapter for WS-Kit enabling stateful, globally-distributed WebSocket applications at the edge",
   "type": "module",
   "sideEffects": false,
