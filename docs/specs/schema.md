@@ -389,21 +389,29 @@ import { ErrorMessage } from "@ws-kit/zod";
 // or get it from schema exports if custom
 const ErrorMsg = message("ERROR", {
   code: z.enum([
-    "VALIDATION_FAILED",
-    "AUTHENTICATION_FAILED",
-    "AUTHORIZATION_FAILED",
-    "RESOURCE_NOT_FOUND",
-    "RATE_LIMIT_EXCEEDED",
-    "INTERNAL_SERVER_ERROR",
+    "UNAUTHENTICATED",
+    "PERMISSION_DENIED",
+    "INVALID_ARGUMENT",
+    "FAILED_PRECONDITION",
+    "NOT_FOUND",
+    "ALREADY_EXISTS",
+    "ABORTED",
+    "DEADLINE_EXCEEDED",
+    "RESOURCE_EXHAUSTED",
+    "UNAVAILABLE",
+    "UNIMPLEMENTED",
+    "INTERNAL",
+    "CANCELLED",
   ]),
-  message: z.string().optional(),
-  context: z.record(z.any()).optional(),
+  message: z.string(),
+  details: z.record(z.any()).optional(),
+  retryAfterMs: z.number().optional(),
 });
 
 // Usage in handlers:
 router.on(SomeMessage, (ctx) => {
   if (!authorized) {
-    ctx.error("AUTHORIZATION_FAILED", "Not allowed");
+    ctx.error("PERMISSION_DENIED", "Not allowed");
   }
 });
 ```

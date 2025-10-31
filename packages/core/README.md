@@ -165,15 +165,21 @@ interface MessageContext<TSchema, TData> {
 
 ### Error Codes
 
-Standardized error codes in `ErrorCode` enum:
+Standardized error codes (13 codes, gRPC-aligned per ADR-015):
 
-- `INVALID_MESSAGE_FORMAT` — Malformed message
-- `VALIDATION_FAILED` — Schema validation error
-- `UNSUPPORTED_MESSAGE_TYPE` — No handler registered
-- `AUTHENTICATION_FAILED` — Auth check failed
-- `AUTHORIZATION_FAILED` — Permission denied
-- `PAYLOAD_TOO_LARGE` — Message exceeds size limit
-- `HEARTBEAT_TIMEOUT` — Pong timeout
+- `UNAUTHENTICATED` — Missing or invalid authentication
+- `PERMISSION_DENIED` — Authorization failed (after successful auth)
+- `INVALID_ARGUMENT` — Input validation or semantic validation failed
+- `FAILED_PRECONDITION` — Stateful precondition not met
+- `NOT_FOUND` — Requested resource doesn't exist
+- `ALREADY_EXISTS` — Uniqueness or idempotency violation
+- `ABORTED` — Concurrency conflict (race condition)
+- `DEADLINE_EXCEEDED` — RPC request timed out
+- `RESOURCE_EXHAUSTED` — Rate limit, quota, or buffer overflow
+- `UNAVAILABLE` — Transient infrastructure error
+- `UNIMPLEMENTED` — Feature not supported or deployed
+- `INTERNAL` — Unexpected server error (unhandled exception)
+- `CANCELLED` — Request cancelled by client or peer
 
 ## Adapter Implementation
 

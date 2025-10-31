@@ -420,7 +420,7 @@ router.on(ChatMessage, (ctx) => {
     if (drift < -5000) {
       // More than 5 seconds in the future = likely manipulation
       ctx.send(ErrorMessage, {
-        code: ErrorCode.VALIDATION_FAILED,
+        code: "INVALID_ARGUMENT",
         message: "Invalid timestamp",
       });
       return;
@@ -439,7 +439,7 @@ router.on(ChatMessage, (ctx) => {
 
 Don't reject messages too aggressively — some clock skew is normal. But logging anomalies helps you detect patterns of abuse.
 
-That response code lines up with `docs/specs/error-handling.md`: transport issues become `VALIDATION_FAILED`, leaving business logic free to return domain-specific errors.
+That response code lines up with `docs/specs/error-handling.md`: input validation issues become `INVALID_ARGUMENT` (per ADR-015), leaving business logic free to return domain-specific errors.
 
 ## Testing and Monitoring
 
