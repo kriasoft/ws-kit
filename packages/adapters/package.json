@@ -38,6 +38,14 @@
     "./memory": {
       "types": "./dist/memory/index.d.ts",
       "default": "./dist/memory/index.js"
+    },
+    "./redis": {
+      "types": "./dist/redis/index.d.ts",
+      "default": "./dist/redis/index.js"
+    },
+    "./cloudflare-do": {
+      "types": "./dist/cloudflare-do/index.d.ts",
+      "default": "./dist/cloudflare-do/index.js"
     }
   },
   "main": "./dist/index.js",

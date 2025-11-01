@@ -229,7 +229,7 @@ const cheap = rateLimit({
 const expensive = rateLimit({
   limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 2 }),
   key: keyPerUserPerType,
-  cost: () => (ctx) => (ctx.type === "Compute" ? 5 : 1),
+  cost: (ctx) => (ctx.type === "Compute" ? 5 : 1),
 });
 
 router.use(cheap);

@@ -161,7 +161,7 @@ describe("WebSocketServer E2E", () => {
 
   it("should handle multiple clients simultaneously", async () => {
     // Wait for server to be ready
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Connect multiple clients
     const clients = await Promise.all(

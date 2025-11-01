@@ -107,9 +107,10 @@ const decision = await limiter.consume("user:123", 1);
 **Features:**
 
 - Single Lua script for atomicity (no race conditions)
-- Automatic TTL management (PEXPIRE) for stale bucket cleanup
+- Automatic TTL management (PEXPIRE) for stale bucket cleanup (auto-rounded to integer milliseconds)
 - Shared Redis connection for multiple limiters (memory-efficient)
 - Integer arithmetic for precision (no floating-point drift)
+- Server-authoritative time via `redis.call('TIME')` (no client clock manipulation)
 
 **Multi-Policy (Different Budgets for Different Operations):**
 
@@ -154,10 +155,11 @@ const decision = await limiter.consume("user:123", 1);
 
 **Features:**
 
-- Sharding (FNV-1a hash) for load distribution
+- Sharding (FNV-1a hash) for load distribution (validated at creation time)
 - Persistent storage via Durable Object state
 - Automatic cleanup via mark-and-sweep (24h TTL)
 - Single-threaded per shard guarantees atomicity
+- Shard count validation (must be positive integer, prevents misconfiguration)
 
 **Setup (wrangler.toml):**
 
@@ -212,10 +214,15 @@ type RateLimitDecision =
 
 All adapters validate policy at creation time:
 
-- `capacity` must be ≥ 1
-- `tokensPerSecond` must be > 0
+- `capacity` must be ≥ 1 (throws: "Rate limit capacity must be ≥ 1")
+- `tokensPerSecond` must be > 0 (throws: "tokensPerSecond must be > 0")
 
 Non-integer values are coerced to integers.
+
+**Durable Objects-Specific Validation:**
+
+- `shards` must be a positive integer (throws: "Shard count must be a positive integer")
+- Default: 128 shards
 
 ## Testing
 
@@ -241,18 +248,35 @@ The contract test suite (`packages/adapters/test/contract.ts`) validates:
 
 ### Using Contract Tests in Custom Adapters
 
-To verify a custom adapter implementation:
+To verify a custom adapter implementation, copy the contract test pattern from existing adapters:
 
 ```typescript
 // custom-adapter.test.ts
-import { describeRateLimiterContract } from "@ws-kit/adapters";
+import type { RateLimiter } from "@ws-kit/core";
+import { describe, expect, test } from "bun:test";
 
 const testPolicy = { capacity: 10, tokensPerSecond: 1 };
 
-describeRateLimiterContract("Custom", () => {
-  return createMyCustomRateLimiter(testPolicy);
+describe("RateLimiter: Custom", () => {
+  test("basic consume: allowed", async () => {
+    const limiter = createMyCustomRateLimiter(testPolicy);
+    const result = await limiter.consume("user:1", 1);
+    expect(result.allowed).toBe(true);
+    expect(result.remaining).toBe(9);
+  });
+
+  test("cost > capacity: not retryable", async () => {
+    const limiter = createMyCustomRateLimiter(testPolicy);
+    const result = await limiter.consume("user:1", 11);
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfterMs).toBe(null);
+  });
+
+  // ... add more test cases
 });
 ```
+
+See `packages/adapters/test/contract.ts` for the full contract test suite that all adapters must pass.
 
 ### Integration Tests
 

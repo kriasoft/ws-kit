@@ -142,8 +142,8 @@ export function memoryRateLimiter(
   const policySnapshot: Policy = Object.freeze({
     capacity,
     tokensPerSecond,
-    prefix,
-  });
+    ...(prefix !== undefined && { prefix }),
+  }) as Policy;
 
   /**
    * Get or create a mutex for the given key.

@@ -729,6 +729,113 @@ router.on(AuthenticateUser, (ctx) => {
 });
 ```
 
+## Rate Limiting
+
+Protect your WebSocket server from abuse with atomic, distributed rate limiting. WS-Kit provides an adapter-first rate limiting system that works across single-instance and multi-pod deployments.
+
+### Quick Start (Single-Instance)
+
+For development or single-instance deployments, use the in-memory adapter:
+
+```ts
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+
+const limiter = rateLimit({
+  limiter: memoryRateLimiter({
+    capacity: 200, // Max 200 tokens per bucket
+    tokensPerSecond: 100, // Refill at 100 tokens/second
+  }),
+  key: keyPerUserPerType, // Per-user per-message-type buckets (recommended)
+});
+
+const router = createRouter<AppData>();
+router.use(limiter); // Apply to all messages
+```
+
+### Multi-Pod Deployments (Redis)
+
+For distributed deployments, coordinate via Redis:
+
+```ts
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { createClient } from "redis";
+
+const redisClient = createClient({ url: process.env.REDIS_URL });
+await redisClient.connect();
+
+const limiter = rateLimit({
+  limiter: redisRateLimiter(redisClient, {
+    capacity: 200,
+    tokensPerSecond: 100,
+  }),
+  key: keyPerUserPerType,
+});
+
+router.use(limiter);
+```
+
+### Cloudflare Workers (Durable Objects)
+
+For Cloudflare Workers, use Durable Objects for coordination:
+
+```ts
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+
+const limiter = rateLimit({
+  limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
+    capacity: 200,
+    tokensPerSecond: 100,
+  }),
+  key: keyPerUserPerType,
+});
+
+router.use(limiter);
+```
+
+### Key Functions
+
+Three built-in key functions provide different isolation strategies:
+
+- **`keyPerUserPerType`** (recommended) — One bucket per (user, message type). Prevents one operation from starving others.
+- **`keyPerUserOrIpPerType`** — Per-user for authenticated traffic, IP fallback for anonymous (requires router integration for IP access).
+- **`perUserKey`** — Simpler per-user bucket. Use `cost()` to weight operations within a shared budget.
+
+Create custom key functions for other strategies:
+
+```ts
+const limiter = rateLimit({
+  limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
+  key: (ctx) => `${ctx.ws.data?.userId}:${ctx.type}`, // Custom keying
+  cost: (ctx) => (ctx.type === "ExpensiveOp" ? 10 : 1),
+});
+```
+
+### Observability
+
+Rate limit violations are reported via the `onLimitExceeded` hook:
+
+```ts
+serve(router, {
+  port: 3000,
+  onLimitExceeded(info) {
+    if (info.type === "rate") {
+      console.warn("rate_limited", {
+        clientId: info.clientId,
+        observed: info.observed, // Attempted cost
+        limit: info.limit, // Bucket capacity
+        retryAfterMs: info.retryAfterMs,
+      });
+      metrics.increment("rate_limit.exceeded");
+    }
+  },
+});
+```
+
+For complete documentation, see [docs/proposals/rate-limiting.md](docs/proposals/rate-limiting.md) and [docs/guides/rate-limiting.md](docs/guides/rate-limiting.md).
+
 ## How to compose routes
 
 Organize code by splitting handlers into separate routers, then merge them into a main router using the `merge()` method:

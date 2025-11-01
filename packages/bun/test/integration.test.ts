@@ -206,8 +206,15 @@ describe("@ws-kit/bun integration tests", () => {
       const req = new Request("ws://localhost/ws");
       await fetch(req, mockServer);
 
-      // Test that router.publish can be called
-      const publishPromise = router.publish("room:123", { text: "Hello" });
+      // Define a test message schema for publishing
+      const RoomMessage = message("ROOM_MESSAGE", {
+        text: z.string(),
+      });
+
+      // Test that router.publish can be called with schema
+      const publishPromise = router.publish("room:123", RoomMessage, {
+        text: "Hello",
+      });
       expect(publishPromise).toBeInstanceOf(Promise);
 
       // Should resolve without error

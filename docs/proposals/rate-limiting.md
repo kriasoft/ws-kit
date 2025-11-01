@@ -1,10 +1,47 @@
 # Feature Proposal: Built-In Rate Limiting (Adapter-First Design)
 
-**Status**: Proposal
+**Status**: ✅ Implemented
 **Date**: 2025-11-01
 **Concern**: "No built-in message throttling (application responsibility via middleware)"
 **Focus**: **Multi-backend portability with correct distributed semantics** (Bun, Cloudflare Workers/DO, edge runtimes)
 **Architecture**: [ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md)
+
+---
+
+## Implementation Status
+
+**This proposal has been fully implemented.** All components described below are production-ready:
+
+- ✅ `RateLimiter` interface in `@ws-kit/core/src/types.ts`
+- ✅ `rateLimit()` middleware in `@ws-kit/middleware`
+- ✅ Memory adapter in `@ws-kit/adapters/memory`
+- ✅ Redis adapter in `@ws-kit/adapters/redis`
+- ✅ Cloudflare Durable Objects adapter in `@ws-kit/adapters/cloudflare-do`
+- ✅ Comprehensive tests and contract validation
+- ✅ Full integration with router error handling
+
+**Key implementation details:**
+
+- `RateLimiter` interface includes `getPolicy()` method (required for middleware to report capacity)
+- Middleware executes at step 6 (post-validation) rather than step 3 (pre-validation) due to architectural constraints
+- IP fallback for unauthenticated users not available at middleware layer; use custom key functions or router-level integration
+- All adapters pass the same atomicity and fairness contract tests
+
+**Quick start:**
+
+```typescript
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+
+const limiter = rateLimit({
+  limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),
+  key: keyPerUserPerType,
+});
+
+router.use(limiter);
+```
+
+See [docs/guides/rate-limiting.md](/guides/rate-limiting) for detailed usage examples.
 
 ---
 
