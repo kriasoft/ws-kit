@@ -1,5 +1,14 @@
 # @ws-kit/bun
 
+## 0.2.1
+
+### Patch Changes
+
+- [#29](https://github.com/kriasoft/ws-kit/pull/29) [`8114c39`](https://github.com/kriasoft/ws-kit/commit/8114c39f3c46d788cc9b41698f3af08db9bcf3bb) Thanks [@koistya](https://github.com/koistya)! - Update integration tests for rate limiting adapter support.
+
+- Updated dependencies [[`8114c39`](https://github.com/kriasoft/ws-kit/commit/8114c39f3c46d788cc9b41698f3af08db9bcf3bb)]:
+  - @ws-kit/core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
