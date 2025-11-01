@@ -1,5 +1,17 @@
 # @ws-kit/client
 
+## 0.2.0
+
+### Minor Changes
+
+- [#27](https://github.com/kriasoft/ws-kit/pull/27) [`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36) Thanks [@koistya](https://github.com/koistya)! - Enhanced error handling: clients now automatically infer retry behavior from error codes. Added support for `retryable` and `retryAfterMs` fields in error responses. Updated request-response correlation to handle both success and error cases with full type safety.
+
+### Patch Changes
+
+- Updated dependencies [[`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36), [`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36)]:
+  - @ws-kit/valibot@0.2.0
+  - @ws-kit/zod@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
