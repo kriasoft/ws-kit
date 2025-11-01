@@ -121,6 +121,48 @@ function publish(scope: string, message: any) {
 - ✅ Automatic cleanup on disconnect
 - ⚠️ **No persistence across server restart** — Subscriptions are in-memory
 
+## Adapter Interfaces
+
+WS-Kit uses adapter patterns for cross-platform features that require atomic semantics. Each feature defines a public interface that adapters implement.
+
+### RateLimiter Adapter
+
+The `RateLimiter` interface defines atomic token consumption for rate limiting across all backends. See [ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md) for design rationale.
+
+**Interface:**
+
+```typescript
+export interface RateLimiter {
+  consume(key: string, cost: number): Promise<RateLimitDecision>;
+  dispose?(): void;
+}
+
+export type RateLimitDecision =
+  | { allowed: true; remaining: number }
+  | { allowed: false; remaining: number; retryAfterMs: number | null };
+```
+
+**Atomicity per Adapter:**
+
+| Adapter             | Mechanism             | Use Case              |
+| ------------------- | --------------------- | --------------------- |
+| **Memory**          | Per-key mutex         | Dev, single-server    |
+| **Redis**           | Lua script            | Multi-pod distributed |
+| **Durable Objects** | Single-threaded shard | Cloudflare Workers    |
+
+**Middleware Usage:**
+
+```typescript
+const decision = await limiter.consume("user:123:SendMessage", 1);
+if (!decision.allowed) {
+  ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, {
+    retryAfterMs: decision.retryAfterMs,
+  });
+}
+```
+
+**Contract Guarantees:** All adapters must pass tests validating atomicity (no token over-spend under concurrency), multi-key isolation, impossible operations (`retryAfterMs: null`), and deterministic clocks. See `docs/proposals/rate-limiting.md` for complete details.
+
 ## Broadcast
 
 ### Fan-Out Strategy

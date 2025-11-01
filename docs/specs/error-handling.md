@@ -62,7 +62,7 @@ const ErrorMessage = message("ERROR", {
   message: z.string().optional(),
   details: z.record(z.any()).optional(),
   retryable: z.boolean().optional(),
-  retryAfterMs: z.number().int().positive().optional(),
+  retryAfterMs: z.union([z.number().int().nonnegative(), z.null()]).optional(),
 });
 
 // Unified wire format for both ERROR and RPC_ERROR:
@@ -77,7 +77,10 @@ const ErrorMessage = message("ERROR", {
 //     message?: string,
 //     details?: Record<string, any>,
 //     retryable?: boolean,        // inferred from code if omitted
-//     retryAfterMs?: number       // backoff hint for transient errors
+//     retryAfterMs?: number | null // backoff hint for transient errors
+//                                  // - number (≥0): retry after this many ms
+//                                  // - null: operation impossible under policy (non-retryable)
+//                                  // - absent: no retry guidance
 //   }
 // }
 //
@@ -133,7 +136,9 @@ Use `ctx.error(code, message, details)` for type-safe responses. The framework l
 - For codes marked "Forbidden": `retryAfterMs` **must be absent**
 - For codes marked "Optional": `retryAfterMs` may be present when server has a backoff hint
 - For codes marked "Recommended" (e.g., `RESOURCE_EXHAUSTED`): servers **should** include `retryAfterMs` when due to backpressure or rate limiting
-- Example: `ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, { retryable: true, retryAfterMs: 100 })`
+- `retryAfterMs: null` signals a non-retryable failure (e.g., cost exceeds capacity in rate limiting). Use `FAILED_PRECONDITION` with `retryAfterMs: null` for impossible operations
+- Example retryable: `ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, { retryable: true, retryAfterMs: 100 })`
+- Example impossible: `ctx.error("FAILED_PRECONDITION", "Operation cost exceeds limit", undefined, { retryable: false, retryAfterMs: null })`
 
 ### Extending Error Codes
 
