@@ -27,7 +27,7 @@ export class ServerError extends Error {
   constructor(
     message: string,
     public readonly code: string,
-    public readonly context?: Record<string, unknown>,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ServerError";

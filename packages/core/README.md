@@ -23,7 +23,7 @@ Platform-agnostic WebSocket router and type system with composition-based adapte
 - **Platform implementations**: Bun/Cloudflare adapters live in separate packages
 - **High-performance PubSub**: Provided by platform adapters (default `MemoryPubSub` for testing)
 - **Codec abstraction**: Uses JSON (post-launch feature)
-- **Middleware chain**: Use hooks for Phase 1 (post-launch feature)
+- **Middleware chain**: Use hooks (post-launch feature)
 - **Protocol versioning**: Handled per-platform (post-launch feature)
 - **Backpressure policies**: Platform-specific (handled by adapters)
 
@@ -50,14 +50,14 @@ If the answer is "specific adapter," the feature belongs in that adapter, not co
 
 ## Implementation Status
 
-✅ **Phase 2.1: Core Types & Interfaces** — Complete
+✅ **Core Types & Interfaces** — Complete
 
 - Abstract adapter interfaces (`ValidatorAdapter`, `PlatformAdapter`, `PubSub`)
 - Type definitions (`ServerWebSocket`, `MessageContext`, lifecycle hooks)
 - Error handling (`ErrorCode`, `WebSocketError`)
 - Default `MemoryPubSub` implementation
 
-✅ **Phase 2.2: Router Implementation** — Complete
+✅ **Router Implementation** — Complete
 
 - `WebSocketRouter<V, TData>` class with full message routing
 - Lifecycle hooks (`onOpen`, `onClose`, `onAuth`, `onError`)
@@ -66,8 +66,6 @@ If the answer is "specific adapter," the feature belongs in that adapter, not co
 - Router composition via `merge()`
 - Message normalization and validation pipeline
 - PubSub integration with pluggable implementations
-
-**Next**: Phase 3 (Bun adapter), Phase 4 (Zod/Valibot validators), Phase 5 (Client)
 
 ## API Reference
 
@@ -165,7 +163,9 @@ interface MessageContext<TSchema, TData> {
 
 ### Error Codes
 
-Standardized error codes (13 codes, gRPC-aligned per ADR-015):
+Standardized error codes (13 codes, gRPC-aligned per ADR-015) with automatic retry inference:
+
+**Terminal Errors (Non-Retryable):**
 
 - `UNAUTHENTICATED` — Missing or invalid authentication
 - `PERMISSION_DENIED` — Authorization failed (after successful auth)
@@ -173,13 +173,33 @@ Standardized error codes (13 codes, gRPC-aligned per ADR-015):
 - `FAILED_PRECONDITION` — Stateful precondition not met
 - `NOT_FOUND` — Requested resource doesn't exist
 - `ALREADY_EXISTS` — Uniqueness or idempotency violation
-- `ABORTED` — Concurrency conflict (race condition)
+- `UNIMPLEMENTED` — Feature not supported or deployed
+- `CANCELLED` — Request cancelled by client or peer
+
+**Transient Errors (Retryable):**
+
 - `DEADLINE_EXCEEDED` — RPC request timed out
 - `RESOURCE_EXHAUSTED` — Rate limit, quota, or buffer overflow
 - `UNAVAILABLE` — Transient infrastructure error
-- `UNIMPLEMENTED` — Feature not supported or deployed
-- `INTERNAL` — Unexpected server error (unhandled exception)
-- `CANCELLED` — Request cancelled by client or peer
+- `ABORTED` — Concurrency conflict (race condition)
+
+**Mixed:**
+
+- `INTERNAL` — Unexpected server error (retryability app-specific)
+
+**Error Response Format:**
+
+```typescript
+{
+  code: ErrorCode,          // Standard error code
+  message?: string,         // Optional description
+  details?: Record<string, any>,  // Optional context
+  retryable?: boolean,      // Optional (auto-inferred from code)
+  retryAfterMs?: number     // Optional backoff hint for transient errors
+}
+```
+
+See [docs/specs/error-handling.md](../../docs/specs/error-handling.md) and `ERROR_CODE_META` for complete retry semantics and code metadata.
 
 ## Adapter Implementation
 

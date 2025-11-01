@@ -315,6 +315,7 @@ export function createMessageSchema(zod: ZodLike) {
     message: zod.string().optional(),
     details: zod.record(zod.string(), zod.any()).optional(),
     retryable: zod.boolean().optional(),
+    retryAfterMs: zod.number().int().positive().optional(),
   });
 
   // Client-side helper: validates and creates messages for sending

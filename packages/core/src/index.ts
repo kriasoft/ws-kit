@@ -12,7 +12,7 @@
  * - MemoryPubSub default implementation for testing and single-server deployments
  *
  * Does NOT provide:
- * - Router implementation (Phase 2.2+)
+ * - Router implementation — separate packages provide full implementations
  * - Validator adapters (Zod, Valibot) — provided by @ws-kit/zod, @ws-kit/valibot
  * - Platform adapters (Bun, Cloudflare) — provided by @ws-kit/bun, @ws-kit/cloudflare-do
  *
@@ -46,6 +46,9 @@ export type {
   RouterHooks,
   HeartbeatConfig,
   LimitsConfig,
+  LimitExceededHandler,
+  LimitExceededInfo,
+  LimitType,
   WebSocketRouterOptions,
   MessageSchemaType,
   MessageHandlerEntry,
@@ -61,8 +64,19 @@ export type {
 // Error Handling
 // ============================================================================
 
-export { ErrorCode, WebSocketError, WsKitError } from "./error.js";
-export type { ErrorCodeValue, ErrorPayload, ErrorMessage } from "./error.js";
+export {
+  ErrorCode,
+  ERROR_CODE_META,
+  WebSocketError,
+  WsKitError,
+} from "./error.js";
+export type {
+  ErrorCodeValue,
+  ErrorCodeMetadata,
+  ErrorPayload,
+  ErrorMessage,
+} from "./error.js";
+export type { ErrorWire, RpcErrorWire } from "./types.js";
 
 // ============================================================================
 // Constants & Defaults

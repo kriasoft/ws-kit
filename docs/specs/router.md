@@ -24,31 +24,12 @@ Quick navigation for AI tools:
 
 **Recommended: Platform-Specific Package** (zero detection overhead)
 
-```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/bun";
+For a complete quick start example, see the quick start guide in the main README which demonstrates:
 
-type AppData = { userId?: string };
-const router = createRouter<AppData>();
-
-const PingMessage = message("PING", { value: z.number() });
-const PongMessage = message("PONG", { reply: z.number() });
-
-router.on(PingMessage, (ctx) => {
-  console.log("Ping from:", ctx.ws.data.clientId);
-  console.log("Received at:", ctx.receivedAt);
-  // ✅ ctx.payload is fully typed - no 'as any' needed!
-  ctx.send(PongMessage, { reply: ctx.payload.value * 2 });
-});
-
-serve(router, {
-  port: 3000,
-  authenticate(req) {
-    const token = req.headers.get("authorization");
-    return token ? { userId: "user-123" } : undefined;
-  },
-});
-```
+- Setting up router with connection data types
+- Defining message schemas with full type inference
+- Registering handlers with validated payloads
+- Starting the server with authentication
 
 This pattern is recommended because:
 
@@ -57,7 +38,7 @@ This pattern is recommended because:
 - ✅ Explicit deployment target (impossible to misconfigure)
 - ✅ Single canonical location for platform APIs (validator + platform together)
 
-**Alternative: Low-Level Control**
+## Alternative: Low-Level Control
 
 For code that needs direct control over Bun server configuration:
 
@@ -220,7 +201,7 @@ const core = (router as any)[Symbol.for("ws-kit.core")];
 
 ### Debug/Assertions
 
-**Development Mode (Optional Proxy Wrapper)**
+## Development Mode (Optional Proxy Wrapper)
 
 In development (`NODE_ENV !== "production"`), you can enable an optional Proxy wrapper around the router for runtime assertions and typo detection:
 
@@ -282,13 +263,16 @@ router.on(UserLoggedIn, (ctx) => {
 });
 
 // ✅ RPC: request/response with guaranteed reply
+const GetUserResponse = message("GetUserResponse", { user: UserSchema });
+const GetUser = rpc(GetUserRequest, GetUserResponse);
+
 router.rpc(GetUser, (ctx) => {
   const user = findUser(ctx.payload.id);
   if (!user) {
     ctx.error?.("NOT_FOUND", "User not found");
     return;
   }
-  ctx.reply?.({ user }); // Terminal, one-shot reply
+  ctx.reply?.(GetUserResponse, { user }); // Terminal, one-shot reply
 });
 
 // ❌ WRONG: Event handler trying to "reply" (no guarantee)
@@ -298,9 +282,12 @@ router.on(QueryData, (ctx) => {
 });
 
 // ✅ RIGHT: Use RPC for queries that need guaranteed responses
-router.rpc(QueryData, (ctx) => {
+const QueryResponse = message("QueryResponse", { result: z.any() });
+const Query = rpc(QueryData, QueryResponse);
+
+router.rpc(Query, (ctx) => {
   const result = queryDatabase(ctx.payload);
-  ctx.reply?.({ result }); // Guaranteed, one-shot reply
+  ctx.reply?.(QueryResponse, { result }); // Guaranteed, one-shot reply
 });
 ```
 
@@ -335,7 +322,7 @@ type MessageContext<Schema, Data> = {
   unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
 
   // RPC handlers only (when message has response schema)
-  reply?: (data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
+  reply?: (schema: MessageSchema, data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
   progress?: (data?: unknown) => void; // Progress update (non-terminal, optional)
   abortSignal?: AbortSignal; // Fires on client cancel/disconnect (ADR-015)
   onCancel?: (cb: () => void) => () => void; // Register cancel callback
@@ -356,12 +343,16 @@ type MessageContext<Schema, Data> = {
 
 ```typescript
 // Terminal reply (one-shot, schema-enforced)
-ctx.reply?.({ userId: "123", email: "user@example.com" });
+const GetUserResponse = message("GetUserResponse", {
+  userId: z.string(),
+  email: z.string(),
+});
+ctx.reply?.(GetUserResponse, { userId: "123", email: "user@example.com" });
 
 // Progress updates before reply (optional)
 ctx.progress?.({ loaded: 50 });
 ctx.progress?.({ loaded: 100 });
-ctx.reply?.({ data: result });
+ctx.reply?.(GetUserResponse, { userId: "123", email: "user@example.com" });
 
 // Abort signal for cancellation
 const result = await fetch(url, { signal: ctx.abortSignal });
@@ -373,6 +364,88 @@ ctx.onCancel?.(() => {
 ```
 
 See [ADR-015: Unified RPC API](../adr/015-unified-rpc-api-design.md) for design rationale.
+
+## RPC Wire Format (Success and Error)
+
+### RPC Success Response (Option A - Canonical)
+
+When a handler calls `ctx.reply(data)`, the response is sent with the **response message schema type**:
+
+```json
+{
+  "type": "<ResponseMessageName>",
+  "meta": {
+    "timestamp": 1730450000123,
+    "correlationId": "req-42"
+  },
+  "payload": {
+    /* response fields per schema */
+  }
+}
+```
+
+**Example**: For a `GetUserRequest` → `GetUserResponse` RPC:
+
+```typescript
+const GetUserRequest = message("GetUser", { userId: z.string() });
+const GetUserResponse = message("GetUserResponse", { user: UserSchema });
+
+const GetUser = rpc(GetUserRequest, GetUserResponse);
+
+router.rpc(GetUser, (ctx) => {
+  const user = await db.users.findById(ctx.payload.userId);
+  ctx.reply?.(GetUserResponse, { user }); // Sends GetUserResponse with correlationId
+});
+```
+
+**Wire on success**:
+
+```json
+{
+  "type": "GetUserResponse",
+  "meta": {
+    "timestamp": 1730450000123,
+    "correlationId": "req-42"
+  },
+  "payload": {
+    "user": { "id": "123", "name": "Alice" }
+  }
+}
+```
+
+**Key points**:
+
+- `type` is the **response message name** (not a generic `RPC_OK` envelope)
+- `meta.timestamp` is always present (server-generated)
+- `meta.correlationId` allows clients to match response to request
+- Response schema validation ensures type safety both directions
+
+### RPC Error Response
+
+If the handler calls `ctx.error()` instead, an error envelope is sent:
+
+```json
+{
+  "type": "RPC_ERROR",
+  "meta": {
+    "timestamp": 1730450000124,
+    "correlationId": "req-42"
+  },
+  "payload": {
+    "code": "NOT_FOUND",
+    "message": "User not found",
+    "details": { "userId": "123" },
+    "retryable": false
+  }
+}
+```
+
+**Unified error structure** (same for `ERROR` and `RPC_ERROR`):
+
+- `meta.correlationId` **present** for `RPC_ERROR` (maps to request)
+- `meta.correlationId` **absent** for non-RPC `ERROR` messages
+- **Exception**: If an RPC request fails validation before a valid `correlationId` can be extracted, the server sends `ERROR` (not `RPC_ERROR`) with code `INVALID_ARGUMENT`
+- See [Error Handling](./error-handling.md#authoritative-error-code-table) for error codes, retry semantics, and `retryAfterMs` rules
 
 **Type Safety**: `ctx.payload` exists only when schema defines it:
 
@@ -388,6 +461,33 @@ router.on(WithoutPayload, (ctx) => {
   const p = ctx.payload; // ❌ Type error
 });
 ```
+
+### RPC Progress Updates (Non-Terminal)
+
+For long-running RPC operations, use `ctx.progress()` to send non-terminal updates before the final `ctx.reply()`. Progress updates allow clients to receive streaming feedback without completing the RPC.
+
+**Usage**:
+
+```typescript
+const ProgressUpdate = message("ProgressUpdate", { percent: z.number() });
+const OperationResult = message("OperationResult", { result: z.string() });
+const LongOperation = createRpc(LongOperationRequest, OperationResult);
+
+router.rpc(LongOperation, async (ctx) => {
+  // Send non-terminal progress updates
+  ctx.progress?.(ProgressUpdate, { percent: 25 });
+  // ... do work ...
+  ctx.progress?.(ProgressUpdate, { percent: 75 });
+  // Final response completes the RPC
+  ctx.reply?.(OperationResult, { result: "done" });
+});
+```
+
+**Semantics & wire format**: See [schema.md: Progress Updates](./schema.md#progress-updates-non-terminal) for:
+
+- Wire format and correlationId semantics
+- Client-side `call.progress()` streaming API
+- Type-safety guarantees and order semantics
 
 ### Middleware
 
@@ -435,7 +535,7 @@ Middleware functions have the signature:
 - **Async/Await Support**: Middleware can be async; use `await next()` to wait for downstream completion
 - **Skip Behavior**: If middleware doesn't call `next()`, the handler is skipped and the chain stops
 
-**Example: Async Middleware with Waiting**
+## Example: Async Middleware with Waiting
 
 ```typescript
 router.use(async (ctx, next) => {
@@ -456,14 +556,14 @@ router.use(async (ctx, next) => {
 - **Error Handling**: Middleware can call `ctx.error()` to reject (connection closes) or throw to trigger `onError` hook
 - **Same Context Fields**: Middleware sees the same context type and fields as handlers
 
-**Guarantee: Linear Execution**
+## Guarantee: Linear Execution
 
 - Global middleware always runs before per-route middleware
 - Per-route middleware always runs before handlers
 - If any middleware calls `ctx.error()` or throws, downstream middleware and handlers are skipped
 - The `onError` hook is called if an unhandled error occurs anywhere in the chain
 
-**Example: Authentication + Authorization Middleware**
+## Example: Authentication + Authorization Middleware
 
 ```typescript
 type AppData = { userId?: string; roles?: string[] };
@@ -613,70 +713,21 @@ router.on(QueryMessage, (ctx) => {
 
 ## Subscriptions & Publishing
 
-Use type-safe publish/subscribe to send messages to multiple connections via named topics:
+For comprehensive pub/sub patterns, examples, and detailed API documentation, see **[@broadcasting.md](./broadcasting.md)**.
 
-```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
+**Quick API reference:**
 
-type AppData = { userId?: string; roomId?: string };
+- `ctx.subscribe(topic)` — Subscribe connection to a topic
+- `ctx.unsubscribe(topic)` — Unsubscribe connection from a topic
+- `ctx.publish(topic, schema, payload)` — Type-safe publish from handler context
+- `router.publish(topic, schema, payload)` — Type-safe publish from outside handlers
 
-const RoomMessage = message("ROOM_MESSAGE", { text: z.string() });
-const UserTyping = message("USER_TYPING", { userId: z.string() });
+**Key principles:**
 
-const router = createRouter<AppData>();
-
-// Subscribe to a room when joining
-router.on(JoinRoom, (ctx) => {
-  const roomId = ctx.payload.roomId;
-  ctx.assignData({ roomId });
-  ctx.subscribe(`room:${roomId}`); // Subscribe to room topic
-});
-
-// Publish to room when sending a message
-router.on(RoomMessage, (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  if (!roomId) return;
-
-  // Type-safe publish: schema enforces payload structure at compile time
-  router.publish(`room:${roomId}`, RoomMessage, {
-    text: ctx.payload.text,
-  });
-});
-
-// Unsubscribe when client leaves room
-router.on(LeaveRoom, (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  if (roomId) {
-    ctx.unsubscribe(`room:${roomId}`);
-    ctx.assignData({ roomId: undefined });
-  }
-});
-
-// Automatic cleanup on disconnect
-router.onClose((ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  if (roomId) {
-    // Cleanup: notify room that user left
-    router.publish(`room:${roomId}`, UserLeft, {
-      userId: ctx.ws.data?.userId || "anonymous",
-    });
-  }
-});
-```
-
-**API:**
-
-- `ctx.subscribe(topic)` — Subscribe to a topic; messages published to this topic are sent to the connection
-- `ctx.unsubscribe(topic)` — Unsubscribe from a topic
-- `router.publish<Schema>(topic, schema, payload)` — Type-safe publish; payload validated by schema at compile time
-
-**Critical Rules:**
-
-1. **Validation Before Broadcast**: Payloads are validated at compile time (schema type inference). Runtime validation occurs before message transmission to ensure integrity
-2. **Cleanup on Disconnect**: Always unsubscribe in `onClose()` or via `ctx.unsubscribe()` to prevent memory leaks. For most cases, the connection closing automatically removes subscriptions
-3. **No Handler Trigger**: `router.publish()` does NOT trigger handlers on the publishing connection; it broadcasts to subscribers only
-4. **Topic Scoping**: Topics are arbitrary strings; use naming conventions like `room:123`, `user:456:notifications` for clarity
-5. **Ordering**: Messages published to a topic are delivered in order to all subscribers at the time of publish
+- All publish operations are schema-validated at compile-time and validated at runtime
+- Cleanup on disconnect: always unsubscribe in `onClose()` or via `ctx.unsubscribe()` to prevent memory leaks
+- Message ordering is guaranteed within a topic at the time of publish
+- Use naming conventions like `room:123`, `user:456:notifications` for topic clarity
 
 ## Custom Connection Data
 
@@ -742,17 +793,14 @@ router.on(SecureMessage, (ctx) => {
 
 ## Error Handling
 
-Use `ctx.error()` for type-safe, discriminated error responses (see ADR-009 for design rationale):
+Use `ctx.error()` for type-safe, discriminated error responses:
 
 ```typescript
 router.on(LoginMessage, (ctx) => {
   try {
     const user = authenticate(ctx.payload);
     if (!user) {
-      // ✅ Type-safe error code
-      ctx.error("UNAUTHENTICATED", "Invalid credentials", {
-        hint: "Check your username and password",
-      });
+      ctx.error("UNAUTHENTICATED", "Invalid credentials");
       return;
     }
     ctx.assignData({ userId: user.id });
@@ -760,28 +808,9 @@ router.on(LoginMessage, (ctx) => {
     ctx.error("INTERNAL", "Authentication service unavailable");
   }
 });
-
-router.on(QueryMessage, (ctx) => {
-  try {
-    const result = queryDatabase(ctx.payload);
-    ctx.send(QueryResponse, result);
-  } catch (error) {
-    ctx.error("INTERNAL", "Database query failed", {
-      reason: String(error),
-    });
-  }
-});
 ```
 
-**Standard Error Codes** (see [ADR-015](../adr/015-unified-rpc-api-design.md) for complete taxonomy):
-
-- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
-- `UNAUTHENTICATED` — Authentication failed
-- `PERMISSION_DENIED` — Authenticated but lacks rights
-- `NOT_FOUND` — Resource not found
-- `RESOURCE_EXHAUSTED` — Rate limit or backpressure exceeded
-- `INTERNAL` — Server error
-- See ADR-015 for full error code decision tree
+For complete error code reference, error handling patterns, and structured logging integration, see **[@error-handling.md](./error-handling.md)** (design rationale in ADR-009).
 
 **Error Propagation**: If a handler throws an unhandled error, the router catches it and calls the `onError` lifecycle hook (if registered). See [Lifecycle Hooks](#lifecycle-hooks) for details.
 
@@ -829,6 +858,19 @@ serve(router, {
     // Track broadcast patterns for analytics
     analytics.track("broadcast", { scope, messageType: message.type });
   },
+
+  onLimitExceeded(info) {
+    // Called when a client violates payload size limits (protocol enforcement)
+    console.warn(
+      `Client ${info.clientId} exceeded limit: ${info.observed} > ${info.limit} bytes`,
+    );
+    // Emit metrics for monitoring
+    metrics.increment("limits.exceeded", {
+      type: info.type, // "payload", "rate", "connections", etc.
+      observed: info.observed,
+      limit: info.limit,
+    });
+  },
 });
 ```
 
@@ -837,9 +879,11 @@ serve(router, {
 1. `onUpgrade()` — Connection upgrade initiated (before authentication)
 2. `authenticate()` — Set initial connection data
 3. `onOpen()` — After authenticated (safe to send messages)
-4. [Handler executes]
-5. `onClose()` — After connection closes
-6. `onError()` — When unhandled error occurs in handler or middleware
+4. [Message received]
+5. **`onLimitExceeded()` — If payload exceeds limits (protocol enforcement)**
+6. [Handler executes (if message passes limits and validation)]
+7. `onClose()` — After connection closes
+8. `onError()` — When unhandled error occurs in handler or middleware
 
 **Hook Guarantees**:
 

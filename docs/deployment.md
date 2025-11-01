@@ -230,7 +230,7 @@ router.on(MessageSchema, (ctx) => {
 
 ### 2. Rate Limiting
 
-Implement per-user rate limiting in middleware:
+Implement per-user rate limiting in middleware with backoff hints:
 
 ```typescript
 const rateLimiters = new Map<string, { count: number; resetAt: number }>();
@@ -242,7 +242,12 @@ router.use((ctx, next) => {
 
   if (limit && now < limit.resetAt) {
     if (limit.count >= 100) {
-      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      // Send backoff hint so client knows when to retry
+      const retryAfterMs = Math.max(0, limit.resetAt - now);
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages", undefined, {
+        retryable: true,
+        retryAfterMs, // Client waits before retrying
+      });
       return;
     }
     limit.count++;
@@ -256,6 +261,8 @@ router.use((ctx, next) => {
   return next();
 });
 ```
+
+The `retryAfterMs` field helps clients implement intelligent backoff: they'll automatically retry after the specified duration without hammering the server with immediate requests.
 
 ### 3. Idle Timeout Handling
 

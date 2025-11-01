@@ -1,14 +1,19 @@
 # Development Rules
 
-Quick reference index for MUST/NEVER rules. Links to canonical specs for details.
+**Quick Lookup Index for MUST/NEVER/ALWAYS rules.**
+
+This is a **rapid reference** to help you find rules quickly. For implementation details, rationale, and complete guidance, always follow the linked canonical specs.
+
+**Important**: This file is an INDEX and QUICK REFERENCE, not a canonical source. The detailed specs (schema.md, router.md, validation.md, etc.) are authoritative. When guidance seems incomplete here, that's intentional—click the linked specs for full context and rationale.
 
 **How to Use:**
 
-1. Scan this file for applicable rules
-2. Follow links to canonical sections for implementation details
-3. When in doubt, linked sections take precedence over this index
+1. **Quickly find rules**: Scan this index for your use case
+2. **Get implementation details**: Click the linked `@spec.md#section` references
+3. **Understand trade-offs**: Read the referenced spec section for "why" and detailed examples
+4. **When in doubt**: The linked canonical section always takes precedence
 
-**Note:** This is an INDEX, not a canonical source. Domain specs own their rules.
+**What's NOT here**: Design rationale, code examples (beyond one-liners), trade-off analysis. Read the linked specs for those.
 
 ---
 
@@ -21,52 +26,22 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
 
 ### Import Patterns (ADR-007: Export-with-Helpers)
 
-- **ALWAYS** use single canonical import source → ADR-007, @schema.md#Canonical-Import-Patterns
-  - Server: `import { z, message, createRouter } from "@ws-kit/zod"` or `@ws-kit/valibot`
-  - Client (Typed): `import { wsClient } from "@ws-kit/client/zod"` or `@ws-kit/client/valibot`
-  - Platform-specific: `import { serve } from "@ws-kit/bun"` or `@ws-kit/cloudflare-do`
-- **NEVER** mix imports from different sources (prevents dual package hazard) → ADR-007
-- **NEVER** import `z` directly from `zod` or `v` from `valibot`; always import from `@ws-kit/zod` or `@ws-kit/valibot`
-  - ❌ `import { z } from "zod"` — Creates dual package hazard; breaks type inference
-  - ✅ `import { z } from "@ws-kit/zod"` — Single source; full type safety
+See **[@schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns)** for complete patterns and examples.
 
-**ESLint Enforcement:**
+**MUST enforce:**
 
-```json
-{
-  "rules": {
-    "no-restricted-imports": [
-      "error",
-      {
-        "name": "zod",
-        "message": "Import from @ws-kit/zod instead to avoid dual package hazard"
-      },
-      {
-        "name": "valibot",
-        "message": "Import from @ws-kit/valibot instead to avoid dual package hazard"
-      }
-    ]
-  }
-}
-```
+- **ALWAYS** use single canonical import source (prevents dual package hazard) → ADR-007
+- **NEVER** import directly from `zod` or `valibot`; use `@ws-kit/zod` or `@ws-kit/valibot`
 
-**Add to ESLint config:**
+**Recommended ESLint rule:**
 
 ```javascript
-// .eslintrc.js
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        patterns: [
-          { group: ["zod"], message: "Use @ws-kit/zod instead" },
-          { group: ["valibot"], message: "Use @ws-kit/valibot instead" },
-        ],
-      },
-    ],
-  },
-};
+"no-restricted-imports": ["error", {
+  patterns: [
+    { group: ["zod"], message: "Use @ws-kit/zod instead" },
+    { group: ["valibot"], message: "Use @ws-kit/valibot instead" },
+  ],
+}]
 ```
 
 ### Runtime Selection (ADR-006)
@@ -142,6 +117,7 @@ export default {
 - **ALWAYS** keep connections open (handler must close explicitly) → @error-handling.md
 - **ALWAYS** log errors with `clientId` for traceability → @error-handling.md
 - **ALWAYS** implement `onError` hook in `serve()` for centralized error handling → ADR-009
+- **NEVER** include passwords, tokens, API keys, or credentials in error details (automatically stripped) → @error-handling.md#Error-Detail-Sanitization
 
 ### Messaging
 

@@ -6,7 +6,7 @@
 - **Status**: Superseded by ADR-005, ADR-007
 - **Tags**: architecture, type-safety, developer-experience, API design
 
-> **⚠️ Superseded:** This ADR describes the original factory pattern approach. As of Phase 2 (v1.3), the API has evolved to use:
+> **⚠️ Superseded:** This ADR describes the original factory pattern approach. The API has evolved to use:
 >
 > - **ADR-005**: Builder Pattern with Symbol escape hatch (replaces Proxy approach)
 > - **ADR-007**: Export-with-Helpers Pattern (replaces `createMessageSchema()` factory)

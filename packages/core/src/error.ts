@@ -83,12 +83,122 @@ export enum ErrorCode {
 export type ErrorCodeValue = `${ErrorCode}`;
 
 /**
+ * Metadata for error codes: retryability, backoff hints, wire format rules.
+ *
+ * This is the source of truth for:
+ * - Which codes are retryable (and how clients should backoff)
+ * - Whether retryAfterMs is required, optional, or forbidden in the wire format
+ *
+ * Reference: docs/specs/error-handling.md (authoritative error code table)
+ */
+export interface ErrorCodeMetadata {
+  /** Whether code is retryable. "maybe" = server must decide (e.g., INTERNAL) */
+  retryable: boolean | "maybe";
+
+  /** Human-readable description of this error code */
+  description: string;
+
+  /** Suggested backoff interval in ms (informational; for docs/defaults) */
+  suggestBackoffMs?: number;
+
+  /** Rule for retryAfterMs presence on the wire */
+  retryAfterMsRule: "forbidden" | "optional" | "required";
+}
+
+/**
+ * Authoritative error code metadata (13 gRPC-aligned codes).
+ *
+ * Used by:
+ * - Server: when sending errors, validates retryAfterMs per rule
+ * - Clients: when parsing errors, infers retryable and backoff strategy
+ * - Specs: documents retry semantics for each code
+ */
+export const ERROR_CODE_META: Record<ErrorCode, ErrorCodeMetadata> = {
+  // Terminal errors (do not retry)
+  [ErrorCode.UNAUTHENTICATED]: {
+    retryable: false,
+    description: "Auth token missing, expired, or invalid",
+    retryAfterMsRule: "forbidden",
+  },
+  [ErrorCode.PERMISSION_DENIED]: {
+    retryable: false,
+    description: "Authenticated but lacks rights (authZ)",
+    retryAfterMsRule: "forbidden",
+  },
+  [ErrorCode.INVALID_ARGUMENT]: {
+    retryable: false,
+    description: "Input validation or semantic violation",
+    retryAfterMsRule: "forbidden",
+  },
+  [ErrorCode.FAILED_PRECONDITION]: {
+    retryable: false,
+    description: "State requirement not met",
+    retryAfterMsRule: "forbidden",
+  },
+  [ErrorCode.NOT_FOUND]: {
+    retryable: false,
+    description: "Target resource absent",
+    retryAfterMsRule: "forbidden",
+  },
+  [ErrorCode.ALREADY_EXISTS]: {
+    retryable: false,
+    description: "Uniqueness or idempotency replay violation",
+    retryAfterMsRule: "forbidden",
+  },
+  [ErrorCode.UNIMPLEMENTED]: {
+    retryable: false,
+    description: "Feature not supported or deployed",
+    retryAfterMsRule: "forbidden",
+  },
+
+  // Transient errors (retry with backoff)
+  [ErrorCode.DEADLINE_EXCEEDED]: {
+    retryable: true,
+    description: "RPC timed out",
+    suggestBackoffMs: 50,
+    retryAfterMsRule: "optional",
+  },
+  [ErrorCode.RESOURCE_EXHAUSTED]: {
+    retryable: true,
+    description: "Rate limit, quota, or buffer overflow",
+    suggestBackoffMs: 100,
+    retryAfterMsRule: "optional",
+  },
+  [ErrorCode.UNAVAILABLE]: {
+    retryable: true,
+    description: "Transient infrastructure error",
+    suggestBackoffMs: 100,
+    retryAfterMsRule: "optional",
+  },
+
+  // Server / evolution
+  [ErrorCode.ABORTED]: {
+    retryable: true,
+    description: "Concurrency conflict (race condition)",
+    suggestBackoffMs: 50,
+    retryAfterMsRule: "optional",
+  },
+  [ErrorCode.INTERNAL]: {
+    retryable: "maybe",
+    description: "Unexpected server error (bug); retryability is app-specific",
+    suggestBackoffMs: 200,
+    retryAfterMsRule: "optional",
+  },
+  [ErrorCode.CANCELLED]: {
+    retryable: false,
+    description: "Call cancelled (client disconnect, timeout abort)",
+    retryAfterMsRule: "forbidden",
+  },
+};
+
+/**
  * Error payload structure for ERROR type messages.
  *
  * This is the standard format for sending errors to clients.
+ * Used in both non-RPC ERROR and RPC_ERROR messages (unified envelope).
  */
 export interface ErrorPayload {
-  /** Standard error code */
+  /** Standard error code (one of 13 gRPC-aligned codes) */
   code: ErrorCode;
 
   /** Human-readable error message */
@@ -96,6 +206,23 @@ export interface ErrorPayload {
 
   /** Additional debugging details (varies by error type) */
   details?: Record<string, unknown>;
+
+  /**
+   * Whether the error is retryable.
+   * If omitted, clients infer from ERROR_CODE_META.
+   * If present, overrides inferred value.
+   */
+  retryable?: boolean;
+
+  /**
+   * Suggested backoff interval in ms before retry (for transient errors).
+   * Only present if retryable=true and server has a specific backoff hint.
+   * Per ERROR_CODE_META, rule varies by error code:
+   * - "forbidden": must be absent
+   * - "optional": may be absent (client uses default backoff)
+   * - "required": should be present (server enforces)
+   */
+  retryAfterMs?: number;
 }
 
 /**

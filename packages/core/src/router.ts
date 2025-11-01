@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { DEFAULT_CONFIG, RESERVED_CONTROL_PREFIX } from "./constants.js";
-import { ErrorCode, WsKitError } from "./error.js";
+import { ErrorCode, ERROR_CODE_META, WsKitError } from "./error.js";
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
@@ -11,7 +11,11 @@ import type {
   CloseHandler,
   CloseHandlerContext,
   ErrorHandler,
+  ErrorKind,
   EventHandler,
+  LimitExceededHandler,
+  LimitExceededInfo,
+  LimitType,
   MessageContext,
   MessageHandler,
   MessageHandlerEntry,
@@ -106,6 +110,7 @@ export class WebSocketRouter<
   private readonly closeHandlers: CloseHandler<TData>[] = [];
   private readonly authHandlers: AuthHandler<TData>[] = [];
   private readonly errorHandlers: ErrorHandler<TData>[] = [];
+  private readonly limitExceededHandlers: LimitExceededHandler<TData>[] = [];
   private readonly middlewares: Middleware<TData>[] = [];
   private readonly routeMiddleware = new Map<string, Middleware<TData>[]>(); // Per-route middleware by message type
 
@@ -119,6 +124,10 @@ export class WebSocketRouter<
 
   // Limits
   private readonly maxPayloadBytes: number;
+  private readonly limitsConfig?: {
+    onExceeded?: "send" | "close" | "custom";
+    closeCode?: number;
+  };
   private readonly socketBufferLimitBytes: number;
   private readonly rpcTimeoutMs: number;
   private readonly dropProgressOnBackpressure: boolean;
@@ -156,6 +165,16 @@ export class WebSocketRouter<
 
     this.maxPayloadBytes =
       options.limits?.maxPayloadBytes ?? DEFAULT_CONFIG.MAX_PAYLOAD_BYTES;
+
+    // Store limits behavior configuration
+    if (options.limits) {
+      this.limitsConfig = {
+        onExceeded: options.limits.onExceeded ?? "send",
+        ...(options.limits.closeCode !== undefined && {
+          closeCode: options.limits.closeCode,
+        }),
+      };
+    }
 
     // Store RPC configuration
     this.socketBufferLimitBytes =
@@ -205,6 +224,8 @@ export class WebSocketRouter<
       if (options.hooks.onClose) this.closeHandlers.push(options.hooks.onClose);
       if (options.hooks.onAuth) this.authHandlers.push(options.hooks.onAuth);
       if (options.hooks.onError) this.errorHandlers.push(options.hooks.onError);
+      if (options.hooks.onLimitExceeded)
+        this.limitExceededHandlers.push(options.hooks.onLimitExceeded);
     }
 
     // Set up testing utilities if testing mode is enabled
@@ -859,9 +880,9 @@ export class WebSocketRouter<
    *
    * **Scope** depends on PubSub implementation:
    * - MemoryPubSub: This process instance only
-   * - BunPubSub (Phase 3): Load-balanced cluster (all instances)
-   * - DurablePubSub (Phase 6): This DO instance only
-   * - RedisPubSub (Phase 8): Multiple instances via Redis
+   * - BunPubSub: Load-balanced cluster (all instances)
+   * - DurablePubSub: This DO instance only
+   * - RedisPubSub: Multiple instances via Redis
    *
    * **Options** (PublishOptions):
    * - `excludeSelf`: Future feature for suppressing sender echo (default: false)
@@ -1312,20 +1333,37 @@ export class WebSocketRouter<
           "response" in handlerEntry.schema;
 
         if (isRpcMessage) {
-          // Send RPC_ERROR for validation failure (socket stays open)
-          const correlationId = (normalized.meta as Record<string, unknown>)
+          // Extract correlationId for RPC error handling
+          const msgCorrelationId = (normalized.meta as Record<string, unknown>)
             ?.correlationId;
-          if (typeof correlationId === "string") {
-            ws.send(
-              JSON.stringify({
-                type: "RPC_ERROR",
-                code: "VALIDATION",
-                message: "Request validation failed",
-                meta: {
-                  timestamp: Date.now(),
-                  correlationId,
-                },
-              }),
+          const trimmedCorrelationId =
+            typeof msgCorrelationId === "string"
+              ? msgCorrelationId.trim()
+              : undefined;
+
+          // Enforce correlationId presence for RPC (RFC: INVALID_ARGUMENT if missing)
+          // If RPC message lacks valid correlationId, send ERROR (not RPC_ERROR)
+          // since we can't correlate the error back to the request
+          if (!trimmedCorrelationId) {
+            this.sendErrorEnvelope(
+              ws,
+              ErrorCode.INVALID_ARGUMENT,
+              "RPC request requires non-empty meta.correlationId",
+              undefined,
+              {
+                errorKind: { kind: "oneway", clientId },
+              },
+            );
+          } else {
+            // Send RPC_ERROR for validation failure (socket stays open)
+            this.sendErrorEnvelope(
+              ws,
+              ErrorCode.INVALID_ARGUMENT,
+              "Request validation failed",
+              undefined,
+              {
+                errorKind: { kind: "rpc", correlationId: trimmedCorrelationId },
+              },
             );
           }
         }
@@ -1356,6 +1394,10 @@ export class WebSocketRouter<
         code: string,
         message: string,
         details?: Record<string, unknown>,
+        options?: {
+          retryable?: boolean;
+          retryAfterMs?: number;
+        },
       ) => {
         try {
           if (!this.validator) {
@@ -1365,50 +1407,61 @@ export class WebSocketRouter<
             );
           }
 
-          // For RPC: check one-shot guard and send RPC_ERROR
-          if (isRpc && correlationId) {
-            if (this.#rpc.isTerminal(clientId, correlationId)) {
-              // Already sent terminal, suppress
-              return;
-            }
-            this.#rpc.onTerminal(clientId, correlationId);
+          // Construct errorKind discriminated union
+          let errorKind: ErrorKind;
+          if (isRpc) {
+            // For RPC: extract and validate correlationId
+            const rpcCorrelationId = (
+              validatedData.meta as Record<string, unknown>
+            )?.correlationId;
+            const trimmedCorrelationId =
+              typeof rpcCorrelationId === "string"
+                ? rpcCorrelationId.trim()
+                : undefined;
 
-            // Check backpressure
-            if (this.shouldBackpressure(ws)) {
-              console.warn(
-                `[ws] Backpressure on RPC error send, still sending RPC_ERROR`,
+            if (!trimmedCorrelationId) {
+              // No correlationId found - type error, should not happen
+              // Fall back to oneway error
+              console.error(
+                "[ws] RPC error without correlationId (type system violation)",
               );
-            }
+              errorKind = { kind: "oneway", clientId };
+            } else {
+              // Valid RPC error
+              errorKind = { kind: "rpc", correlationId: trimmedCorrelationId };
 
-            // Send RPC_ERROR with wire format
-            ws.send(
-              JSON.stringify({
-                type: "RPC_ERROR",
-                code,
-                message,
-                ...(details && { details }),
-                meta: {
-                  timestamp: Date.now(),
-                  correlationId,
-                },
-              }),
-            );
+              // Check one-shot guard before sending
+              if (this.#rpc.isTerminal(clientId, trimmedCorrelationId)) {
+                // Already sent terminal, suppress
+                return;
+              }
+              this.#rpc.onTerminal(clientId, trimmedCorrelationId);
+
+              // Check backpressure (warn but still send)
+              if (this.shouldBackpressure(ws)) {
+                console.warn(
+                  `[ws] Backpressure on RPC error send for ${code}, still sending RPC_ERROR`,
+                );
+              }
+            }
           } else {
-            // Non-RPC: send standard ERROR message
-            ws.send(
-              JSON.stringify({
-                type: "ERROR",
-                meta: {
-                  timestamp: Date.now(),
-                },
-                payload: {
-                  code,
-                  message,
-                  ...(details && { details }),
-                },
-              }),
-            );
+            // Non-RPC error
+            errorKind = { kind: "oneway", clientId };
           }
+
+          // Send unified error envelope
+          const envOptions: {
+            errorKind?: ErrorKind;
+            retryable?: boolean;
+            retryAfterMs?: number;
+          } = { errorKind };
+          if (options?.retryable !== undefined) {
+            envOptions.retryable = options.retryable;
+          }
+          if (options?.retryAfterMs !== undefined) {
+            envOptions.retryAfterMs = options.retryAfterMs;
+          }
+          this.sendErrorEnvelope(ws, code, message, details, envOptions);
         } catch (error) {
           console.error("[ws] Error sending error message:", error);
         }
@@ -1504,10 +1557,15 @@ export class WebSocketRouter<
           console.warn(
             `[ws] RPC inflight limit exceeded for ${clientId}, rejecting ${correlationId}`,
           );
-          errorSend("RESOURCE_EXHAUSTED", "Too many in-flight RPCs", {
-            retryable: true,
-            retryAfterMs: 100,
-          });
+          errorSend(
+            "RESOURCE_EXHAUSTED",
+            "Too many in-flight RPCs",
+            undefined,
+            {
+              retryable: true,
+              retryAfterMs: 100,
+            },
+          );
           return;
         }
       }
@@ -1560,10 +1618,15 @@ export class WebSocketRouter<
               `[ws] Backpressure exceeded on RPC terminal send for ${correlationId}`,
             );
             // Send RESOURCE_EXHAUSTED error instead (per ADR-015)
-            errorSend("RESOURCE_EXHAUSTED", "Socket buffer exceeded capacity", {
-              retryable: true,
-              retryAfterMs: 100,
-            });
+            errorSend(
+              "RESOURCE_EXHAUSTED",
+              "Socket buffer exceeded capacity",
+              undefined,
+              {
+                retryable: true,
+                retryAfterMs: 100,
+              },
+            );
             return;
           }
 
@@ -1772,21 +1835,76 @@ export class WebSocketRouter<
     } catch (error) {
       const actualError =
         error instanceof Error ? error : new Error(String(error));
-      const fallbackContext = this.createMessageContext(
-        ws,
-        "",
-        clientId,
-        receivedAt,
-        send,
-      );
-      const suppressed = this.callErrorHandlers(actualError, fallbackContext);
 
-      // Auto-send INTERNAL response unless suppressed by error handler
-      if (this.autoSendErrorOnThrow && !suppressed) {
-        const errorMessage = this.exposeErrorDetails
-          ? actualError.message
-          : "Internal server error";
-        fallbackContext.error("INTERNAL", errorMessage);
+      // Check if this is a limit exceeded error
+      const limitInfo = (actualError as unknown as Record<string, unknown>)
+        ?._limitExceeded as
+        | { type: string; observed: number; limit: number }
+        | undefined;
+
+      if (limitInfo) {
+        // Handle limit exceeded case
+        const limitExceededInfo: LimitExceededInfo<TData> = {
+          type: limitInfo.type as LimitType,
+          observed: limitInfo.observed,
+          limit: limitInfo.limit,
+          ws,
+          clientId,
+          retryAfterMs: 0,
+        };
+
+        // Call limit exceeded handlers (fire-and-forget)
+        this.callLimitExceededHandlers(limitExceededInfo);
+
+        // Handle based on configuration
+        const onExceeded = this.limitsConfig?.onExceeded ?? "send";
+
+        if (onExceeded === "send") {
+          // Send RESOURCE_EXHAUSTED error response, keep connection open
+          // Use fallbackContext to ensure wire format consistency with protocol
+          const fallbackContext = this.createMessageContext(
+            ws,
+            "",
+            clientId,
+            receivedAt,
+            send,
+          );
+          fallbackContext.error(
+            "RESOURCE_EXHAUSTED",
+            `Payload size exceeds limit (${limitInfo.observed} > ${limitInfo.limit})`,
+            {
+              observed: limitInfo.observed,
+              limit: limitInfo.limit,
+            },
+            {
+              retryable: true,
+              retryAfterMs: 100,
+            },
+          );
+        } else if (onExceeded === "close") {
+          // Close connection with configured code (default: 1009 "Message Too Big")
+          const closeCode = this.limitsConfig?.closeCode ?? 1009;
+          ws.close(closeCode, "RESOURCE_EXHAUSTED");
+        }
+        // For "custom", do nothing - let app handle in onLimitExceeded hook
+      } else {
+        // Not a limit error - handle as regular error
+        const fallbackContext = this.createMessageContext(
+          ws,
+          "",
+          clientId,
+          receivedAt,
+          send,
+        );
+        const suppressed = this.callErrorHandlers(actualError, fallbackContext);
+
+        // Auto-send INTERNAL response unless suppressed by error handler
+        if (this.autoSendErrorOnThrow && !suppressed) {
+          const errorMessage = this.exposeErrorDetails
+            ? actualError.message
+            : "Internal server error";
+          fallbackContext.error("INTERNAL", errorMessage);
+        }
       }
     }
   }
@@ -1818,9 +1936,12 @@ export class WebSocketRouter<
   /**
    * Check if payload size is within limits.
    *
-   * @throws Error if payload exceeds maxPayloadBytes
+   * Returns the payload size for tracking.
+   *
+   * @returns Payload size in bytes
+   * @throws Error if payload exceeds maxPayloadBytes (with special marker)
    */
-  private checkPayloadSize(message: string | Buffer): void {
+  private checkPayloadSize(message: string | Buffer): number {
     let size: number;
 
     if (typeof message === "string") {
@@ -1830,10 +1951,19 @@ export class WebSocketRouter<
     }
 
     if (size > this.maxPayloadBytes) {
-      throw new Error(
+      const error = new Error(
         `Payload size ${size} exceeds limit of ${this.maxPayloadBytes}`,
       );
+      // Mark this as a limit exceeded error for special handling
+      (error as unknown as Record<string, unknown>)._limitExceeded = {
+        type: "payload",
+        observed: size,
+        limit: this.maxPayloadBytes,
+      };
+      throw error;
     }
+
+    return size;
   }
 
   /**
@@ -1878,6 +2008,39 @@ export class WebSocketRouter<
 
     return true;
   }
+
+  /**
+   * Call all registered limit exceeded handlers.
+   *
+   * Fire-and-forget execution: exceptions are logged but don't interrupt other handlers.
+   */
+  private callLimitExceededHandlers(info: LimitExceededInfo<TData>): void {
+    if (this.limitExceededHandlers.length === 0) {
+      return;
+    }
+
+    for (const handler of this.limitExceededHandlers) {
+      try {
+        const result = handler(info);
+        // If handler returns a promise, don't await (fire-and-forget pattern)
+        // But log if it rejects
+        if (result instanceof Promise) {
+          result.catch((error) => {
+            console.error(
+              `[ws] Error in onLimitExceeded handler for ${info.clientId}:`,
+              error,
+            );
+          });
+        }
+      } catch (handlerError) {
+        console.error(
+          `[ws] Error in onLimitExceeded handler for ${info.clientId}:`,
+          handlerError,
+        );
+      }
+    }
+  }
+
   /**
    * Call all registered error handlers and track suppression requests.
    *
@@ -1951,18 +2114,23 @@ export class WebSocketRouter<
       code: string,
       message: string,
       details?: Record<string, unknown>,
+      options?: {
+        retryable?: boolean;
+        retryAfterMs?: number;
+      },
     ) => {
-      try {
-        ws.send(
-          JSON.stringify({
-            type: "ERROR",
-            meta: { timestamp: Date.now() },
-            payload: { code, message, ...(details && { details }) },
-          }),
-        );
-      } catch (error) {
-        console.error("[ws] Error sending error message:", error);
+      const envOptions: {
+        errorKind?: ErrorKind;
+        retryable?: boolean;
+        retryAfterMs?: number;
+      } = { errorKind: { kind: "oneway", clientId } };
+      if (options?.retryable !== undefined) {
+        envOptions.retryable = options.retryable;
       }
+      if (options?.retryAfterMs !== undefined) {
+        envOptions.retryAfterMs = options.retryAfterMs;
+      }
+      this.sendErrorEnvelope(ws, code, message, details, envOptions);
     };
 
     // Helper to update connection data
@@ -2194,5 +2362,182 @@ export class WebSocketRouter<
       return false; // Backpressure disabled
     }
     return this.getBufferedBytes(ws) > this.socketBufferLimitBytes;
+  }
+
+  /**
+   * Send a unified error envelope (ERROR or RPC_ERROR with same structure).
+   *
+   * Both message types use:
+   * { type, meta: { timestamp, correlationId? }, payload: { code, message?, details?, retryable?, retryAfterMs? } }
+   *
+   * This ensures:
+   * - Consistent client parsing (no dual paths)
+   * - retryAfterMs validation per ERROR_CODE_META
+   * - Deterministic backoff hints for transient errors
+   */
+  /**
+   * Sanitize error details before wire transmission.
+   * Removes sensitive keys (passwords, tokens, auth credentials) and huge blobs.
+   */
+  private sanitizeErrorDetails(
+    details: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!details || Object.keys(details).length === 0) {
+      return details;
+    }
+
+    // Forbidden keys (known sensitive fields)
+    const forbidden = new Set([
+      "password",
+      "token",
+      "authorization",
+      "cookie",
+      "secret",
+      "apikey",
+      "api_key",
+      "accesstoken",
+      "access_token",
+      "refreshtoken",
+      "refresh_token",
+      "credentials",
+      "auth",
+      "bearer",
+      "jwt",
+    ]);
+
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(details)) {
+      // Skip forbidden keys (case-insensitive)
+      if (forbidden.has(key.toLowerCase())) {
+        continue;
+      }
+
+      // Skip huge nested objects (prevent blob leaks)
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !(value instanceof Date)
+      ) {
+        const str = JSON.stringify(value);
+        if (str.length > 500) {
+          continue;
+        }
+      }
+
+      // Safe to include
+      result[key] = value;
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  private sendErrorEnvelope(
+    ws: ServerWebSocket<TData>,
+    code: string,
+    message?: string,
+    details?: Record<string, unknown>,
+    options?: {
+      errorKind?: ErrorKind;
+      retryable?: boolean;
+      retryAfterMs?: number;
+    },
+  ): void {
+    try {
+      const {
+        errorKind = { kind: "oneway" },
+        retryable,
+        retryAfterMs,
+      } = options || {};
+
+      // Look up error code metadata for validation rules
+      const meta = ERROR_CODE_META[code as ErrorCode];
+
+      // Validate retryAfterMs against error code rules (soft: warn + omit)
+      if (meta) {
+        if (
+          meta.retryAfterMsRule === "forbidden" &&
+          retryAfterMs !== undefined
+        ) {
+          console.warn(
+            `[ws] Error code ${code} forbids retryAfterMs, but value was provided: ${retryAfterMs}ms (omitting)`,
+          );
+        }
+      }
+
+      // Build unified payload
+      const payload: Record<string, unknown> = { code };
+      if (message !== undefined) {
+        payload.message = message;
+      }
+
+      // Sanitize details before adding to payload (remove sensitive keys)
+      const sanitized = this.sanitizeErrorDetails(details);
+      if (sanitized !== undefined) {
+        payload.details = sanitized;
+      }
+
+      // Include retryable hint
+      let finalRetryable = retryable;
+
+      // For INTERNAL errors: require explicit decision (default to false for fail-safe)
+      if (code === ErrorCode.INTERNAL && finalRetryable === undefined) {
+        console.warn(
+          `[ws] INTERNAL error without explicit retryable; defaulting to false. ` +
+            `Set retryable=true only if this is transient (e.g., DB timeout). ` +
+            `Use UNAVAILABLE or RESOURCE_EXHAUSTED for infrastructure issues.`,
+        );
+        finalRetryable = false;
+      }
+
+      if (finalRetryable !== undefined) {
+        payload.retryable = finalRetryable;
+      } else if (meta?.retryable === true) {
+        // Auto-include retryable=true for known transient codes
+        payload.retryable = true;
+      }
+
+      // Include backoff hint if applicable (only if not forbidden)
+      // If retryAfterMs is set, imply retryable=true (for clarity)
+      if (
+        retryAfterMs !== undefined &&
+        meta?.retryAfterMsRule !== "forbidden"
+      ) {
+        payload.retryAfterMs = retryAfterMs;
+        // Make retryAfterMs imply retryable=true if not explicitly set
+        if (payload.retryable === undefined) {
+          payload.retryable = true;
+        }
+      }
+
+      // Build unified envelope
+      const isRpc = errorKind.kind === "rpc";
+      const envelope: Record<string, unknown> = {
+        type: isRpc ? "RPC_ERROR" : "ERROR",
+        meta: { timestamp: Date.now() },
+        payload,
+      };
+
+      // Add correlationId for RPC (required for client correlation)
+      // The type system guarantees correlationId exists for kind: "rpc"
+      if (isRpc) {
+        (envelope.meta as Record<string, unknown>).correlationId =
+          errorKind.correlationId;
+      }
+
+      ws.send(JSON.stringify(envelope));
+
+      // Close socket for certain error codes (auth/authz failures, policy violations)
+      const closeOnErrorCodes = new Set([
+        ErrorCode.UNAUTHENTICATED,
+        ErrorCode.PERMISSION_DENIED,
+      ]);
+
+      if (closeOnErrorCodes.has(code as ErrorCode)) {
+        ws.close(1008, code); // 1008 = Policy Violation
+      }
+    } catch (error) {
+      console.error("[ws] Error sending error envelope:", error);
+    }
   }
 }

@@ -146,9 +146,32 @@ router.on(QueryMessage, (ctx) => {
     ctx.error("INTERNAL", "Database query failed");
   }
 });
+
+// Transient errors with retry hints
+router.on(ProcessPaymentMessage, (ctx) => {
+  try {
+    processPayment(ctx.payload);
+  } catch (err) {
+    if (isRateLimited(err)) {
+      // Transient error: send backoff hint for client retry
+      ctx.error("RESOURCE_EXHAUSTED", "Rate limit exceeded", undefined, {
+        retryable: true,
+        retryAfterMs: 5000, // Client waits 5s before retry
+      });
+    } else if (isTemporarilyUnavailable(err)) {
+      // Infrastructure error: automatic client backoff
+      ctx.error("UNAVAILABLE", "Service temporarily unavailable");
+    } else {
+      // Unexpected error: don't retry
+      ctx.error("INTERNAL", "Payment processing failed");
+    }
+  }
+});
 ```
 
 **Standard error codes** (gRPC-aligned, see ADR-015):
+
+Clients automatically infer retry behavior from error codes. Use `retryAfterMs` option to provide backoff hints for transient errors.
 
 **Terminal errors** (don't retry):
 
@@ -158,19 +181,19 @@ router.on(QueryMessage, (ctx) => {
 - `NOT_FOUND` — Resource not found
 - `FAILED_PRECONDITION` — State requirement not met
 - `ALREADY_EXISTS` — Uniqueness or idempotency violation
-- `ABORTED` — Concurrency conflict (race condition)
+- `UNIMPLEMENTED` — Feature not supported or deployed
+- `CANCELLED` — Request cancelled by client or peer
 
-**Transient errors** (retry with backoff):
+**Transient errors** (automatically retryable):
 
 - `DEADLINE_EXCEEDED` — RPC request timed out
-- `RESOURCE_EXHAUSTED` — Rate limit, quota, or backpressure exceeded
+- `RESOURCE_EXHAUSTED` — Rate limit, quota, or backpressure exceeded (use `retryAfterMs` for backoff)
 - `UNAVAILABLE` — Transient infrastructure error
+- `ABORTED` — Concurrency conflict (race condition), automatically retried
 
-**Server/evolution**:
+**Mixed (app-specific)**:
 
-- `UNIMPLEMENTED` — Feature not supported or deployed
-- `INTERNAL` — Unexpected server error
-- `CANCELLED` — Request cancelled by client or peer
+- `INTERNAL` — Unexpected server error (server decides if retryable)
 
 ## Discriminated Unions
 

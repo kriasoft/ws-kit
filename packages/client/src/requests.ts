@@ -8,6 +8,7 @@
 
 import {
   ConnectionClosedError,
+  RpcError,
   ServerError,
   StateError,
   TimeoutError,
@@ -22,6 +23,7 @@ interface PendingRequest {
   reject: (err: Error) => void;
   timeoutHandle: ReturnType<typeof setTimeout> | null;
   abortHandler: (() => void) | null;
+  onProgress?: (data: unknown) => void;
 }
 
 export class RequestTracker {
@@ -40,6 +42,7 @@ export class RequestTracker {
     timeoutMs: number,
     onFlush: () => void,
     signal?: AbortSignal,
+    onProgress?: (data: unknown) => void,
   ): Promise<unknown> {
     // Check if already aborted before dispatch
     if (signal?.aborted) {
@@ -63,6 +66,7 @@ export class RequestTracker {
         reject,
         timeoutHandle: null, // Set after flush
         abortHandler: null,
+        ...(onProgress && { onProgress }),
       };
 
       this.pending.set(correlationId, pending);
@@ -153,6 +157,18 @@ export class RequestTracker {
       return;
     }
 
+    // 1. Progress frames: emit progress and keep pending, don't settle
+    if (msg.type === "$ws:rpc-progress") {
+      // Emit progress callback if registered
+      if (pending.onProgress) {
+        const data =
+          "data" in msg && msg.data !== undefined ? msg.data : undefined;
+        pending.onProgress(data);
+      }
+      // Continue waiting for terminal reply
+      return;
+    }
+
     // Remove from map (first reply settles, subsequent dropped)
     this.pending.delete(correlationId);
 
@@ -172,14 +188,46 @@ export class RequestTracker {
       );
     }
 
-    // 2. Type is ERROR → reject with ServerError
+    // 2a. Type is RPC_ERROR → reject with RpcError
+    if (msg.type === "RPC_ERROR") {
+      const payload =
+        "payload" in msg && msg.payload && typeof msg.payload === "object"
+          ? (msg.payload as {
+              message?: unknown;
+              code?: unknown;
+              details?: unknown;
+              retryable?: unknown;
+              retryAfterMs?: unknown;
+            })
+          : undefined;
+
+      pending.reject(
+        new RpcError(
+          typeof payload?.message === "string" ? payload.message : "RPC error",
+          (typeof payload?.code === "string"
+            ? payload.code
+            : "INTERNAL") as string,
+          payload?.details,
+          typeof payload?.retryable === "boolean"
+            ? payload.retryable
+            : undefined,
+          typeof payload?.retryAfterMs === "number"
+            ? payload.retryAfterMs
+            : undefined,
+          correlationId,
+        ),
+      );
+      return;
+    }
+
+    // 2b. Type is ERROR → reject with ServerError
     if (msg.type === "ERROR") {
       const payload =
         "payload" in msg && msg.payload && typeof msg.payload === "object"
           ? (msg.payload as {
               message?: unknown;
               code?: unknown;
-              context?: unknown;
+              details?: unknown;
             })
           : undefined;
 
@@ -189,7 +237,7 @@ export class RequestTracker {
             ? payload.message
             : "Server error",
           typeof payload?.code === "string" ? payload.code : "UNKNOWN",
-          payload?.context as Record<string, unknown> | undefined,
+          payload?.details as Record<string, unknown> | undefined,
         ),
       );
       return;

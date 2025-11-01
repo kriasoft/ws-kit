@@ -6,7 +6,7 @@
 
 ## Problem
 
-While Phase A RPC reliability features are production-ready (abort, deadlines, one-shot, backpressure), several developer experience issues remain:
+While core RPC reliability features are production-ready (abort, deadlines, one-shot, backpressure), several developer experience issues remain:
 
 1. **Implicit correlation policy**: Clients must manually generate `correlationId`; missing IDs cause silent match failures
 2. **Unclear intent**: No explicit method to signal "send to this client" vs. other send methods
@@ -271,8 +271,8 @@ See `packages/core/test/features/rpc-incomplete-warning.test.ts` for full test c
 
 ## Future Work
 
-- **Phase B**: Streaming RPC with enhanced AsyncIterable client API
-- **Phase C**: Client-side AbortSignal sending `$ws:abort`
+- Streaming RPC with enhanced AsyncIterable client API
+- Client-side AbortSignal sending `$ws:abort`
 - Reconnect policy options (explicit `resendOnReconnect` knob)
 
 ## References

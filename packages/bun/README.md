@@ -282,7 +282,7 @@ Called for each message matching a schema:
 router.on(LoginSchema, async (ctx) => {
   // ctx.payload has type-safe data
   // ctx.ws.data has connection metadata
-  // ctx.send() to reply
+  // ctx.send() to reply with messages
 
   const { username, password } = ctx.payload;
   const user = await verifyLogin(username, password);
@@ -290,7 +290,8 @@ router.on(LoginSchema, async (ctx) => {
   if (user) {
     ctx.send(LoginSuccessMessage, { token: user.token });
   } else {
-    ctx.send(LoginFailureMessage, { reason: "Invalid credentials" });
+    // Use ctx.error() for error responses (not ctx.send() with error message)
+    ctx.error("INVALID_ARGUMENT", "Invalid username or password");
   }
 });
 ```

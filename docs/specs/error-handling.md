@@ -59,67 +59,81 @@ const ErrorMessage = message("ERROR", {
     "INTERNAL",
     "CANCELLED",
   ]),
-  message: z.string(),
+  message: z.string().optional(),
   details: z.record(z.any()).optional(),
   retryable: z.boolean().optional(),
+  retryAfterMs: z.number().int().positive().optional(),
 });
 
-// Schema structure:
+// Unified wire format for both ERROR and RPC_ERROR:
 // {
-//   type: "ERROR",
-//   meta: { timestamp?, correlationId? },
+//   type: "ERROR" | "RPC_ERROR",
+//   meta: {
+//     timestamp: number,          // always present (server-generated)
+//     correlationId?: string      // present for RPC_ERROR; absent for ERROR
+//   },
 //   payload: {
 //     code: ErrorCode,
-//     message: string,
+//     message?: string,
 //     details?: Record<string, any>,
-//     retryable?: boolean
+//     retryable?: boolean,        // inferred from code if omitted
+//     retryAfterMs?: number       // backoff hint for transient errors
 //   }
 // }
+//
+// Note: When an RPC message fails validation before a valid correlationId can be
+// extracted, the server sends ERROR (not RPC_ERROR) with code INVALID_ARGUMENT,
+// since the error cannot be correlated back to the request.
 ```
 
 ## Standard Error Codes {#error-code-enum}
 
 **Standard codes (per ADR-015, gRPC-aligned, 13 codes)**:
 
-```typescript
-type RpcErrorCode =
-  // Terminal errors (don't auto-retry):
-  | "UNAUTHENTICATED" // Missing or invalid authentication
-  | "PERMISSION_DENIED" // Authorization failed (after successful auth)
-  | "INVALID_ARGUMENT" // Input validation or semantic validation failed
-  | "FAILED_PRECONDITION" // Stateful precondition not met
-  | "NOT_FOUND" // Requested resource doesn't exist
-  | "ALREADY_EXISTS" // Uniqueness or idempotency violation
-  | "ABORTED" // Concurrency conflict (race condition)
-  // Transient errors (retry with backoff):
-  | "DEADLINE_EXCEEDED" // RPC request timed out
-  | "RESOURCE_EXHAUSTED" // Buffer overflow, rate limits, or backpressure
-  | "UNAVAILABLE" // Transient infrastructure error (retriable)
-  // Server/evolution:
-  | "UNIMPLEMENTED" // Feature not supported or deployed
-  | "INTERNAL" // Unexpected server error (unhandled exception)
-  | "CANCELLED"; // Request was cancelled by client or peer
-```
+For the complete error taxonomy, detailed rationale, and decision tree, see **[ADR-015](../adr/015-unified-rpc-api-design.md)** (section 3.3: Error Code Reference & Decision Matrix).
 
-**Quick Error Selection (ADR-015)**:
+**Quick reference** — use the code that best matches your scenario:
 
-| Scenario                    | Code                  | Retryable          | Example                                   |
-| --------------------------- | --------------------- | ------------------ | ----------------------------------------- |
-| Not authenticated           | `UNAUTHENTICATED`     | No                 | Missing/invalid token, re-authenticate    |
-| Not authorized              | `PERMISSION_DENIED`   | No                 | Insufficient role/scope after auth        |
-| Schema validation failed    | `INVALID_ARGUMENT`    | No                 | Missing field, wrong type, semantic error |
-| Precondition not met        | `FAILED_PRECONDITION` | No                 | Perform prerequisite action first         |
-| Not found                   | `NOT_FOUND`           | No                 | User/resource deleted or doesn't exist    |
-| Uniqueness violation        | `ALREADY_EXISTS`      | No                 | Duplicate key, idempotency key reuse      |
-| Race condition              | `ABORTED`             | Yes (with backoff) | Optimistic lock failure, write conflict   |
-| Timeout                     | `DEADLINE_EXCEEDED`   | Yes (with backoff) | RPC didn't complete in time               |
-| Rate limited or buffer full | `RESOURCE_EXHAUSTED`  | Yes                | Too many requests, server backpressure    |
-| Network/transient error     | `UNAVAILABLE`         | Yes                | Server temporarily unreachable            |
-| Feature not deployed        | `UNIMPLEMENTED`       | No                 | Feature behind flag, version skew         |
-| Unhandled exception         | `INTERNAL`            | No                 | Database crash, bug, unexpected error     |
-| User cancelled/disconnected | `CANCELLED`           | No                 | Socket closed, AbortSignal fired          |
+- **Authentication/Authorization**: `UNAUTHENTICATED` (missing/invalid token), `PERMISSION_DENIED` (authorized but insufficient rights)
+- **Input/Validation**: `INVALID_ARGUMENT` (validation failed), `FAILED_PRECONDITION` (state not ready)
+- **Resource Issues**: `NOT_FOUND` (doesn't exist), `ALREADY_EXISTS` (duplicate/idempotency violation), `ABORTED` (race condition)
+- **Transient Issues**: `DEADLINE_EXCEEDED` (timeout), `RESOURCE_EXHAUSTED` (rate limit/buffer full), `UNAVAILABLE` (temporarily unreachable)
+- **Server/Evolution**: `UNIMPLEMENTED` (feature not deployed), `INTERNAL` (unexpected error), `CANCELLED` (user/peer cancelled)
 
-Use `ctx.error(code, message, details, { retryable })` for type-safe responses. The framework logs all errors with connection identity for traceability.
+Use `ctx.error(code, message, details)` for type-safe responses. The framework logs all errors with connection identity for traceability.
+
+### Authoritative Error Code Table
+
+| Code                  | Retryable | Description                                                | `retryAfterMs` rule    |
+| --------------------- | --------- | ---------------------------------------------------------- | ---------------------- |
+| `UNAUTHENTICATED`     | ❌ No     | Auth token missing, expired, or invalid                    | Forbidden              |
+| `PERMISSION_DENIED`   | ❌ No     | Authenticated but lacks rights (authZ)                     | Forbidden              |
+| `INVALID_ARGUMENT`    | ❌ No     | Input validation or semantic violation                     | Forbidden              |
+| `FAILED_PRECONDITION` | ❌ No     | State requirement not met                                  | Forbidden              |
+| `NOT_FOUND`           | ❌ No     | Target resource absent                                     | Forbidden              |
+| `ALREADY_EXISTS`      | ❌ No     | Uniqueness or idempotency replay violation                 | Forbidden              |
+| `UNIMPLEMENTED`       | ❌ No     | Feature not supported or deployed                          | Forbidden              |
+| `CANCELLED`           | ❌ No     | Call cancelled (client disconnect, timeout abort)          | Forbidden              |
+| `DEADLINE_EXCEEDED`   | ✅ Yes    | RPC timed out (retry immediately)                          | Optional               |
+| `RESOURCE_EXHAUSTED`  | ✅ Yes    | Rate limit, quota, or buffer overflow                      | Optional (recommended) |
+| `UNAVAILABLE`         | ✅ Yes    | Transient infrastructure error                             | Optional               |
+| `ABORTED`             | ✅ Yes    | Concurrency conflict (race condition)                      | Optional               |
+| `INTERNAL`            | ⚠️ Maybe  | Unexpected server error (bug); server decides if retryable | Optional               |
+
+**Client Inference Rules**:
+
+- If `retryable` field is **present**, use its value
+- If `retryable` field is **absent**:
+  - Infer `true` for transient codes (`DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `ABORTED`)
+  - Infer `false` for terminal codes (all others)
+  - For `INTERNAL`, infer `false` (conservative: assume bug, don't retry)
+
+**Server Validation Rules**:
+
+- For codes marked "Forbidden": `retryAfterMs` **must be absent**
+- For codes marked "Optional": `retryAfterMs` may be present when server has a backoff hint
+- For codes marked "Recommended" (e.g., `RESOURCE_EXHAUSTED`): servers **should** include `retryAfterMs` when due to backpressure or rate limiting
+- Example: `ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, { retryable: true, retryAfterMs: 100 })`
 
 ### Extending Error Codes
 
@@ -159,6 +173,36 @@ router.on(CreateRoom, (ctx) => {
 - Keep error messages human-readable and helpful
 - Errors are automatically logged with `clientId` for debugging
 
+## Reserved Control Message Namespace {#control-namespace}
+
+The `$ws:` prefix is **reserved** for system messages sent by ws-kit. Do not use this prefix in your application message types.
+
+**System Control Messages:**
+
+- `$ws:rpc-progress` — Non-terminal RPC progress updates (used internally by `ctx.progress()`)
+- `$ws:abort` — RPC cancellation request (client-initiated, used internally by AbortSignal support)
+
+Future system messages may use this namespace, so applications must avoid colliding with names like:
+
+- `$ws:cancel`
+- `$ws:ping`
+- `$ws:pong`
+- `$ws:keepalive`
+
+**Example (do NOT register handlers for):**
+
+```typescript
+// ❌ Avoid this
+router.on({ type: "$ws:custom-message" }, (ctx) => {
+  // This will conflict with future system messages
+});
+
+// ✅ Use your own prefix instead
+router.on({ type: "APP:custom-message" }, (ctx) => {
+  // This is safe and explicit
+});
+```
+
 ## Sending Errors
 
 ### Using ctx.error() (Recommended)
@@ -182,6 +226,19 @@ router.on(JoinRoom, (ctx) => {
 ```
 
 **Note**: Error messages include a producer `meta.timestamp`; **never** base server actions on it — use `ctx.receivedAt` for server logic (see @schema.md#Which-timestamp-to-use).
+
+### Error Detail Sanitization
+
+Error details are automatically sanitized before transmission to prevent accidental credential leaks.
+
+**Forbidden keys (case-insensitive)**: `password`, `token`, `authorization`, `bearer`, `jwt`, `apikey`, `api_key`, `accesstoken`, `access_token`, `refreshtoken`, `refresh_token`, `cookie`, `secret`, `credentials`, `auth`
+
+**Size limits**: Nested objects (JSON > 500 chars) and oversized values are omitted. If all details are stripped, the `details` field is omitted entirely.
+
+**Note**: Sanitization is a **safety net**, not a substitute for careful error design. Always think before including details:
+
+- ✅ Include: Resource IDs, field names, error context for troubleshooting
+- ❌ Avoid: Passwords, tokens, API keys, internal state, huge blobs
 
 ## Error Handling in Handlers
 
@@ -276,16 +333,121 @@ router.use(SendMessage, (ctx, next) => {
 - `1009` — Message Too Big (payload exceeds limit)
 - `1011` — Server Error (unexpected server failure)
 
+## Limits Monitoring {#limits-monitoring}
+
+Payload size limits are enforced at the protocol level (before message validation). When a client sends a message exceeding the configured limit, the router:
+
+1. **Calls the `onLimitExceeded` hook** with structured limit information
+2. **Sends a `RESOURCE_EXHAUSTED` error** or **closes the connection** (configurable)
+3. **Does NOT call `onError`** (limit violations are protocol, not handler errors)
+
+### Configuration
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter({
+  limits: {
+    maxPayloadBytes: 1_000_000, // 1MB (default)
+
+    // How to respond when limit exceeded
+    onExceeded: "send", // Send RESOURCE_EXHAUSTED error (default)
+    // "close" — Close with code 1009
+    // "custom" — Do nothing (app handles in hook)
+
+    // WebSocket close code when onExceeded === "close"
+    closeCode: 1009, // RFC 6455 "Message Too Big" (default)
+  },
+
+  hooks: {
+    onLimitExceeded: (info) => {
+      // info.type = "payload" (extensible for future limits)
+      // info.observed = actual payload size (bytes)
+      // info.limit = configured limit
+      // info.clientId = client identifier
+      // info.ws = WebSocket connection
+
+      // Emit metrics/alerts
+      metrics.increment("limits.exceeded", {
+        type: info.type,
+        clientId: info.clientId,
+        overage: info.observed - info.limit,
+      });
+    },
+  },
+});
+```
+
+### Behavior by Mode
+
+| Mode     | Response to Client          | Connection | Hook Called |
+| -------- | --------------------------- | ---------- | ----------- |
+| `send`   | `ERROR: RESOURCE_EXHAUSTED` | Stays open | ✅          |
+| `close`  | None (closes immediately)   | Closes     | ✅          |
+| `custom` | None (up to app)            | Stays open | ✅          |
+
+### Payload Limit → RESOURCE_EXHAUSTED Mapping
+
+When `onExceeded: "send"`:
+
+```json
+{
+  "type": "ERROR",
+  "code": "RESOURCE_EXHAUSTED",
+  "message": "Payload size exceeds limit (2000001 > 1000000)",
+  "details": {
+    "observed": 2000001,
+    "limit": 1000000
+  },
+  "retryAfterMs": 0
+}
+```
+
+Clients should treat `RESOURCE_EXHAUSTED` as transient and may retry with smaller payloads. When `onExceeded: "close"`, the connection closes with code `1009`.
+
+### Example: Rate Limiting with Limits Monitoring
+
+```typescript
+const router = createRouter({
+  limits: {
+    maxPayloadBytes: 5_000_000, // 5MB
+    onExceeded: "send",
+  },
+  hooks: {
+    onLimitExceeded: async (info) => {
+      // Check for repeated violations (potential abuse)
+      const violations = await redis.incr(`limit_violations:${info.clientId}`);
+      await redis.expire(`limit_violations:${info.clientId}`, 60);
+
+      if (violations > 5) {
+        // Ban client after 5 violations in 1 minute
+        info.ws.close(1008, "POLICY_VIOLATION");
+      }
+
+      // Emit metrics for SLOs
+      metrics.histogram("payload_size_violations", {
+        observed: info.observed,
+        limit: info.limit,
+        clientId: info.clientId,
+      });
+    },
+  },
+});
+```
+
 ## Error Behavior
 
-| Error Type       | Connection | Logged | Handler Called |
-| ---------------- | ---------- | ------ | -------------- |
-| Parse error      | Stays open | ✅     | ❌             |
-| Missing type     | Stays open | ✅     | ❌             |
-| No handler       | Stays open | ✅     | ❌             |
-| Validation fails | Stays open | ✅     | ❌             |
-| Handler throws   | Stays open | ✅     | N/A            |
-| Async rejection  | Stays open | ✅     | N/A            |
+| Error Type       | Connection | Logged | Handler Called    |
+| ---------------- | ---------- | ------ | ----------------- |
+| Limit exceeded   | Config¹    | ✅     | `onLimitExceeded` |
+| Parse error      | Stays open | ✅     | ❌                |
+| Missing type     | Stays open | ✅     | ❌                |
+| No handler       | Stays open | ✅     | ❌                |
+| Validation fails | Stays open | ✅     | ❌                |
+| Handler throws   | Stays open | ✅     | `onError`         |
+| Async rejection  | Stays open | ✅     | `onError`         |
+
+¹ When `onExceeded: "send"` (default), connection stays open. When `onExceeded: "close"`, connection closes with code 1009.
 
 **Critical**: Connections never auto-close on errors. Handler must explicitly call `ctx.ws.close()`.
 

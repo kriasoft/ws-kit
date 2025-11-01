@@ -160,25 +160,10 @@ This is the **canonical table** for timestamp usage across all specs. All other 
 
 **Reserved Server-Only Meta Keys**: {#Reserved-Server-Only-Meta-Keys}
 
-The following keys are RESERVED and MUST NOT be set by clients (see @rules.md#reserved-keys for canonical list):
+- `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
+- `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
-- `clientId`: Connection identity (stripped during normalization, access via `ctx.ws.data.clientId`)
-- `receivedAt`: Server receive timestamp (stripped during normalization, access via `ctx.receivedAt`)
-
-These keys are stripped during message normalization before validation (security boundary). See @validation.md#normalization-rules for implementation details.
-
-**Schema Constraint**: Extended meta schemas MUST NOT define reserved keys (`clientId`, `receivedAt`). Adapters MUST throw an error at schema creation if reserved keys are detected in the extended meta definition (design-time enforcement layer).
-
-**Enforcement**: The `message()` helper validates extended meta keys and throws:
-
-```typescript
-throw new Error(
-  `Reserved meta keys not allowed in schema: ${reservedInMeta.join(", ")}. ` +
-    `Reserved keys: ${Array.from(RESERVED_META_KEYS).join(", ")}`,
-);
-```
-
-**Rationale**: Prevents silent validation failures from normalization stripping user-defined reserved keys. Fails fast at design time with clear error message.
+These keys are stripped during normalization before validation (security boundary). Extended meta schemas MUST NOT define these keys (schema creation will throw an error). See @validation.md#normalization-rules for complete implementation details.
 
 **Critical**:
 
@@ -259,18 +244,22 @@ router.on(GetUser, (ctx) => {
 });
 ```
 
-**Optional: Progress updates before terminal reply**:
+### Progress Updates (Non-Terminal)
+
+For long-running RPC operations, send non-terminal progress updates before the final terminal reply. Progress updates allow the server to stream intermediate results while the client waits for completion.
+
+**Server**: Use `ctx.progress()` before `ctx.reply()`:
 
 ```typescript
-router.on(GetUser, (ctx) => {
+router.rpc(GetUser, (ctx) => {
   ctx.progress?.({ stage: "loading" });
   const user = await db.users.findById(ctx.payload.id);
   ctx.progress?.({ stage: "validating" });
-  ctx.reply?.({ user });
+  ctx.reply?.(GetUserResponse, { user });
 });
 ```
 
-**Client**: Use `call.result()` for terminal, `call.progress()` for stream:
+**Client**: Use `call.progress()` to stream updates and `call.result()` for terminal:
 
 ```typescript
 const client = wsClient({ url: "ws://localhost:3000" });
@@ -286,6 +275,29 @@ for await (const p of call.progress()) {
 // Wait for terminal response
 const { user } = await call.result();
 ```
+
+**Progress Message Wire Format**:
+
+Progress updates are sent as internal control messages (reserved type `$ws:rpc-progress`):
+
+```json
+{
+  "type": "$ws:rpc-progress",
+  "meta": {
+    "timestamp": 1730450000125,
+    "correlationId": "req-42"
+  },
+  "data": { "stage": "validating" }
+}
+```
+
+**Semantics**:
+
+- **Non-terminal**: Client waits for final `reply()` or `error()` (progress messages don't complete the RPC)
+- **Unidirectional**: Server → Client only (clients cannot send progress messages)
+- **Optional**: Not required; use only when operation genuinely produces updates
+- **Order guarantee**: Progress messages arrive in send order; final response arrives last
+- **Schema-inferred**: Progress data type matches the response schema
 
 **Benefits (ADR-015)**:
 

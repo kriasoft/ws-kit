@@ -89,24 +89,24 @@ router.rpc(LongOperation, async (ctx) => {
 
 ### Error Handling in RPC
 
-Use `ctx.error()` to reject requests with standard error codes:
+Use `ctx.error()` to reject requests with standard error codes. Clients automatically infer retry behavior and respect backoff hints:
 
 ```typescript
 router.rpc(GetUser, async (ctx) => {
-  // Validation error
+  // Validation error (non-retryable)
   if (!isValidUserId(ctx.payload.id)) {
     ctx.error("INVALID_ARGUMENT", "Invalid user ID format");
     return;
   }
 
-  // Not found
+  // Not found (non-retryable)
   const user = await db.users.findById(ctx.payload.id);
   if (!user) {
     ctx.error("NOT_FOUND", "User not found");
     return;
   }
 
-  // Server error
+  // Precondition error (non-retryable)
   if (!user.isActive) {
     ctx.error("FAILED_PRECONDITION", "User account is inactive");
     return;
@@ -116,19 +116,55 @@ router.rpc(GetUser, async (ctx) => {
 });
 ```
 
+Transient errors with backoff hints:
+
+```typescript
+router.rpc(ProcessData, async (ctx) => {
+  try {
+    const result = await expensiveComputation(ctx.payload);
+    ctx.reply(ProcessData.response, { result });
+  } catch (err) {
+    if (isRateLimited(err)) {
+      // Transient error: client will auto-retry with backoff
+      ctx.error("RESOURCE_EXHAUSTED", "Server busy", undefined, {
+        retryable: true,
+        retryAfterMs: 2000, // Client waits 2s before retry
+      });
+    } else if (isTemporary(err)) {
+      // Transient infrastructure error (auto-retryable)
+      ctx.error("UNAVAILABLE", "Database temporarily unavailable");
+    } else {
+      // Unexpected error (don't retry)
+      ctx.error("INTERNAL", "Computation failed");
+    }
+  }
+});
+```
+
 **Key error codes:**
+
+**Terminal (non-retryable):**
 
 - `INVALID_ARGUMENT`: Input validation failed
 - `UNAUTHENTICATED`: Authentication missing or invalid
 - `PERMISSION_DENIED`: Authenticated but lacks permissions
 - `NOT_FOUND`: Resource doesn't exist
 - `FAILED_PRECONDITION`: State requirement not met
-- `RESOURCE_EXHAUSTED`: Rate limit or quota exceeded
-- `INTERNAL`: Unexpected server error
+- `UNIMPLEMENTED`: Feature not supported
+
+**Transient (automatically retryable):**
+
+- `RESOURCE_EXHAUSTED`: Rate limit or quota exceeded (use `retryAfterMs`)
 - `DEADLINE_EXCEEDED`: Request timed out
+- `UNAVAILABLE`: Service temporarily unavailable
+- `ABORTED`: Concurrency conflict
+
+**Mixed:**
+
+- `INTERNAL`: Unexpected server error (server decides retryability)
 - `CANCELLED`: Client cancelled or disconnected
 
-See [Error Handling Spec](./specs/error-handling.md) for the complete taxonomy.
+See [Error Handling Spec](./specs/error-handling.md) for the complete taxonomy and retry semantics.
 
 ### Cancellation and Deadlines
 

@@ -259,6 +259,86 @@ client.on("connected", () => {
 });
 ```
 
+## Message Payload Limits & Monitoring
+
+WS-Kit enforces configurable message payload size limits at the protocol level. This protects against:
+
+- Memory exhaustion from oversized messages
+- Protocol violations (Cloudflare DO 1MB limit)
+- Resource abuse attacks
+
+### Configuration
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter({
+  limits: {
+    // Maximum allowed message size in bytes (default: 1MB)
+    maxPayloadBytes: 1_000_000,
+
+    // How to respond when client exceeds limit
+    onExceeded: "send", // "send" (default) | "close" | "custom"
+    // - "send": Send RESOURCE_EXHAUSTED error, keep connection open
+    // - "close": Close connection with code 1009 (RFC 6455 "Message Too Big")
+    // - "custom": Do nothing (app handles in onLimitExceeded hook)
+
+    // WebSocket close code when onExceeded === "close" (default: 1009)
+    closeCode: 1009,
+  },
+
+  hooks: {
+    onLimitExceeded: async (info) => {
+      // Called when a client violates payload limits
+      // info.type = "payload" | "rate" | "connections" | "backpressure"
+      // info.observed = actual bytes sent
+      // info.limit = configured limit
+      // info.clientId = client identifier
+      // info.ws = WebSocket connection
+
+      // Emit metrics for SLOs
+      metrics.histogram("payload_violations", {
+        observed: info.observed,
+        limit: info.limit,
+        clientId: info.clientId,
+      });
+
+      // Detect abuse patterns
+      const violations = await redis.incr(`violations:${info.clientId}`);
+      if (violations > 10) {
+        // Ban after 10 violations
+        info.ws.close(1008, "POLICY_VIOLATION");
+      }
+    },
+  },
+});
+```
+
+### Adapter-Specific Limits
+
+| Adapter           | Default Limit | Hard Limit | Notes                        |
+| ----------------- | ------------- | ---------- | ---------------------------- |
+| **Bun**           | 1MB (config)  | None       | Configurable per router      |
+| **Cloudflare DO** | 1MB (config)  | 1MB        | Platform enforces hard limit |
+| **Deno**          | 1MB (config)  | None       | Configurable per router      |
+
+### Behavior When Limit Exceeded
+
+| Config                 | Response                    | Connection | Hook Called       |
+| ---------------------- | --------------------------- | ---------- | ----------------- |
+| `onExceeded: "send"`   | `ERROR: RESOURCE_EXHAUSTED` | Stays open | `onLimitExceeded` |
+| `onExceeded: "close"`  | None (closes immediately)   | Closes     | `onLimitExceeded` |
+| `onExceeded: "custom"` | None (app decides)          | Stays open | `onLimitExceeded` |
+
+**Note**: Limit violations do NOT call `onError` — they are protocol enforcement, not handler errors.
+
+### Best Practices
+
+1. **Monitor limits** - Use `onLimitExceeded` for metrics and alerts
+2. **Size reasonably** - Set limits based on your message types (e.g., 1MB for file uploads, 10KB for chat)
+3. **Handle gracefully** - Send clear error messages so clients know to retry with smaller payloads
+4. **Detect abuse** - Count violations per client and ban repeat offenders
+
 ## Adapter Selection
 
 Choose an adapter based on your deployment model:

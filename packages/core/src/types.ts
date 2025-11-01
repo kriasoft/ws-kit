@@ -108,14 +108,33 @@ export interface EventMessageContext<
   /**
    * Send a type-safe error response to the client.
    *
-   * Creates and sends an ERROR message with standard error structure.
-   * Use this for errors that should be communicated to the client.
+   * Creates and sends an ERROR message with unified error structure.
+   * Supports deterministic client backoff via retryable + retryAfterMs hints.
    *
-   * @param code - Standard error code (e.g., "UNAUTHENTICATED", "NOT_FOUND")
-   * @param message - Human-readable error description
-   * @param details - Optional error context/details
+   * @param code - Standard error code (one of 13 gRPC-aligned codes per ERROR_CODE_META)
+   * @param message - Optional human-readable error description
+   * @param details - Optional error context/details (structured data safe for clients)
+   * @param options - Optional retry semantics: retryable (boolean) and retryAfterMs (ms hint)
+   *
+   * @example
+   * // Non-retryable error
+   * ctx.error("NOT_FOUND", "User not found", { userId: "123" });
+   *
+   * // Transient error with backoff hint
+   * ctx.error("RESOURCE_EXHAUSTED", "Buffer full", undefined, {
+   *   retryable: true,
+   *   retryAfterMs: 100
+   * });
    */
-  error(code: string, message: string, details?: Record<string, unknown>): void;
+  error(
+    code: string,
+    message?: string,
+    details?: Record<string, unknown>,
+    options?: {
+      retryable?: boolean;
+      retryAfterMs?: number;
+    },
+  ): void;
 
   /**
    * Merge partial data into the connection's custom data object.
@@ -218,14 +237,34 @@ export interface RpcMessageContext<
   /**
    * Send a type-safe error response to the client (RPC error).
    *
-   * Creates and sends an RPC_ERROR message with standard error structure.
+   * Creates and sends an RPC_ERROR message with unified error structure.
    * One-shot guarded: first error wins, subsequent calls are suppressed.
+   * Supports deterministic client backoff via retryable + retryAfterMs hints.
    *
-   * @param code - Standard error code (e.g., "UNAUTHENTICATED", "NOT_FOUND")
-   * @param message - Human-readable error description
-   * @param details - Optional error context/details
+   * @param code - Standard error code (one of 13 gRPC-aligned codes per ERROR_CODE_META)
+   * @param message - Optional human-readable error description
+   * @param details - Optional error context/details (structured data safe for clients)
+   * @param options - Optional retry semantics: retryable (boolean) and retryAfterMs (ms hint)
+   *
+   * @example
+   * // Send non-retryable error
+   * ctx.error("INVALID_ARGUMENT", "Invalid user ID", { field: "userId" });
+   *
+   * // Send transient error with backoff
+   * ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, {
+   *   retryable: true,
+   *   retryAfterMs: 100
+   * });
    */
-  error(code: string, message: string, details?: Record<string, unknown>): void;
+  error(
+    code: string,
+    message?: string,
+    details?: Record<string, unknown>,
+    options?: {
+      retryable?: boolean;
+      retryAfterMs?: number;
+    },
+  ): void;
 
   /**
    * Merge partial data into the connection's custom data object.
@@ -660,6 +699,25 @@ export type Middleware<TData extends WebSocketData = WebSocketData> = (
 ) => void | Promise<void>;
 
 /**
+ * Handler for limit exceeded events.
+ *
+ * Called when a connection exceeds a configured limit (e.g., message size).
+ * Multiple handlers can be registered and are executed sequentially.
+ * Exceptions in handlers are logged but don't interrupt other handlers.
+ *
+ * Useful for:
+ * - Metrics/monitoring (increment counters, emit alerts)
+ * - Custom logging with structured context
+ * - Rate limiting decisions
+ * - Resource cleanup
+ *
+ * @param info - Structured limit exceeded information
+ * @returns void or Promise<void>
+ */
+export type LimitExceededHandler<TData extends WebSocketData = WebSocketData> =
+  (info: LimitExceededInfo<TData>) => void | Promise<void>;
+
+/**
  * Router lifecycle hooks.
  *
  * Each hook can be registered multiple times. Hooks are executed in registration order.
@@ -676,6 +734,9 @@ export interface RouterHooks<TData extends WebSocketData = WebSocketData> {
 
   /** Called when an error occurs during message processing */
   onError?: ErrorHandler<TData>;
+
+  /** Called when a connection exceeds a configured limit (payload size, rate, etc.) */
+  onLimitExceeded?: LimitExceededHandler<TData>;
 }
 
 /**
@@ -724,11 +785,64 @@ export interface HeartbeatConfig {
 }
 
 /**
- * Message payload size constraints.
+ * Type discriminator for limit violations.
+ *
+ * Used to identify which limit was exceeded, allowing extensibility for future limit types.
+ */
+export type LimitType = "payload" | "rate" | "connections" | "backpressure";
+
+/**
+ * Information about a limit being exceeded.
+ *
+ * Passed to the onLimitExceeded hook to enable monitoring, metrics, and custom handling.
+ */
+export interface LimitExceededInfo<
+  TData extends WebSocketData = WebSocketData,
+> {
+  /** Type of limit exceeded (payload, rate, connections, etc.) */
+  type: LimitType;
+
+  /** Observed value (bytes for payload, requests/sec for rate, count for connections) */
+  observed: number;
+
+  /** Configured limit value */
+  limit: number;
+
+  /** WebSocket connection */
+  ws: ServerWebSocket<TData>;
+
+  /** Unique client identifier */
+  clientId: string;
+
+  /** Optional: milliseconds to suggest client waits before retry */
+  retryAfterMs?: number;
+}
+
+/**
+ * Message payload size constraints and limit violation behavior.
  */
 export interface LimitsConfig {
   /** Maximum message payload size in bytes (default: 1,000,000) */
   maxPayloadBytes?: number;
+
+  /**
+   * How to respond when a limit is exceeded (default: "send").
+   *
+   * - "send": Send RESOURCE_EXHAUSTED error frame, keep connection open
+   * - "close": Close connection with WebSocket code (default 1009), no error frame
+   * - "custom": Do nothing else (app will handle in onLimitExceeded hook)
+   */
+  onExceeded?: "send" | "close" | "custom";
+
+  /**
+   * WebSocket close code when onExceeded === "close" (default: 1009).
+   *
+   * Standard WebSocket codes:
+   * - 1009: Message Too Big (RFC 6455)
+   * - 1008: Policy Violation
+   * - 1011: Server Error
+   */
+  closeCode?: number;
 }
 
 /**
@@ -1058,26 +1172,88 @@ export interface RpcAbortWire {
 }
 
 /**
+ * Discriminated union for error envelope dispatch (internal).
+ *
+ * Distinguishes between RPC errors (must have correlationId) and one-way errors.
+ * Using a discriminated union prevents accidental creation of RPC_ERROR without correlationId
+ * at the type system level, eliminating a class of runtime bugs.
+ *
+ * - `rpc`: Error response to an RPC request (correlationId required for client correlation)
+ * - `oneway`: Fire-and-forget error (no correlation needed, clientId is optional)
+ */
+export type ErrorKind =
+  | { kind: "rpc"; correlationId: string }
+  | { kind: "oneway"; clientId?: string };
+
+/**
+ * Non-RPC error wire format (sent to client for fire-and-forget errors).
+ *
+ * Unified envelope structure shared with RPC_ERROR (without correlationId).
+ * Ref: docs/specs/error-handling.md (Authoritative Error Code Table)
+ */
+export interface ErrorWire {
+  type: "ERROR";
+  meta: {
+    timestamp: number; // Always present (server-generated)
+  };
+  payload: {
+    code:
+      | "UNAUTHENTICATED"
+      | "PERMISSION_DENIED"
+      | "INVALID_ARGUMENT"
+      | "FAILED_PRECONDITION"
+      | "NOT_FOUND"
+      | "ALREADY_EXISTS"
+      | "ABORTED"
+      | "DEADLINE_EXCEEDED"
+      | "RESOURCE_EXHAUSTED"
+      | "UNAVAILABLE"
+      | "UNIMPLEMENTED"
+      | "INTERNAL"
+      | "CANCELLED"
+      | `APP_${string}`;
+    message?: string;
+    details?: Record<string, unknown>;
+    retryable?: boolean;
+    retryAfterMs?: number;
+  };
+}
+
+/**
  * RPC error wire format (sent to client on RPC failure).
  *
- * Standard structure for RPC errors allowing typed client handling.
- * Extensible error codes support app-specific codes via APP_${string}.
+ * Unified envelope structure (same as ERROR, with correlationId in meta).
+ * Enables consistent client parsing: both ERROR and RPC_ERROR have { type, meta, payload }.
+ * One-shot guarded: server ensures only one error or reply per RPC.
+ *
+ * Ref: docs/specs/error-handling.md (Authoritative Error Code Table)
+ * Ref: docs/specs/router.md (RPC Wire Format)
  */
 export interface RpcErrorWire {
   type: "RPC_ERROR";
-  code:
-    | "INVALID_ARGUMENT"
-    | "UNAUTHENTICATED"
-    | "NOT_FOUND"
-    | "RESOURCE_EXHAUSTED"
-    | "ABORTED"
-    | "INTERNAL"
-    | `APP_${string}`;
-  message: string;
-  details?: unknown;
-  retryable?: boolean;
-  retryAfterMs?: number;
   meta: {
-    correlationId: string;
+    timestamp: number; // Always present (server-generated)
+    correlationId: string; // Required: maps to request for client correlation
+  };
+  payload: {
+    code:
+      | "UNAUTHENTICATED"
+      | "PERMISSION_DENIED"
+      | "INVALID_ARGUMENT"
+      | "FAILED_PRECONDITION"
+      | "NOT_FOUND"
+      | "ALREADY_EXISTS"
+      | "ABORTED"
+      | "DEADLINE_EXCEEDED"
+      | "RESOURCE_EXHAUSTED"
+      | "UNAVAILABLE"
+      | "UNIMPLEMENTED"
+      | "INTERNAL"
+      | "CANCELLED"
+      | `APP_${string}`;
+    message?: string;
+    details?: Record<string, unknown>;
+    retryable?: boolean;
+    retryAfterMs?: number;
   };
 }
