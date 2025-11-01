@@ -45,6 +45,9 @@
   "peerDependencies": {
     "@ws-kit/core": "workspace:*"
   },
+  "devDependencies": {
+    "@ws-kit/adapters": "workspace:*"
+  },
   "engines": {
     "node": ">=22"
   }

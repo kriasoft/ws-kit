@@ -40,6 +40,13 @@
         "@types/bun": "latest",
       },
     },
+    "packages/adapters": {
+      "name": "@ws-kit/adapters",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:*",
+      },
+    },
     "packages/bun": {
       "name": "@ws-kit/bun",
       "version": "0.2.0",
@@ -77,6 +84,9 @@
     "packages/middleware": {
       "name": "@ws-kit/middleware",
       "version": "0.0.0",
+      "devDependencies": {
+        "@ws-kit/adapters": "workspace:*",
+      },
       "peerDependencies": {
         "@ws-kit/core": "workspace:*",
       },
@@ -450,6 +460,8 @@
     "@vueuse/metadata": ["@vueuse/metadata@12.8.2", "", {}, "sha512-rAyLGEuoBJ/Il5AmFHiziCPdQzRt88VxR+Y/A/QhJ1EWtWqPBBAxTAFaSkviwEuOEZNtW8pvkPgoCZQ+HxqW1A=="],
 
     "@vueuse/shared": ["@vueuse/shared@12.8.2", "", { "dependencies": { "vue": "^3.5.13" } }, "sha512-dznP38YzxZoNloI0qpEfpkms8knDtaoQ6Y/sfS0L7Yki4zh40LFHEhur0odJC6xTHG5dxWVPiUWBXn+wCG2s5w=="],
+
+    "@ws-kit/adapters": ["@ws-kit/adapters@workspace:packages/adapters"],
 
     "@ws-kit/bun": ["@ws-kit/bun@workspace:packages/bun"],
 
