@@ -677,6 +677,44 @@ const mainRouter = createRouter<AppData>().merge(authRouter).merge(chatRouter);
 
 **Type System Note**: All routers should define the same `TData` type for composition to work correctly. Type compatibility is enforced at compile time.
 
+### Rate Limiting Middleware
+
+Use the rate limiting middleware from `@ws-kit/middleware` to apply token bucket rate limiting with adapter portability:
+
+```typescript
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+
+// Create adapter (memory for dev, Redis for production)
+const limiter = memoryRateLimiter({
+  capacity: 200,
+  tokensPerSecond: 100,
+});
+
+// Add middleware
+const rateLimitMiddleware = rateLimit({
+  limiter,
+  key: keyPerUserPerType, // Fair per-user per-message-type isolation
+  cost: (ctx) => (ctx.type === "Compute" ? 10 : 1), // Expensive ops cost more
+});
+
+router.use(rateLimitMiddleware);
+```
+
+**Execution Timing**: Rate limiting runs as middleware (after schema validation, where app authentication data is available). Adapters atomically consume tokens to prevent race conditions in distributed systems.
+
+**Key Functions**:
+
+- `keyPerUserPerType(ctx)` — Fair isolation: tenant + user + message type (recommended)
+- `perUserKey(ctx)` — Lighter footprint: tenant + user only
+- `keyPerUserOrIpPerType(ctx)` — Falls back to user if authenticated; note: IP not available at middleware layer
+
+**Rate Limit Errors**: When rate limited, the router sends `RESOURCE_EXHAUSTED` (retryable) or `FAILED_PRECONDITION` (impossible cost) error. The error includes a computed `retryAfterMs` backoff hint for clients.
+
+**Observability**: Track rate limit violations via the `onLimitExceeded` hook in `serve()` options (see [Lifecycle Hooks](#lifecycle-hooks)).
+
+For complete rate limiting design, examples, and adapter implementations, see the **[rate limiting proposal](../proposals/rate-limiting.md)** and **[ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md)**.
+
 ## Message Routing
 
 ### Type-Based Routing

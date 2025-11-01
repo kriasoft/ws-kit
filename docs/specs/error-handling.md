@@ -410,6 +410,93 @@ When `onExceeded: "send"`:
 
 Clients should treat `RESOURCE_EXHAUSTED` as transient and may retry with smaller payloads. When `onExceeded: "close"`, the connection closes with code `1009`.
 
+### Rate Limit → RESOURCE_EXHAUSTED or FAILED_PRECONDITION Mapping
+
+Rate limiting via `@ws-kit/middleware` uses the same error handling pipeline as payload limits. When a request exceeds the rate limit:
+
+**Case 1: Retryable (attempted cost ≤ capacity)**:
+
+```json
+{
+  "type": "ERROR",
+  "code": "RESOURCE_EXHAUSTED",
+  "message": "Rate limit exceeded",
+  "details": {
+    "observed": 1,
+    "limit": 1
+  },
+  "retryAfterMs": 1250
+}
+```
+
+Clients should retry after `retryAfterMs` milliseconds with the same request.
+
+**Case 2: Impossible (attempted cost > capacity)**:
+
+```json
+{
+  "type": "ERROR",
+  "code": "FAILED_PRECONDITION",
+  "message": "Operation cost exceeds rate limit capacity (5 > 3)",
+  "details": {
+    "observed": 5,
+    "limit": 3
+  }
+}
+```
+
+Clients should NOT retry this operation under the current policy (cost exceeds capacity). Suggest contacting server admin or using a different approach.
+
+### Example: Rate Limiting with Metrics and Alerts
+
+```typescript
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+
+const rateLimitMiddleware = rateLimit({
+  limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
+  key: keyPerUserPerType,
+});
+
+serve(router, {
+  middleware: [rateLimitMiddleware],
+
+  onLimitExceeded(info) {
+    if (info.type === "rate") {
+      // Track rate limit violations
+      const isImpossible =
+        info.retryAfterMs === null || info.retryAfterMs === undefined;
+
+      console.warn(
+        `[RateLimit] ${info.clientId}: ${info.observed} tokens (capacity: ${info.limit})`,
+        {
+          retryAfterMs: info.retryAfterMs,
+          impossible: isImpossible,
+        },
+      );
+
+      // Emit metrics for monitoring
+      metrics.histogram("rate_limit_violations", {
+        observed: info.observed,
+        limit: info.limit,
+        retryable: !isImpossible,
+      });
+
+      // Alert on repeated violations (potential abuse)
+      const violations = cache.incr(`rate_violations:${info.clientId}`, 60); // 60s TTL
+      if (violations > 10) {
+        alerts.notify("HIGH_RATE_LIMIT_VIOLATIONS", {
+          clientId: info.clientId,
+          violations,
+        });
+      }
+    }
+  },
+});
+```
+
+For complete rate limiting API and adapter implementations, see **[@ws-kit/middleware](https://github.com/kriasoft/ws-kit/tree/main/packages/middleware)** and **[rate limiting proposal](../proposals/rate-limiting.md)**.
+
 ### Example: Rate Limiting with Limits Monitoring
 
 ```typescript

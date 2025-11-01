@@ -1,0 +1,54 @@
+{
+  "name": "@ws-kit/adapters",
+  "version": "0.0.0",
+  "description": "Adapter implementations for WS-Kit: memory, Redis, Durable Objects, and more",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/adapters"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "adapter",
+    "rate-limiting",
+    "rate-limiter",
+    "token-bucket",
+    "redis",
+    "durable-objects",
+    "cloudflare",
+    "type-safe",
+    "typescript",
+    "distributed"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./memory": {
+      "types": "./dist/memory/index.d.ts",
+      "default": "./dist/memory/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

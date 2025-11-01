@@ -849,6 +849,14 @@ export interface RateLimiter {
   consume(key: string, cost: number): Promise<RateLimitDecision>;
 
   /**
+   * Get the policy configuration for this rate limiter.
+   * **Required by all adapters.** Used by middleware to report accurate capacity in error responses.
+   *
+   * @returns Policy object with capacity, tokensPerSecond, and optional prefix
+   */
+  getPolicy(): Policy;
+
+  /**
    * Optional: cleanup resources (connection, timers, etc.).
    * Called on app shutdown.
    *

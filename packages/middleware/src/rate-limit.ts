@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 import type {
   IngressContext,
   MessageContext,
@@ -15,21 +18,6 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    * Rate limiter adapter instance (memory, redis, or durable objects)
    */
   limiter: RateLimiter;
-
-  /**
-   * Policy capacity (maximum tokens available).
-   *
-   * Must match the capacity configured in the adapter factory (e.g., memoryRateLimiter).
-   * Used to populate the _limitExceeded.limit field for error reporting and metrics.
-   *
-   * @example
-   * const limiter = memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 });
-   * const middleware = rateLimit({
-   *   limiter,
-   *   capacity: 200, // Must match the adapter's capacity
-   * });
-   */
-  capacity: number;
 
   /**
    * Key function to extract rate limit bucket key from context.
@@ -107,7 +95,6 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
  *
  * const limiter = rateLimit({
  *   limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),
- *   capacity: 200, // Must match adapter capacity for correct metrics
  *   key: keyPerUserPerType,
  *   cost: (ctx) => 1,
  * });
@@ -117,12 +104,7 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
 export function rateLimit<TData extends WebSocketData = WebSocketData>(
   options: RateLimitOptions<TData>,
 ): Middleware<TData> {
-  const {
-    limiter,
-    capacity,
-    key = keyPerUserOrIpPerType,
-    cost: costFn,
-  } = options;
+  const { limiter, key = keyPerUserOrIpPerType, cost: costFn } = options;
 
   return async (
     ctx: MessageContext<unknown, TData>,
@@ -176,10 +158,13 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
       );
 
       // Attach limit metadata (same contract as payload size limits)
+      // Get the real capacity from the adapter's policy (required on all adapters)
+      const limit = limiter.getPolicy().capacity; // Always available; no fallback needed
+
       (error as unknown as Record<string, unknown>)._limitExceeded = {
         type: "rate" as const,
         observed: cost,
-        limit: capacity, // Configured policy capacity (not remaining tokens)
+        limit, // Real capacity from adapter
         retryAfterMs: decision.retryAfterMs,
       };
 
@@ -191,10 +176,10 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
   };
 }
 
-export { keyPerUserPerType, keyPerUserOrIpPerType, perUserKey } from "./keys";
 export type {
-  RateLimiter,
+  IngressContext,
   Policy,
   RateLimitDecision,
-  IngressContext,
+  RateLimiter,
 } from "@ws-kit/core";
+export { keyPerUserOrIpPerType, keyPerUserPerType, perUserKey } from "./keys";

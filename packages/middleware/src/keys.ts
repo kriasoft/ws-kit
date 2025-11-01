@@ -40,7 +40,7 @@ export interface RateLimitContext extends Record<string, unknown> {
  *   return `rl:${org}:${user}:${ctx.type}`;
  * }
  *
- * router.use(rateLimit({ limiter, capacity, key: customKey }));
+ * router.use(rateLimit({ limiter, key: customKey }));
  */
 export function keyPerUserPerType<
   TData extends WebSocketData & RateLimitContext = WebSocketData &
