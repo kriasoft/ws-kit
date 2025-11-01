@@ -69,6 +69,10 @@ export type {
   SendFunction,
 } from "./types.js";
 
+// Re-export error utilities and types
+export { ERROR_CODE_META } from "@ws-kit/core";
+export type { ErrorCodeMetadata } from "@ws-kit/core";
+
 // Re-export core types for convenience
 export type {
   CloseHandler,

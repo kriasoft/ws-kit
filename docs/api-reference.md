@@ -646,27 +646,59 @@ router.on(PingMessage, (ctx) => {
 
 **Note:** For RPC handlers, use `ctx.reply()` for terminal responses instead of `ctx.send()` to ensure one-shot guarantee and proper correlation tracking.
 
-#### `ctx.error(code, message, details?)`
+#### `ctx.error(code, message?, details?, options?)`
 
-Send a type-safe error response.
+Send a type-safe error response with optional retry semantics.
 
 ```typescript
-error(code: string, message: string, details?: Record<string, unknown>): void;
+error(
+  code: string,
+  message?: string,
+  details?: Record<string, unknown>,
+  options?: {
+    retryable?: boolean;
+    retryAfterMs?: number;
+  }
+): void;
 ```
 
 **Parameters:**
 
 - `code` - Standard error code (see Error Codes section)
-- `message` - Human-readable error description
+- `message` - Optional human-readable error description
 - `details` - Optional error context
+- `options` - Optional retry semantics:
+  - `retryable` - Whether error is retryable (auto-inferred from code if omitted)
+  - `retryAfterMs` - Backoff interval hint for transient errors
 
-**Example:**
+**Examples:**
+
+Non-retryable error with details:
 
 ```typescript
 router.on(JoinRoom, (ctx) => {
   if (!roomExists(ctx.payload.roomId)) {
     ctx.error("NOT_FOUND", "Room not found", { roomId: ctx.payload.roomId });
     return;
+  }
+});
+```
+
+Transient error with backoff hint:
+
+```typescript
+router.on(ProcessPayment, (ctx) => {
+  try {
+    processPayment(ctx.payload);
+  } catch (err) {
+    if (isRateLimited(err)) {
+      ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, {
+        retryable: true,
+        retryAfterMs: 5000,
+      });
+    } else {
+      ctx.error("INTERNAL", "Payment processing failed");
+    }
   }
 });
 ```
@@ -1231,19 +1263,39 @@ Bun.serve({
 
 ### Error Response Methods
 
-Send a type-safe error response using `ctx.error(code, message, details?)`:
+Send a type-safe error response using `ctx.error()` with automatic retry inference:
 
 ```typescript
-error(code: ErrorCode, message: string, details?: Record<string, unknown>): void;
+error(
+  code: ErrorCode,
+  message?: string,
+  details?: Record<string, unknown>,
+  options?: { retryable?: boolean; retryAfterMs?: number }
+): void;
 ```
 
-**Example:**
+Clients automatically infer whether errors are retryable based on the error code. Use `retryAfterMs` to provide backoff hints for transient errors.
+
+**Non-retryable error:**
 
 ```typescript
 router.on(JoinRoom, (ctx) => {
   if (!roomExists(ctx.payload.roomId)) {
     ctx.error("NOT_FOUND", "Room not found", { roomId: ctx.payload.roomId });
     return;
+  }
+});
+```
+
+**Transient error with backoff:**
+
+```typescript
+router.on(QueryData, (ctx) => {
+  if (isSaturated()) {
+    ctx.error("RESOURCE_EXHAUSTED", "Server busy", undefined, {
+      retryable: true,
+      retryAfterMs: 1000,
+    });
   }
 });
 ```

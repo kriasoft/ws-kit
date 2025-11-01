@@ -263,13 +263,16 @@ router.on(UserLoggedIn, (ctx) => {
 });
 
 // ✅ RPC: request/response with guaranteed reply
+const GetUserResponse = message("GetUserResponse", { user: UserSchema });
+const GetUser = rpc(GetUserRequest, GetUserResponse);
+
 router.rpc(GetUser, (ctx) => {
   const user = findUser(ctx.payload.id);
   if (!user) {
     ctx.error?.("NOT_FOUND", "User not found");
     return;
   }
-  ctx.reply?.({ user }); // Terminal, one-shot reply
+  ctx.reply?.(GetUserResponse, { user }); // Terminal, one-shot reply
 });
 
 // ❌ WRONG: Event handler trying to "reply" (no guarantee)
@@ -279,9 +282,12 @@ router.on(QueryData, (ctx) => {
 });
 
 // ✅ RIGHT: Use RPC for queries that need guaranteed responses
-router.rpc(QueryData, (ctx) => {
+const QueryResponse = message("QueryResponse", { result: z.any() });
+const Query = rpc(QueryData, QueryResponse);
+
+router.rpc(Query, (ctx) => {
   const result = queryDatabase(ctx.payload);
-  ctx.reply?.({ result }); // Guaranteed, one-shot reply
+  ctx.reply?.(QueryResponse, { result }); // Guaranteed, one-shot reply
 });
 ```
 
@@ -316,7 +322,7 @@ type MessageContext<Schema, Data> = {
   unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
 
   // RPC handlers only (when message has response schema)
-  reply?: (data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
+  reply?: (schema: MessageSchema, data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
   progress?: (data?: unknown) => void; // Progress update (non-terminal, optional)
   abortSignal?: AbortSignal; // Fires on client cancel/disconnect (ADR-015)
   onCancel?: (cb: () => void) => () => void; // Register cancel callback
@@ -337,12 +343,16 @@ type MessageContext<Schema, Data> = {
 
 ```typescript
 // Terminal reply (one-shot, schema-enforced)
-ctx.reply?.({ userId: "123", email: "user@example.com" });
+const GetUserResponse = message("GetUserResponse", {
+  userId: z.string(),
+  email: z.string(),
+});
+ctx.reply?.(GetUserResponse, { userId: "123", email: "user@example.com" });
 
 // Progress updates before reply (optional)
 ctx.progress?.({ loaded: 50 });
 ctx.progress?.({ loaded: 100 });
-ctx.reply?.({ data: result });
+ctx.reply?.(GetUserResponse, { userId: "123", email: "user@example.com" });
 
 // Abort signal for cancellation
 const result = await fetch(url, { signal: ctx.abortSignal });
@@ -354,6 +364,88 @@ ctx.onCancel?.(() => {
 ```
 
 See [ADR-015: Unified RPC API](../adr/015-unified-rpc-api-design.md) for design rationale.
+
+## RPC Wire Format (Success and Error)
+
+### RPC Success Response (Option A - Canonical)
+
+When a handler calls `ctx.reply(data)`, the response is sent with the **response message schema type**:
+
+```json
+{
+  "type": "<ResponseMessageName>",
+  "meta": {
+    "timestamp": 1730450000123,
+    "correlationId": "req-42"
+  },
+  "payload": {
+    /* response fields per schema */
+  }
+}
+```
+
+**Example**: For a `GetUserRequest` → `GetUserResponse` RPC:
+
+```typescript
+const GetUserRequest = message("GetUser", { userId: z.string() });
+const GetUserResponse = message("GetUserResponse", { user: UserSchema });
+
+const GetUser = rpc(GetUserRequest, GetUserResponse);
+
+router.rpc(GetUser, (ctx) => {
+  const user = await db.users.findById(ctx.payload.userId);
+  ctx.reply?.(GetUserResponse, { user }); // Sends GetUserResponse with correlationId
+});
+```
+
+**Wire on success**:
+
+```json
+{
+  "type": "GetUserResponse",
+  "meta": {
+    "timestamp": 1730450000123,
+    "correlationId": "req-42"
+  },
+  "payload": {
+    "user": { "id": "123", "name": "Alice" }
+  }
+}
+```
+
+**Key points**:
+
+- `type` is the **response message name** (not a generic `RPC_OK` envelope)
+- `meta.timestamp` is always present (server-generated)
+- `meta.correlationId` allows clients to match response to request
+- Response schema validation ensures type safety both directions
+
+### RPC Error Response
+
+If the handler calls `ctx.error()` instead, an error envelope is sent:
+
+```json
+{
+  "type": "RPC_ERROR",
+  "meta": {
+    "timestamp": 1730450000124,
+    "correlationId": "req-42"
+  },
+  "payload": {
+    "code": "NOT_FOUND",
+    "message": "User not found",
+    "details": { "userId": "123" },
+    "retryable": false
+  }
+}
+```
+
+**Unified error structure** (same for `ERROR` and `RPC_ERROR`):
+
+- `meta.correlationId` **present** for `RPC_ERROR` (maps to request)
+- `meta.correlationId` **absent** for non-RPC `ERROR` messages
+- **Exception**: If an RPC request fails validation before a valid `correlationId` can be extracted, the server sends `ERROR` (not `RPC_ERROR`) with code `INVALID_ARGUMENT`
+- See [Error Handling](./error-handling.md#authoritative-error-code-table) for error codes, retry semantics, and `retryAfterMs` rules
 
 **Type Safety**: `ctx.payload` exists only when schema defines it:
 
@@ -369,6 +461,33 @@ router.on(WithoutPayload, (ctx) => {
   const p = ctx.payload; // ❌ Type error
 });
 ```
+
+### RPC Progress Updates (Non-Terminal)
+
+For long-running RPC operations, use `ctx.progress()` to send non-terminal updates before the final `ctx.reply()`. Progress updates allow clients to receive streaming feedback without completing the RPC.
+
+**Usage**:
+
+```typescript
+const ProgressUpdate = message("ProgressUpdate", { percent: z.number() });
+const OperationResult = message("OperationResult", { result: z.string() });
+const LongOperation = createRpc(LongOperationRequest, OperationResult);
+
+router.rpc(LongOperation, async (ctx) => {
+  // Send non-terminal progress updates
+  ctx.progress?.(ProgressUpdate, { percent: 25 });
+  // ... do work ...
+  ctx.progress?.(ProgressUpdate, { percent: 75 });
+  // Final response completes the RPC
+  ctx.reply?.(OperationResult, { result: "done" });
+});
+```
+
+**Semantics & wire format**: See [schema.md: Progress Updates](./schema.md#progress-updates-non-terminal) for:
+
+- Wire format and correlationId semantics
+- Client-side `call.progress()` streaming API
+- Type-safety guarantees and order semantics
 
 ### Middleware
 

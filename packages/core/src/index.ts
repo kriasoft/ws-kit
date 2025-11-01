@@ -64,8 +64,19 @@ export type {
 // Error Handling
 // ============================================================================
 
-export { ErrorCode, WebSocketError, WsKitError } from "./error.js";
-export type { ErrorCodeValue, ErrorPayload, ErrorMessage } from "./error.js";
+export {
+  ErrorCode,
+  ERROR_CODE_META,
+  WebSocketError,
+  WsKitError,
+} from "./error.js";
+export type {
+  ErrorCodeValue,
+  ErrorCodeMetadata,
+  ErrorPayload,
+  ErrorMessage,
+} from "./error.js";
+export type { ErrorWire, RpcErrorWire } from "./types.js";
 
 // ============================================================================
 // Constants & Defaults

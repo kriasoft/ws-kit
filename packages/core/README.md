@@ -163,7 +163,9 @@ interface MessageContext<TSchema, TData> {
 
 ### Error Codes
 
-Standardized error codes (13 codes, gRPC-aligned per ADR-015):
+Standardized error codes (13 codes, gRPC-aligned per ADR-015) with automatic retry inference:
+
+**Terminal Errors (Non-Retryable):**
 
 - `UNAUTHENTICATED` — Missing or invalid authentication
 - `PERMISSION_DENIED` — Authorization failed (after successful auth)
@@ -171,13 +173,33 @@ Standardized error codes (13 codes, gRPC-aligned per ADR-015):
 - `FAILED_PRECONDITION` — Stateful precondition not met
 - `NOT_FOUND` — Requested resource doesn't exist
 - `ALREADY_EXISTS` — Uniqueness or idempotency violation
-- `ABORTED` — Concurrency conflict (race condition)
+- `UNIMPLEMENTED` — Feature not supported or deployed
+- `CANCELLED` — Request cancelled by client or peer
+
+**Transient Errors (Retryable):**
+
 - `DEADLINE_EXCEEDED` — RPC request timed out
 - `RESOURCE_EXHAUSTED` — Rate limit, quota, or buffer overflow
 - `UNAVAILABLE` — Transient infrastructure error
-- `UNIMPLEMENTED` — Feature not supported or deployed
-- `INTERNAL` — Unexpected server error (unhandled exception)
-- `CANCELLED` — Request cancelled by client or peer
+- `ABORTED` — Concurrency conflict (race condition)
+
+**Mixed:**
+
+- `INTERNAL` — Unexpected server error (retryability app-specific)
+
+**Error Response Format:**
+
+```typescript
+{
+  code: ErrorCode,          // Standard error code
+  message?: string,         // Optional description
+  details?: Record<string, any>,  // Optional context
+  retryable?: boolean,      // Optional (auto-inferred from code)
+  retryAfterMs?: number     // Optional backoff hint for transient errors
+}
+```
+
+See [docs/specs/error-handling.md](../../docs/specs/error-handling.md) and `ERROR_CODE_META` for complete retry semantics and code metadata.
 
 ## Adapter Implementation
 

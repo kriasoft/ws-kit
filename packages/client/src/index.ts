@@ -573,7 +573,8 @@ export function createClient(opts: ClientOptions): WebSocketClient {
         ("timeoutMs" in replyOrOpts ||
           "meta" in replyOrOpts ||
           "correlationId" in replyOrOpts ||
-          "signal" in replyOrOpts);
+          "signal" in replyOrOpts ||
+          "onProgress" in replyOrOpts);
 
       if (isOptionsObject) {
         // Third arg is options, use RPC response schema
@@ -617,6 +618,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
       meta?: Record<string, unknown>;
       correlationId?: string;
       signal?: AbortSignal;
+      onProgress?: (data: unknown) => void;
     },
   ): Promise<unknown> {
     const timeoutMs = opts?.timeoutMs ?? 30000;
@@ -696,6 +698,7 @@ export function createClient(opts: ClientOptions): WebSocketClient {
         }
       },
       opts?.signal,
+      opts?.onProgress,
     );
 
     return requestPromise;

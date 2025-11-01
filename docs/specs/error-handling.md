@@ -59,22 +59,31 @@ const ErrorMessage = message("ERROR", {
     "INTERNAL",
     "CANCELLED",
   ]),
-  message: z.string(),
+  message: z.string().optional(),
   details: z.record(z.any()).optional(),
   retryable: z.boolean().optional(),
+  retryAfterMs: z.number().int().positive().optional(),
 });
 
-// Schema structure:
+// Unified wire format for both ERROR and RPC_ERROR:
 // {
-//   type: "ERROR",
-//   meta: { timestamp?, correlationId? },
+//   type: "ERROR" | "RPC_ERROR",
+//   meta: {
+//     timestamp: number,          // always present (server-generated)
+//     correlationId?: string      // present for RPC_ERROR; absent for ERROR
+//   },
 //   payload: {
 //     code: ErrorCode,
-//     message: string,
+//     message?: string,
 //     details?: Record<string, any>,
-//     retryable?: boolean
+//     retryable?: boolean,        // inferred from code if omitted
+//     retryAfterMs?: number       // backoff hint for transient errors
 //   }
 // }
+//
+// Note: When an RPC message fails validation before a valid correlationId can be
+// extracted, the server sends ERROR (not RPC_ERROR) with code INVALID_ARGUMENT,
+// since the error cannot be correlated back to the request.
 ```
 
 ## Standard Error Codes {#error-code-enum}
@@ -92,6 +101,39 @@ For the complete error taxonomy, detailed rationale, and decision tree, see **[A
 - **Server/Evolution**: `UNIMPLEMENTED` (feature not deployed), `INTERNAL` (unexpected error), `CANCELLED` (user/peer cancelled)
 
 Use `ctx.error(code, message, details)` for type-safe responses. The framework logs all errors with connection identity for traceability.
+
+### Authoritative Error Code Table
+
+| Code                  | Retryable | Description                                                | `retryAfterMs` rule    |
+| --------------------- | --------- | ---------------------------------------------------------- | ---------------------- |
+| `UNAUTHENTICATED`     | ❌ No     | Auth token missing, expired, or invalid                    | Forbidden              |
+| `PERMISSION_DENIED`   | ❌ No     | Authenticated but lacks rights (authZ)                     | Forbidden              |
+| `INVALID_ARGUMENT`    | ❌ No     | Input validation or semantic violation                     | Forbidden              |
+| `FAILED_PRECONDITION` | ❌ No     | State requirement not met                                  | Forbidden              |
+| `NOT_FOUND`           | ❌ No     | Target resource absent                                     | Forbidden              |
+| `ALREADY_EXISTS`      | ❌ No     | Uniqueness or idempotency replay violation                 | Forbidden              |
+| `UNIMPLEMENTED`       | ❌ No     | Feature not supported or deployed                          | Forbidden              |
+| `CANCELLED`           | ❌ No     | Call cancelled (client disconnect, timeout abort)          | Forbidden              |
+| `DEADLINE_EXCEEDED`   | ✅ Yes    | RPC timed out (retry immediately)                          | Optional               |
+| `RESOURCE_EXHAUSTED`  | ✅ Yes    | Rate limit, quota, or buffer overflow                      | Optional (recommended) |
+| `UNAVAILABLE`         | ✅ Yes    | Transient infrastructure error                             | Optional               |
+| `ABORTED`             | ✅ Yes    | Concurrency conflict (race condition)                      | Optional               |
+| `INTERNAL`            | ⚠️ Maybe  | Unexpected server error (bug); server decides if retryable | Optional               |
+
+**Client Inference Rules**:
+
+- If `retryable` field is **present**, use its value
+- If `retryable` field is **absent**:
+  - Infer `true` for transient codes (`DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `ABORTED`)
+  - Infer `false` for terminal codes (all others)
+  - For `INTERNAL`, infer `false` (conservative: assume bug, don't retry)
+
+**Server Validation Rules**:
+
+- For codes marked "Forbidden": `retryAfterMs` **must be absent**
+- For codes marked "Optional": `retryAfterMs` may be present when server has a backoff hint
+- For codes marked "Recommended" (e.g., `RESOURCE_EXHAUSTED`): servers **should** include `retryAfterMs` when due to backpressure or rate limiting
+- Example: `ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, { retryable: true, retryAfterMs: 100 })`
 
 ### Extending Error Codes
 
@@ -131,6 +173,36 @@ router.on(CreateRoom, (ctx) => {
 - Keep error messages human-readable and helpful
 - Errors are automatically logged with `clientId` for debugging
 
+## Reserved Control Message Namespace {#control-namespace}
+
+The `$ws:` prefix is **reserved** for system messages sent by ws-kit. Do not use this prefix in your application message types.
+
+**System Control Messages:**
+
+- `$ws:rpc-progress` — Non-terminal RPC progress updates (used internally by `ctx.progress()`)
+- `$ws:abort` — RPC cancellation request (client-initiated, used internally by AbortSignal support)
+
+Future system messages may use this namespace, so applications must avoid colliding with names like:
+
+- `$ws:cancel`
+- `$ws:ping`
+- `$ws:pong`
+- `$ws:keepalive`
+
+**Example (do NOT register handlers for):**
+
+```typescript
+// ❌ Avoid this
+router.on({ type: "$ws:custom-message" }, (ctx) => {
+  // This will conflict with future system messages
+});
+
+// ✅ Use your own prefix instead
+router.on({ type: "APP:custom-message" }, (ctx) => {
+  // This is safe and explicit
+});
+```
+
 ## Sending Errors
 
 ### Using ctx.error() (Recommended)
@@ -154,6 +226,19 @@ router.on(JoinRoom, (ctx) => {
 ```
 
 **Note**: Error messages include a producer `meta.timestamp`; **never** base server actions on it — use `ctx.receivedAt` for server logic (see @schema.md#Which-timestamp-to-use).
+
+### Error Detail Sanitization
+
+Error details are automatically sanitized before transmission to prevent accidental credential leaks.
+
+**Forbidden keys (case-insensitive)**: `password`, `token`, `authorization`, `bearer`, `jwt`, `apikey`, `api_key`, `accesstoken`, `access_token`, `refreshtoken`, `refresh_token`, `cookie`, `secret`, `credentials`, `auth`
+
+**Size limits**: Nested objects (JSON > 500 chars) and oversized values are omitted. If all details are stripped, the `details` field is omitted entirely.
+
+**Note**: Sanitization is a **safety net**, not a substitute for careful error design. Always think before including details:
+
+- ✅ Include: Resource IDs, field names, error context for troubleshooting
+- ❌ Avoid: Passwords, tokens, API keys, internal state, huge blobs
 
 ## Error Handling in Handlers
 

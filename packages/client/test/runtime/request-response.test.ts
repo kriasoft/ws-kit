@@ -532,4 +532,78 @@ describe("Client: Request/Response Correlation", () => {
       expect(reply.type).toBe("HELLO_OK");
     });
   });
+
+  describe("RPC Progress Streaming", () => {
+    it("calls onProgress callback for $ws:rpc-progress frames without settling", async () => {
+      await client.connect();
+
+      const progressUpdates: unknown[] = [];
+      const promise = client.request(
+        Ping,
+        { text: "test" },
+        {
+          timeoutMs: 5000,
+          correlationId: "progress-test",
+          onProgress: (data) => progressUpdates.push(data),
+        },
+      );
+
+      // Server sends progress updates
+      simulateReceive({
+        type: "$ws:rpc-progress",
+        meta: { correlationId: "progress-test" },
+        data: { processed: 1 },
+      });
+
+      simulateReceive({
+        type: "$ws:rpc-progress",
+        meta: { correlationId: "progress-test" },
+        data: { processed: 2 },
+      });
+
+      // Promise should not be settled yet
+      expect(progressUpdates).toEqual([{ processed: 1 }, { processed: 2 }]);
+
+      // Server sends terminal reply
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: "progress-test" },
+        payload: { reply: "done" },
+      });
+
+      const reply = (await promise) as z.infer<typeof Ping>;
+      expect(reply.payload.reply).toBe("done");
+      expect(progressUpdates).toEqual([{ processed: 1 }, { processed: 2 }]);
+    });
+
+    it("handles progress frames without onProgress callback gracefully", async () => {
+      await client.connect();
+
+      const promise = client.request(
+        Ping,
+        { text: "test" },
+        {
+          timeoutMs: 5000,
+          correlationId: "progress-no-callback",
+        },
+      );
+
+      // Server sends progress updates
+      simulateReceive({
+        type: "$ws:rpc-progress",
+        meta: { correlationId: "progress-no-callback" },
+        data: { processed: 1 },
+      });
+
+      // Server sends terminal reply
+      simulateReceive({
+        type: "PONG",
+        meta: { correlationId: "progress-no-callback" },
+        payload: { reply: "done" },
+      });
+
+      const reply = (await promise) as z.infer<typeof Ping>;
+      expect(reply.payload.reply).toBe("done");
+    });
+  });
 });

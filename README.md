@@ -477,7 +477,7 @@ router.onClose((ctx) => {
 - `ctx.send()` — Type-safe send to this client only
 - `ctx.assignData()` — Type-safe partial data updates
 - `ctx.subscribe()` / `ctx.unsubscribe()` — Topic management
-- `ctx.error()` — Send type-safe error messages
+- `ctx.error(code, message?, details?, options?)` — Send type-safe error with optional retry hints
 
 ## Broadcasting and Subscriptions
 
@@ -603,11 +603,11 @@ The `publish()` function ensures that all broadcast messages are validated again
 
 ## Error handling and sending error messages
 
-Effective error handling is crucial for maintaining robust WebSocket connections. WS-Kit provides built-in error response support with standardized error codes.
+Effective error handling is crucial for maintaining robust WebSocket connections. WS-Kit provides built-in error response support with standardized error codes and automatic retry inference for clients.
 
 ### Error handling with ctx.error()
 
-Use `ctx.error()` to send type-safe error responses:
+Use `ctx.error()` to send type-safe error responses with optional retry hints:
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -623,22 +623,43 @@ router.on(JoinRoom, async (ctx) => {
   // Check if room exists
   const roomExists = await checkRoomExists(roomId);
   if (!roomExists) {
-    // Send error with standardized code
+    // Send non-retryable error with context
     ctx.error("NOT_FOUND", `Room ${roomId} does not exist`, { roomId });
     return;
   }
 
   // Continue with normal flow
   ctx.assignData({ roomId });
-  ctx.ws.subscribe(roomId);
+  ctx.subscribe(roomId);
+});
+```
+
+For transient errors, include a backoff hint:
+
+```ts
+router.on(SomeMessage, async (ctx) => {
+  try {
+    const result = await getDataWithQuota();
+    // ...
+  } catch (error) {
+    if (isRateLimited(error)) {
+      // Send retryable error with backoff hint
+      ctx.error("RESOURCE_EXHAUSTED", "Rate limit exceeded", undefined, {
+        retryable: true,
+        retryAfterMs: 1000, // Client should wait 1s before retry
+      });
+    } else {
+      ctx.error("INTERNAL", "Server error");
+    }
+  }
 });
 ```
 
 ### Standard error codes
 
-The standard error codes (aligned with gRPC) are:
+The standard error codes (13 codes, aligned with gRPC) are automatically inferred as retryable or non-retryable:
 
-**Terminal errors (don't retry):**
+**Terminal errors (non-retryable):**
 
 - `UNAUTHENTICATED` — Authentication failed
 - `PERMISSION_DENIED` — Authenticated but lacks rights
@@ -646,21 +667,23 @@ The standard error codes (aligned with gRPC) are:
 - `FAILED_PRECONDITION` — Operation preconditions not met
 - `NOT_FOUND` — Resource not found
 - `ALREADY_EXISTS` — Resource already exists
-- `ABORTED` — Operation aborted
+- `UNIMPLEMENTED` — Feature not implemented
+- `CANCELLED` — Request cancelled by client
 
-**Transient errors (retry with backoff):**
+**Transient errors (retryable with backoff):**
 
 - `DEADLINE_EXCEEDED` — Request deadline exceeded
 - `RESOURCE_EXHAUSTED` — Rate limit, backpressure, or quota exceeded
 - `UNAVAILABLE` — Service temporarily unavailable
+- `ABORTED` — Concurrency conflict or operation aborted
 
-**Server & evolution:**
+**Mixed (app-specific):**
 
-- `UNIMPLEMENTED` — Feature not implemented
-- `INTERNAL` — Server error
-- `CANCELLED` — Request cancelled by client
+- `INTERNAL` — Unexpected server error (retryability determined by app)
 
-See [ADR-015](docs/adr/015-error-handling.md) for the complete error code taxonomy.
+Clients automatically infer retry behavior from the error code. Use `retryAfterMs` to provide backoff hints for transient errors, or override `retryable` for specific cases.
+
+See [ADR-015](docs/adr/015-error-handling.md) for the complete error code taxonomy and [docs/specs/error-handling.md](docs/specs/error-handling.md) for retry semantics.
 
 ### Custom error handling
 
@@ -797,6 +820,23 @@ const reply = await client.request(Hello, { name: "Bob" }, HelloOk, {
 See the [Client Documentation](./docs/specs/client.md) for complete API reference and advanced usage.
 
 ## Breaking Changes & Migration
+
+### Error Message Parameter is Optional
+
+The `ctx.error()` method now has an optional message parameter and supports retry semantics:
+
+```ts
+// Old signature (still works - backward compatible)
+ctx.error("NOT_FOUND", "Resource not found", { resourceId });
+
+// New signature with retry hints
+ctx.error("RESOURCE_EXHAUSTED", undefined, undefined, {
+  retryable: true,
+  retryAfterMs: 1000,
+});
+```
+
+The wire format for errors now includes optional `retryable` and `retryAfterMs` fields. Clients automatically infer retry behavior from error codes via `ERROR_CODE_META`.
 
 ### Validator is Required
 

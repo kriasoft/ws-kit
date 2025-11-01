@@ -117,6 +117,7 @@ export default {
 - **ALWAYS** keep connections open (handler must close explicitly) → @error-handling.md
 - **ALWAYS** log errors with `clientId` for traceability → @error-handling.md
 - **ALWAYS** implement `onError` hook in `serve()` for centralized error handling → ADR-009
+- **NEVER** include passwords, tokens, API keys, or credentials in error details (automatically stripped) → @error-handling.md#Error-Detail-Sanitization
 
 ### Messaging
 

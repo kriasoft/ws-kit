@@ -193,15 +193,22 @@ router.on(SomeMessage, (ctx) => {
 
 ### Standard Error Codes
 
-Use `ctx.error()` with standard error codes for consistent error handling:
+Use `ctx.error()` with standard error codes for consistent error handling. Clients automatically infer whether errors are retryable:
 
 ```typescript
+// Non-retryable error (client won't retry)
 ctx.error("INVALID_ARGUMENT", "Invalid room ID");
+
+// Transient error with backoff hint (client retries after 2s)
+ctx.error("RESOURCE_EXHAUSTED", "Server busy", undefined, {
+  retryable: true,
+  retryAfterMs: 2000,
+});
 ```
 
 Available error codes (aligned with gRPC standards):
 
-**Terminal errors** (don't retry):
+**Terminal errors** (non-retryable):
 
 - `UNAUTHENTICATED`: Auth token missing, expired, or invalid
 - `PERMISSION_DENIED`: Authenticated but lacks rights
@@ -209,21 +216,40 @@ Available error codes (aligned with gRPC standards):
 - `FAILED_PRECONDITION`: State requirement not met
 - `NOT_FOUND`: Resource not found
 - `ALREADY_EXISTS`: Uniqueness or idempotency violation
-- `ABORTED`: Concurrency conflict (race condition)
+- `UNIMPLEMENTED`: Feature not supported or deployed
+- `CANCELLED`: Call cancelled (client disconnect, timeout abort)
 
-**Transient errors** (retry with backoff):
+**Transient errors** (automatically retryable):
 
 - `DEADLINE_EXCEEDED`: RPC timed out
 - `RESOURCE_EXHAUSTED`: Rate limit, quota, or backpressure exceeded
 - `UNAVAILABLE`: Transient infrastructure error
+- `ABORTED`: Concurrency conflict (race condition)
 
-**Server/evolution**:
+**Mixed (app-specific)**:
 
-- `UNIMPLEMENTED`: Feature not supported or deployed
-- `INTERNAL`: Unexpected server error (bug)
-- `CANCELLED`: Call cancelled (client disconnect, timeout abort)
+- `INTERNAL`: Unexpected server error (server decides retryability)
 
-See [Error Handling](./specs/error-handling.md) and ADR-015 for complete error code taxonomy.
+#### Retry Behavior
+
+Clients infer retryability using these rules:
+
+1. **If `retryable` field is present**: Use its value
+2. **If `retryable` field is absent**:
+   - Transient codes (`DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `ABORTED`): infer `true`
+   - Terminal codes (all others): infer `false`
+   - `INTERNAL`: infer `false` (conservative: assume bug, don't retry)
+
+Use `retryAfterMs` to provide backoff hints for transient errors:
+
+```typescript
+// Backoff hints are optional but recommended for rate-limited scenarios
+ctx.error("RESOURCE_EXHAUSTED", undefined, undefined, {
+  retryAfterMs: 5000, // Client waits 5 seconds before retrying
+});
+```
+
+See [Error Handling Spec](./specs/error-handling.md) and ADR-015 for complete error code taxonomy and semantics.
 
 ## WebSocket Data
 

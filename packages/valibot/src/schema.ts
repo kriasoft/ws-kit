@@ -360,6 +360,9 @@ export function createMessageSchema(valibot: ValibotLike) {
     message: valibot.optional(valibot.string()),
     details: valibot.optional(valibot.record(valibot.string(), valibot.any())),
     retryable: valibot.optional(valibot.boolean()),
+    retryAfterMs: valibot.optional(
+      valibot.pipe(valibot.number(), valibot.integer(), valibot.minValue(1)),
+    ),
   });
 
   // Client-side helper: validates and creates messages for sending

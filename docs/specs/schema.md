@@ -244,18 +244,22 @@ router.on(GetUser, (ctx) => {
 });
 ```
 
-**Optional: Progress updates before terminal reply**:
+### Progress Updates (Non-Terminal)
+
+For long-running RPC operations, send non-terminal progress updates before the final terminal reply. Progress updates allow the server to stream intermediate results while the client waits for completion.
+
+**Server**: Use `ctx.progress()` before `ctx.reply()`:
 
 ```typescript
-router.on(GetUser, (ctx) => {
+router.rpc(GetUser, (ctx) => {
   ctx.progress?.({ stage: "loading" });
   const user = await db.users.findById(ctx.payload.id);
   ctx.progress?.({ stage: "validating" });
-  ctx.reply?.({ user });
+  ctx.reply?.(GetUserResponse, { user });
 });
 ```
 
-**Client**: Use `call.result()` for terminal, `call.progress()` for stream:
+**Client**: Use `call.progress()` to stream updates and `call.result()` for terminal:
 
 ```typescript
 const client = wsClient({ url: "ws://localhost:3000" });
@@ -271,6 +275,29 @@ for await (const p of call.progress()) {
 // Wait for terminal response
 const { user } = await call.result();
 ```
+
+**Progress Message Wire Format**:
+
+Progress updates are sent as internal control messages (reserved type `$ws:rpc-progress`):
+
+```json
+{
+  "type": "$ws:rpc-progress",
+  "meta": {
+    "timestamp": 1730450000125,
+    "correlationId": "req-42"
+  },
+  "data": { "stage": "validating" }
+}
+```
+
+**Semantics**:
+
+- **Non-terminal**: Client waits for final `reply()` or `error()` (progress messages don't complete the RPC)
+- **Unidirectional**: Server → Client only (clients cannot send progress messages)
+- **Optional**: Not required; use only when operation genuinely produces updates
+- **Order guarantee**: Progress messages arrive in send order; final response arrives last
+- **Schema-inferred**: Progress data type matches the response schema
 
 **Benefits (ADR-015)**:
 
