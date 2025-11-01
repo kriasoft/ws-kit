@@ -1,5 +1,16 @@
 # @ws-kit/bun
 
+## 0.2.0
+
+### Minor Changes
+
+- [#27](https://github.com/kriasoft/ws-kit/pull/27) [`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36) Thanks [@koistya](https://github.com/koistya)! - Added configurable message payload size limits with monitoring hooks. Helps debug backpressure issues and prevent out-of-memory conditions from malformed or excessively large messages.
+
+### Patch Changes
+
+- Updated dependencies [[`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36)]:
+  - @ws-kit/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @ws-kit/core
 
+## 0.2.0
+
+### Minor Changes
+
+- [#27](https://github.com/kriasoft/ws-kit/pull/27) [`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36) Thanks [@koistya](https://github.com/koistya)! - Error handling improvements: added `retryable` and `retryAfterMs` options to `ctx.error()`. Standard error codes now classified as terminal, transient, or mixed for automatic client retry inference. Added error detail sanitization to prevent credential leaks.
+
 ## 0.1.0
 
 ### Minor Changes

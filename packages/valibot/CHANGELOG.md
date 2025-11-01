@@ -1,5 +1,16 @@
 # @ws-kit/valibot
 
+## 0.2.0
+
+### Minor Changes
+
+- [#27](https://github.com/kriasoft/ws-kit/pull/27) [`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36) Thanks [@koistya](https://github.com/koistya)! - Improved error message formatting: validator now provides field paths and context in error messages. Better error context for developers debugging validation failures.
+
+### Patch Changes
+
+- Updated dependencies [[`7317f53`](https://github.com/kriasoft/ws-kit/commit/7317f5381cc2b03fe42bff32e9aad24da0db3f36)]:
+  - @ws-kit/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

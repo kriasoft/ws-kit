@@ -1,6 +1,6 @@
 {
   "name": "bun-zod-chat-example",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Real-time chat application using @ws-kit/bun + @ws-kit/zod",
   "type": "module",
