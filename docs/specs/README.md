@@ -66,49 +66,29 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 
 ## Architectural Decision Records (ADRs)
 
-**When to reference ADRs:**
+For comprehensive architecture documentation and design rationale, see the [ADR Index](../adr/README.md).
 
-- When explaining _why_ a design choice was made
-- When documenting trade-offs and alternatives
-- For design rationale and implementation guidance
+**Key ADRs referenced in specs:**
 
-**Normative ADRs** (foundation of the API design - MUST follow):
+- **ADR-007**: [Export-with-Helpers Pattern](../adr/007-export-with-helpers-pattern.md) — FOUNDATIONAL: Single canonical import source
+- **ADR-001**: [Message Context Conditional Payload Typing](../adr/001-message-context-conditional-payload-typing.md) — Type-safe `ctx.payload` access
+- **ADR-002**: [Typed Client Adapters](../adr/002-typed-client-adapters.md) — Full type inference in browser/Node.js clients
+- **ADR-015**: [Unified RPC API Design](../adr/015-unified-rpc-api-design.md) — Request/response patterns with schema unification
 
-| ADR         | Title                                                                                                  | Implements                         | Key Decision                                                                                                                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ADR-007** | [Export-with-Helpers Pattern](../adr/007-export-with-helpers-pattern.md)                               | @schema.md, @router.md, @client.md | **FOUNDATIONAL**: Single canonical import source (`@ws-kit/zod` or `@ws-kit/valibot`) prevents dual-package hazards. All server imports must follow this pattern. |
-| **ADR-001** | [Message Context Conditional Payload Typing](../adr/001-message-context-conditional-payload-typing.md) | @schema.md, @validation.md         | Conditional `ctx.payload` typing via intersection types—ensures type safety in handlers without manual assertions                                                 |
-| **ADR-002** | [Typed Client Adapters via Type Overrides](../adr/002-typed-client-adapters.md)                        | @client.md                         | Separate typed clients (`/zod/client`, `/valibot/client`) for full type inference; generic `/client` for custom validators only                                   |
-| **ADR-005** | [Builder Pattern and Symbol Escape Hatch](../adr/005-builder-pattern-and-symbol-escape-hatch.md)       | @router.md                         | Plain object builder for `createRouter()` replacing Proxy; Symbol.for escape hatch for advanced use cases                                                         |
-
-**Informational ADRs** (reference for design rationale and patterns):
-
-| ADR         | Title                                                                                                        | Impacts Spec                   | Key Decision                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------------ |
-| **ADR-003** | [Example Import Strategy with Path Aliases](../adr/003-example-imports.md)                                   | Examples                       | Production-like imports in development via path aliases                              |
-| **ADR-004** | [Typed Router Factory Pattern](../adr/004-typed-router-factory.md)                                           | @schema.md, @router.md         | Factory pattern for type preservation (superseded by ADR-005, ADR-007)               |
-| **ADR-006** | [Multi-Runtime `serve()` with Explicit Selection](../adr/006-multi-runtime-serve-with-explicit-selection.md) | @router.md, @client.md         | Unified `serve()` function across platforms (Bun, Cloudflare, Deno)                  |
-| **ADR-008** | [Middleware Support](../adr/008-middleware-support.md)                                                       | @router.md                     | Global and per-route middleware with `next()` semantics                              |
-| **ADR-009** | [Error Handling and Lifecycle Hooks](../adr/009-error-handling-and-lifecycle-hooks.md)                       | @error-handling.md, @router.md | `ctx.error()` and lifecycle hooks (`onError`, `onUpgrade`, `onOpen`, `onClose`)      |
-| **ADR-010** | [Throttled Broadcast Pattern](../adr/010-throttled-broadcast-pattern.md)                                     | @patterns.md, @broadcasting.md | Utility functions for coalescing rapid publishes (50-95% bandwidth reduction)        |
-| **ADR-011** | [Structured Logging Adapter](../adr/011-structured-logging-adapter.md)                                       | @router.md                     | Pluggable logger interface for production deployments (Winston, Pino, Datadog, etc.) |
+See [docs/adr/README.md](../adr/README.md) for the complete decision index.
 
 ## Import Quick Reference
 
-**Server imports MUST follow ADR-007 (export-with-helpers pattern):**
+**Server imports MUST follow ADR-007 (export-with-helpers pattern).**
 
-| Context                | Import Path                                                  | Spec                                          |
-| ---------------------- | ------------------------------------------------------------ | --------------------------------------------- |
-| Server (Zod)           | `import { z, message, createRouter } from "@ws-kit/zod"`     | ADR-007, @schema.md#Canonical-Import-Patterns |
-| Server (Valibot)       | `import { z, message, createRouter } from "@ws-kit/valibot"` | ADR-007, @schema.md#Canonical-Import-Patterns |
-| Platform (Bun)         | `import { serve } from "@ws-kit/bun"`                        | ADR-006, @router.md#Basic-Setup               |
-| Utilities (Throttle)   | `import { createThrottledPublish } from "@ws-kit/core"`      | @patterns.md, ADR-010                         |
-| Utilities (Logger)     | `import { createLogger, LOG_CONTEXT } from "@ws-kit/core"`   | @router.md, ADR-011                           |
-| Client (Zod typed)     | `import { wsClient } from "@ws-kit/client/zod"`              | @client.md, ADR-002                           |
-| Client (Valibot typed) | `import { wsClient } from "@ws-kit/client/valibot"`          | @client.md, ADR-002                           |
-| Client (generic)       | `import { wsClient } from "@ws-kit/client"`                  | @client.md                                    |
+For complete canonical import patterns and usage examples, see **[@schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns)**.
 
-See @schema.md#Canonical-Import-Patterns for complete import examples.
+**Quick reference:**
+
+- Server (Zod/Valibot): `import { z/v, message, createRouter } from "@ws-kit/zod"` or `@ws-kit/valibot"`
+- Platform (Bun): `import { serve } from "@ws-kit/bun"`
+- Client (Typed): `import { wsClient } from "@ws-kit/client/zod"` or `@ws-kit/client/valibot"`
+- Client (Generic): `import { wsClient } from "@ws-kit/client"`
 
 ## Quick Reference
 
@@ -139,50 +119,30 @@ ctx = {
 
 ### Key Patterns
 
-```typescript
-// 1. Import from single source (export-with-helpers)
-import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/bun";
+For detailed working examples, see **[CLAUDE.md](../../CLAUDE.md#quick-start)** and **[@router.md](./router.md)**. Core concepts include:
 
-// 2. Define connection data type
-type AppData = { userId?: string };
+1. **Import from single source** (export-with-helpers pattern, ADR-007)
+   - Server: `import { z, message, createRouter } from "@ws-kit/zod"`
+   - Client: `import { wsClient } from "@ws-kit/client/zod"`
 
-// 3. Create router and schemas (full type inference!)
-const router = createRouter<AppData>();
-const PingMsg = message("PING", { value: z.number() });
-const PongMsg = message("PONG", { reply: z.number() });
+2. **Type-safe message handling** with full inference
+   - Define schemas with `message()`
+   - Access `ctx.payload` without type assertions
+   - TypeScript enforces when payload exists (ADR-001)
 
-// 4. Handle messages (ctx.payload fully typed!)
-router.on(PingMsg, (ctx) => {
-  console.log("Received at:", ctx.receivedAt); // Server time (authoritative)
-  ctx.send(PongMsg, { reply: ctx.payload.value * 2 }); // ✅ No type assertions needed
-});
+3. **Middleware & validation**
+   - Global middleware with `router.use((ctx, next) => ...)`
+   - Per-route middleware with `router.use(schema, middleware)`
+   - Validation occurs before handlers run
 
-// 5. Middleware and broadcasting
-router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "PING") {
-    ctx.error("UNAUTHENTICATED", "Not authenticated");
-    return;
-  }
-  return next();
-});
+4. **Broadcasting & pub/sub**
+   - Unicast: `ctx.send(schema, data)` to current connection
+   - Multicast: `router.publish(topic, schema, data)` to subscribers
+   - Subscribe/unsubscribe with `ctx.subscribe()` / `ctx.unsubscribe()`
 
-router.on(ChatMsg, (ctx) => {
-  router.publish("room:123", RoomMsg, {
-    text: ctx.payload.text,
-    userId: ctx.ws.data?.userId || "anon",
-  });
-});
-
-// 6. Serve with explicit runtime (production-safe)
-serve(router, {
-  port: 3000,
-  runtime: "bun", // Required in production
-  authenticate(req) {
-    return { userId: "user-123" };
-  },
-});
-```
+5. **Error handling & lifecycle**
+   - Type-safe errors: `ctx.error(code, message, details)`
+   - Lifecycle hooks: `onOpen`, `onClose`, `onError`, `onBroadcast`
 
 ## Design Philosophy
 

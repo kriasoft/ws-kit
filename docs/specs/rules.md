@@ -21,52 +21,22 @@ Quick reference index for MUST/NEVER rules. Links to canonical specs for details
 
 ### Import Patterns (ADR-007: Export-with-Helpers)
 
-- **ALWAYS** use single canonical import source → ADR-007, @schema.md#Canonical-Import-Patterns
-  - Server: `import { z, message, createRouter } from "@ws-kit/zod"` or `@ws-kit/valibot`
-  - Client (Typed): `import { wsClient } from "@ws-kit/client/zod"` or `@ws-kit/client/valibot`
-  - Platform-specific: `import { serve } from "@ws-kit/bun"` or `@ws-kit/cloudflare-do`
-- **NEVER** mix imports from different sources (prevents dual package hazard) → ADR-007
-- **NEVER** import `z` directly from `zod` or `v` from `valibot`; always import from `@ws-kit/zod` or `@ws-kit/valibot`
-  - ❌ `import { z } from "zod"` — Creates dual package hazard; breaks type inference
-  - ✅ `import { z } from "@ws-kit/zod"` — Single source; full type safety
+See **[@schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns)** for complete patterns and examples.
 
-**ESLint Enforcement:**
+**MUST enforce:**
 
-```json
-{
-  "rules": {
-    "no-restricted-imports": [
-      "error",
-      {
-        "name": "zod",
-        "message": "Import from @ws-kit/zod instead to avoid dual package hazard"
-      },
-      {
-        "name": "valibot",
-        "message": "Import from @ws-kit/valibot instead to avoid dual package hazard"
-      }
-    ]
-  }
-}
-```
+- **ALWAYS** use single canonical import source (prevents dual package hazard) → ADR-007
+- **NEVER** import directly from `zod` or `valibot`; use `@ws-kit/zod` or `@ws-kit/valibot`
 
-**Add to ESLint config:**
+**Recommended ESLint rule:**
 
 ```javascript
-// .eslintrc.js
-module.exports = {
-  rules: {
-    "no-restricted-imports": [
-      "error",
-      {
-        patterns: [
-          { group: ["zod"], message: "Use @ws-kit/zod instead" },
-          { group: ["valibot"], message: "Use @ws-kit/valibot instead" },
-        ],
-      },
-    ],
-  },
-};
+"no-restricted-imports": ["error", {
+  patterns: [
+    { group: ["zod"], message: "Use @ws-kit/zod instead" },
+    { group: ["valibot"], message: "Use @ws-kit/valibot instead" },
+  ],
+}]
 ```
 
 ### Runtime Selection (ADR-006)

@@ -81,45 +81,17 @@ const ErrorMessage = message("ERROR", {
 
 **Standard codes (per ADR-015, gRPC-aligned, 13 codes)**:
 
-```typescript
-type RpcErrorCode =
-  // Terminal errors (don't auto-retry):
-  | "UNAUTHENTICATED" // Missing or invalid authentication
-  | "PERMISSION_DENIED" // Authorization failed (after successful auth)
-  | "INVALID_ARGUMENT" // Input validation or semantic validation failed
-  | "FAILED_PRECONDITION" // Stateful precondition not met
-  | "NOT_FOUND" // Requested resource doesn't exist
-  | "ALREADY_EXISTS" // Uniqueness or idempotency violation
-  | "ABORTED" // Concurrency conflict (race condition)
-  // Transient errors (retry with backoff):
-  | "DEADLINE_EXCEEDED" // RPC request timed out
-  | "RESOURCE_EXHAUSTED" // Buffer overflow, rate limits, or backpressure
-  | "UNAVAILABLE" // Transient infrastructure error (retriable)
-  // Server/evolution:
-  | "UNIMPLEMENTED" // Feature not supported or deployed
-  | "INTERNAL" // Unexpected server error (unhandled exception)
-  | "CANCELLED"; // Request was cancelled by client or peer
-```
+For the complete error taxonomy, detailed rationale, and decision tree, see **[ADR-015](../adr/015-unified-rpc-api-design.md)** (section 3.3: Error Code Reference & Decision Matrix).
 
-**Quick Error Selection (ADR-015)**:
+**Quick reference** — use the code that best matches your scenario:
 
-| Scenario                    | Code                  | Retryable          | Example                                   |
-| --------------------------- | --------------------- | ------------------ | ----------------------------------------- |
-| Not authenticated           | `UNAUTHENTICATED`     | No                 | Missing/invalid token, re-authenticate    |
-| Not authorized              | `PERMISSION_DENIED`   | No                 | Insufficient role/scope after auth        |
-| Schema validation failed    | `INVALID_ARGUMENT`    | No                 | Missing field, wrong type, semantic error |
-| Precondition not met        | `FAILED_PRECONDITION` | No                 | Perform prerequisite action first         |
-| Not found                   | `NOT_FOUND`           | No                 | User/resource deleted or doesn't exist    |
-| Uniqueness violation        | `ALREADY_EXISTS`      | No                 | Duplicate key, idempotency key reuse      |
-| Race condition              | `ABORTED`             | Yes (with backoff) | Optimistic lock failure, write conflict   |
-| Timeout                     | `DEADLINE_EXCEEDED`   | Yes (with backoff) | RPC didn't complete in time               |
-| Rate limited or buffer full | `RESOURCE_EXHAUSTED`  | Yes                | Too many requests, server backpressure    |
-| Network/transient error     | `UNAVAILABLE`         | Yes                | Server temporarily unreachable            |
-| Feature not deployed        | `UNIMPLEMENTED`       | No                 | Feature behind flag, version skew         |
-| Unhandled exception         | `INTERNAL`            | No                 | Database crash, bug, unexpected error     |
-| User cancelled/disconnected | `CANCELLED`           | No                 | Socket closed, AbortSignal fired          |
+- **Authentication/Authorization**: `UNAUTHENTICATED` (missing/invalid token), `PERMISSION_DENIED` (authorized but insufficient rights)
+- **Input/Validation**: `INVALID_ARGUMENT` (validation failed), `FAILED_PRECONDITION` (state not ready)
+- **Resource Issues**: `NOT_FOUND` (doesn't exist), `ALREADY_EXISTS` (duplicate/idempotency violation), `ABORTED` (race condition)
+- **Transient Issues**: `DEADLINE_EXCEEDED` (timeout), `RESOURCE_EXHAUSTED` (rate limit/buffer full), `UNAVAILABLE` (temporarily unreachable)
+- **Server/Evolution**: `UNIMPLEMENTED` (feature not deployed), `INTERNAL` (unexpected error), `CANCELLED` (user/peer cancelled)
 
-Use `ctx.error(code, message, details, { retryable })` for type-safe responses. The framework logs all errors with connection identity for traceability.
+Use `ctx.error(code, message, details)` for type-safe responses. The framework logs all errors with connection identity for traceability.
 
 ### Extending Error Codes
 

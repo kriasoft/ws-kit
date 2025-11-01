@@ -24,31 +24,12 @@ Quick navigation for AI tools:
 
 **Recommended: Platform-Specific Package** (zero detection overhead)
 
-```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
-import { serve } from "@ws-kit/bun";
+For a complete quick start example, see **[CLAUDE.md#Quick-Start](../../CLAUDE.md#quick-start)** which demonstrates:
 
-type AppData = { userId?: string };
-const router = createRouter<AppData>();
-
-const PingMessage = message("PING", { value: z.number() });
-const PongMessage = message("PONG", { reply: z.number() });
-
-router.on(PingMessage, (ctx) => {
-  console.log("Ping from:", ctx.ws.data.clientId);
-  console.log("Received at:", ctx.receivedAt);
-  // ✅ ctx.payload is fully typed - no 'as any' needed!
-  ctx.send(PongMessage, { reply: ctx.payload.value * 2 });
-});
-
-serve(router, {
-  port: 3000,
-  authenticate(req) {
-    const token = req.headers.get("authorization");
-    return token ? { userId: "user-123" } : undefined;
-  },
-});
-```
+- Setting up router with connection data types
+- Defining message schemas with full type inference
+- Registering handlers with validated payloads
+- Starting the server with authentication
 
 This pattern is recommended because:
 
@@ -57,7 +38,7 @@ This pattern is recommended because:
 - ✅ Explicit deployment target (impossible to misconfigure)
 - ✅ Single canonical location for platform APIs (validator + platform together)
 
-**Alternative: Low-Level Control**
+## Alternative: Low-Level Control
 
 For code that needs direct control over Bun server configuration:
 
@@ -220,7 +201,7 @@ const core = (router as any)[Symbol.for("ws-kit.core")];
 
 ### Debug/Assertions
 
-**Development Mode (Optional Proxy Wrapper)**
+## Development Mode (Optional Proxy Wrapper)
 
 In development (`NODE_ENV !== "production"`), you can enable an optional Proxy wrapper around the router for runtime assertions and typo detection:
 
@@ -435,7 +416,7 @@ Middleware functions have the signature:
 - **Async/Await Support**: Middleware can be async; use `await next()` to wait for downstream completion
 - **Skip Behavior**: If middleware doesn't call `next()`, the handler is skipped and the chain stops
 
-**Example: Async Middleware with Waiting**
+## Example: Async Middleware with Waiting
 
 ```typescript
 router.use(async (ctx, next) => {
@@ -456,14 +437,14 @@ router.use(async (ctx, next) => {
 - **Error Handling**: Middleware can call `ctx.error()` to reject (connection closes) or throw to trigger `onError` hook
 - **Same Context Fields**: Middleware sees the same context type and fields as handlers
 
-**Guarantee: Linear Execution**
+## Guarantee: Linear Execution
 
 - Global middleware always runs before per-route middleware
 - Per-route middleware always runs before handlers
 - If any middleware calls `ctx.error()` or throws, downstream middleware and handlers are skipped
 - The `onError` hook is called if an unhandled error occurs anywhere in the chain
 
-**Example: Authentication + Authorization Middleware**
+## Example: Authentication + Authorization Middleware
 
 ```typescript
 type AppData = { userId?: string; roles?: string[] };
@@ -613,70 +594,21 @@ router.on(QueryMessage, (ctx) => {
 
 ## Subscriptions & Publishing
 
-Use type-safe publish/subscribe to send messages to multiple connections via named topics:
+For comprehensive pub/sub patterns, examples, and detailed API documentation, see **[@broadcasting.md](./broadcasting.md)**.
 
-```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
+**Quick API reference:**
 
-type AppData = { userId?: string; roomId?: string };
+- `ctx.subscribe(topic)` — Subscribe connection to a topic
+- `ctx.unsubscribe(topic)` — Unsubscribe connection from a topic
+- `ctx.publish(topic, schema, payload)` — Type-safe publish from handler context
+- `router.publish(topic, schema, payload)` — Type-safe publish from outside handlers
 
-const RoomMessage = message("ROOM_MESSAGE", { text: z.string() });
-const UserTyping = message("USER_TYPING", { userId: z.string() });
+**Key principles:**
 
-const router = createRouter<AppData>();
-
-// Subscribe to a room when joining
-router.on(JoinRoom, (ctx) => {
-  const roomId = ctx.payload.roomId;
-  ctx.assignData({ roomId });
-  ctx.subscribe(`room:${roomId}`); // Subscribe to room topic
-});
-
-// Publish to room when sending a message
-router.on(RoomMessage, (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  if (!roomId) return;
-
-  // Type-safe publish: schema enforces payload structure at compile time
-  router.publish(`room:${roomId}`, RoomMessage, {
-    text: ctx.payload.text,
-  });
-});
-
-// Unsubscribe when client leaves room
-router.on(LeaveRoom, (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  if (roomId) {
-    ctx.unsubscribe(`room:${roomId}`);
-    ctx.assignData({ roomId: undefined });
-  }
-});
-
-// Automatic cleanup on disconnect
-router.onClose((ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  if (roomId) {
-    // Cleanup: notify room that user left
-    router.publish(`room:${roomId}`, UserLeft, {
-      userId: ctx.ws.data?.userId || "anonymous",
-    });
-  }
-});
-```
-
-**API:**
-
-- `ctx.subscribe(topic)` — Subscribe to a topic; messages published to this topic are sent to the connection
-- `ctx.unsubscribe(topic)` — Unsubscribe from a topic
-- `router.publish<Schema>(topic, schema, payload)` — Type-safe publish; payload validated by schema at compile time
-
-**Critical Rules:**
-
-1. **Validation Before Broadcast**: Payloads are validated at compile time (schema type inference). Runtime validation occurs before message transmission to ensure integrity
-2. **Cleanup on Disconnect**: Always unsubscribe in `onClose()` or via `ctx.unsubscribe()` to prevent memory leaks. For most cases, the connection closing automatically removes subscriptions
-3. **No Handler Trigger**: `router.publish()` does NOT trigger handlers on the publishing connection; it broadcasts to subscribers only
-4. **Topic Scoping**: Topics are arbitrary strings; use naming conventions like `room:123`, `user:456:notifications` for clarity
-5. **Ordering**: Messages published to a topic are delivered in order to all subscribers at the time of publish
+- All publish operations are schema-validated at compile-time and validated at runtime
+- Cleanup on disconnect: always unsubscribe in `onClose()` or via `ctx.unsubscribe()` to prevent memory leaks
+- Message ordering is guaranteed within a topic at the time of publish
+- Use naming conventions like `room:123`, `user:456:notifications` for topic clarity
 
 ## Custom Connection Data
 
