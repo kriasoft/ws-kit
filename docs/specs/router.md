@@ -24,7 +24,7 @@ Quick navigation for AI tools:
 
 **Recommended: Platform-Specific Package** (zero detection overhead)
 
-For a complete quick start example, see **[CLAUDE.md#Quick-Start](../../CLAUDE.md#quick-start)** which demonstrates:
+For a complete quick start example, see the quick start guide in the main README which demonstrates:
 
 - Setting up router with connection data types
 - Defining message schemas with full type inference

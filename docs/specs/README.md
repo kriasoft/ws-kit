@@ -31,8 +31,8 @@ When specs reference the same concept, the canonical source takes precedence:
 
 **Core Patterns:**
 
-- **Export-with-Helpers**: Import `z`, `message()`, and `createRouter()` from single source (`@ws-kit/zod` or `@ws-kit/valibot`) (@schema.md#Canonical-Import-Patterns)
-- **Message Helper**: Use `message(type, payload?, meta?)` to create schemas; single validator instance prevents dual-package issues (@schema.md#Export-with-Helpers-Pattern)
+- **Export-with-Helpers**: Import `z`, `message()`, and `createRouter()` from single source (`@ws-kit/zod` or `@ws-kit/valibot`) (@schema.md#canonical-import-patterns)
+- **Message Helper**: Use `message(type, payload?, meta?)` to create schemas; single validator instance prevents dual-package issues (@schema.md#message-helper)
 - **Router Creation**: Use `createRouter<TData>()` with explicit generic for full type inference in handlers (@router.md#Creating-a-Router)
 - **Typed Clients**: `/zod/client`, `/valibot/client` exports with `wsClient()` for full type inference; generic `/client` for custom validators only (ADR-002)
 - **Normalization**: Security boundary; strips reserved keys before validation (@validation.md#normalization-rules)
@@ -128,7 +128,7 @@ ctx = {
 
 ### Key Patterns
 
-For detailed working examples, see **[CLAUDE.md](../../CLAUDE.md#quick-start)** and **[@router.md](./router.md)**. Core concepts include:
+For detailed working examples, see **[router.md](./router.md)** and **[getting started guide](../getting-started.md)**. Core concepts include:
 
 1. **Import from single source** (export-with-helpers pattern, ADR-007)
    - Server: `import { z, message, createRouter } from "@ws-kit/zod"`
