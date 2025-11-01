@@ -660,6 +660,25 @@ export type Middleware<TData extends WebSocketData = WebSocketData> = (
 ) => void | Promise<void>;
 
 /**
+ * Handler for limit exceeded events.
+ *
+ * Called when a connection exceeds a configured limit (e.g., message size).
+ * Multiple handlers can be registered and are executed sequentially.
+ * Exceptions in handlers are logged but don't interrupt other handlers.
+ *
+ * Useful for:
+ * - Metrics/monitoring (increment counters, emit alerts)
+ * - Custom logging with structured context
+ * - Rate limiting decisions
+ * - Resource cleanup
+ *
+ * @param info - Structured limit exceeded information
+ * @returns void or Promise<void>
+ */
+export type LimitExceededHandler<TData extends WebSocketData = WebSocketData> =
+  (info: LimitExceededInfo<TData>) => void | Promise<void>;
+
+/**
  * Router lifecycle hooks.
  *
  * Each hook can be registered multiple times. Hooks are executed in registration order.
@@ -676,6 +695,9 @@ export interface RouterHooks<TData extends WebSocketData = WebSocketData> {
 
   /** Called when an error occurs during message processing */
   onError?: ErrorHandler<TData>;
+
+  /** Called when a connection exceeds a configured limit (payload size, rate, etc.) */
+  onLimitExceeded?: LimitExceededHandler<TData>;
 }
 
 /**
@@ -724,11 +746,64 @@ export interface HeartbeatConfig {
 }
 
 /**
- * Message payload size constraints.
+ * Type discriminator for limit violations.
+ *
+ * Used to identify which limit was exceeded, allowing extensibility for future limit types.
+ */
+export type LimitType = "payload" | "rate" | "connections" | "backpressure";
+
+/**
+ * Information about a limit being exceeded.
+ *
+ * Passed to the onLimitExceeded hook to enable monitoring, metrics, and custom handling.
+ */
+export interface LimitExceededInfo<
+  TData extends WebSocketData = WebSocketData,
+> {
+  /** Type of limit exceeded (payload, rate, connections, etc.) */
+  type: LimitType;
+
+  /** Observed value (bytes for payload, requests/sec for rate, count for connections) */
+  observed: number;
+
+  /** Configured limit value */
+  limit: number;
+
+  /** WebSocket connection */
+  ws: ServerWebSocket<TData>;
+
+  /** Unique client identifier */
+  clientId: string;
+
+  /** Optional: milliseconds to suggest client waits before retry */
+  retryAfterMs?: number;
+}
+
+/**
+ * Message payload size constraints and limit violation behavior.
  */
 export interface LimitsConfig {
   /** Maximum message payload size in bytes (default: 1,000,000) */
   maxPayloadBytes?: number;
+
+  /**
+   * How to respond when a limit is exceeded (default: "send").
+   *
+   * - "send": Send RESOURCE_EXHAUSTED error frame, keep connection open
+   * - "close": Close connection with WebSocket code (default 1009), no error frame
+   * - "custom": Do nothing else (app will handle in onLimitExceeded hook)
+   */
+  onExceeded?: "send" | "close" | "custom";
+
+  /**
+   * WebSocket close code when onExceeded === "close" (default: 1009).
+   *
+   * Standard WebSocket codes:
+   * - 1009: Message Too Big (RFC 6455)
+   * - 1008: Policy Violation
+   * - 1011: Server Error
+   */
+  closeCode?: number;
 }
 
 /**

@@ -12,6 +12,9 @@ import type {
   CloseHandlerContext,
   ErrorHandler,
   EventHandler,
+  LimitExceededHandler,
+  LimitExceededInfo,
+  LimitType,
   MessageContext,
   MessageHandler,
   MessageHandlerEntry,
@@ -106,6 +109,7 @@ export class WebSocketRouter<
   private readonly closeHandlers: CloseHandler<TData>[] = [];
   private readonly authHandlers: AuthHandler<TData>[] = [];
   private readonly errorHandlers: ErrorHandler<TData>[] = [];
+  private readonly limitExceededHandlers: LimitExceededHandler<TData>[] = [];
   private readonly middlewares: Middleware<TData>[] = [];
   private readonly routeMiddleware = new Map<string, Middleware<TData>[]>(); // Per-route middleware by message type
 
@@ -119,6 +123,10 @@ export class WebSocketRouter<
 
   // Limits
   private readonly maxPayloadBytes: number;
+  private readonly limitsConfig?: {
+    onExceeded?: "send" | "close" | "custom";
+    closeCode?: number;
+  };
   private readonly socketBufferLimitBytes: number;
   private readonly rpcTimeoutMs: number;
   private readonly dropProgressOnBackpressure: boolean;
@@ -156,6 +164,16 @@ export class WebSocketRouter<
 
     this.maxPayloadBytes =
       options.limits?.maxPayloadBytes ?? DEFAULT_CONFIG.MAX_PAYLOAD_BYTES;
+
+    // Store limits behavior configuration
+    if (options.limits) {
+      this.limitsConfig = {
+        onExceeded: options.limits.onExceeded ?? "send",
+        ...(options.limits.closeCode !== undefined && {
+          closeCode: options.limits.closeCode,
+        }),
+      };
+    }
 
     // Store RPC configuration
     this.socketBufferLimitBytes =
@@ -205,6 +223,8 @@ export class WebSocketRouter<
       if (options.hooks.onClose) this.closeHandlers.push(options.hooks.onClose);
       if (options.hooks.onAuth) this.authHandlers.push(options.hooks.onAuth);
       if (options.hooks.onError) this.errorHandlers.push(options.hooks.onError);
+      if (options.hooks.onLimitExceeded)
+        this.limitExceededHandlers.push(options.hooks.onLimitExceeded);
     }
 
     // Set up testing utilities if testing mode is enabled
@@ -1772,21 +1792,72 @@ export class WebSocketRouter<
     } catch (error) {
       const actualError =
         error instanceof Error ? error : new Error(String(error));
-      const fallbackContext = this.createMessageContext(
-        ws,
-        "",
-        clientId,
-        receivedAt,
-        send,
-      );
-      const suppressed = this.callErrorHandlers(actualError, fallbackContext);
 
-      // Auto-send INTERNAL response unless suppressed by error handler
-      if (this.autoSendErrorOnThrow && !suppressed) {
-        const errorMessage = this.exposeErrorDetails
-          ? actualError.message
-          : "Internal server error";
-        fallbackContext.error("INTERNAL", errorMessage);
+      // Check if this is a limit exceeded error
+      const limitInfo = (actualError as unknown as Record<string, unknown>)
+        ?._limitExceeded as
+        | { type: string; observed: number; limit: number }
+        | undefined;
+
+      if (limitInfo) {
+        // Handle limit exceeded case
+        const limitExceededInfo: LimitExceededInfo<TData> = {
+          type: limitInfo.type as LimitType,
+          observed: limitInfo.observed,
+          limit: limitInfo.limit,
+          ws,
+          clientId,
+          retryAfterMs: 0,
+        };
+
+        // Call limit exceeded handlers (fire-and-forget)
+        this.callLimitExceededHandlers(limitExceededInfo);
+
+        // Handle based on configuration
+        const onExceeded = this.limitsConfig?.onExceeded ?? "send";
+
+        if (onExceeded === "send") {
+          // Send RESOURCE_EXHAUSTED error response, keep connection open
+          // Use fallbackContext to ensure wire format consistency with protocol
+          const fallbackContext = this.createMessageContext(
+            ws,
+            "",
+            clientId,
+            receivedAt,
+            send,
+          );
+          fallbackContext.error(
+            "RESOURCE_EXHAUSTED",
+            `Payload size exceeds limit (${limitInfo.observed} > ${limitInfo.limit})`,
+            {
+              observed: limitInfo.observed,
+              limit: limitInfo.limit,
+            },
+          );
+        } else if (onExceeded === "close") {
+          // Close connection with configured code (default: 1009 "Message Too Big")
+          const closeCode = this.limitsConfig?.closeCode ?? 1009;
+          ws.close(closeCode, "RESOURCE_EXHAUSTED");
+        }
+        // For "custom", do nothing - let app handle in onLimitExceeded hook
+      } else {
+        // Not a limit error - handle as regular error
+        const fallbackContext = this.createMessageContext(
+          ws,
+          "",
+          clientId,
+          receivedAt,
+          send,
+        );
+        const suppressed = this.callErrorHandlers(actualError, fallbackContext);
+
+        // Auto-send INTERNAL response unless suppressed by error handler
+        if (this.autoSendErrorOnThrow && !suppressed) {
+          const errorMessage = this.exposeErrorDetails
+            ? actualError.message
+            : "Internal server error";
+          fallbackContext.error("INTERNAL", errorMessage);
+        }
       }
     }
   }
@@ -1818,9 +1889,12 @@ export class WebSocketRouter<
   /**
    * Check if payload size is within limits.
    *
-   * @throws Error if payload exceeds maxPayloadBytes
+   * Returns the payload size for tracking.
+   *
+   * @returns Payload size in bytes
+   * @throws Error if payload exceeds maxPayloadBytes (with special marker)
    */
-  private checkPayloadSize(message: string | Buffer): void {
+  private checkPayloadSize(message: string | Buffer): number {
     let size: number;
 
     if (typeof message === "string") {
@@ -1830,10 +1904,19 @@ export class WebSocketRouter<
     }
 
     if (size > this.maxPayloadBytes) {
-      throw new Error(
+      const error = new Error(
         `Payload size ${size} exceeds limit of ${this.maxPayloadBytes}`,
       );
+      // Mark this as a limit exceeded error for special handling
+      (error as unknown as Record<string, unknown>)._limitExceeded = {
+        type: "payload",
+        observed: size,
+        limit: this.maxPayloadBytes,
+      };
+      throw error;
     }
+
+    return size;
   }
 
   /**
@@ -1878,6 +1961,39 @@ export class WebSocketRouter<
 
     return true;
   }
+
+  /**
+   * Call all registered limit exceeded handlers.
+   *
+   * Fire-and-forget execution: exceptions are logged but don't interrupt other handlers.
+   */
+  private callLimitExceededHandlers(info: LimitExceededInfo<TData>): void {
+    if (this.limitExceededHandlers.length === 0) {
+      return;
+    }
+
+    for (const handler of this.limitExceededHandlers) {
+      try {
+        const result = handler(info);
+        // If handler returns a promise, don't await (fire-and-forget pattern)
+        // But log if it rejects
+        if (result instanceof Promise) {
+          result.catch((error) => {
+            console.error(
+              `[ws] Error in onLimitExceeded handler for ${info.clientId}:`,
+              error,
+            );
+          });
+        }
+      } catch (handlerError) {
+        console.error(
+          `[ws] Error in onLimitExceeded handler for ${info.clientId}:`,
+          handlerError,
+        );
+      }
+    }
+  }
+
   /**
    * Call all registered error handlers and track suppression requests.
    *

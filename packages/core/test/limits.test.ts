@@ -83,12 +83,12 @@ describe("Message Payload Limits", () => {
     });
 
     it("should reject 2MB message with default limit", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -103,24 +103,24 @@ describe("Message Payload Limits", () => {
         payload: "x".repeat(2_000_000),
       });
 
-      // Should catch error in hook
+      // Should catch error in limit exceeded hook
       await router.handleMessage(ws, largeMessage);
-      expect(errors.length).toBe(1);
-      expect(errors[0].message).toMatch(/Payload size .* exceeds limit/);
+      expect(limitExceededCalls.length).toBe(1);
+      expect(limitExceededCalls[0].type).toBe("payload");
     });
   });
 
   describe("Custom Limits", () => {
     it("should enforce custom max payload size", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 1000, // 1KB
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -135,10 +135,10 @@ describe("Message Payload Limits", () => {
         payload: "x".repeat(2000),
       });
 
-      // Should catch error
+      // Should catch in limit exceeded hook
       await router.handleMessage(ws, largeMessage);
-      expect(errors.length).toBe(1);
-      expect(errors[0].message).toMatch(/Payload size .* exceeds limit/);
+      expect(limitExceededCalls.length).toBe(1);
+      expect(limitExceededCalls[0].limit).toBe(1000);
     });
 
     it("should accept messages below custom limit", async () => {
@@ -166,15 +166,15 @@ describe("Message Payload Limits", () => {
     });
 
     it("should handle very small limits", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 10, // 10 bytes
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -185,9 +185,9 @@ describe("Message Payload Limits", () => {
       // Create a minimal message that exceeds limit
       const message = "x".repeat(22);
 
-      // Should catch error
+      // Should catch in limit exceeded hook
       await router.handleMessage(ws, message);
-      expect(errors.length).toBe(1);
+      expect(limitExceededCalls.length).toBe(1);
     });
 
     it("should handle very large limits", async () => {
@@ -204,15 +204,15 @@ describe("Message Payload Limits", () => {
 
   describe("Limit Enforcement", () => {
     it("should count bytes in string messages", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 100,
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -224,19 +224,19 @@ describe("Message Payload Limits", () => {
       const message = "x".repeat(150); // 150 bytes
 
       await router.handleMessage(ws, message);
-      expect(errors.length).toBe(1);
+      expect(limitExceededCalls.length).toBe(1);
     });
 
     it("should count bytes in Buffer messages", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 100,
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -249,19 +249,19 @@ describe("Message Payload Limits", () => {
       buffer.fill(0x41); // Fill with 'A'
 
       await router.handleMessage(ws, buffer);
-      expect(errors.length).toBe(1);
+      expect(limitExceededCalls.length).toBe(1);
     });
 
     it("should account for UTF-8 byte encoding", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 100,
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -273,7 +273,7 @@ describe("Message Payload Limits", () => {
       const message = "😀".repeat(50); // 200 bytes
 
       await router.handleMessage(ws, message);
-      expect(errors.length).toBe(1);
+      expect(limitExceededCalls.length).toBe(1);
     });
   });
 
@@ -327,15 +327,15 @@ describe("Message Payload Limits", () => {
     });
 
     it("should reject message one byte over limit", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 100,
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -347,7 +347,7 @@ describe("Message Payload Limits", () => {
       const message = "x".repeat(101);
 
       await router.handleMessage(ws, message);
-      expect(errors.length).toBe(1);
+      expect(limitExceededCalls.length).toBe(1);
     });
 
     it("should handle Buffer at exact limit", async () => {
@@ -368,15 +368,15 @@ describe("Message Payload Limits", () => {
     });
 
     it("should handle zero limit", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 0,
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -388,21 +388,21 @@ describe("Message Payload Limits", () => {
       const message = "a"; // 1 byte - exceeds 0 byte limit
 
       await router.handleMessage(ws, message);
-      expect(errors.length).toBe(1); // Message exceeds 0 byte limit
+      expect(limitExceededCalls.length).toBe(1); // Message exceeds 0 byte limit
     });
   });
 
   describe("Multiple Connections", () => {
     it("should enforce limits independently for each connection", async () => {
-      const errors: Error[] = [];
+      const limitExceededCalls: any[] = [];
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 100,
         },
         hooks: {
-          onError: (error) => {
-            errors.push(error);
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
           },
         },
       });
@@ -419,7 +419,229 @@ describe("Message Payload Limits", () => {
       await router.handleMessage(ws1, largeMessage);
       await router.handleMessage(ws2, largeMessage);
 
-      expect(errors.length).toBe(2);
+      expect(limitExceededCalls.length).toBe(2);
+    });
+  });
+
+  describe("Limit Exceeded Hook", () => {
+    it("should call onLimitExceeded hook when payload exceeds limit", async () => {
+      const limitExceededCalls: any[] = [];
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+        },
+        hooks: {
+          onLimitExceeded: (info) => {
+            limitExceededCalls.push(info);
+          },
+        },
+      });
+
+      const ws = createMockWebSocket();
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      expect(limitExceededCalls.length).toBe(1);
+      expect(limitExceededCalls[0].type).toBe("payload");
+      expect(limitExceededCalls[0].observed).toBeGreaterThan(100);
+      expect(limitExceededCalls[0].limit).toBe(100);
+      expect(limitExceededCalls[0].clientId).toBe("test-client");
+      expect(limitExceededCalls[0].ws).toBe(ws);
+    });
+
+    it("should send RESOURCE_EXHAUSTED error when onExceeded='send'", async () => {
+      let sentMessage: string | null = null;
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "send",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      expect(sentMessage).toBeTruthy();
+      const parsed = JSON.parse(sentMessage!);
+      expect(parsed.type).toBe("ERROR");
+      expect(parsed.payload.code).toBe("RESOURCE_EXHAUSTED");
+      expect(parsed.payload.details.observed).toBeGreaterThan(100);
+      expect(parsed.payload.details.limit).toBe(100);
+    });
+
+    it("should close connection when onExceeded='close'", async () => {
+      let closeCalled = false;
+      let closeCode: number | undefined;
+      let closeReason: string | undefined;
+
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "close",
+          closeCode: 1009,
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.close = (code, reason) => {
+        closeCalled = true;
+        closeCode = code;
+        closeReason = reason;
+      };
+
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      expect(closeCalled).toBe(true);
+      expect(closeCode).toBe(1009);
+      expect(closeReason).toBe("RESOURCE_EXHAUSTED");
+    });
+
+    it("should not call onError for limit violations", async () => {
+      const errorCalls: any[] = [];
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "send",
+        },
+        hooks: {
+          onError: (error) => {
+            errorCalls.push(error);
+          },
+        },
+      });
+
+      const ws = createMockWebSocket();
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      // onError should NOT be called for limit violations
+      expect(errorCalls.length).toBe(0);
+    });
+
+    it("should handle custom close code", async () => {
+      let closeCode: number | undefined;
+
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "close",
+          closeCode: 1008, // Policy Violation
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.close = (code) => {
+        closeCode = code;
+      };
+
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      expect(closeCode).toBe(1008);
+    });
+
+    it("should default to close code 1009 for close behavior", async () => {
+      let closeCode: number | undefined;
+
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "close",
+          // No explicit closeCode provided
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.close = (code) => {
+        closeCode = code;
+      };
+
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      expect(closeCode).toBe(1009); // Should default to 1009
+    });
+
+    it("should do nothing for custom mode", async () => {
+      let closeCalled = false;
+      let sendMessage: string | null = null;
+
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "custom",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.close = () => {
+        closeCalled = true;
+      };
+      ws.send = (msg) => {
+        if (typeof msg === "string") sendMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      // For custom mode, no automatic send or close
+      expect(closeCalled).toBe(false);
+      expect(sendMessage).toBeNull();
+    });
+
+    it("should pass correct info to async limit exceeded handler", async () => {
+      const limitExceededCalls: any[] = [];
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+        },
+        hooks: {
+          onLimitExceeded: async (info) => {
+            // Simulate async work
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            limitExceededCalls.push(info);
+          },
+        },
+      });
+
+      const ws = createMockWebSocket();
+      await router.handleOpen(ws);
+
+      const largeMessage = "x".repeat(150);
+      await router.handleMessage(ws, largeMessage);
+
+      // Handler was called (fire-and-forget, so may not be awaited)
+      // Give async handler time to complete
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(limitExceededCalls.length).toBe(1);
     });
   });
 });

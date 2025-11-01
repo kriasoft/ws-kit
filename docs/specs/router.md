@@ -739,6 +739,19 @@ serve(router, {
     // Track broadcast patterns for analytics
     analytics.track("broadcast", { scope, messageType: message.type });
   },
+
+  onLimitExceeded(info) {
+    // Called when a client violates payload size limits (protocol enforcement)
+    console.warn(
+      `Client ${info.clientId} exceeded limit: ${info.observed} > ${info.limit} bytes`,
+    );
+    // Emit metrics for monitoring
+    metrics.increment("limits.exceeded", {
+      type: info.type, // "payload", "rate", "connections", etc.
+      observed: info.observed,
+      limit: info.limit,
+    });
+  },
 });
 ```
 
@@ -747,9 +760,11 @@ serve(router, {
 1. `onUpgrade()` — Connection upgrade initiated (before authentication)
 2. `authenticate()` — Set initial connection data
 3. `onOpen()` — After authenticated (safe to send messages)
-4. [Handler executes]
-5. `onClose()` — After connection closes
-6. `onError()` — When unhandled error occurs in handler or middleware
+4. [Message received]
+5. **`onLimitExceeded()` — If payload exceeds limits (protocol enforcement)**
+6. [Handler executes (if message passes limits and validation)]
+7. `onClose()` — After connection closes
+8. `onError()` — When unhandled error occurs in handler or middleware
 
 **Hook Guarantees**:
 

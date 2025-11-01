@@ -248,16 +248,121 @@ router.use(SendMessage, (ctx, next) => {
 - `1009` — Message Too Big (payload exceeds limit)
 - `1011` — Server Error (unexpected server failure)
 
+## Limits Monitoring {#limits-monitoring}
+
+Payload size limits are enforced at the protocol level (before message validation). When a client sends a message exceeding the configured limit, the router:
+
+1. **Calls the `onLimitExceeded` hook** with structured limit information
+2. **Sends a `RESOURCE_EXHAUSTED` error** or **closes the connection** (configurable)
+3. **Does NOT call `onError`** (limit violations are protocol, not handler errors)
+
+### Configuration
+
+```typescript
+import { createRouter } from "@ws-kit/zod";
+
+const router = createRouter({
+  limits: {
+    maxPayloadBytes: 1_000_000, // 1MB (default)
+
+    // How to respond when limit exceeded
+    onExceeded: "send", // Send RESOURCE_EXHAUSTED error (default)
+    // "close" — Close with code 1009
+    // "custom" — Do nothing (app handles in hook)
+
+    // WebSocket close code when onExceeded === "close"
+    closeCode: 1009, // RFC 6455 "Message Too Big" (default)
+  },
+
+  hooks: {
+    onLimitExceeded: (info) => {
+      // info.type = "payload" (extensible for future limits)
+      // info.observed = actual payload size (bytes)
+      // info.limit = configured limit
+      // info.clientId = client identifier
+      // info.ws = WebSocket connection
+
+      // Emit metrics/alerts
+      metrics.increment("limits.exceeded", {
+        type: info.type,
+        clientId: info.clientId,
+        overage: info.observed - info.limit,
+      });
+    },
+  },
+});
+```
+
+### Behavior by Mode
+
+| Mode     | Response to Client          | Connection | Hook Called |
+| -------- | --------------------------- | ---------- | ----------- |
+| `send`   | `ERROR: RESOURCE_EXHAUSTED` | Stays open | ✅          |
+| `close`  | None (closes immediately)   | Closes     | ✅          |
+| `custom` | None (up to app)            | Stays open | ✅          |
+
+### Payload Limit → RESOURCE_EXHAUSTED Mapping
+
+When `onExceeded: "send"`:
+
+```json
+{
+  "type": "ERROR",
+  "code": "RESOURCE_EXHAUSTED",
+  "message": "Payload size exceeds limit (2000001 > 1000000)",
+  "details": {
+    "observed": 2000001,
+    "limit": 1000000
+  },
+  "retryAfterMs": 0
+}
+```
+
+Clients should treat `RESOURCE_EXHAUSTED` as transient and may retry with smaller payloads. When `onExceeded: "close"`, the connection closes with code `1009`.
+
+### Example: Rate Limiting with Limits Monitoring
+
+```typescript
+const router = createRouter({
+  limits: {
+    maxPayloadBytes: 5_000_000, // 5MB
+    onExceeded: "send",
+  },
+  hooks: {
+    onLimitExceeded: async (info) => {
+      // Check for repeated violations (potential abuse)
+      const violations = await redis.incr(`limit_violations:${info.clientId}`);
+      await redis.expire(`limit_violations:${info.clientId}`, 60);
+
+      if (violations > 5) {
+        // Ban client after 5 violations in 1 minute
+        info.ws.close(1008, "POLICY_VIOLATION");
+      }
+
+      // Emit metrics for SLOs
+      metrics.histogram("payload_size_violations", {
+        observed: info.observed,
+        limit: info.limit,
+        clientId: info.clientId,
+      });
+    },
+  },
+});
+```
+
 ## Error Behavior
 
-| Error Type       | Connection | Logged | Handler Called |
-| ---------------- | ---------- | ------ | -------------- |
-| Parse error      | Stays open | ✅     | ❌             |
-| Missing type     | Stays open | ✅     | ❌             |
-| No handler       | Stays open | ✅     | ❌             |
-| Validation fails | Stays open | ✅     | ❌             |
-| Handler throws   | Stays open | ✅     | N/A            |
-| Async rejection  | Stays open | ✅     | N/A            |
+| Error Type       | Connection | Logged | Handler Called    |
+| ---------------- | ---------- | ------ | ----------------- |
+| Limit exceeded   | Config¹    | ✅     | `onLimitExceeded` |
+| Parse error      | Stays open | ✅     | ❌                |
+| Missing type     | Stays open | ✅     | ❌                |
+| No handler       | Stays open | ✅     | ❌                |
+| Validation fails | Stays open | ✅     | ❌                |
+| Handler throws   | Stays open | ✅     | `onError`         |
+| Async rejection  | Stays open | ✅     | `onError`         |
+
+¹ When `onExceeded: "send"` (default), connection stays open. When `onExceeded: "close"`, connection closes with code 1009.
 
 **Critical**: Connections never auto-close on errors. Handler must explicitly call `ctx.ws.close()`.
 
