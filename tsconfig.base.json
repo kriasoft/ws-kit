@@ -28,6 +28,7 @@
     "baseUrl": ".",
     "paths": {
       "@ws-kit/core": ["packages/core/src/index.ts"],
+      "@ws-kit/middleware": ["packages/middleware/src/index.ts"],
       "@ws-kit/bun": ["packages/bun/src/index.ts"],
       "@ws-kit/zod": ["packages/zod/src/index.ts"],
       "@ws-kit/valibot": ["packages/valibot/src/index.ts"],

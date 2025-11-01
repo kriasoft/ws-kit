@@ -1,0 +1,51 @@
+{
+  "name": "@ws-kit/middleware",
+  "version": "0.0.0",
+  "description": "Cross-runtime middleware for WS-Kit: rate limiting, deduplication, and observability hooks",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/middleware"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "middleware",
+    "rate-limiting",
+    "rate-limiter",
+    "token-bucket",
+    "deduplication",
+    "idempotency",
+    "observability",
+    "type-safe",
+    "typescript",
+    "distributed",
+    "adapter-based"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

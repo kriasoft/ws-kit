@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
+    { "path": "./packages/middleware" },
     { "path": "./packages/client" },
     { "path": "./packages/client/zod" },
     { "path": "./packages/client/valibot" },
