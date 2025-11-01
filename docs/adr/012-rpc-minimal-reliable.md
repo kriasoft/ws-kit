@@ -56,7 +56,7 @@ Implement minimal, composable RPC features focused on reliability without bloati
 
 - `ctx.send()` for progress auto-copies `correlationId` from request.
 - Allows multi-message RPC responses without new primitive.
-- Prepared for Phase B: typed streaming API.
+- Foundation for future streaming enhancements.
 
 ### 7. **RPC Detection & Context Flags**
 
@@ -108,4 +108,4 @@ Implement minimal, composable RPC features focused on reliability without bloati
 - **Specs**:
   - `docs/specs/router.md#RPC-Invariants` (unicast, one-shot, validation→RPC_ERROR)
   - `docs/specs/schema.md#Meta-Fields` (timeoutMs, idempotencyKey, control prefix rule)
-- **Phase C Follow-up**: Client abort signal support, reconnect policy, idempotency middleware pattern.
+- **Future work**: Client abort signal support, reconnect policy, idempotency middleware pattern.

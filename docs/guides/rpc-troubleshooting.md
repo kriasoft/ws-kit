@@ -311,7 +311,7 @@ const handler = createCloudflareHandler(router, {
    }
    ```
 
-2. **Stream long results** (Phase B feature)
+2. **Stream long results**
    - Use progress messages for streaming
    - Copy correlationId automatically
 

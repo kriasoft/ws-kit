@@ -23,7 +23,7 @@ Platform-agnostic WebSocket router and type system with composition-based adapte
 - **Platform implementations**: Bun/Cloudflare adapters live in separate packages
 - **High-performance PubSub**: Provided by platform adapters (default `MemoryPubSub` for testing)
 - **Codec abstraction**: Uses JSON (post-launch feature)
-- **Middleware chain**: Use hooks for Phase 1 (post-launch feature)
+- **Middleware chain**: Use hooks (post-launch feature)
 - **Protocol versioning**: Handled per-platform (post-launch feature)
 - **Backpressure policies**: Platform-specific (handled by adapters)
 
@@ -50,14 +50,14 @@ If the answer is "specific adapter," the feature belongs in that adapter, not co
 
 ## Implementation Status
 
-✅ **Phase 2.1: Core Types & Interfaces** — Complete
+✅ **Core Types & Interfaces** — Complete
 
 - Abstract adapter interfaces (`ValidatorAdapter`, `PlatformAdapter`, `PubSub`)
 - Type definitions (`ServerWebSocket`, `MessageContext`, lifecycle hooks)
 - Error handling (`ErrorCode`, `WebSocketError`)
 - Default `MemoryPubSub` implementation
 
-✅ **Phase 2.2: Router Implementation** — Complete
+✅ **Router Implementation** — Complete
 
 - `WebSocketRouter<V, TData>` class with full message routing
 - Lifecycle hooks (`onOpen`, `onClose`, `onAuth`, `onError`)
@@ -66,8 +66,6 @@ If the answer is "specific adapter," the feature belongs in that adapter, not co
 - Router composition via `merge()`
 - Message normalization and validation pipeline
 - PubSub integration with pluggable implementations
-
-**Next**: Phase 3 (Bun adapter), Phase 4 (Zod/Valibot validators), Phase 5 (Client)
 
 ## API Reference
 

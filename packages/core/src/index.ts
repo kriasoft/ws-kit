@@ -12,7 +12,7 @@
  * - MemoryPubSub default implementation for testing and single-server deployments
  *
  * Does NOT provide:
- * - Router implementation (Phase 2.2+)
+ * - Router implementation — separate packages provide full implementations
  * - Validator adapters (Zod, Valibot) — provided by @ws-kit/zod, @ws-kit/valibot
  * - Platform adapters (Bun, Cloudflare) — provided by @ws-kit/bun, @ws-kit/cloudflare-do
  *

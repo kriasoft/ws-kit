@@ -859,9 +859,9 @@ export class WebSocketRouter<
    *
    * **Scope** depends on PubSub implementation:
    * - MemoryPubSub: This process instance only
-   * - BunPubSub (Phase 3): Load-balanced cluster (all instances)
-   * - DurablePubSub (Phase 6): This DO instance only
-   * - RedisPubSub (Phase 8): Multiple instances via Redis
+   * - BunPubSub: Load-balanced cluster (all instances)
+   * - DurablePubSub: This DO instance only
+   * - RedisPubSub: Multiple instances via Redis
    *
    * **Options** (PublishOptions):
    * - `excludeSelf`: Future feature for suppressing sender echo (default: false)

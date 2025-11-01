@@ -480,5 +480,5 @@ Pin the error code decision tree (section 3.3) in troubleshooting guides and API
 
 - [ADR-012: Minimal Reliable RPC](./012-rpc-minimal-reliable.md) — Core RPC lifecycle
 - [ADR-013: Reconnect & Idempotency](./013-rpc-reconnect-idempotency.md) — Safe retries
-- [ADR-014: RPC DX Improvements](./014-rpc-dx-safety-improvements.md) — Phase A improvements
+- [ADR-014: RPC DX Improvements](./014-rpc-dx-safety-improvements.md) — RPC improvements
 - [RPC Troubleshooting](../guides/rpc-troubleshooting) — Troubleshooting guide

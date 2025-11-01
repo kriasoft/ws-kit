@@ -11,7 +11,7 @@ describe("@ws-kit/bun integration tests", () => {
   let mockServer: any;
 
   beforeEach(() => {
-    // Create a router for testing (use new Phase 2 API)
+    // Create a router for testing
     router = createRouter();
 
     // Create mock Bun server
