@@ -1,0 +1,50 @@
+# WS-Kit
+
+> WS-Kit is a type-safe WebSocket toolkit for Bun and Cloudflare that combines Zod or Valibot message validation with RPC-style workflows, broadcasting, and structured middleware.
+
+Primary docs live at https://kriasoft.com/docs/ with the landing page at https://kriasoft.com/ws-kit/. Pages are authored in Markdown for VitePress and include runnable TypeScript samples compatible with Bun and Cloudflare. Contact: [hello@kriasoft.com](mailto:hello@kriasoft.com). Source: https://github.com/kriasoft/ws-kit.
+
+- Router APIs cover message schemas, RPC patterns, middleware, and broadcasting with first-class TypeScript types.
+- Client guides detail reconnection, authentication, error handling, and advanced streaming flows.
+- Architecture notes and specifications explain design decisions, validation rules, and roadmap considerations.
+
+## Quick Start
+
+- [Landing page](https://kriasoft.com/ws-kit/): Highlights, hero example, and entry points into the documentation.
+- [Getting started](https://kriasoft.com/docs/getting-started): Installation steps, project bootstrap, and first router walkthrough.
+- [Examples](https://kriasoft.com/docs/examples): Annotated scenarios covering chat rooms, broadcasting, and RPC workflows.
+
+## Core Concepts
+
+- [Core concepts](https://kriasoft.com/docs/core-concepts): Message lifecycle, routing, context, and pub/sub patterns.
+- [Message schemas](https://kriasoft.com/docs/message-schemas): Declaring messages with Zod or Valibot and sharing types with clients.
+- [RPC](https://kriasoft.com/docs/rpc): Built-in request/response, streaming progress, and timeout handling.
+- [Middleware](https://kriasoft.com/docs/middleware): Authentication, rate limiting, and other cross-cutting concerns.
+
+## Client Guides
+
+- [Client setup](https://kriasoft.com/docs/client-setup): Installing the client, connection lifecycle management, and reconnection strategies.
+- [Client API](https://kriasoft.com/docs/client-api): API surface for sending, receiving, and subscribing to messages.
+- [Client auth](https://kriasoft.com/docs/client-auth): Token management, attaching session data, and securing channels.
+- [Client errors](https://kriasoft.com/docs/client-errors): Error taxonomy, retry logic, and debugging strategies.
+- [Client advanced](https://kriasoft.com/docs/client-advanced): Streaming updates, background processing, and custom adapters.
+
+## Platform & Deployment
+
+- [Advanced usage](https://kriasoft.com/docs/advanced-usage): Multi-router setups, testing patterns, and observability hooks.
+- [Deployment](https://kriasoft.com/docs/deployment): Deployment flows for Bun servers and Cloudflare Durable Objects.
+- [Valibot integration](https://kriasoft.com/docs/valibot-integration): Using Valibot validators in place of Zod across the stack.
+- [ESLint config](https://kriasoft.com/docs/eslint-config): Shared linting presets for WS-Kit projects.
+
+## Reference & Architecture
+
+- [API reference](https://kriasoft.com/docs/api-reference): Detailed API documentation for @ws-kit packages and adapters.
+- [Specs index](https://kriasoft.com/docs/specs/): Formal protocol specifications, router rules, and validation requirements.
+- [Architecture decisions](https://kriasoft.com/docs/adr/): Architectural decision records behind key design choices.
+- [RPC troubleshooting guide](https://kriasoft.com/docs/guides/rpc-troubleshooting): Diagnosing request/response pitfalls and reconnection states.
+
+## Optional
+
+- [Blog: Two timestamps, one message](https://kriasoft.com/docs/blog/2025-10-08_two_timestamps_one_message): Lessons on timestamp integrity for WebSocket systems.
+- [Blog: Audit-proof real-time platforms](https://kriasoft.com/docs/blog/2025-10-08_audit_proof_real_time_platforms): Ensuring auditability in real-time architectures.
+- [Proposals](https://kriasoft.com/docs/proposals/): Active RFCs and explorations for future features.
