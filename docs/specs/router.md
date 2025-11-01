@@ -674,17 +674,14 @@ router.on(SecureMessage, (ctx) => {
 
 ## Error Handling
 
-Use `ctx.error()` for type-safe, discriminated error responses (see ADR-009 for design rationale):
+Use `ctx.error()` for type-safe, discriminated error responses:
 
 ```typescript
 router.on(LoginMessage, (ctx) => {
   try {
     const user = authenticate(ctx.payload);
     if (!user) {
-      // ✅ Type-safe error code
-      ctx.error("UNAUTHENTICATED", "Invalid credentials", {
-        hint: "Check your username and password",
-      });
+      ctx.error("UNAUTHENTICATED", "Invalid credentials");
       return;
     }
     ctx.assignData({ userId: user.id });
@@ -692,28 +689,9 @@ router.on(LoginMessage, (ctx) => {
     ctx.error("INTERNAL", "Authentication service unavailable");
   }
 });
-
-router.on(QueryMessage, (ctx) => {
-  try {
-    const result = queryDatabase(ctx.payload);
-    ctx.send(QueryResponse, result);
-  } catch (error) {
-    ctx.error("INTERNAL", "Database query failed", {
-      reason: String(error),
-    });
-  }
-});
 ```
 
-**Standard Error Codes** (see [ADR-015](../adr/015-unified-rpc-api-design.md) for complete taxonomy):
-
-- `INVALID_ARGUMENT` — Invalid payload or schema mismatch
-- `UNAUTHENTICATED` — Authentication failed
-- `PERMISSION_DENIED` — Authenticated but lacks rights
-- `NOT_FOUND` — Resource not found
-- `RESOURCE_EXHAUSTED` — Rate limit or backpressure exceeded
-- `INTERNAL` — Server error
-- See ADR-015 for full error code decision tree
+For complete error code reference, error handling patterns, and structured logging integration, see **[@error-handling.md](./error-handling.md)** (design rationale in ADR-009).
 
 **Error Propagation**: If a handler throws an unhandled error, the router catches it and calls the `onError` lifecycle hook (if registered). See [Lifecycle Hooks](#lifecycle-hooks) for details.
 

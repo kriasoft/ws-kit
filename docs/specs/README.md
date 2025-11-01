@@ -6,17 +6,26 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 
 **Start Here:**
 
-1. **Implementing a feature?** → `rules.md` (rules) → linked detail specs
+1. **Implementing a feature?** → `rules.md` (quick index) → linked canonical spec
 2. **Debugging validation?** → `validation.md` (pipeline) → `schema.md` (structure)
 3. **Client integration?** → `client.md` (API) → `test-requirements.md` (patterns)
 4. **Understanding design?** → `docs/adr/` (decisions) → linked specs
 
-**Canonical Sources** (when specs conflict, these win):
+**Note on rules.md**: It's a quick-lookup INDEX, not the canonical source. Each rule links to the spec that owns that rule. The linked spec is authoritative.
 
-- Reserved keys: `validation.md#normalization-rules`
-- Timestamps: `schema.md#Which-timestamp-to-use`
-- Error codes: `error-handling.md#error-code-enum`
-- Type overrides: ADR-001, ADR-002
+## Canonical Sources by Concept
+
+When specs reference the same concept, the canonical source takes precedence:
+
+| Concept                 | Canonical Spec                          | Also Discussed In        | Why                                 |
+| ----------------------- | --------------------------------------- | ------------------------ | ----------------------------------- |
+| **Timestamp Usage**     | `schema.md#Which-timestamp-to-use`      | router.md, validation.md | Single table, referenced everywhere |
+| **Reserved Keys**       | `validation.md#normalization-rules`     | schema.md                | Implementation details here         |
+| **Identity (clientId)** | `schema.md#Why-clientId-is-not-in-meta` | validation.md, rules.md  | Design rationale + implementation   |
+| **Error Codes**         | `error-handling.md#error-code-enum`     | router.md, ADR-015       | Complete taxonomy and decision tree |
+| **Validation Flow**     | `validation.md#Flow`                    | rules.md                 | Full pipeline stages                |
+| **Normalization**       | `validation.md#normalization-rules`     | schema.md                | Implementation + code examples      |
+| **Export-with-Helpers** | `schema.md#Canonical-Import-Patterns`   | ADR-007                  | Pattern definition + ADR rationale  |
 
 ## Terminology {#Terminology}
 

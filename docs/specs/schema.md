@@ -160,25 +160,10 @@ This is the **canonical table** for timestamp usage across all specs. All other 
 
 **Reserved Server-Only Meta Keys**: {#Reserved-Server-Only-Meta-Keys}
 
-The following keys are RESERVED and MUST NOT be set by clients (see @rules.md#reserved-keys for canonical list):
+- `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
+- `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
-- `clientId`: Connection identity (stripped during normalization, access via `ctx.ws.data.clientId`)
-- `receivedAt`: Server receive timestamp (stripped during normalization, access via `ctx.receivedAt`)
-
-These keys are stripped during message normalization before validation (security boundary). See @validation.md#normalization-rules for implementation details.
-
-**Schema Constraint**: Extended meta schemas MUST NOT define reserved keys (`clientId`, `receivedAt`). Adapters MUST throw an error at schema creation if reserved keys are detected in the extended meta definition (design-time enforcement layer).
-
-**Enforcement**: The `message()` helper validates extended meta keys and throws:
-
-```typescript
-throw new Error(
-  `Reserved meta keys not allowed in schema: ${reservedInMeta.join(", ")}. ` +
-    `Reserved keys: ${Array.from(RESERVED_META_KEYS).join(", ")}`,
-);
-```
-
-**Rationale**: Prevents silent validation failures from normalization stripping user-defined reserved keys. Fails fast at design time with clear error message.
+These keys are stripped during normalization before validation (security boundary). Extended meta schemas MUST NOT define these keys (schema creation will throw an error). See @validation.md#normalization-rules for complete implementation details.
 
 **Critical**:
 

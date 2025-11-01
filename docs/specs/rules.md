@@ -1,14 +1,19 @@
 # Development Rules
 
-Quick reference index for MUST/NEVER rules. Links to canonical specs for details.
+**Quick Lookup Index for MUST/NEVER/ALWAYS rules.**
+
+This is a **rapid reference** to help you find rules quickly. For implementation details, rationale, and complete guidance, always follow the linked canonical specs.
+
+**Important**: This file is an INDEX and QUICK REFERENCE, not a canonical source. The detailed specs (schema.md, router.md, validation.md, etc.) are authoritative. When guidance seems incomplete here, that's intentional—click the linked specs for full context and rationale.
 
 **How to Use:**
 
-1. Scan this file for applicable rules
-2. Follow links to canonical sections for implementation details
-3. When in doubt, linked sections take precedence over this index
+1. **Quickly find rules**: Scan this index for your use case
+2. **Get implementation details**: Click the linked `@spec.md#section` references
+3. **Understand trade-offs**: Read the referenced spec section for "why" and detailed examples
+4. **When in doubt**: The linked canonical section always takes precedence
 
-**Note:** This is an INDEX, not a canonical source. Domain specs own their rules.
+**What's NOT here**: Design rationale, code examples (beyond one-liners), trade-off analysis. Read the linked specs for those.
 
 ---
 
