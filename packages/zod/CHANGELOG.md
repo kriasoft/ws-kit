@@ -1,5 +1,12 @@
 # @ws-kit/zod
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [[`8114c39`](https://github.com/kriasoft/ws-kit/commit/8114c39f3c46d788cc9b41698f3af08db9bcf3bb)]:
+  - @ws-kit/core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
