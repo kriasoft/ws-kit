@@ -1839,7 +1839,12 @@ export class WebSocketRouter<
       // Check if this is a limit exceeded error
       const limitInfo = (actualError as unknown as Record<string, unknown>)
         ?._limitExceeded as
-        | { type: string; observed: number; limit: number }
+        | {
+            type: string;
+            observed: number;
+            limit: number;
+            retryAfterMs?: number | null;
+          }
         | undefined;
 
       if (limitInfo) {
@@ -1850,7 +1855,10 @@ export class WebSocketRouter<
           limit: limitInfo.limit,
           ws,
           clientId,
-          retryAfterMs: 0,
+          ...(limitInfo.retryAfterMs !== null &&
+            limitInfo.retryAfterMs !== undefined && {
+              retryAfterMs: limitInfo.retryAfterMs,
+            }),
         };
 
         // Call limit exceeded handlers (fire-and-forget)
@@ -1869,18 +1877,35 @@ export class WebSocketRouter<
             receivedAt,
             send,
           );
-          fallbackContext.error(
-            "RESOURCE_EXHAUSTED",
-            `Payload size exceeds limit (${limitInfo.observed} > ${limitInfo.limit})`,
-            {
-              observed: limitInfo.observed,
-              limit: limitInfo.limit,
-            },
-            {
-              retryable: true,
-              retryAfterMs: 100,
-            },
-          );
+
+          // If retryAfterMs is null, it's an impossible operation (cost > capacity)
+          if (limitInfo.retryAfterMs === null) {
+            fallbackContext.error(
+              "FAILED_PRECONDITION",
+              `Operation cost exceeds limit capacity (${limitInfo.observed} > ${limitInfo.limit})`,
+              {
+                observed: limitInfo.observed,
+                limit: limitInfo.limit,
+              },
+            );
+          } else {
+            // Retryable limit: forward computed retryAfterMs, or default to 100ms for payload limits
+            const retryAfterMs =
+              limitInfo.retryAfterMs ??
+              (limitInfo.type === "payload" ? 100 : undefined);
+            fallbackContext.error(
+              "RESOURCE_EXHAUSTED",
+              `Limit exceeded (${limitInfo.observed} > ${limitInfo.limit})`,
+              {
+                observed: limitInfo.observed,
+                limit: limitInfo.limit,
+              },
+              {
+                retryable: true,
+                ...(retryAfterMs !== undefined && { retryAfterMs }),
+              },
+            );
+          }
         } else if (onExceeded === "close") {
           // Close connection with configured code (default: 1009 "Message Too Big")
           const closeCode = this.limitsConfig?.closeCode ?? 1009;

@@ -29,7 +29,7 @@
     },
     "examples/bun-zod-chat": {
       "name": "bun-zod-chat-example",
-      "version": "0.0.1",
+      "version": "0.1.1",
       "dependencies": {
         "@ws-kit/bun": "workspace:*",
         "@ws-kit/core": "workspace:*",
@@ -40,9 +40,16 @@
         "@types/bun": "latest",
       },
     },
+    "packages/adapters": {
+      "name": "@ws-kit/adapters",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:*",
+      },
+    },
     "packages/bun": {
       "name": "@ws-kit/bun",
-      "version": "0.0.1",
+      "version": "0.2.0",
       "dependencies": {
         "@ws-kit/core": "workspace:*",
         "uuid": "^13.0.0",
@@ -53,7 +60,7 @@
     },
     "packages/client": {
       "name": "@ws-kit/client",
-      "version": "0.0.1",
+      "version": "0.2.0",
       "dependencies": {
         "@ws-kit/valibot": "workspace:*",
         "@ws-kit/zod": "workspace:*",
@@ -61,7 +68,7 @@
     },
     "packages/cloudflare-do": {
       "name": "@ws-kit/cloudflare-do",
-      "version": "0.0.1",
+      "version": "0.1.1",
       "dependencies": {
         "@ws-kit/core": "workspace:*",
         "uuid": "^13.0.0",
@@ -72,11 +79,21 @@
     },
     "packages/core": {
       "name": "@ws-kit/core",
-      "version": "0.0.1",
+      "version": "0.2.0",
+    },
+    "packages/middleware": {
+      "name": "@ws-kit/middleware",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@ws-kit/adapters": "workspace:*",
+      },
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:*",
+      },
     },
     "packages/redis-pubsub": {
       "name": "@ws-kit/redis-pubsub",
-      "version": "0.0.1",
+      "version": "0.1.1",
       "dependencies": {
         "@ws-kit/core": "workspace:*",
       },
@@ -89,7 +106,7 @@
     },
     "packages/valibot": {
       "name": "@ws-kit/valibot",
-      "version": "0.0.1",
+      "version": "0.2.0",
       "dependencies": {
         "@ws-kit/core": "workspace:*",
       },
@@ -102,7 +119,7 @@
     },
     "packages/zod": {
       "name": "@ws-kit/zod",
-      "version": "0.0.1",
+      "version": "0.2.0",
       "dependencies": {
         "@ws-kit/core": "workspace:*",
       },
@@ -444,6 +461,8 @@
 
     "@vueuse/shared": ["@vueuse/shared@12.8.2", "", { "dependencies": { "vue": "^3.5.13" } }, "sha512-dznP38YzxZoNloI0qpEfpkms8knDtaoQ6Y/sfS0L7Yki4zh40LFHEhur0odJC6xTHG5dxWVPiUWBXn+wCG2s5w=="],
 
+    "@ws-kit/adapters": ["@ws-kit/adapters@workspace:packages/adapters"],
+
     "@ws-kit/bun": ["@ws-kit/bun@workspace:packages/bun"],
 
     "@ws-kit/client": ["@ws-kit/client@workspace:packages/client"],
@@ -451,6 +470,8 @@
     "@ws-kit/cloudflare-do": ["@ws-kit/cloudflare-do@workspace:packages/cloudflare-do"],
 
     "@ws-kit/core": ["@ws-kit/core@workspace:packages/core"],
+
+    "@ws-kit/middleware": ["@ws-kit/middleware@workspace:packages/middleware"],
 
     "@ws-kit/redis-pubsub": ["@ws-kit/redis-pubsub@workspace:packages/redis-pubsub"],
 

@@ -71,6 +71,18 @@ export default defineConfig({
         ],
       },
       {
+        text: "Guides",
+        items: [
+          { text: "Rate Limiting", link: "/guides/rate-limiting" },
+          { text: "On vs RPC", link: "/guides/on-vs-rpc" },
+          { text: "RPC Troubleshooting", link: "/guides/rpc-troubleshooting" },
+          {
+            text: "Advanced Multi-Runtime",
+            link: "/guides/advanced-multi-runtime",
+          },
+        ],
+      },
+      {
         text: "Client",
         items: [
           { text: "Setup", link: "/client-setup" },

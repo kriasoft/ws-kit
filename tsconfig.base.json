@@ -27,15 +27,22 @@
 
     "baseUrl": ".",
     "paths": {
-      "@ws-kit/core": ["packages/core/src/index.ts"],
+      "@ws-kit/adapters": ["packages/adapters/src/index.ts"],
+      "@ws-kit/adapters/cloudflare-do": [
+        "packages/adapters/src/cloudflare-do/index.ts"
+      ],
+      "@ws-kit/adapters/memory": ["packages/adapters/src/memory/index.ts"],
+      "@ws-kit/adapters/redis": ["packages/adapters/src/redis/index.ts"],
       "@ws-kit/bun": ["packages/bun/src/index.ts"],
-      "@ws-kit/zod": ["packages/zod/src/index.ts"],
-      "@ws-kit/valibot": ["packages/valibot/src/index.ts"],
-      "@ws-kit/redis-pubsub": ["packages/redis-pubsub/src/index.ts"],
-      "@ws-kit/cloudflare-do": ["packages/cloudflare-do/src/index.ts"],
       "@ws-kit/client": ["packages/client/src/index.ts"],
+      "@ws-kit/client/valibot": ["packages/client/valibot/src/index.ts"],
       "@ws-kit/client/zod": ["packages/client/zod/src/index.ts"],
-      "@ws-kit/client/valibot": ["packages/client/valibot/src/index.ts"]
+      "@ws-kit/cloudflare-do": ["packages/cloudflare-do/src/index.ts"],
+      "@ws-kit/core": ["packages/core/src/index.ts"],
+      "@ws-kit/middleware": ["packages/middleware/src/index.ts"],
+      "@ws-kit/redis-pubsub": ["packages/redis-pubsub/src/index.ts"],
+      "@ws-kit/valibot": ["packages/valibot/src/index.ts"],
+      "@ws-kit/zod": ["packages/zod/src/index.ts"]
     },
 
     "types": ["bun"]

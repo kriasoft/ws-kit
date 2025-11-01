@@ -365,6 +365,32 @@ ctx.onCancel?.(() => {
 
 See [ADR-015: Unified RPC API](../adr/015-unified-rpc-api-design.md) for design rationale.
 
+### Pre-Validation Context (IngressContext)
+
+Middleware running **before schema validation** (e.g., rate limiting) receive `IngressContext`, which excludes unvalidated payload. See [ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md) for the adapter pattern.
+
+```typescript
+type IngressContext<Data = unknown> = {
+  type: string; // Message type (extracted, trusted)
+  id: string; // Connection ID (UUID v7)
+  ip: string; // Client IP address
+  ws: { data: Data }; // App connection state (from authenticate)
+  meta: { receivedAt: number }; // Server timestamp (ms)
+
+  send: SendFunction;
+  error: ErrorFunction;
+  assignData: AssignDataFunction;
+  subscribe: SubscribeFunction;
+  unsubscribe: UnsubscribeFunction;
+};
+```
+
+**Key differences from `MessageContext`**:
+
+- ❌ `ctx.payload` — not available (schema not validated yet)
+- ❌ `ctx.meta.correlationId` — only populated for RPC after routing
+- ✅ `ctx.type`, `ctx.ws.data`, `ctx.meta.receivedAt` — all available
+
 ## RPC Wire Format (Success and Error)
 
 ### RPC Success Response (Option A - Canonical)
@@ -651,6 +677,44 @@ const mainRouter = createRouter<AppData>().merge(authRouter).merge(chatRouter);
 
 **Type System Note**: All routers should define the same `TData` type for composition to work correctly. Type compatibility is enforced at compile time.
 
+### Rate Limiting Middleware
+
+Use the rate limiting middleware from `@ws-kit/middleware` to apply token bucket rate limiting with adapter portability:
+
+```typescript
+import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+
+// Create adapter (memory for dev, Redis for production)
+const limiter = memoryRateLimiter({
+  capacity: 200,
+  tokensPerSecond: 100,
+});
+
+// Add middleware
+const rateLimitMiddleware = rateLimit({
+  limiter,
+  key: keyPerUserPerType, // Fair per-user per-message-type isolation
+  cost: (ctx) => (ctx.type === "Compute" ? 10 : 1), // Expensive ops cost more
+});
+
+router.use(rateLimitMiddleware);
+```
+
+**Execution Timing**: Rate limiting runs as middleware (after schema validation, where app authentication data is available). Adapters atomically consume tokens to prevent race conditions in distributed systems.
+
+**Key Functions**:
+
+- `keyPerUserPerType(ctx)` — Fair isolation: tenant + user + message type (recommended)
+- `perUserKey(ctx)` — Lighter footprint: tenant + user only
+- `keyPerUserOrIpPerType(ctx)` — Falls back to user if authenticated; note: IP not available at middleware layer
+
+**Rate Limit Errors**: When rate limited, the router sends `RESOURCE_EXHAUSTED` (retryable) or `FAILED_PRECONDITION` (impossible cost) error. The error includes a computed `retryAfterMs` backoff hint for clients.
+
+**Observability**: Track rate limit violations via the `onLimitExceeded` hook in `serve()` options (see [Lifecycle Hooks](#lifecycle-hooks)).
+
+For complete rate limiting design, examples, and adapter implementations, see the **[rate limiting proposal](../proposals/rate-limiting.md)** and **[ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md)**.
+
 ## Message Routing
 
 ### Type-Based Routing
@@ -860,15 +924,22 @@ serve(router, {
   },
 
   onLimitExceeded(info) {
-    // Called when a client violates payload size limits (protocol enforcement)
-    console.warn(
-      `Client ${info.clientId} exceeded limit: ${info.observed} > ${info.limit} bytes`,
-    );
+    // Called when a client violates any limit (payload, rate, etc.)
+    if (info.type === "payload") {
+      console.warn(
+        `Client ${info.clientId} exceeded payload limit: ${info.observed} > ${info.limit} bytes`,
+      );
+    } else if (info.type === "rate") {
+      console.warn(
+        `Client ${info.clientId} exceeded rate limit (attempted cost: ${info.observed}, capacity: ${info.limit})`,
+      );
+    }
     // Emit metrics for monitoring
     metrics.increment("limits.exceeded", {
-      type: info.type, // "payload", "rate", "connections", etc.
+      type: info.type,
       observed: info.observed,
       limit: info.limit,
+      retryAfterMs: info.retryAfterMs,
     });
   },
 });
@@ -890,7 +961,54 @@ serve(router, {
 - Hooks are called even if they throw; exceptions logged, never rethrown
 - `onError`, `onBroadcast` called after the action completes
 - `onUpgrade`, `onOpen`, `onClose` called after state change
+- `onLimitExceeded` called fire-and-forget (not awaited)
 - Hooks can observe and trigger side effects, but cannot modify operations
+
+### LimitExceededInfo Type
+
+The `onLimitExceeded` hook receives a discriminated union based on limit type:
+
+```typescript
+type LimitExceededInfo =
+  | {
+      type: "payload";
+      clientId: string;
+      ws: WebSocket;
+      observed: number; // Actual payload size (bytes)
+      limit: number; // Configured max payload size
+    }
+  | {
+      type: "rate";
+      clientId: string;
+      ws: WebSocket;
+      observed: number; // Attempted cost (tokens)
+      limit: number; // Rate limit capacity
+      retryAfterMs: number | null; // null = impossible (cost > capacity)
+    };
+```
+
+**Example:**
+
+```typescript
+onLimitExceeded(info) {
+  switch (info.type) {
+    case "payload":
+      logger.warn("Payload limit exceeded", {
+        clientId: info.clientId,
+        observed: info.observed,
+      });
+      break;
+
+    case "rate":
+      logger.warn("Rate limit exceeded", {
+        clientId: info.clientId,
+        attempted_cost: info.observed,
+        retryAfterMs: info.retryAfterMs,
+      });
+      break;
+  }
+}
+```
 
 ### Close Behavior
 

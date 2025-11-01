@@ -121,6 +121,48 @@ function publish(scope: string, message: any) {
 - ✅ Automatic cleanup on disconnect
 - ⚠️ **No persistence across server restart** — Subscriptions are in-memory
 
+## Adapter Interfaces
+
+WS-Kit uses adapter patterns for cross-platform features that require atomic semantics. Each feature defines a public interface that adapters implement.
+
+### RateLimiter Adapter
+
+The `RateLimiter` interface defines atomic token consumption for rate limiting across all backends. See [ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md) for design rationale.
+
+**Interface:**
+
+```typescript
+export interface RateLimiter {
+  consume(key: string, cost: number): Promise<RateLimitDecision>;
+  dispose?(): void;
+}
+
+export type RateLimitDecision =
+  | { allowed: true; remaining: number }
+  | { allowed: false; remaining: number; retryAfterMs: number | null };
+```
+
+**Atomicity per Adapter:**
+
+| Adapter             | Mechanism             | Use Case              |
+| ------------------- | --------------------- | --------------------- |
+| **Memory**          | Per-key mutex         | Dev, single-server    |
+| **Redis**           | Lua script            | Multi-pod distributed |
+| **Durable Objects** | Single-threaded shard | Cloudflare Workers    |
+
+**Middleware Usage:**
+
+```typescript
+const decision = await limiter.consume("user:123:SendMessage", 1);
+if (!decision.allowed) {
+  ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, {
+    retryAfterMs: decision.retryAfterMs,
+  });
+}
+```
+
+**Contract Guarantees:** All adapters must pass tests validating atomicity (no token over-spend under concurrency), multi-key isolation, impossible operations (`retryAfterMs: null`), and deterministic clocks. See `docs/proposals/rate-limiting.md` for complete details.
+
 ## Broadcast
 
 ### Fan-Out Strategy
@@ -494,6 +536,138 @@ const stub = env.ROUTER.get(doId);
 - ✅ **Simple distribution**: No external router needed; client directly reaches correct shard
 
 **Important**: Changing shard count (`10` → `20`) remaps existing scopes. Plan a migration period if using persistent storage or want to preserve session state across deployments.
+
+## Rate Limiter Adapters
+
+Rate limiting adapters implement atomic token bucket consumption via the `RateLimiter` interface. Each adapter chooses how to achieve atomicity appropriate to its backend.
+
+### RateLimiter Interface
+
+```typescript
+export interface RateLimiter {
+  /**
+   * Atomically consume tokens from a rate limit bucket.
+   * @param key - Rate limit key (e.g., "user:123:SendMessage")
+   * @param cost - Number of tokens to consume (positive integer)
+   * @returns Decision: allowed + remaining tokens, or denied + retry time
+   */
+  consume(key: string, cost: number): Promise<RateLimitDecision>;
+
+  /**
+   * Get the policy configuration for this rate limiter.
+   * Required by all adapters for accurate error reporting.
+   */
+  getPolicy(): Policy;
+
+  /**
+   * Optional cleanup on app shutdown
+   */
+  dispose?(): void | Promise<void>;
+}
+
+export type RateLimitDecision =
+  | { allowed: true; remaining: number }
+  | {
+      allowed: false;
+      remaining: number;
+      retryAfterMs: number | null; // null if cost > capacity
+    };
+```
+
+### Memory Adapter (`@ws-kit/adapters/memory`)
+
+**Best for**: Development, single-instance deployments (Bun, Node.js)
+
+```typescript
+import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+
+const limiter = memoryRateLimiter({
+  capacity: 100, // Max tokens available
+  tokensPerSecond: 10, // Refill rate
+  prefix: "api:", // Optional key namespacing
+});
+
+const decision = await limiter.consume("user:123", 1);
+if (!decision.allowed) {
+  console.log(`Retry after ${decision.retryAfterMs}ms`);
+}
+```
+
+**Atomicity**: Per-key FIFO mutex ensures only one concurrent `consume()` per key.
+
+**Guarantees**:
+
+- ✅ Atomic token mutation (no race conditions within single instance)
+- ✅ Deterministic with clock injection (testable via time-travel)
+- ❌ No persistence across restarts
+- ❌ No distributed coordination
+
+### Redis Adapter (Future)
+
+**Best for**: Multi-pod production deployments
+
+Uses Lua scripting for atomic read-modify-write on Redis:
+
+```typescript
+import { redisRateLimiter } from "@ws-kit/adapters/redis";
+
+const limiter = redisRateLimiter(redisClient, {
+  capacity: 1000,
+  tokensPerSecond: 100,
+  prefix: "api:",
+});
+
+const decision = await limiter.consume("user:123", 1);
+```
+
+**Atomicity**: Lua script runs as single Redis operation (EVALSHA).
+
+**Guarantees**:
+
+- ✅ Atomic across all pods (single Redis operation)
+- ✅ Distributed coordination
+- ✅ Automatic TTL-based cleanup
+- ❌ Network latency (~1-2ms per request)
+
+### Cloudflare Durable Objects Adapter (Future)
+
+**Best for**: Cloudflare Workers with distributed sharding
+
+Uses sharded Durable Objects for high-concurrency distributed rate limiting:
+
+```typescript
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+
+const limiter = durableObjectRateLimiter(env.RATE_LIMITER_NAMESPACE, {
+  capacity: 500,
+  tokensPerSecond: 50,
+  shards: 128, // Distribute across 128 DO instances
+});
+
+const decision = await limiter.consume("user:123", 1);
+```
+
+**Atomicity**: Single-threaded per-shard guarantees; keys hash to shards deterministically.
+
+**Guarantees**:
+
+- ✅ Atomic within shard (single-threaded DO)
+- ✅ Distributed coordination across shards
+- ✅ Automatic mark-and-sweep cleanup
+- ✅ High throughput (parallelism across shards)
+
+## Adapter Contract
+
+All rate limiter adapters must:
+
+1. **Validate policy at factory creation time** — Throw immediately if `capacity < 1` or `tokensPerSecond <= 0`
+2. **Expose policy via `getPolicy()`** — Return the policy object; **required** for accurate error reporting in middleware
+3. **Implement atomic `consume()`** — No token double-spend, even under concurrency
+4. **Return consistent structures** — `{ allowed, remaining, retryAfterMs }` always present (or undefined)
+5. **Handle non-monotonic clocks** — Clamp negative elapsed time to 0 (NTP adjustments)
+6. **Pass contract tests** — All adapters must pass the shared test suite in `packages/adapters/test/contract.ts`
+
+See **[rate limiting proposal](../proposals/rate-limiting.md)** for complete algorithm and implementation details.
 
 ### PubSub Engine Interface
 
