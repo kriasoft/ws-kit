@@ -134,6 +134,29 @@ export default defineConfig({
     },
   },
 
+  markdown: {
+    config: (md) => {
+      const originalNormalizeLink = md.normalizeLink;
+      const gitHubBase = "https://github.com/kriasoft/ws-kit/blob/main";
+
+      md.normalizeLink = (url: string) => {
+        // Transform relative example links to GitHub URLs
+        if (url.startsWith("../../examples/")) {
+          return url.replace(
+            /^\.\.\/\.\.\/examples\//,
+            `${gitHubBase.replace("/blob/", "/tree/")}/examples/`,
+          );
+        }
+        // Transform CLAUDE.md link to GitHub URL
+        if (url.includes("../../CLAUDE")) {
+          return `${gitHubBase}/CLAUDE.md`;
+        }
+        // Fall back to original for all other links
+        return originalNormalizeLink(url);
+      };
+    },
+  },
+
   vite: {
     publicDir: "../.vitepress/public",
   },
