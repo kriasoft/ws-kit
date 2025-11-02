@@ -44,7 +44,7 @@ jobs:
 
       - uses: changesets/action@v1
         with:
-          publish: bun changeset publish
+          publish: bun scripts/release.ts
           version: bun changeset version
           commit: "chore: version and release packages"
           title: "chore: version and release packages"
