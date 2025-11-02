@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "002-drop-new",
+  "description": "Queue full with drop-new policy, new message not queued",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SEND",
+      "count": 10,
+      "msg": { "type": "SEND_DATA", "data": "msg-{i}" }
+    },
+    {
+      "actor": "server",
+      "action": "QUEUE_AT_CAPACITY",
+      "capacity": 10
+    },
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": { "type": "SEND_DATA", "data": "msg-11" }
+    },
+    {
+      "actor": "server",
+      "action": "REJECT_NEW"
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "RESOURCE_EXHAUSTED",
+        "policy": "drop-new",
+        "retryAfterMs": 100,
+        "queueDepth": 10
+      }
+    }
+  ],
+  "assertions": [{ "server.queue.length": 10 }, { "server.queue[9]": "msg-10" }]
+}

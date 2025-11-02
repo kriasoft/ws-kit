@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "003-optimistic-update",
+  "description": "Client sends update, receives server confirmation via clientReqId in delta",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "STATE",
+      "serverRev": 5,
+      "participants": {
+        "user-1": {
+          "id": "user-1",
+          "name": "Alice",
+          "status": "online",
+          "lastActive": 1000
+        }
+      }
+    },
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": {
+        "type": "UPDATE",
+        "patch": { "status": "away" },
+        "baseRev": 5,
+        "clientReqId": "req-123"
+      }
+    },
+    {
+      "actor": "client",
+      "action": "OPTIMISTIC_APPLY",
+      "state": {
+        "user-1": {
+          "id": "user-1",
+          "name": "Alice",
+          "status": "away",
+          "lastActive": 1000
+        }
+      },
+      "pendingOps": 1
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "SYNC.DELTAS",
+        "fromRev": 5,
+        "toRev": 6,
+        "operations": [
+          {
+            "rev": 6,
+            "type": "participant.updated",
+            "payload": { "id": "user-1", "status": "away" },
+            "clientReqId": "req-123"
+          }
+        ]
+      }
+    },
+    {
+      "actor": "client",
+      "action": "ACK_PENDING",
+      "clientReqId": "req-123"
+    }
+  ],
+  "assertions": [
+    { "client.serverRev": 6 },
+    { "client.pendingOps": 0 },
+    { "client.state.user-1.status": "away" }
+  ]
+}

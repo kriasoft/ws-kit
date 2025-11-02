@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "003-queue-unlimited",
+  "description": "Queue policy enabled, messages accumulated without drop or error",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SEND",
+      "count": 20,
+      "msg": { "type": "SEND_DATA", "data": "msg-{i}" }
+    },
+    {
+      "actor": "server",
+      "action": "QUEUE_POLICY",
+      "policy": "queue"
+    },
+    {
+      "actor": "server",
+      "action": "RECEIVE_ALL"
+    }
+  ],
+  "assertions": [{ "server.queue.length": 20 }, { "server.errors": 0 }]
+}

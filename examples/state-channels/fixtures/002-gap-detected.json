@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "002-gap-detected",
+  "description": "Client offline during updates, reconnects with gap, receives SEQUENCE_GAP",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SUBSCRIBE"
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": { "type": "STATE_SYNC", "seq": 1, "payload": { "count": 1 } }
+    },
+    {
+      "actor": "client",
+      "action": "DISCONNECT"
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": { "type": "STATE_SYNC", "seq": 2, "payload": { "count": 2 } }
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": { "type": "STATE_SYNC", "seq": 3, "payload": { "count": 3 } }
+    },
+    {
+      "actor": "client",
+      "action": "RECONNECT"
+    },
+    {
+      "actor": "client",
+      "action": "RECEIVE",
+      "msg": { "type": "STATE_SYNC", "seq": 3, "payload": { "count": 3 } }
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "SEQUENCE_GAP",
+        "expectedSeq": 2,
+        "receivedSeq": 3,
+        "resumeFrom": 3
+      }
+    }
+  ],
+  "assertions": [{ "client.detectedGap": true }, { "client.expectedSeq": 4 }]
+}

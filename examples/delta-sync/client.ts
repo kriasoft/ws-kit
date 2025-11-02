@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Delta Synchronization Client Example
  *
@@ -7,8 +10,7 @@
  * - Server reconciliation
  */
 
-import type { Participant, Operation, Revision } from "./schema";
-import { SnapshotSyncMessage, DeltaSyncMessage } from "./schema";
+import type { Operation, Participant, Revision } from "./schema";
 
 // ============================================================================
 // Client State Management
@@ -55,6 +57,24 @@ class DeltaSyncClient {
    */
   getCurrentRev(): Revision {
     return this.state.serverRev;
+  }
+
+  /**
+   * Handle revision gap error from server (client too far behind buffer)
+   */
+  handleRevisionGap(
+    payload: {
+      expectedRev: Revision;
+      serverRev: Revision;
+      bufferFirstRev: Revision;
+      resumeFrom: Revision;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } & Record<string, any>,
+  ): void {
+    console.log(
+      `[CLIENT] Received REVISION_GAP: expected=${payload.expectedRev}, server=${payload.serverRev}, bufferFirstRev=${payload.bufferFirstRev}`,
+    );
+    // Server will send SYNC.SNAPSHOT next for recovery
   }
 
   /**

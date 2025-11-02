@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Ring buffer for storing operation history with fixed memory footprint.
  *
@@ -7,7 +10,7 @@
 export class RingBuffer<T extends { rev: number }> {
   private buffer: T[] = [];
   private readonly maxSize: number;
-  private firstRev = 0; // Revision of oldest item in buffer
+  private _firstRev = 0; // Revision of oldest item in buffer
 
   constructor(maxSize = 1024) {
     this.maxSize = maxSize;
@@ -18,7 +21,7 @@ export class RingBuffer<T extends { rev: number }> {
    */
   push(item: T): void {
     if (this.buffer.length === 0) {
-      this.firstRev = item.rev;
+      this._firstRev = item.rev;
     }
 
     this.buffer.push(item);
@@ -26,7 +29,7 @@ export class RingBuffer<T extends { rev: number }> {
     // Remove oldest item if over capacity
     if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
-      this.firstRev = this.buffer[0]?.rev ?? item.rev;
+      this._firstRev = this.buffer[0]?.rev ?? item.rev;
     }
   }
 
@@ -37,7 +40,7 @@ export class RingBuffer<T extends { rev: number }> {
    */
   range(fromRev: number, toRev: number): T[] | undefined {
     // Check if range is outside buffer window
-    if (fromRev < this.firstRev - 1 || toRev > this.lastRev) {
+    if (fromRev < this._firstRev - 1 || toRev > this.lastRev) {
       return undefined; // Out of range, need snapshot
     }
 
@@ -51,7 +54,14 @@ export class RingBuffer<T extends { rev: number }> {
    */
   canProvideDeltas(fromRev: number): boolean {
     if (this.buffer.length === 0) return fromRev === 0;
-    return fromRev >= this.firstRev - 1;
+    return fromRev >= this._firstRev - 1;
+  }
+
+  /**
+   * Get the revision of the oldest operation in buffer
+   */
+  get firstRev(): number {
+    return this._firstRev;
   }
 
   /**
@@ -73,6 +83,6 @@ export class RingBuffer<T extends { rev: number }> {
    */
   clear(): void {
     this.buffer = [];
-    this.firstRev = 0;
+    this._firstRev = 0;
   }
 }

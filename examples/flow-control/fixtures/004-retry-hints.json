@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "004-retry-hints",
+  "description": "RESOURCE_EXHAUSTED includes retryAfterMs, client backs off correctly",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SEND",
+      "count": 11,
+      "msg": { "type": "SEND_DATA", "data": "msg-{i}" }
+    },
+    {
+      "actor": "server",
+      "action": "QUEUE_FULL"
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "RESOURCE_EXHAUSTED",
+        "policy": "drop-oldest",
+        "retryAfterMs": 250,
+        "queueDepth": 10
+      }
+    },
+    {
+      "actor": "client",
+      "action": "READ_RETRY_HINT",
+      "expectedMs": 250
+    },
+    {
+      "actor": "client",
+      "action": "WAIT",
+      "ms": 250
+    },
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": { "type": "SEND_DATA", "data": "retry-msg" }
+    },
+    {
+      "actor": "server",
+      "action": "ACCEPT"
+    }
+  ],
+  "assertions": [
+    { "client.backedOffMs": 250 },
+    { "client.retrySuccessful": true }
+  ]
+}

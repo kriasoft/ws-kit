@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "state-channels",
+  "description": "FIFO state updates with sequence tracking and gap recovery",
+  "messages": {
+    "STATE_SYNC": {
+      "description": "Broadcast state update with sequence number",
+      "fields": {
+        "seq": { "type": "number", "description": "Server sequence number" },
+        "payload": { "type": "object", "description": "State data" }
+      }
+    },
+    "STATE_UPDATE": {
+      "description": "Client sends update with sequence number",
+      "fields": {
+        "seq": { "type": "number", "description": "Client sequence number" },
+        "payload": { "type": "object", "description": "Update data" }
+      }
+    },
+    "SEQUENCE_GAP": {
+      "description": "Error: sequence gap detected",
+      "fields": {
+        "expectedSeq": {
+          "type": "number",
+          "description": "Expected client seq"
+        },
+        "receivedSeq": { "type": "number", "description": "Received seq" },
+        "resumeFrom": {
+          "type": "number",
+          "description": "Server seq to resume from"
+        }
+      }
+    },
+    "CATCH_UP_REQUEST": {
+      "description": "Client requests missing messages from server",
+      "fields": {
+        "fromSeq": {
+          "type": "number",
+          "description": "Server seq to resume from"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "flow-control",
+  "description": "Backpressure strategies with retry hints",
+  "messages": {
+    "SEND_DATA": {
+      "description": "Client sends data to server",
+      "fields": {
+        "data": { "type": "string", "description": "Payload data" }
+      }
+    },
+    "RESOURCE_EXHAUSTED": {
+      "description": "Server queue is full, client must back off",
+      "fields": {
+        "policy": {
+          "type": "string",
+          "description": "Policy applied (drop-oldest, drop-new, queue)"
+        },
+        "retryAfterMs": {
+          "type": "number",
+          "description": "Milliseconds before retry is safe"
+        },
+        "queueDepth": { "type": "number", "description": "Current queue depth" }
+      }
+    },
+    "DATA_ACK": {
+      "description": "Server acknowledges receipt",
+      "fields": {
+        "id": {
+          "type": "string",
+          "description": "Message id being acknowledged"
+        }
+      }
+    }
+  }
+}

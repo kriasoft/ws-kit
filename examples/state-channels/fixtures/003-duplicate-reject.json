@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "003-duplicate-reject",
+  "description": "Client retries seq=2, server silently acknowledges (no side effects)",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": {
+        "type": "STATE_UPDATE",
+        "seq": 1,
+        "payload": { "action": "set", "value": "a" }
+      }
+    },
+    {
+      "actor": "server",
+      "action": "APPLY",
+      "clientSeq": 1
+    },
+    {
+      "actor": "server",
+      "action": "BROADCAST",
+      "seq": 1
+    },
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": {
+        "type": "STATE_UPDATE",
+        "seq": 1,
+        "payload": { "action": "set", "value": "a" }
+      }
+    },
+    {
+      "actor": "server",
+      "action": "DETECT_DUPLICATE"
+    }
+  ],
+  "assertions": [{ "server.appliedUpdates": 1 }, { "server.broadcasts": 1 }]
+}
