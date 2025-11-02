@@ -1,5 +1,13 @@
 # @ws-kit/core
 
+## 0.4.0
+
+### Minor Changes
+
+- [#34](https://github.com/kriasoft/ws-kit/pull/34) [`7f9bec8`](https://github.com/kriasoft/ws-kit/commit/7f9bec81a47f1d70b72dadc87731b26f76dac913) Thanks [@koistya](https://github.com/koistya)! - Add comprehensive application patterns documentation and examples for state channels, delta sync, and flow control. Includes production-ready examples with typed schemas, conformance tests, and detailed guides for implementing these architectural patterns.
+
+- [#34](https://github.com/kriasoft/ws-kit/pull/34) [`7f9bec8`](https://github.com/kriasoft/ws-kit/commit/7f9bec81a47f1d70b72dadc87731b26f76dac913) Thanks [@koistya](https://github.com/koistya)! - Introduce `IWebSocketRouter<TData>` interface for type-safe router composition. Adapters now accept the interface instead of the concrete class, enabling seamless compatibility with typed routers from `@ws-kit/zod` and `@ws-kit/valibot`. This eliminates false type errors when passing typed routers to platform adapters.
+
 ## 0.3.0
 
 ### Minor Changes
