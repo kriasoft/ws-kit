@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "delta-sync",
+  "description": "Revision-based state synchronization with operation replay buffer",
+  "messages": {
+    "SYNC.SNAPSHOT": {
+      "direction": "server→client",
+      "description": "Full state snapshot when client is too far behind",
+      "fields": {
+        "rev": { "type": "number", "description": "Current server revision" },
+        "participants": {
+          "type": "object",
+          "description": "Full participant state map"
+        }
+      }
+    },
+    "SYNC.DELTAS": {
+      "direction": "server→client",
+      "description": "Incremental operations since client's last revision",
+      "fields": {
+        "fromRev": {
+          "type": "number",
+          "description": "Previous client revision"
+        },
+        "toRev": { "type": "number", "description": "New server revision" },
+        "operations": { "type": "array", "description": "Operations to apply" }
+      }
+    },
+    "REVISION_GAP": {
+      "direction": "server→client",
+      "description": "Error: client revision too far behind server buffer",
+      "fields": {
+        "expectedRev": {
+          "type": "number",
+          "description": "Client's last known revision"
+        },
+        "serverRev": {
+          "type": "number",
+          "description": "Current server revision"
+        },
+        "bufferFirstRev": {
+          "type": "number",
+          "description": "Oldest revision in buffer"
+        },
+        "resumeFrom": {
+          "type": "number",
+          "description": "Revision to resume from (= serverRev)"
+        }
+      }
+    },
+    "JOIN": {
+      "direction": "client→server",
+      "description": "Client joins meeting and requests state",
+      "fields": {
+        "participantId": {
+          "type": "string",
+          "description": "Unique participant identifier"
+        },
+        "name": { "type": "string", "description": "Display name" }
+      }
+    },
+    "UPDATE": {
+      "direction": "client→server",
+      "description": "Client sends state update with optimistic confirmation tracking",
+      "fields": {
+        "patch": {
+          "type": "object",
+          "description": "Partial participant state to apply"
+        },
+        "baseRev": {
+          "type": "number",
+          "description": "Client's current revision (optional)"
+        },
+        "clientReqId": {
+          "type": "string",
+          "description": "Unique request ID for ack tracking"
+        }
+      }
+    },
+    "LEAVE": {
+      "direction": "client→server",
+      "description": "Client leaves meeting",
+      "fields": {}
+    },
+    "HEARTBEAT": {
+      "direction": "client→server",
+      "description": "Keep-alive ping to prevent timeout",
+      "fields": {}
+    }
+  }
+}

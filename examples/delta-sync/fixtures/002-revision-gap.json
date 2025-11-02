@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "002-revision-gap",
+  "description": "Client falls behind server's operation buffer, receives REVISION_GAP error then SYNC.SNAPSHOT",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": { "type": "JOIN", "participantId": "user-1", "name": "Alice" }
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "SYNC.SNAPSHOT",
+        "rev": 1,
+        "participants": {
+          "user-1": {
+            "id": "user-1",
+            "name": "Alice",
+            "status": "online",
+            "lastActive": 1000
+          }
+        }
+      }
+    },
+    {
+      "actor": "client",
+      "action": "DISCONNECT"
+    },
+    {
+      "actor": "server",
+      "action": "PROCESS_OPERATIONS",
+      "count": 1050
+    },
+    {
+      "actor": "client",
+      "action": "RECONNECT"
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "REVISION_GAP",
+        "expectedRev": 1,
+        "serverRev": 1051,
+        "bufferFirstRev": 27,
+        "resumeFrom": 1051
+      }
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "SYNC.SNAPSHOT",
+        "rev": 1051,
+        "participants": {
+          "user-1": {
+            "id": "user-1",
+            "name": "Alice",
+            "status": "online",
+            "lastActive": 2000
+          }
+        }
+      }
+    }
+  ],
+  "assertions": [
+    { "server.rev": 1051 },
+    { "client.serverRev": 1051 },
+    { "client.detectedGap": true },
+    { "client.pendingOps": 0 }
+  ]
+}

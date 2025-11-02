@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "001-happy-path",
+  "description": "Client joins, receives snapshot, then receives deltas on updates",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": { "type": "JOIN", "participantId": "user-1", "name": "Alice" }
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "SYNC.SNAPSHOT",
+        "rev": 1,
+        "participants": {
+          "user-1": {
+            "id": "user-1",
+            "name": "Alice",
+            "status": "online",
+            "lastActive": 1000
+          }
+        }
+      }
+    },
+    {
+      "actor": "client",
+      "action": "SEND",
+      "msg": {
+        "type": "UPDATE",
+        "patch": { "status": "away" },
+        "clientReqId": "req-1"
+      }
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "SYNC.DELTAS",
+        "fromRev": 1,
+        "toRev": 2,
+        "operations": [
+          {
+            "rev": 2,
+            "type": "participant.updated",
+            "payload": { "id": "user-1", "status": "away" },
+            "clientReqId": "req-1"
+          }
+        ]
+      }
+    }
+  ],
+  "assertions": [
+    { "server.rev": 2 },
+    { "client.serverRev": 2 },
+    { "client.pendingOps": 0 }
+  ]
+}

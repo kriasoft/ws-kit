@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Delta Synchronization Server Example
  *
@@ -5,22 +8,20 @@
  * Perfect for collaborative apps where bandwidth matters.
  */
 
-import { createRouter, message } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 import type { ServerWebSocket } from "@ws-kit/core";
-import {
-  ParticipantSchema,
-  JoinMessage,
-  UpdateMessage,
-  LeaveMessage,
-  SnapshotSyncMessage,
-  DeltaSyncMessage,
-  OperationSchema,
-  type Participant,
-  type Operation,
-  type Revision,
-} from "./schema";
+import { createRouter, message } from "@ws-kit/zod";
 import { RingBuffer } from "./ring-buffer";
+import {
+  DeltaSyncMessage,
+  JoinMessage,
+  LeaveMessage,
+  RevisionGapMessage,
+  SnapshotSyncMessage,
+  UpdateMessage,
+  type Operation,
+  type Participant,
+} from "./schema";
 
 // ============================================================================
 // Server State Management
@@ -35,6 +36,7 @@ interface ClientState {
   participantId: string;
   lastSentRev: number; // Last revision sent to this client
   lastHeartbeat: number;
+  ws: ServerWebSocket; // WebSocket connection for sending messages
 }
 
 class DeltaSyncServer {
@@ -73,13 +75,14 @@ class DeltaSyncServer {
         participantId,
         lastSentRev: 0, // Will get full snapshot
         lastHeartbeat: Date.now(),
+        ws: ctx.ws,
       });
 
       // Add to state and emit operation
       this.addParticipant(participant);
 
       // Send full snapshot to new client
-      this.sendSnapshot(ctx.ws, participantId);
+      this.sendSnapshot(participantId);
 
       // Notify other clients of the new participant (optional cast for testing)
       if (ctx.ws) {
@@ -217,20 +220,20 @@ class DeltaSyncServer {
   /**
    * Send full state snapshot to a client
    */
-  private sendSnapshot(ctx: ServerWebSocket, participantId: string): void {
+  private sendSnapshot(participantId: string): void {
+    const client = this.clients.get(participantId);
+    if (!client) return;
+
     const payload = {
       rev: this.state.rev,
       participants: this.state.participants,
     };
 
     // Send typed snapshot message
-    ctx.send(SnapshotSyncMessage, payload);
+    client.ws.send(SnapshotSyncMessage, payload);
 
     // Update last sent revision
-    const client = this.clients.get(participantId);
-    if (client) {
-      client.lastSentRev = this.state.rev;
-    }
+    client.lastSentRev = this.state.rev;
   }
 
   /**
@@ -250,7 +253,8 @@ class DeltaSyncServer {
             operations: ops,
           };
 
-          // Note: Would send via connection here
+          client.ws.send(DeltaSyncMessage, payload);
+
           console.log(
             `[DELTA] Sent ${ops.length} ops to ${participantId} (${client.lastSentRev} → ${this.state.rev})`,
           );
@@ -260,9 +264,21 @@ class DeltaSyncServer {
         }
       }
 
-      // Fallback to snapshot if delta not available
-      console.log(`[SNAPSHOT] Sent to ${participantId} (too far behind)`);
-      client.lastSentRev = this.state.rev;
+      // Client is too far behind - send REVISION_GAP error first
+      console.log(
+        `[REVISION_GAP] ${participantId} too far behind (${client.lastSentRev} → ${this.state.rev})`,
+      );
+
+      const bufferFirstRev = this.operations.firstRev;
+      client.ws.send(RevisionGapMessage, {
+        expectedRev: client.lastSentRev,
+        serverRev: this.state.rev,
+        bufferFirstRev,
+        resumeFrom: this.state.rev,
+      });
+
+      // Then send snapshot for recovery
+      this.sendSnapshot(participantId);
     }
   }
 

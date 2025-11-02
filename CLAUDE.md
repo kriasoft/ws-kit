@@ -187,3 +187,32 @@ bun test packages/zod/test         # Specific package
 bun test --grep "pattern"          # By pattern
 bun test --watch                   # Watch mode
 ```
+
+## Implementing Application Patterns
+
+See [docs/patterns/README.md](./docs/patterns/README.md) for detailed guides and examples.
+
+### Workflow
+
+1. Copy template: `cp -r examples/state-channels examples/my-pattern`
+2. Define message contract (in `contract.json` or `schema.ts`, using canonical field names from [docs/invariants.md](./docs/invariants.md))
+3. Implement `server.ts` and `client.ts` using the contract (use `ctx.send()`, `ctx.publish()` in handlers, or direct `ws.send()` in helper methods)
+4. Create 3+ fixtures in `fixtures/NNN-description.json` (numbered 001, 002, 003...)
+5. Write `conformance.test.ts` to validate fixtures
+6. Update `docs/patterns/README.md` with pattern description
+
+> Example: All three shipped patterns (`state-channels`, `flow-control`, `delta-sync`) use `contract.json`. Alternatively, a TypeScript schema (`schema.ts`) is also valid.
+
+### Checklist
+
+- [ ] Fixtures numbered sequentially (001, 002, 003) with no gaps
+- [ ] Zero `// @ts-ignore` directives in implementations
+- [ ] Contract/schema uses canonical field names from `docs/invariants.md`
+- [ ] Pattern referenced in `docs/patterns/README.md`
+- [ ] `bun test examples/my-pattern/conformance.test.ts` passes
+
+### Validate
+
+```bash
+bun run test:patterns  # Runs CI checks on all patterns
+```

@@ -1,4 +1,7 @@
-import { z, message } from "@ws-kit/zod";
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
+import { message, z } from "@ws-kit/zod";
 
 /**
  * Message schemas for delta synchronization protocol
@@ -71,6 +74,23 @@ export const DeltaSyncMessage = message(
   },
 );
 
+/**
+ * Revision gap error: Client is too far behind the server's revision buffer
+ * Send this before falling back to SYNC.SNAPSHOT for transparency
+ */
+export const RevisionGapMessage = message(
+  "REVISION_GAP",
+  {
+    expectedRev: RevisionSchema,
+    serverRev: RevisionSchema,
+    bufferFirstRev: RevisionSchema,
+    resumeFrom: RevisionSchema,
+  },
+  {
+    timestamp: z.number().optional(),
+  },
+);
+
 // ============================================================================
 // Client → Server Messages
 // ============================================================================
@@ -108,7 +128,8 @@ export const HeartbeatMessage = message("HEARTBEAT");
 
 export type SnapshotSync = z.infer<typeof SnapshotSyncMessage>;
 export type DeltaSync = z.infer<typeof DeltaSyncMessage>;
-export type ServerMessage = SnapshotSync | DeltaSync;
+export type RevisionGap = z.infer<typeof RevisionGapMessage>;
+export type ServerMessage = SnapshotSync | DeltaSync | RevisionGap;
 
 export type JoinPayload = z.infer<typeof JoinMessage>;
 export type UpdatePayload = z.infer<typeof UpdateMessage>;

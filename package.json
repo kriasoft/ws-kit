@@ -50,6 +50,7 @@
     "rebuild": "bun tsc -b --clean && bun tsc -b",
     "clean": "bun tsc -b --clean",
     "test": "bun test",
+    "test:patterns": "bash ./scripts/validate-patterns.sh && bun test examples/**/conformance.test.ts",
     "typecheck": "bun tsc -b && bun tsc --noEmit",
     "lint": "eslint --report-unused-disable-directives .",
     "lint:fix": "eslint --report-unused-disable-directives --fix .",

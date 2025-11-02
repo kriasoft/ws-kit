@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureVersion": "1.0.0",
+  "name": "001-initialization",
+  "description": "Client joins, server sends initial state with seq=0",
+  "steps": [
+    {
+      "actor": "client",
+      "action": "SUBSCRIBE"
+    },
+    {
+      "actor": "server",
+      "action": "SEND",
+      "msg": {
+        "type": "STATE_SYNC",
+        "seq": 0,
+        "payload": { "status": "ready" }
+      }
+    }
+  ],
+  "assertions": [{ "client.expectedSeq": 1 }, { "server.serverSeq": 0 }]
+}
