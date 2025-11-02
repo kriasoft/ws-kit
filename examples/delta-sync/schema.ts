@@ -134,3 +134,12 @@ export type ServerMessage = SnapshotSync | DeltaSync | RevisionGap;
 export type JoinPayload = z.infer<typeof JoinMessage>;
 export type UpdatePayload = z.infer<typeof UpdateMessage>;
 export type ClientMessage = JoinPayload | UpdatePayload;
+
+/**
+ * Application data attached to WebSocket connections
+ * Set by authenticate() and updated when client joins
+ */
+export interface AppData {
+  clientId: string;
+  participantId?: string;
+}

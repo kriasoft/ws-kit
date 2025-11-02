@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./examples" },
     { "path": "./packages/adapters" },
     { "path": "./packages/bun" },
     { "path": "./packages/client" },

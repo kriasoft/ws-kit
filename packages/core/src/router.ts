@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { DEFAULT_CONFIG, RESERVED_CONTROL_PREFIX } from "./constants.js";
-import { ErrorCode, ERROR_CODE_META, WsKitError } from "./error.js";
+import { ERROR_CODE_META, ErrorCode, WsKitError } from "./error.js";
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
@@ -13,6 +13,7 @@ import type {
   ErrorHandler,
   ErrorKind,
   EventHandler,
+  IWebSocketRouter,
   LimitExceededHandler,
   LimitExceededInfo,
   LimitType,
@@ -94,7 +95,8 @@ interface TestingUtils<TData extends WebSocketData = WebSocketData> {
 export class WebSocketRouter<
   V extends ValidatorAdapter = ValidatorAdapter,
   TData extends WebSocketData = WebSocketData,
-> {
+> implements IWebSocketRouter<TData>
+{
   private readonly validator: V | undefined;
   private readonly validatorId: unknown | undefined; // Store validator identity for compatibility checks
   private readonly platform: PlatformAdapter | undefined;
@@ -152,6 +154,10 @@ export class WebSocketRouter<
     // Uses the constructor function as identity marker (works for both Zod and Valibot adapters)
     this.validatorId = this.validator?.constructor;
     this.platform = options.platform;
+
+    // Mark this instance as a ws-kit router for merge() validation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this as any)[Symbol.for("ws-kit.router")] = true;
 
     // Store provided pubsub or set up lazy provider
     if (options.pubsub) {
@@ -743,8 +749,9 @@ export class WebSocketRouter<
    * Merges handlers, lifecycle hooks, global middleware, and per-route middleware.
    * Last-write-wins for duplicate message types.
    *
-   * @param router - Another WebSocketRouter to merge
+   * @param router - A WebSocketRouter instance (from @ws-kit/core, @ws-kit/zod, or @ws-kit/valibot)
    * @returns This router for method chaining
+   * @throws TypeError if the router is not a ws-kit router
    *
    * @example
    * ```typescript
@@ -763,7 +770,21 @@ export class WebSocketRouter<
    *   .merge(chatRouter);
    * ```
    */
-  merge(router: WebSocketRouter<V, TData>): this {
+  merge(router: IWebSocketRouter<TData>): this {
+    // **Design**: Route composition via merge enables modular router setup.
+    // Routers can be initialized independently (each with its own handlers),
+    // then merged into a primary router for unified serving. This supports
+    // patterns like splitting auth/chat/game routes across modules.
+    //
+    // Type parameter note: ValidatorAdapter allows any validator (Zod, Valibot, etc.)
+    // since merge only accesses handler structures, not validator-specific logic.
+    //
+    // **Gotcha**: Merging routers with different validators (e.g., Zod + Valibot)
+    // is allowed at the type level but will cause runtime validation errors when
+    // messages matching the merged handlers are processed. Keep validators consistent
+    // across all routers in a merge chain. Use `createRouter()` from the same package
+    // (@ws-kit/zod or @ws-kit/valibot) for all routers you plan to merge.
+
     // Access private members through type assertion for composability
     interface AccessibleRouter {
       messageHandlers: Map<string, MessageHandlerEntry<TData>>;
@@ -775,8 +796,24 @@ export class WebSocketRouter<
       routeMiddleware: Map<string, Middleware<TData>[]>;
     }
 
+    // Unwrap router facade if needed (e.g., TypedZodRouter, TypedValibotRouter)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const coreToAdd = (router as any)[Symbol.for("ws-kit.core")] ?? router;
+
+    // Validate that the router is compatible by checking for ws-kit router marker
+    const isValidRouter =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((coreToAdd as any)[Symbol.for("ws-kit.router")] ?? false) === true;
+
+    if (!isValidRouter) {
+      throw new TypeError(
+        "Cannot merge router: expected a router from @ws-kit/zod, " +
+          "@ws-kit/valibot, or a WebSocketRouter instance",
+      );
+    }
+
     // SAFETY: Router internals are intentionally accessible for testing
-    const other = router as unknown as AccessibleRouter;
+    const other = coreToAdd as unknown as AccessibleRouter;
 
     // Merge message handlers
     if (other.messageHandlers) {
@@ -1478,6 +1515,16 @@ export class WebSocketRouter<
         }
       };
 
+      // Create getData function for type-safe connection data access
+      const getData = <K extends keyof TData>(key: K): TData[K] => {
+        try {
+          return ws.data?.[key];
+        } catch (error) {
+          console.error("[ws] Error getting data from connection:", error);
+          return undefined as TData[K];
+        }
+      };
+
       // Create subscribe function as convenience method
       const subscribe = (channel: string): void => {
         try {
@@ -1748,6 +1795,7 @@ export class WebSocketRouter<
         send: rpcAwareSend,
         error: errorSend,
         assignData,
+        getData,
         subscribe,
         unsubscribe,
         publish,
@@ -2169,6 +2217,16 @@ export class WebSocketRouter<
       }
     };
 
+    // Helper to access connection data with type safety
+    const getData = <K extends keyof TData>(key: K): TData[K] => {
+      try {
+        return ws.data?.[key];
+      } catch (error) {
+        console.error("[ws] Error getting data from connection:", error);
+        return undefined as TData[K];
+      }
+    };
+
     // Subscribe to channel
     const subscribe = (channel: string): void => {
       try {
@@ -2206,6 +2264,7 @@ export class WebSocketRouter<
       error: errorSend,
       reply: send as SendFunction, // Semantic alias (may not be RPC in all contexts)
       assignData,
+      getData,
       subscribe,
       unsubscribe,
       publish,

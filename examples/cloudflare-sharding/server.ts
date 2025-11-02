@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Cloudflare Durable Object Handler
  *
@@ -9,8 +12,8 @@
  * Use `router.ts` with `getShardedStub()` to distribute rooms across multiple shards.
  */
 
-import { z, message, createRouter } from "@ws-kit/zod";
 import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createRouter, message, z } from "@ws-kit/zod";
 
 // Message schemas
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
@@ -24,6 +27,7 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 // Type-safe app data
 interface AppData {
+  clientId: string;
   userId?: string;
   roomId?: string;
 }
@@ -85,7 +89,13 @@ export class WebSocketRouter {
     this.handler = createDurableObjectHandler(router, {
       authenticate(req) {
         const token = req.headers.get("authorization");
-        return token ? { userId: token.replace("Bearer ", "") } : undefined;
+        const userId = token?.replace("Bearer ", "");
+        return userId
+          ? {
+              clientId: req.headers.get("sec-websocket-key") || "anonymous",
+              userId,
+            }
+          : undefined;
       },
     });
   }

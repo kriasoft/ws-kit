@@ -26,42 +26,44 @@
 
 export type {
   AppDataDefault,
-  ServerWebSocket,
-  WebSocketData,
-  MessageMeta,
-  MessageContext,
-  EventMessageContext,
-  RpcMessageContext,
-  SendFunction,
-  OpenHandlerContext,
-  OpenHandler,
-  CloseHandlerContext,
-  CloseHandler,
-  MessageHandler,
-  EventHandler,
-  RpcHandler,
   AuthHandler,
+  CloseHandler,
+  CloseHandlerContext,
   ErrorHandler,
-  Middleware,
-  RouterHooks,
+  EventHandler,
+  EventMessageContext,
   HeartbeatConfig,
-  LimitsConfig,
+  IngressContext,
+  IWebSocketRouter,
   LimitExceededHandler,
   LimitExceededInfo,
+  LimitsConfig,
   LimitType,
-  RateLimitDecision,
-  Policy,
-  RateLimiter,
-  IngressContext,
-  WebSocketRouterOptions,
-  MessageSchemaType,
+  MessageContext,
+  MessageContextMethods,
+  MessageHandler,
   MessageHandlerEntry,
-  ValidatorAdapter,
+  MessageMeta,
+  MessageSchemaType,
+  Middleware,
+  OpenHandler,
+  OpenHandlerContext,
   PlatformAdapter,
-  PubSub,
-  PubSubPublishOptions,
+  Policy,
   PublishOptions,
   PublishResult,
+  PubSub,
+  PubSubPublishOptions,
+  RateLimitDecision,
+  RateLimiter,
+  RouterHooks,
+  RpcHandler,
+  RpcMessageContext,
+  SendFunction,
+  ServerWebSocket,
+  ValidatorAdapter,
+  WebSocketData,
+  WebSocketRouterOptions,
 } from "./types.js";
 
 // ============================================================================
@@ -69,16 +71,16 @@ export type {
 // ============================================================================
 
 export {
-  ErrorCode,
   ERROR_CODE_META,
+  ErrorCode,
   WebSocketError,
   WsKitError,
 } from "./error.js";
 export type {
-  ErrorCodeValue,
   ErrorCodeMetadata,
-  ErrorPayload,
+  ErrorCodeValue,
   ErrorMessage,
+  ErrorPayload,
 } from "./error.js";
 export type { ErrorWire, RpcErrorWire } from "./types.js";
 
@@ -86,7 +88,7 @@ export type { ErrorWire, RpcErrorWire } from "./types.js";
 // Constants & Defaults
 // ============================================================================
 
-export { RESERVED_META_KEYS, DEFAULT_CONFIG } from "./constants.js";
+export { DEFAULT_CONFIG, RESERVED_META_KEYS } from "./constants.js";
 export type { ReservedMetaKey } from "./constants.js";
 
 // ============================================================================
@@ -113,7 +115,7 @@ export { MemoryPubSub } from "./pubsub.js";
 // Message Normalization & Validation
 // ============================================================================
 
-export { validateMetaSchema, normalizeInboundMessage } from "./normalize.js";
+export { normalizeInboundMessage, validateMetaSchema } from "./normalize.js";
 
 // ============================================================================
 // Utilities
@@ -143,8 +145,8 @@ export { validateMetaSchema, normalizeInboundMessage } from "./normalize.js";
  * ```
  */
 export {
-  createThrottledPublish,
   createAdvancedThrottledPublish,
+  createThrottledPublish,
 } from "./throttle.js";
 export type { ThrottledBroadcastConfig } from "./throttle.js";
 
@@ -194,7 +196,7 @@ export type { LoggerAdapter, LoggerOptions } from "./logger.js";
  * });
  * ```
  */
-export { stableStringify, idempotencyKey } from "./utils.js";
+export { idempotencyKey, stableStringify } from "./utils.js";
 export type { IdempotencyKeyOpts } from "./utils.js";
 
 // ============================================================================

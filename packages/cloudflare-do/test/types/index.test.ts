@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it } from "bun:test";
-import { expectTypeOf } from "bun:test";
 import type { PlatformAdapter, PubSub } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
 import { createDurableObjectAdapter } from "../../src/adapter.js";
-import { DurablePubSub } from "../../src/pubsub.js";
 import { createDurableObjectHandler } from "../../src/handler.js";
+import { DurablePubSub } from "../../src/pubsub.js";
 import type {
   DurableObjectHandler,
   DurableObjectWebSocketData,
@@ -73,23 +72,27 @@ describe("@ws-kit/cloudflare-do type tests", () => {
   describe("createDurableObjectHandler", () => {
     it("should return DurableObjectHandler", () => {
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
-      const handler = createDurableObjectHandler({ router: mockRouter });
+      const handler = createDurableObjectHandler(mockRouter);
       expectTypeOf(handler).toMatchTypeOf<DurableObjectHandler>();
     });
 
     it("should have fetch property", () => {
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
-      const handler = createDurableObjectHandler({ router: mockRouter });
+      const handler = createDurableObjectHandler(mockRouter);
       expectTypeOf(handler.fetch).toBeFunction();
       expectTypeOf(handler.fetch).parameters.toEqualTypeOf<[Request]>();
       expectTypeOf(handler.fetch).returns.resolves.toMatchTypeOf<Response>();
@@ -102,14 +105,14 @@ describe("@ws-kit/cloudflare-do type tests", () => {
       }
 
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
-      const handler = createDurableObjectHandler<CustomData>({
-        router: mockRouter,
-      });
+      const handler = createDurableObjectHandler<CustomData>(mockRouter);
       expectTypeOf(handler).toMatchTypeOf<DurableObjectHandler<CustomData>>();
     });
   });

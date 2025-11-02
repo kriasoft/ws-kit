@@ -27,22 +27,24 @@
  * ```
  */
 
-import { WebSocketRouter } from "@ws-kit/core";
 import type {
   AuthHandler,
   CloseHandler,
   ErrorHandler,
+  IWebSocketRouter,
   MessageContext,
   Middleware,
   OpenHandler,
   PublishOptions,
   PublishResult,
+  ServerWebSocket,
   WebSocketData,
   WebSocketRouterOptions,
 } from "@ws-kit/core";
+import { WebSocketRouter } from "@ws-kit/core";
 
-import zodValidator from "./validator.js";
 import type { MessageHandler, MessageSchemaType } from "./types.js";
+import zodValidator from "./validator.js";
 
 /**
  * Type-safe WebSocket router interface with Zod validation.
@@ -255,10 +257,12 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
    * Merges all handlers, lifecycle hooks, and middleware from the source router.
    * Last-write-wins for duplicate message types.
    *
-   * @param router - Another router to merge
+   * Only supports @ws-kit routers (TypedZodRouter, TypedValibotRouter, or WebSocketRouter).
+   *
+   * @param router - A @ws-kit router instance
    * @returns This router for method chaining
    */
-  merge(router: TypedZodRouter<TData>): this;
+  merge(router: IWebSocketRouter<TData>): this;
 
   /**
    * Publish a type-safe message to all subscribers on a channel.
@@ -290,6 +294,28 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
     payload: unknown,
     options?: PublishOptions,
   ): Promise<PublishResult>;
+
+  /**
+   * Platform adapter handlers for WebSocket lifecycle events.
+   *
+   * Provides the core connection handling for platform integrations.
+   * Call these methods from your platform's WebSocket handlers
+   * (e.g., Bun.serve, Cloudflare DO, Node.js http.createServer).
+   *
+   * @internal - Platform adapters only
+   */
+  readonly websocket: {
+    /** Called when a WebSocket connection opens */
+    open(ws: ServerWebSocket<TData>): Promise<void>;
+    /** Called when a message arrives */
+    message(ws: ServerWebSocket<TData>, data: string | Buffer): Promise<void>;
+    /** Called when a connection closes */
+    close(
+      ws: ServerWebSocket<TData>,
+      code: number,
+      reason?: string,
+    ): Promise<void>;
+  };
 
   /**
    * Access the underlying core router for advanced introspection.
@@ -330,7 +356,7 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
 export function createZodRouter<TData extends WebSocketData = WebSocketData>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options?: Omit<WebSocketRouterOptions<any, TData>, "validator">,
-): TypedZodRouter<TData> {
+): TypedZodRouter<TData> & IWebSocketRouter<TData> {
   // Create core router with Zod validator
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const coreRouter = new WebSocketRouter<any, TData>({
@@ -396,9 +422,23 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
     },
 
     // Router composition
-    merge(sourceRouter) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const coreToAdd = (sourceRouter as any)[Symbol.for("ws-kit.core")];
+    merge(sourceRouter: IWebSocketRouter<TData>) {
+      const coreToAdd =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (sourceRouter as any)[Symbol.for("ws-kit.core")] ?? sourceRouter;
+
+      // Validate that the router is compatible by checking for ws-kit router marker
+      const isValidRouter =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (coreToAdd as any)?.[Symbol.for("ws-kit.router")] === true;
+
+      if (!isValidRouter) {
+        throw new TypeError(
+          "Cannot merge router: expected a router from @ws-kit/zod, " +
+            "@ws-kit/valibot, or a WebSocketRouter instance",
+        );
+      }
+
       coreRouter.merge(coreToAdd);
       return router;
     },
@@ -413,6 +453,11 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
       return coreRouter.publish(channel, schema, payload, options);
     },
 
+    // Platform adapter handlers (delegating to core router)
+    get websocket() {
+      return coreRouter.websocket;
+    },
+
     // Stable escape hatch for advanced introspection (following React convention)
     [Symbol.for("ws-kit.core")]: coreRouter,
   };
@@ -424,5 +469,5 @@ export function createZodRouter<TData extends WebSocketData = WebSocketData>(
     configurable: true,
   });
 
-  return router;
+  return router as typeof router & IWebSocketRouter<TData>;
 }

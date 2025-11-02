@@ -1,52 +1,44 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { createClient } from "@ws-kit/client";
+import { wsClient } from "@ws-kit/client/zod";
+import {
+  CatchUpRequestMessage,
+  SequenceGapMessage,
+  StateSyncMessage,
+  StateUpdateMessage,
+} from "./schema";
 
-const client = createClient<
-  {
-    STATE_SYNC: { seq: number; payload: unknown };
-    SEQUENCE_GAP: {
-      expectedSeq: number;
-      receivedSeq: number;
-      resumeFrom: number;
-    };
-  },
-  {
-    STATE_UPDATE: { seq: number; payload: unknown };
-    CATCH_UP_REQUEST: { fromSeq: number };
-  }
->("ws://localhost:3000");
+const client = wsClient({ url: "ws://localhost:3000" });
 
 let clientSeq = 0;
 let expectedSeq = 1;
 
-client.on("open", () => {
-  client.send("STATE_UPDATE", {
+client.onceOpen().then(() => {
+  client.send(StateUpdateMessage, {
     seq: ++clientSeq,
     payload: { status: "online" },
   });
 });
 
-client.on("STATE_SYNC", (msg: { seq: number; payload: unknown }) => {
-  if (msg.seq > expectedSeq) {
-    console.error(`Gap detected: expected ${expectedSeq}, got ${msg.seq}`);
-    client.send("CATCH_UP_REQUEST", { fromSeq: expectedSeq });
-    expectedSeq = msg.seq + 1;
+client.on(StateSyncMessage, (msg) => {
+  if (msg.payload.seq > expectedSeq) {
+    console.error(
+      `Gap detected: expected ${expectedSeq}, got ${msg.payload.seq}`,
+    );
+    client.send(CatchUpRequestMessage, { fromSeq: expectedSeq });
+    expectedSeq = msg.payload.seq + 1;
     return;
   }
-  expectedSeq = msg.seq + 1;
-  console.log(`State sync seq=${msg.seq}:`, msg.payload);
+  expectedSeq = msg.payload.seq + 1;
+  console.log(`State sync seq=${msg.payload.seq}:`, msg.payload.payload);
 });
 
-client.on(
-  "SEQUENCE_GAP",
-  (msg: { expectedSeq: number; receivedSeq: number; resumeFrom: number }) => {
-    console.error(
-      `Sequence gap: expected ${msg.expectedSeq}, got ${msg.receivedSeq}`,
-    );
-    client.send("CATCH_UP_REQUEST", { fromSeq: msg.resumeFrom });
-  },
-);
+client.on(SequenceGapMessage, (msg) => {
+  console.error(
+    `Sequence gap: expected ${msg.payload.expectedSeq}, got ${msg.payload.receivedSeq}`,
+  );
+  client.send(CatchUpRequestMessage, { fromSeq: msg.payload.resumeFrom });
+});
 
 client.connect();

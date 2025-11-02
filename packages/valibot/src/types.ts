@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { ServerWebSocket } from "@ws-kit/core";
+import type { MessageContextMethods, ServerWebSocket } from "@ws-kit/core";
 import type { InferOutput, ObjectSchema } from "valibot";
 
 /**
@@ -63,7 +63,7 @@ export type ErrorCode = RpcErrorCode;
 
 /**
  * Type-safe function for sending validated messages through WebSocket.
- * Uses nested conditionals to extract payload/meta types from Valibot's ObjectSchema entries.
+ * Extracts payload/meta types from schema entries for compile-time validation.
  */
 export type SendFunction = <Schema extends MessageSchemaType>(
   schema: Schema,
@@ -96,7 +96,10 @@ export type SendFunction = <Schema extends MessageSchemaType>(
  *
  * @see ADR-001 - keyof check for discriminated unions
  */
-export type MessageContext<Schema extends MessageSchemaType, Data> = {
+export type MessageContext<
+  Schema extends MessageSchemaType,
+  Data extends { clientId: string },
+> = MessageContextMethods<Data> & {
   /** WebSocket connection with custom data */
   ws: ServerWebSocket<Data>;
   /** Message type extracted from schema */
@@ -145,37 +148,20 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
     message: string,
     details?: Record<string, unknown>,
   ): void;
-  /**
-   * Merge partial data into the connection's custom data object.
-   *
-   * Safe way to update connection data without replacing it entirely.
-   * Calls Object.assign(ctx.ws.data, partial) internally.
-   *
-   * @param partial - Partial object to merge into ctx.ws.data
-   *
-   * @example
-   * ```typescript
-   * router.use((ctx, next) => {
-   *   const user = await authenticate(ctx.payload);
-   *   ctx.assignData({ userId: user.id, roles: user.roles });
-   *   return next();
-   * });
-   * ```
-   */
-  assignData(partial: Partial<Data>): void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } & (Schema extends ObjectSchema<infer TEntries, any>
-  ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TEntries extends Record<string, any>
-    ? "payload" extends keyof TEntries
-      ? { payload: InferOutput<TEntries["payload"]> }
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      TEntries extends Record<string, any>
+      ? "payload" extends keyof TEntries
+        ? { payload: InferOutput<TEntries["payload"]> }
+        : Record<string, never>
       : Record<string, never>
-    : Record<string, never>
-  : Record<string, never>);
+    : Record<string, never>);
 
-export type MessageHandler<Schema extends MessageSchemaType, Data> = (
-  context: MessageContext<Schema, Data>,
-) => void | Promise<void>;
+export type MessageHandler<
+  Schema extends MessageSchemaType,
+  Data extends { clientId: string },
+> = (context: MessageContext<Schema, Data>) => void | Promise<void>;
 
 /**
  * Base constraint for all message schemas created by messageSchema().
@@ -184,7 +170,9 @@ export type MessageHandler<Schema extends MessageSchemaType, Data> = (
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type MessageSchemaType = ObjectSchema<any, any>;
 
-export interface MessageHandlerEntry<Data = unknown> {
+export interface MessageHandlerEntry<
+  Data extends { clientId: string } = { clientId: string },
+> {
   schema: MessageSchemaType;
   handler: MessageHandler<MessageSchemaType, Data>;
 }

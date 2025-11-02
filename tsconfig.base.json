@@ -47,5 +47,5 @@
 
     "types": ["bun"]
   },
-  "exclude": ["**/dist", "**/.turbo", "**/node_modules", "examples"]
+  "exclude": ["**/dist", "**/.turbo", "**/node_modules"]
 }

@@ -74,6 +74,8 @@ router.on(Message, (ctx) => {
   ctx.publish(topic, schema, data); // Broadcast to topic subscribers (1-to-many)
   ctx.subscribe(topic); // Join topic
   ctx.unsubscribe(topic); // Leave topic
+  ctx.getData(key); // Access typed connection data
+  ctx.assignData(partial); // Update connection data
 });
 
 // Request-response pattern (RPC)
@@ -93,6 +95,8 @@ client.request(schema, data); // RPC call (returns Promise, auto-correlation)
 - `reply()` vs `send()` — RPC terminal response vs fire-and-forget (ADR-015)
 - `progress()` — non-terminal RPC updates for streaming (ADR-015)
 - `request()` — client-side RPC with auto-correlation (ADR-014)
+
+**Connection Data**: Pass generic `AppData` type to `createRouter<AppData>()` for full type inference. See [docs/specs/router.md#connection-data](./docs/specs/router.md) for details.
 
 ## Key Patterns
 

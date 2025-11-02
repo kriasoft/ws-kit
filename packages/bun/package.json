@@ -58,5 +58,11 @@
   "engines": {
     "bun": ">=1.3",
     "node": ">=22"
+  },
+  "scripts": {
+    "prepack": "bun run ../../scripts/prepack.ts"
+  },
+  "publishConfig": {
+    "directory": "dist"
   }
 }

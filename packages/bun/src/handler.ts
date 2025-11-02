@@ -1,19 +1,19 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import * as uuid from "uuid";
-const { v7: uuidv7 } = uuid;
 import type {
-  WebSocketRouter,
+  IWebSocketRouter,
   ServerWebSocket,
   WebSocketData,
 } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
+import * as uuid from "uuid";
 import type {
   BunHandler,
   BunHandlerOptions,
   BunWebSocketData,
 } from "./types.js";
+const { v7: uuidv7 } = uuid;
 
 /**
  * Create Bun WebSocket handlers for use with Bun.serve.
@@ -45,13 +45,9 @@ import type {
  * @returns Object with `fetch` and `websocket` handlers for Bun.serve
  */
 export function createBunHandler<TData extends WebSocketData = WebSocketData>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  router: WebSocketRouter<any, TData>,
+  router: IWebSocketRouter<TData>,
   options?: BunHandlerOptions<TData>,
 ): BunHandler<TData> {
-  // Extract core router if a typed router wrapper is passed
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
   const clientIdHeader = options?.clientIdHeader ?? "x-client-id";
 
   return {
@@ -164,8 +160,9 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
             return;
           }
 
-          // Call router's open handler
-          await coreRouter.handleOpen(ws);
+          // Call router's open handler via the object to preserve 'this' binding.
+          // This ensures routers with ordinary methods (not arrow functions) work correctly.
+          await router.websocket.open(ws);
 
           // Call onOpen hook (after connection is established and authenticated)
           try {
@@ -188,11 +185,12 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
        */
       async message(
         ws: ServerWebSocket<BunWebSocketData<TData>>,
-        message: string | Buffer,
+        data: string | Buffer,
       ): Promise<void> {
         try {
-          // Call router's message handler
-          await coreRouter.handleMessage(ws, message);
+          // Call router's message handler via the object to preserve 'this' binding.
+          // This ensures routers with ordinary methods (not arrow functions) work correctly.
+          await router.websocket.message(ws, data);
         } catch (error) {
           console.error("[ws] Error in message handler:", error);
           // Don't close the connection on message errors unless critical
@@ -208,8 +206,9 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
         reason?: string,
       ): Promise<void> {
         try {
-          // Call router's close handler
-          await coreRouter.handleClose(ws, code, reason);
+          // Call router's close handler via the object to preserve 'this' binding.
+          // This ensures routers with ordinary methods (not arrow functions) work correctly.
+          await router.websocket.close(ws, code, reason);
 
           // Call onClose hook (after cleanup)
           try {
@@ -263,11 +262,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
  */
 export function createDefaultBunFetch<
   TData extends WebSocketData = WebSocketData,
->(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  router: WebSocketRouter<any, TData>,
-  options?: BunHandlerOptions<TData>,
-) {
+>(router: IWebSocketRouter<TData>, options?: BunHandlerOptions<TData>) {
   const { fetch } = createBunHandler(router, options);
   return fetch;
 }

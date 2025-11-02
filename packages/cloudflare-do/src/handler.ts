@@ -1,18 +1,17 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import * as uuid from "uuid";
-const { v7: uuidv7 } = uuid;
 import type {
-  WebSocketRouter,
+  IWebSocketRouter,
   ServerWebSocket,
   WebSocketData,
-  ValidatorAdapter,
 } from "@ws-kit/core";
+import * as uuid from "uuid";
 import type {
   DurableObjectHandler,
   DurableObjectWebSocketData,
 } from "./types.js";
+const { v7: uuidv7 } = uuid;
 
 /**
  * Create a Cloudflare Durable Object WebSocket handler.
@@ -51,7 +50,7 @@ import type {
 export function createDurableObjectHandler<
   TData extends WebSocketData = WebSocketData,
 >(
-  router: WebSocketRouter<ValidatorAdapter, TData>,
+  router: IWebSocketRouter<TData>,
   options?: {
     authenticate?: (
       req: Request,
@@ -60,9 +59,7 @@ export function createDurableObjectHandler<
   },
 ): DurableObjectHandler {
   const { authenticate, maxConnections = 1000 } = options ?? {};
-  // Extract core router if a typed router wrapper is passed
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
+
   let connectionCount = 0;
 
   return {
@@ -144,7 +141,9 @@ export function createDurableObjectHandler<
             (server as any).close(1008, "Missing client ID");
             return new Response("Missing client ID", { status: 400 });
           }
-          await coreRouter.handleOpen(serverWs);
+          // Call router's open handler via the object to preserve 'this' binding.
+          // This ensures routers with ordinary methods (not arrow functions) work correctly.
+          await router.websocket.open(serverWs);
         } catch (error) {
           console.error(`[ws] Error in open handler:`, error);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -154,8 +153,10 @@ export function createDurableObjectHandler<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (server as any).addEventListener("message", async (event: any) => {
           try {
+            // Call router's message handler via the object to preserve 'this' binding.
+            // This ensures routers with ordinary methods (not arrow functions) work correctly.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await coreRouter.handleMessage(serverWs, (event as any).data);
+            await router.websocket.message(serverWs, (event as any).data);
           } catch (error) {
             console.error(`[ws] Error in message handler:`, error);
           }
@@ -165,7 +166,9 @@ export function createDurableObjectHandler<
         (server as any).addEventListener("close", async () => {
           connectionCount--;
           try {
-            await coreRouter.handleClose(serverWs, 1006, "Connection closed");
+            // Call router's close handler via the object to preserve 'this' binding.
+            // This ensures routers with ordinary methods (not arrow functions) work correctly.
+            await router.websocket.close(serverWs, 1006, "Connection closed");
           } catch (error) {
             console.error(`[ws] Error in close handler:`, error);
           }

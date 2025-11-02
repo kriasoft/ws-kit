@@ -46,6 +46,7 @@
   },
   "scripts": {
     "prepare": "husky",
+    "prepack": "bun run scripts/prepack.ts",
     "build": "bun tsc -b",
     "rebuild": "bun tsc -b --clean && bun tsc -b",
     "clean": "bun tsc -b --clean",
