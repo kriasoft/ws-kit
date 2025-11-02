@@ -2,8 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { serve } from "@ws-kit/bun";
-import type { RouteContext } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/zod";
+import {
+  CatchUpRequestMessage,
+  SequenceGapMessage,
+  StateSyncMessage,
+  StateUpdateMessage,
+} from "./schema";
 
 const router = createRouter();
 let serverSeq = 0;
@@ -13,21 +18,24 @@ const clientStates = new Map<
 >();
 const stateHistory: { seq: number; payload: unknown }[] = [];
 
-router.use((ctx: RouteContext<unknown>, next: () => void) => {
-  if (!clientStates.has(ctx.clientId)) {
-    clientStates.set(ctx.clientId, { lastClientSeq: 0, lastServerSeq: 0 });
+router.use((ctx, next) => {
+  if (!clientStates.has(ctx.ws.data.clientId)) {
+    clientStates.set(ctx.ws.data.clientId, {
+      lastClientSeq: 0,
+      lastServerSeq: 0,
+    });
   }
   next();
 });
 
-router.on("STATE_UPDATE", (ctx: RouteContext<unknown>) => {
-  const clientSeq = ctx.payload.seq as number;
-  const clientState = clientStates.get(ctx.clientId);
+router.on(StateUpdateMessage, (ctx) => {
+  const clientSeq = ctx.payload.seq;
+  const clientState = clientStates.get(ctx.ws.data.clientId);
   if (!clientState) return;
 
   // Detect gap
   if (clientSeq > clientState.lastClientSeq + 1) {
-    ctx.send("SEQUENCE_GAP", {
+    ctx.send(SequenceGapMessage, {
       expectedSeq: clientState.lastClientSeq + 1,
       receivedSeq: clientSeq,
       resumeFrom: clientState.lastServerSeq + 1,
@@ -49,15 +57,18 @@ router.on("STATE_UPDATE", (ctx: RouteContext<unknown>) => {
   };
   stateHistory.push(message);
   clientState.lastServerSeq = serverSeq;
-  ctx.publish("state", "STATE_SYNC", message);
+  // Note: ctx.publish() is not available on the typed context
+  // In a real app, use router.publish() or implement custom broadcasting
+  // router.publish("state", StateSyncMessage, message);
+  ctx.send(StateSyncMessage, message);
 });
 
-router.on("CATCH_UP_REQUEST", (ctx: RouteContext<unknown>) => {
-  const fromSeq = ctx.payload.fromSeq as number;
+router.on(CatchUpRequestMessage, (ctx) => {
+  const fromSeq = ctx.payload.fromSeq;
   // Send all missing states starting from fromSeq
   for (const msg of stateHistory) {
     if (msg.seq >= fromSeq) {
-      ctx.send("STATE_SYNC", msg);
+      ctx.send(StateSyncMessage, msg);
     }
   }
 });

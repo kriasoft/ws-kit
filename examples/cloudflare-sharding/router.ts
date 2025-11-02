@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Cloudflare Worker Entry Point
  *
@@ -14,7 +17,8 @@
  * class_name = "WebSocketRouter"
  */
 
-import { getShardedStub } from "@ws-kit/cloudflare-do/sharding";
+import type { DurableObjectNamespace } from "@ws-kit/cloudflare-do";
+import { getShardedStub } from "@ws-kit/cloudflare-do";
 
 interface Env {
   ROUTER: DurableObjectNamespace;
@@ -34,4 +38,4 @@ export default {
     // The DO's fetch handler will upgrade to WebSocket
     return stub.fetch(req);
   },
-} satisfies ExportedHandler<Env>;
+};

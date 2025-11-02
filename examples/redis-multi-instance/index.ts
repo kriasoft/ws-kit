@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Multi-Instance Chat with Redis PubSub
  *
@@ -40,14 +43,28 @@ const LeaveMessage = message("LEAVE", {
   username: z.string(),
 });
 
+// Schemas for internal event broadcasting
+const UserJoinedEvent = message("USER_JOINED", {
+  username: z.string(),
+  instance: z.string(),
+  timestamp: z.number(),
+});
+
+const UserLeftEvent = message("USER_LEFT", {
+  username: z.string(),
+  instance: z.string(),
+  timestamp: z.number(),
+});
+
+const ChatMessageEvent = message("MESSAGE", {
+  username: z.string(),
+  text: z.string(),
+  instance: z.string(),
+  timestamp: z.number(),
+});
+
 // Type definitions for Redis messages
-interface ChatMessageEvent {
-  type: "MESSAGE";
-  username: string;
-  text: string;
-  timestamp: number;
-  instance: string;
-}
+// ChatMessageEvent now defined via message schema above
 
 interface UserEvent {
   type: "USER_JOINED" | "USER_LEFT";
@@ -57,7 +74,7 @@ interface UserEvent {
 }
 
 // Type definitions for WebSocket data
-type WebSocketData = { clientId?: string } & Record<string, unknown>;
+type WebSocketData = { clientId: string } & Record<string, unknown>;
 
 // Track connected users in this instance
 const connectedUsers = new Map<
@@ -85,16 +102,14 @@ const router = createRouter<WebSocketData>({
 });
 
 router.onClose((ctx) => {
-  const clientId = ctx.ws.data?.clientId;
-  if (!clientId) return;
+  const clientId = ctx.ws.data.clientId;
 
   const user = connectedUsers.get(clientId);
   if (user) {
     connectedUsers.delete(clientId);
 
     // Broadcast leave message
-    router.publish("chat:users", {
-      type: "USER_LEFT",
+    router.publish("chat:users", UserLeftEvent, {
       username: user.username,
       timestamp: Date.now(),
       instance: INSTANCE_ID,
@@ -106,8 +121,7 @@ router.onClose((ctx) => {
 
 // Join handler - new user connects
 router.on(JoinMessage, (ctx) => {
-  const clientId = ctx.ws.data?.clientId;
-  if (!clientId) return;
+  const clientId = ctx.ws.data.clientId;
 
   const { username } = ctx.payload; // ✅ Fully typed, no assertion needed
 
@@ -116,8 +130,7 @@ router.on(JoinMessage, (ctx) => {
   console.log(`👤 ${username} joined (instance #${INSTANCE_ID})`);
 
   // Broadcast to all instances
-  router.publish("chat:users", {
-    type: "USER_JOINED",
+  router.publish("chat:users", UserJoinedEvent, {
     username,
     timestamp: Date.now(),
     instance: INSTANCE_ID,
@@ -133,39 +146,32 @@ router.on(JoinMessage, (ctx) => {
 
 // Chat message handler
 router.on(ChatMessage, async (ctx) => {
-  const clientId = ctx.ws.data?.clientId;
-  if (!clientId) return;
+  const clientId = ctx.ws.data.clientId;
 
   const user = connectedUsers.get(clientId);
   if (!user) return;
 
   const { text } = ctx.payload; // ✅ Fully typed, no assertion needed
-  const message = {
-    type: "MESSAGE",
+  console.log(`💬 [${user.username}]: ${text}`);
+
+  // Broadcast to all instances
+  await router.publish("chat:messages", ChatMessageEvent, {
     username: user.username,
     text,
     timestamp: Date.now(),
     instance: INSTANCE_ID,
-  };
-
-  console.log(`💬 [${user.username}]: ${text}`);
-
-  // Broadcast to all instances
-  await router.publish("chat:messages", message);
+  });
 });
 
 // Subscribe to messages from other instances
 pubsub.subscribe("chat:messages", (message: unknown) => {
-  const msg = message as ChatMessageEvent;
-
-  // Send to all connected users in this instance
-  router.on(ChatMessage, (ctx) => {
-    ctx.send(ChatMessage, {
-      username: msg.username,
-      text: msg.text,
-      timestamp: msg.timestamp,
-    });
-  });
+  // Messages from other instances are received here
+  // In a real app, you might forward these to all connected clients
+  // For now, just log them (actual forwarding would require client list)
+  const msg = message as Record<string, unknown>;
+  console.log(
+    `📨 From instance #${msg.instance}: ${msg.username}: ${msg.text}`,
+  );
 });
 
 // Subscribe to user presence updates

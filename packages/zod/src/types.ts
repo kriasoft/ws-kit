@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { ServerWebSocket } from "@ws-kit/core";
+import type { MessageContextMethods, ServerWebSocket } from "@ws-kit/core";
 import type { ZodObject, ZodType } from "zod";
 import { z, ZodLiteral } from "zod";
 
@@ -65,7 +65,7 @@ export type RpcErrorCode =
   | "ALREADY_EXISTS" // Uniqueness or idempotency violation
   | "ABORTED" // Concurrency conflict (race condition)
   | "DEADLINE_EXCEEDED" // RPC request timed out
-  | "RESOURCE_EXHAUSTED" // Rate limit, quota, or backpressure
+  | "RESOURCE_EXHAUSTED" // Rate limit, quota, or buffer overflow
   | "UNAVAILABLE" // Transient infrastructure error (retriable)
   | "UNIMPLEMENTED" // Feature not supported or deployed
   | "INTERNAL" // Unexpected server error
@@ -87,7 +87,10 @@ export type ErrorCode = RpcErrorCode;
  *
  * @see ADR-001 - keyof check for discriminated unions
  */
-export type MessageContext<Schema extends MessageSchemaType, Data> = {
+export type MessageContext<
+  Schema extends MessageSchemaType,
+  Data extends { clientId: string },
+> = MessageContextMethods<Data> & {
   /** WebSocket connection with custom data */
   ws: ServerWebSocket<Data>;
   /** Message type literal from schema */
@@ -120,33 +123,16 @@ export type MessageContext<Schema extends MessageSchemaType, Data> = {
     message: string,
     details?: Record<string, unknown>,
   ): void;
-  /**
-   * Merge partial data into the connection's custom data object.
-   *
-   * Safe way to update connection data without replacing it entirely.
-   * Calls Object.assign(ctx.ws.data, partial) internally.
-   *
-   * @param partial - Partial object to merge into ctx.ws.data
-   *
-   * @example
-   * ```typescript
-   * router.use((ctx, next) => {
-   *   const user = await authenticate(ctx.payload);
-   *   ctx.assignData({ userId: user.id, roles: user.roles });
-   *   return next();
-   * });
-   * ```
-   */
-  assignData(partial: Partial<Data>): void;
 } & ("payload" extends keyof Schema["shape"]
-  ? Schema["shape"]["payload"] extends ZodType
-    ? { payload: z.infer<Schema["shape"]["payload"]> }
-    : Record<string, never>
-  : Record<string, never>);
+    ? Schema["shape"]["payload"] extends ZodType
+      ? { payload: z.infer<Schema["shape"]["payload"]> }
+      : Record<string, never>
+    : Record<string, never>);
 
-export type MessageHandler<Schema extends MessageSchemaType, Data> = (
-  context: MessageContext<Schema, Data>,
-) => void | Promise<void>;
+export type MessageHandler<
+  Schema extends MessageSchemaType,
+  Data extends { clientId: string },
+> = (context: MessageContext<Schema, Data>) => void | Promise<void>;
 
 /**
  * Base constraint for all message schemas created by messageSchema().
@@ -159,7 +145,9 @@ export type MessageSchemaType = ZodObject<{
   payload?: ZodType;
 }>;
 
-export interface MessageHandlerEntry<Data = unknown> {
+export interface MessageHandlerEntry<
+  Data extends { clientId: string } = { clientId: string },
+> {
   schema: MessageSchemaType;
   handler: MessageHandler<MessageSchemaType, Data>;
 }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Real-time chat application using @ws-kit/bun + @ws-kit/zod
  *
@@ -12,6 +15,7 @@
  */
 
 import { createBunHandler } from "@ws-kit/bun";
+import type { WsKitError } from "@ws-kit/core";
 import { createRouter, message, z } from "@ws-kit/zod";
 
 // =======================
@@ -76,7 +80,7 @@ interface User {
   rooms: Set<string>;
 }
 
-type WebSocketData = { clientId?: string } & Record<string, unknown>;
+type WebSocketData = { clientId: string } & Record<string, unknown>;
 
 const users = new Map<string, User>();
 const rooms = new Map<string, Set<string>>();
@@ -93,8 +97,8 @@ const router = createRouter<WebSocketData>();
 
 // Authentication middleware - validates user exists before handling message
 router.use((ctx, next) => {
-  const clientId = ctx.ws.data?.clientId;
-  const user = users.get(clientId || "");
+  const clientId = ctx.ws.data.clientId;
+  const user = users.get(clientId);
 
   // User must exist to process messages
   if (!user) {
@@ -170,11 +174,9 @@ router.onClose(async (ctx) => {
   console.log(`[${clientId}] Disconnected (${users.size} users online)`);
 });
 
-router.onError((error, ctx) => {
-  console.error(
-    `[${ctx?.ws.data.clientId || "unknown"}] Error:`,
-    error.message,
-  );
+router.onError((error: WsKitError) => {
+  console.error("Error:", error.message);
+  return true; // Indicate error was handled
 });
 
 // =======================
@@ -182,8 +184,8 @@ router.onError((error, ctx) => {
 // =======================
 
 router.on(JoinRoomMessage, async (ctx) => {
-  const clientId = ctx.ws.data?.clientId;
-  const user = users.get(clientId || "");
+  const clientId = ctx.ws.data.clientId;
+  const user = users.get(clientId);
   const { room } = ctx.payload;
 
   if (!user) return;
@@ -221,8 +223,8 @@ router.on(JoinRoomMessage, async (ctx) => {
 });
 
 router.on(SendMessageMessage, async (ctx) => {
-  const clientId = ctx.ws.data?.clientId;
-  const user = users.get(clientId || "");
+  const clientId = ctx.ws.data.clientId;
+  const user = users.get(clientId);
   const { text } = ctx.payload;
 
   if (!user || user.rooms.size === 0) {

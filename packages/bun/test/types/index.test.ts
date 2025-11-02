@@ -1,15 +1,14 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it } from "bun:test";
-import { expectTypeOf } from "bun:test";
 import type { PlatformAdapter, PubSub, ServerWebSocket } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
 import {
   createBunAdapter,
   createBunAdapterWithServer,
 } from "../../src/adapter.js";
-import { BunPubSub } from "../../src/pubsub.js";
 import { createBunHandler } from "../../src/handler.js";
+import { BunPubSub } from "../../src/pubsub.js";
 import type {
   BunHandler,
   BunHandlerOptions,
@@ -83,9 +82,11 @@ describe("@ws-kit/bun type tests", () => {
   describe("createBunHandler", () => {
     it("should return BunHandler", () => {
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
       const handler = createBunHandler(mockRouter);
@@ -94,9 +95,11 @@ describe("@ws-kit/bun type tests", () => {
 
     it("should have fetch and websocket properties", () => {
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
       const handler = createBunHandler(mockRouter);
@@ -107,9 +110,11 @@ describe("@ws-kit/bun type tests", () => {
 
     it("should have websocket with lifecycle methods", () => {
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
       const handler = createBunHandler(mockRouter);
@@ -126,9 +131,11 @@ describe("@ws-kit/bun type tests", () => {
       }
 
       const mockRouter = {
-        handleOpen: async () => {},
-        handleClose: async () => {},
-        handleMessage: async () => {},
+        websocket: {
+          open: async () => {},
+          close: async () => {},
+          message: async () => {},
+        },
       } as any;
 
       const handler = createBunHandler<CustomData>(mockRouter);

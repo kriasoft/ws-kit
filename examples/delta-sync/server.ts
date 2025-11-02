@@ -13,12 +13,10 @@ import type { ServerWebSocket } from "@ws-kit/core";
 import { createRouter, message } from "@ws-kit/zod";
 import { RingBuffer } from "./ring-buffer";
 import {
-  DeltaSyncMessage,
   JoinMessage,
   LeaveMessage,
-  RevisionGapMessage,
-  SnapshotSyncMessage,
   UpdateMessage,
+  type AppData,
   type Operation,
   type Participant,
 } from "./schema";
@@ -55,12 +53,15 @@ class DeltaSyncServer {
    * Initialize router with message handlers
    */
   createRouter() {
-    const router = createRouter();
+    const router = createRouter<AppData>();
 
     router.on(JoinMessage, async (ctx) => {
       const { participantId, name } = ctx.payload;
 
       console.log(`[JOIN] ${participantId} (${name})`);
+
+      // Set participantId in connection data for later handlers
+      ctx.assignData({ participantId });
 
       // Create new participant
       const participant: Participant = {
@@ -180,14 +181,19 @@ class DeltaSyncServer {
 
   private updateParticipant(
     participantId: string,
-    patch: Partial<Participant>,
+    patch: Record<string, unknown>,
     clientReqId?: string,
   ): boolean {
     const current = this.state.participants[participantId];
     if (!current) return false;
 
     this.state.rev++;
-    this.state.participants[participantId] = { ...current, ...patch };
+    this.state.participants[participantId] = {
+      ...current,
+      ...(Object.fromEntries(
+        Object.entries(patch).filter(([, v]) => v !== undefined),
+      ) as Partial<Participant>),
+    };
 
     this.operations.push({
       rev: this.state.rev,
@@ -229,8 +235,9 @@ class DeltaSyncServer {
       participants: this.state.participants,
     };
 
-    // Send typed snapshot message
-    client.ws.send(SnapshotSyncMessage, payload);
+    // Send typed snapshot message via raw WebSocket
+    const msg = JSON.stringify({ type: "SYNC.SNAPSHOT", payload });
+    client.ws.send(msg);
 
     // Update last sent revision
     client.lastSentRev = this.state.rev;
@@ -253,7 +260,8 @@ class DeltaSyncServer {
             operations: ops,
           };
 
-          client.ws.send(DeltaSyncMessage, payload);
+          const msg = JSON.stringify({ type: "SYNC.DELTAS", payload });
+          client.ws.send(msg);
 
           console.log(
             `[DELTA] Sent ${ops.length} ops to ${participantId} (${client.lastSentRev} → ${this.state.rev})`,
@@ -270,12 +278,16 @@ class DeltaSyncServer {
       );
 
       const bufferFirstRev = this.operations.firstRev;
-      client.ws.send(RevisionGapMessage, {
-        expectedRev: client.lastSentRev,
-        serverRev: this.state.rev,
-        bufferFirstRev,
-        resumeFrom: this.state.rev,
+      const msg = JSON.stringify({
+        type: "REVISION_GAP",
+        payload: {
+          expectedRev: client.lastSentRev,
+          serverRev: this.state.rev,
+          bufferFirstRev,
+          resumeFrom: this.state.rev,
+        },
       });
+      client.ws.send(msg);
 
       // Then send snapshot for recovery
       this.sendSnapshot(participantId);
@@ -328,7 +340,7 @@ if (import.meta.main) {
   // Serve with Bun
   serve(router, {
     port: parseInt(process.env.PORT || "3000"),
-    authenticate() {
+    authenticate(): AppData {
       return { clientId: crypto.randomUUID() };
     },
   }).catch(console.error);

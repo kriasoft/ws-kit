@@ -1,21 +1,32 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { expectTypeOf } from "bun:test";
-import type { WebSocketRouter } from "@ws-kit/core";
+import { beforeEach, describe, expect, expectTypeOf, it, mock } from "bun:test";
 import { createBunHandler } from "../src/handler.js";
 import type { BunHandler } from "../src/types.js";
 
 describe("createBunHandler", () => {
   let mockRouter: any;
   let mockServer: any;
+  let handleOpen: any;
+  let handleClose: any;
+  let handleMessage: any;
 
   beforeEach(() => {
+    handleOpen = mock(async () => {});
+    handleClose = mock(async () => {});
+    handleMessage = mock(async () => {});
+
     mockRouter = {
-      handleOpen: mock(async () => {}),
-      handleClose: mock(async () => {}),
-      handleMessage: mock(async () => {}),
+      websocket: {
+        open: handleOpen,
+        close: handleClose,
+        message: handleMessage,
+      },
+      // For backwards compatibility with tests checking these directly
+      handleOpen,
+      handleClose,
+      handleMessage,
     };
 
     mockServer = {

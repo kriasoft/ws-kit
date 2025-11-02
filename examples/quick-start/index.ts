@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
 import { chatRouter } from "./chat";
 
 // Create a WebSocket router and merge chat routes
-const router = createRouter();
+const router = createRouter<{ roomId?: string; clientId: string }>();
 router.merge(chatRouter);
 
 // Serve with Bun using the unified serve() helper

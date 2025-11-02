@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { z } from "zod";
 import type { ValidatorAdapter } from "@ws-kit/core";
+import { z } from "zod";
 import type { MessageSchemaType } from "./types.js";
 
 /**
@@ -13,11 +13,18 @@ export class ZodValidatorAdapter implements ValidatorAdapter {
   // Extract the literal type value used for message routing.
   // INVARIANT: Schema must be created by messageSchema() which ensures type.value exists.
   getMessageType(schema: MessageSchemaType): string {
-    return schema.shape.type.value;
+    const typeSchema = schema.shape.type;
+    if (typeSchema && typeof typeSchema.value === "string") {
+      return typeSchema.value;
+    }
+    // This should never happen with schemas from messageSchema()
+    throw new Error("Schema must have a literal type field");
   }
 
   // Validate incoming message data and normalize the result format.
-  // NOTE: Includes prettified error for better debugging in development.
+  // Uses Zod's built-in prettifyError for standardized error formatting.
+  // Provides both raw issues (for programmatic handling) and formatted string
+  // (for human-readable debugging and logging).
   safeParse(schema: MessageSchemaType, data: unknown) {
     const result = schema.safeParse(data);
     return {

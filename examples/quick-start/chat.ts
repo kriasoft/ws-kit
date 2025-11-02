@@ -11,7 +11,7 @@ import {
 } from "./schema";
 
 // Store active room connections for later use
-type WebSocketData = { roomId?: string; clientId?: string } & Record<
+type WebSocketData = { roomId?: string; clientId: string } & Record<
   string,
   unknown
 >;

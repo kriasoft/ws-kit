@@ -147,6 +147,28 @@ export interface EventMessageContext<
   assignData(partial: Partial<TData>): void;
 
   /**
+   * Type-safe accessor for connection data fields.
+   *
+   * Provides convenient access to connection data properties with proper type inference.
+   * Equivalent to `ctx.ws.data[key]` but with better IDE support and type checking.
+   *
+   * @param key - Property name to access from connection data
+   * @returns The value of the property, or undefined if not set
+   *
+   * @example
+   * ```typescript
+   * type AppData = { userId?: string; role?: string };
+   * const router = createRouter<AppData>();
+   *
+   * router.on(MessageSchema, (ctx) => {
+   *   const userId = ctx.getData("userId");      // Type: string | undefined
+   *   const role = ctx.getData("role");          // Type: string | undefined
+   * });
+   * ```
+   */
+  getData<K extends keyof TData>(key: K): TData[K];
+
+  /**
    * Subscribe this connection to a pubsub topic/channel.
    *
    * The connection will receive messages published to this topic via router.publish().
@@ -276,6 +298,28 @@ export interface RpcMessageContext<
   assignData(partial: Partial<TData>): void;
 
   /**
+   * Type-safe accessor for connection data fields.
+   *
+   * Provides convenient access to connection data properties with proper type inference.
+   * Equivalent to `ctx.ws.data[key]` but with better IDE support and type checking.
+   *
+   * @param key - Property name to access from connection data
+   * @returns The value of the property, or undefined if not set
+   *
+   * @example
+   * ```typescript
+   * type AppData = { userId?: string; role?: string };
+   * const router = createRouter<AppData>();
+   *
+   * router.rpc(RpcSchema, (ctx) => {
+   *   const userId = ctx.getData("userId");      // Type: string | undefined
+   *   const role = ctx.getData("role");          // Type: string | undefined
+   * });
+   * ```
+   */
+  getData<K extends keyof TData>(key: K): TData[K];
+
+  /**
    * Subscribe this connection to a pubsub topic/channel.
    *
    * The connection will receive messages published to this topic via router.publish().
@@ -400,6 +444,87 @@ export interface RpcMessageContext<
 
   /** Additional properties may be added by adapters or extensions */
   [key: string]: unknown;
+}
+
+/**
+ * Common message context methods available to both event and RPC handlers.
+ *
+ * These methods are extracted as a shared interface to avoid duplication
+ * across validator adapters (Zod, Valibot, etc.).
+ *
+ * @internal Used by validator adapters; applications use EventMessageContext or RpcMessageContext
+ */
+export interface MessageContextMethods<
+  TData extends WebSocketData = WebSocketData,
+> {
+  /**
+   * Type-safe accessor for connection data fields.
+   *
+   * Provides convenient access to connection data properties with proper type inference.
+   * Equivalent to `ctx.ws.data[key]` but with better IDE support and type checking.
+   *
+   * @param key - Property name to access from connection data
+   * @returns The value of the property, or undefined if not set
+   *
+   * @example
+   * ```typescript
+   * type AppData = { userId?: string; role?: string };
+   * const router = createRouter<AppData>();
+   *
+   * router.on(MessageSchema, (ctx) => {
+   *   const userId = ctx.getData("userId");      // Type: string | undefined
+   *   const role = ctx.getData("role");          // Type: string | undefined
+   * });
+   * ```
+   */
+  getData<K extends keyof TData>(key: K): TData[K];
+
+  /**
+   * Merge partial data into the connection's custom data object.
+   *
+   * Safe way to update connection data without replacing it entirely.
+   * Calls Object.assign(ctx.ws.data, partial) internally.
+   *
+   * @param partial - Partial object to merge into ctx.ws.data
+   */
+  assignData(partial: Partial<TData>): void;
+
+  /**
+   * Subscribe this connection to a pubsub topic/channel.
+   *
+   * The connection will receive messages published to this topic via router.publish().
+   *
+   * @param channel - Topic/channel name to subscribe to
+   */
+  subscribe(channel: string): void;
+
+  /**
+   * Unsubscribe this connection from a pubsub topic/channel.
+   *
+   * The connection will no longer receive messages published to this topic.
+   *
+   * @param channel - Topic/channel name to unsubscribe from
+   */
+  unsubscribe(channel: string): void;
+
+  /**
+   * Publish a typed message to a channel/topic (convenience method).
+   *
+   * Validates the payload against the schema and broadcasts to all subscribers.
+   * This is a bound passthrough to router.publish() optimized for use within handlers.
+   *
+   * @param channel - Topic/channel name to publish to
+   * @param schema - Message schema (validated before broadcast)
+   * @param payload - Message payload (must match schema)
+   * @param options - Publish options (excludeSelf, partitionKey, meta)
+   * @returns Promise resolving to PublishResult with delivery information and capability
+   */
+  publish(
+    channel: string,
+    schema: MessageSchemaType,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<PublishResult>;
 }
 
 /**
@@ -1358,5 +1483,98 @@ export interface RpcErrorWire {
     details?: Record<string, unknown>;
     retryable?: boolean;
     retryAfterMs?: number;
+  };
+}
+
+/**
+ * Public protocol for WebSocket routers.
+ *
+ * Any object implementing this interface can be passed to adapters.
+ * Implementations include:
+ * - WebSocketRouter (untyped core)
+ * - TypedZodRouter (@ws-kit/zod)
+ * - TypedValibotRouter (@ws-kit/valibot, future)
+ * - Custom router implementations
+ *
+ * Uses `this` return type for fluent chaining (works for both class and factory-based routers).
+ * Adapters depend on this interface, not on concrete implementations.
+ *
+ * @typeParam TData - Application-specific connection data
+ */
+export interface IWebSocketRouter<TData extends WebSocketData = WebSocketData> {
+  /** Register handler for fire-and-forget messages */
+  on<TSchema extends MessageSchemaType>(
+    schema: TSchema,
+    handler: MessageHandler<TSchema, TData>,
+  ): this;
+
+  /** Unregister handler for a message type */
+  off(schema: MessageSchemaType): this;
+
+  /** Register handler for RPC request-response messages */
+  rpc<TSchema extends MessageSchemaType>(
+    schema: TSchema,
+    handler: RpcHandler<TSchema, TData>,
+  ): this;
+
+  /** Register topic subscription handler */
+  topic<TSchema extends MessageSchemaType>(
+    schema: TSchema,
+    options?: { onPublish?: MessageHandler<TSchema, TData> },
+  ): this;
+
+  /** Register connection open lifecycle hook */
+  onOpen(handler: OpenHandler<TData>): this;
+
+  /** Register connection close lifecycle hook */
+  onClose(handler: CloseHandler<TData>): this;
+
+  /** Register authentication hook */
+  onAuth(handler: AuthHandler<TData>): this;
+
+  /** Register error handler */
+  onError(handler: ErrorHandler<TData>): this;
+
+  /** Register global middleware */
+  use(middleware: Middleware<TData>): this;
+
+  /** Merge handlers from another router */
+  merge(router: IWebSocketRouter<TData>): this;
+
+  /** Publish message to a channel/topic */
+  publish<TSchema extends MessageSchemaType>(
+    channel: string,
+    schema: TSchema,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<PublishResult>;
+
+  /**
+   * Platform adapter handlers for WebSocket lifecycle events.
+   *
+   * Provides the core connection handling for platform integrations.
+   * Call these methods from your platform's WebSocket handlers
+   * (e.g., Bun.serve, Cloudflare DO, Node.js http.createServer).
+   *
+   * @internal - Platform adapters only
+   *
+   * @example
+   * const { open, message, close } = router.websocket;
+   * // In your platform's WebSocket handler:
+   * ws.onopen = () => open(ws);
+   * ws.onmessage = (msg) => message(ws, msg.data);
+   * ws.onclose = (ev) => close(ws, ev.code);
+   */
+  readonly websocket: {
+    /** Called when a WebSocket connection opens */
+    open(ws: ServerWebSocket<TData>): Promise<void>;
+    /** Called when a message arrives */
+    message(ws: ServerWebSocket<TData>, data: string | Buffer): Promise<void>;
+    /** Called when a connection closes */
+    close(
+      ws: ServerWebSocket<TData>,
+      code: number,
+      reason?: string,
+    ): Promise<void>;
   };
 }

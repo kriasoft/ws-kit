@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import * as v from "valibot";
 import type { ValidatorAdapter } from "@ws-kit/core";
+import * as v from "valibot";
 import type { MessageSchemaType } from "./types.js";
 
 /**
@@ -24,7 +24,10 @@ export class ValibotValidatorAdapter implements ValidatorAdapter {
 
   // Validate incoming message data and normalize the result format.
   // NOTE: Valibot uses 'output' instead of Zod's 'data' for parsed results.
-  // Includes prettified error for consistent error reporting with Zod adapter.
+  // Custom formatting using v.flatten() provides similar output structure
+  // to Zod's prettifyError while working with Valibot's issue format.
+  // Provides both raw issues (for programmatic handling) and formatted string
+  // (for human-readable debugging and logging).
   safeParse(schema: MessageSchemaType, data: unknown) {
     const result = v.safeParse(schema, data);
     return {
@@ -40,6 +43,8 @@ export class ValibotValidatorAdapter implements ValidatorAdapter {
   }
 
   // Format validation issues into a human-readable string for debugging.
+  // Similar to Zod's prettifyError, flattens the issue hierarchy and produces
+  // a multi-line string suitable for logging and error messages.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private formatError(issues: any[]): string {
     const flattened = v.flatten(issues);

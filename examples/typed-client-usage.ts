@@ -144,12 +144,12 @@ async function requestExamples() {
 // ============================================================================
 
 // For comparison: generic client without schema types requires manual type assertions
-import { wsClient as wsClientGeneric } from "@ws-kit/client";
+import { createClient } from "@ws-kit/client";
 import type { InferMessage } from "@ws-kit/client/zod";
 
-const genericClient = wsClientGeneric({ url: "wss://api.example.com" });
+const genericClient = createClient({ url: "wss://api.example.com" });
 
-genericClient.on(HelloOk, (msg) => {
+genericClient.on(HelloOk, (msg: unknown) => {
   // ⚠️ msg is unknown - requires manual type assertion
   const typed = msg as InferMessage<typeof HelloOk>;
   console.log(typed.payload.text);
