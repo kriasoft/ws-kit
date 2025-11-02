@@ -1,5 +1,11 @@
 # @ws-kit/redis-pubsub
 
+## 0.1.3
+
+### Patch Changes
+
+- [#32](https://github.com/kriasoft/ws-kit/pull/32) [`031f4ba`](https://github.com/kriasoft/ws-kit/commit/031f4ba077998c2374ae1ee8ff39187bc60a132d) Thanks [@koistya](https://github.com/koistya)! - Fix workspace dependency resolution in published packages. Use workspace:^ instead of workspace:\* to ensure proper semantic version resolution during publishing.
+
 ## 0.1.2
 
 ### Patch Changes
