@@ -61,7 +61,7 @@ async function discoverPackages(): Promise<string[]> {
     // Ignore errors
   }
 
-  return entries;
+  return entries.sort();
 }
 
 /** Find repo root by walking up until we see a package.json with workspaces */
@@ -82,7 +82,7 @@ async function findRepoRoot(start: string): Promise<string> {
   }
 }
 
-/** Collect {pkgName -> version} from repo's packages directory */
+/** Collect {pkgName -> version} from repo's packages directory (excluding private packages) */
 async function loadWorkspaceVersions(
   root: string,
 ): Promise<Map<string, string>> {
@@ -99,7 +99,9 @@ async function loadWorkspaceVersions(
           try {
             const raw = await fs.readFile(pkgJson, "utf8");
             const pkg = JSON.parse(raw) as Pkg;
-            if (pkg.name && pkg.version) versions.set(pkg.name, pkg.version);
+            if (pkg.name && pkg.version && !pkg.private) {
+              versions.set(pkg.name, pkg.version);
+            }
           } catch {
             /* ignore non-packages */
           }
@@ -123,8 +125,10 @@ function resolveWorkspaceRange(
   const suffix = spec.slice("workspace:".length).trim();
   const v = versions.get(depName);
   if (!v) {
-    console.warn(`[release] Missing version for ${depName}; leaving "${spec}"`);
-    return spec;
+    throw new Error(
+      `[release] Workspace dependency "${depName}" not found in any package. ` +
+        `Make sure it's defined in a package.json with a version number.`,
+    );
   }
 
   if (suffix === "" || suffix === "*" || suffix === "^" || suffix === "~")
@@ -270,6 +274,12 @@ async function prepackPackage(
   const pkgPath = path.join(pkgDir, "package.json");
   const raw = await fs.readFile(pkgPath, "utf8");
   const pkg = JSON.parse(raw) as Pkg;
+
+  if (!pkg.name || !pkg.version) {
+    throw new Error(
+      `Invalid package.json at ${pkgPath}: missing required "name" or "version" field`,
+    );
+  }
 
   const cleaned = sanitizeManifest(pkg, versions);
   const publishDir =
