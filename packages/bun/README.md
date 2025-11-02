@@ -61,22 +61,8 @@ import { z } from "zod";
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Create router
-const router = createRouter();
-
-// Register handlers
-router.on(PingMessage, (ctx) => {
-  ctx.send(PongMessage, { reply: ctx.payload.text });
-});
-
-// Serve with single call
-serve(router, {
-  port: 3000,
-  authenticate(req) {
-    // Optional: verify auth token and return user data
-    return {};
-  },
-  // Optional: enable heartbeat for connection liveness detection
+// Create router with optional heartbeat configuration
+const router = createRouter({
   heartbeat: {
     intervalMs: 30_000, // Ping every 30 seconds
     timeoutMs: 5_000, // Wait 5 seconds for pong
@@ -84,6 +70,20 @@ serve(router, {
       console.log(`Connection ${clientId} is stale, closing...`);
       ws.close();
     },
+  },
+});
+
+// Register handlers
+router.on(PingMessage, (ctx) => {
+  ctx.send(PongMessage, { reply: ctx.payload.text });
+});
+
+// Serve with authentication
+serve(router, {
+  port: 3000,
+  authenticate(req) {
+    // Optional: verify auth token and return user data
+    return {};
   },
 });
 ```
@@ -209,7 +209,7 @@ router.on(JoinRoom, (ctx) => {
 });
 
 // Broadcast to all subscribers on a channel
-router.publish("room:123", RoomUpdate, { text: "Hello everyone!" });
+await router.publish("room:123", RoomUpdate, { text: "Hello everyone!" });
 ```
 
 Messages published to a channel are received by all connections subscribed to that channel.
@@ -222,7 +222,10 @@ In Bun, `router.publish(channel)` broadcasts to **all WebSocket connections in t
 
 ```typescript
 // This broadcasts to connections in THIS process only
-await router.publish("notifications", { message: "Hello" });
+const NotificationMessage = message("NOTIFICATION", { message: z.string() });
+await router.publish("notifications", NotificationMessage, {
+  message: "Hello",
+});
 ```
 
 ### Multi-Instance Cluster (Load Balanced)
@@ -238,7 +241,10 @@ const router = createRouter({
 });
 
 // Now publishes across ALL instances
-await router.publish("notifications", { message: "Hello" });
+const NotificationMessage = message("NOTIFICATION", { message: z.string() });
+await router.publish("notifications", NotificationMessage, {
+  message: "Hello",
+});
 ```
 
 ## Connection Lifecycle
@@ -347,7 +353,7 @@ const router = createRouter({
 // Track rooms
 const rooms = new Map<string, Set<string>>();
 
-router.on(JoinRoomMessage, (ctx) => {
+router.on(JoinRoomMessage, async (ctx) => {
   const { room } = ctx.payload;
   const { clientId } = ctx.ws.data;
 
@@ -360,16 +366,16 @@ router.on(JoinRoomMessage, (ctx) => {
 
   // Broadcast user list using schema
   const users = Array.from(rooms.get(room)!);
-  router.publish(`room:${room}`, UserListMessage, { users });
+  await router.publish(`room:${room}`, UserListMessage, { users });
 });
 
-router.on(SendMessageMessage, (ctx) => {
+router.on(SendMessageMessage, async (ctx) => {
   const { text } = ctx.payload;
   const { clientId } = ctx.ws.data;
   const room = (ctx.ws.data as any).room || "general"; // Set during JOIN
 
   // Broadcast to all in room using schema
-  router.publish(`room:${room}`, BroadcastMessage, {
+  await router.publish(`room:${room}`, BroadcastMessage, {
     user: clientId,
     text,
   });

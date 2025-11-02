@@ -21,6 +21,20 @@ router.rpc(GetUser, (ctx) => {
 });
 ```
 
+**RPC Lifecycle:**
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    C->>S: request (with correlationId)
+    Note over S: Validation & handler
+    S->>C: progress (non-terminal)
+    S->>C: progress (non-terminal)
+    S->>C: reply (terminal)
+    Note over C: Matched correlationId<br/>Request resolved
+```
+
 ## Server-Side: Defining RPC Handlers
 
 ### Basic RPC Handler
@@ -253,26 +267,32 @@ try {
 }
 ```
 
-### Listening to Progress Updates
+### Server-Side Progress (Stream Pattern)
 
-Listen to progress updates as they stream in:
+The server can send progress updates before the terminal reply. On the client, these are received as separate messages:
 
 ```typescript
+// Define a message schema for progress updates
+const SearchProgress = message("SEARCH_PROGRESS", {
+  stage: z.enum(["loading", "processing", "finalizing"]),
+  progress: z.number().min(0).max(100),
+});
+
+// Client listens for progress updates
+client.on(SearchProgress, (msg) => {
+  console.log(`Progress: ${msg.payload.stage} ${msg.payload.progress}%`);
+});
+
+// Then waits for the RPC response
 try {
-  const call = client.request(LongOperation, { query: "search term" });
-
-  // Listen to progress updates
-  for await (const progress of call.progress()) {
-    console.log(`Progress: ${progress.stage} ${progress.progress}%`);
-  }
-
-  // Wait for terminal response
-  const result = await call.result();
+  const result = await client.request(LongOperation, { query: "search term" });
   console.log("Results:", result.payload.results);
 } catch (err) {
   console.error("Failed:", err);
 }
 ```
+
+Note: `client.request()` returns a Promise directly. To receive streaming updates, register a handler with `client.on()` for the progress message type and await the RPC response separately.
 
 ### Timeouts and Cancellation
 
@@ -404,10 +424,17 @@ console.log("Stats:", statsResponse.payload.stats);
 
 ### Streaming Large Results
 
-For large responses, use progress updates to stream data:
+For large responses, use progress updates to stream data in batches:
 
 ```typescript
-// Server
+// Define progress message for batch data
+const DataBatch = message("DATA_BATCH", {
+  items: z.array(z.unknown()),
+  offset: z.number(),
+  total: z.number(),
+});
+
+// Server sends progress updates via ctx.progress(), which client receives as DATA_BATCH messages
 router.rpc(StreamLargeData, async (ctx) => {
   const batchSize = 100;
   const total = 10000;
@@ -425,15 +452,15 @@ router.rpc(StreamLargeData, async (ctx) => {
   ctx.reply(StreamLargeData.response, { complete: true });
 });
 
-// Client
-const call = client.request(StreamLargeData, {});
+// Client listens for batch updates
+client.on(DataBatch, (msg) => {
+  console.log(`Received ${msg.payload.items.length} items`);
+  processItems(msg.payload.items);
+});
 
-for await (const progress of call.progress()) {
-  console.log(`Received ${progress.items.length} items`);
-  processItems(progress.items);
-}
-
-await call.result(); // Wait for completion
+// Then makes the RPC request and waits for completion
+const result = await client.request(StreamLargeData, {});
+console.log("Transfer complete");
 ```
 
 ## Comparison: RPC vs Fire-and-Forget

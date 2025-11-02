@@ -1,160 +1,218 @@
-# Advanced: Multi-Runtime Harness
+# Advanced: Testing Across Multiple Platforms
 
-The generic `serve(router, { runtime })` function with explicit runtime selection is designed for advanced scenarios where you need to deploy the same router code to multiple runtimes or dynamically select the target at startup.
+WS-Kit is designed to work across multiple platforms (Bun, Cloudflare Durable Objects, Deno, etc.). This guide shows how to test the same router code across different runtimes.
 
-**For most applications**, use [platform-specific entrypoints](../index#platform-specific-entrypoints-recommended) instead. This guide covers the advanced use case.
+## Platform-Specific Packages (Not Generic Runtime Selection)
 
-## When to Use Generic Runtime Selection
+Unlike other frameworks, WS-Kit uses **platform-specific packages** rather than a single generic `serve()` function. Each platform has its own package:
 
-Use the generic `serve()` approach when:
+- **`@ws-kit/bun`** — Bun runtime (with `serve()` convenience)
+- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects (low-level only)
+- **Future: `@ws-kit/deno`** — Deno runtime
 
-- **Integration tests** — Run the same router under Bun and Cloudflare DO in CI to ensure compatibility
-- **Framework-agnostic examples** — Demonstrate patterns that work across runtimes without modification
-- **Monorepo tooling** — Build generators or CLIs that auto-target different platforms based on context
-- **Development servers** — Local smoke servers where you pass `--runtime=bun|cf` via CLI flag
-- **Flexible deployments** — Code that selects runtime via environment variable (`WSKIT_RUNTIME=bun`)
+See [ADR-006](../adr/006-multi-runtime-serve-with-explicit-selection.md) for the design rationale.
 
-## Explicit Runtime Selection
+## Example: Testing the Same Router Under Multiple Platforms
 
-Pass `runtime` to `serve()`:
+To validate that your router works across platforms, create a test that runs the same handler logic under different platform adapters:
 
 ```typescript
-import { serve } from "@ws-kit/bun";
-import { createRouter } from "@ws-kit/zod";
+import { describe, it, expect } from "bun:test";
+import { createRouter, message } from "@ws-kit/zod";
+import { z } from "zod";
 
-const router = createRouter();
+// Define shared schemas (platform-independent)
+const PingMessage = message("PING", { text: z.string() });
+const PongMessage = message("PONG", { reply: z.string() });
 
-serve(router, {
-  port: 3000,
-  runtime: "bun", // Explicit: "bun", "cloudflare-do", or "deno"
-  authenticate(req) {
-    return { userId: "123" };
-  },
+// Define router logic (platform-independent)
+function createTestRouter() {
+  const router = createRouter();
+  router.on(PingMessage, (ctx) => {
+    ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
+  });
+  return router;
+}
+
+// Test under Bun
+describe("Router under Bun", () => {
+  it("handles ping-pong", async () => {
+    const { serve } = await import("@ws-kit/bun");
+    const router = createTestRouter();
+
+    // Start server on a unique port
+    const port = 3001;
+    const controller = new AbortController();
+    serve(router, { port, signal: controller.signal });
+
+    // Connect and test
+    const { wsClient } = await import("@ws-kit/client/zod");
+    const client = wsClient(`ws://localhost:${port}`);
+
+    const reply = await client.send(PingMessage, { text: "hello" });
+    expect(reply.reply).toBe("Got: hello");
+
+    await client.close();
+    controller.abort();
+  });
 });
 ```
 
-**Supported runtimes:**
+## Integration Testing with Jest/Vitest
 
-- `"bun"` — Bun runtime
-- `"cloudflare-do"` — Cloudflare Durable Objects
-- `"deno"` — Deno runtime
+For more complex multi-platform testing:
 
-## Environment Variable Override
+```typescript
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createRouter, message } from "@ws-kit/zod";
+import type { WebSocketClient } from "@ws-kit/client";
 
-Set `WSKIT_RUNTIME` to choose runtime without code changes:
+const QueryMessage = message("QUERY", { id: z.string() });
+const ResponseMessage = message("RESPONSE", { result: z.any() });
+
+describe("Platform compatibility", () => {
+  for (const platform of ["bun", "deno"] as const) {
+    describe(`${platform} platform`, () => {
+      let server: any;
+      let client: WebSocketClient;
+      let port: number;
+
+      beforeAll(async () => {
+        const router = createRouter();
+        router.rpc(QueryMessage, (ctx) => {
+          ctx.reply(ResponseMessage, {
+            result: `Processed: ${ctx.payload.id}`,
+          });
+        });
+
+        if (platform === "bun") {
+          const { serve } = await import("@ws-kit/bun");
+          port = 3002;
+          server = await serve(router, { port });
+        } else {
+          // Future: Deno support
+          // const { serve } = await import("@ws-kit/deno");
+          // port = 3003;
+          // server = await serve(router, { port });
+        }
+
+        const { wsClient } = await import("@ws-kit/client/zod");
+        client = wsClient(`ws://localhost:${port}`);
+        await client.connect();
+      });
+
+      afterAll(async () => {
+        await client.close();
+        server?.close();
+      });
+
+      it("handles RPC queries", async () => {
+        const result = await client.request(QueryMessage, { id: "123" });
+        expect(result.result).toBe("Processed: 123");
+      });
+    });
+  }
+});
+```
+
+## Platform-Specific Differences to Handle
+
+When testing across platforms, account for:
+
+1. **Port Binding**: Bun uses `serve()` with a port. Cloudflare DO runs as a Durable Object fetch handler.
+
+   ```typescript
+   // Bun
+   import { serve } from "@ws-kit/bun";
+   serve(router, { port: 3000 });
+
+   // Cloudflare DO
+   import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+   export default { fetch: createDurableObjectHandler(router).fetch };
+   ```
+
+2. **Authentication Context**: Different platforms may have different request/auth models.
+
+   ```typescript
+   // Bun: Full HTTP request
+   serve(router, {
+     authenticate(req) {
+       return { userId: req.headers.get("x-user-id") };
+     },
+   });
+
+   // Cloudflare DO: Durable Object environment
+   createDurableObjectHandler(router, {
+     authenticate(req) {
+       return { userId: req.headers.get("x-user-id") };
+     },
+   });
+   ```
+
+3. **Pub/Sub**: Platform-specific pub/sub adapters.
+
+   ```typescript
+   // Bun with memory pub/sub (default)
+   serve(router, { port: 3000 });
+
+   // Bun with Redis pub/sub for multi-instance
+   import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+   serve(router, {
+     port: 3000,
+     pubsub: createRedisPubSub({ url: "redis://..." }),
+   });
+   ```
+
+## CI/CD Pattern: Test All Platforms
+
+In your `vitest.config.ts` or similar:
+
+```typescript
+export default {
+  test: {
+    globals: true,
+    include: ["**/*.test.ts"],
+    // Run platform-compatibility tests in CI
+    testTimeout: 10000,
+  },
+};
+```
+
+Then in your test suite:
 
 ```bash
-# Development
-WSKIT_RUNTIME=bun node server.js
+# Run all tests including platform compatibility
+bun test
 
-# CI testing
-WSKIT_RUNTIME=cloudflare-do node server.js
-
-# Production (explicit in code is preferred, but env var works)
-WSKIT_RUNTIME=bun node server.js
+# Or filter by platform
+bun test --grep="Bun platform"
 ```
 
-This is useful for:
+## Production Deployment
 
-- CI/CD pipelines that test multiple targets
-- Gradual platform migrations
-- Local development with a `--runtime` CLI flag
-
-## Example: Conditional Runtime Selection
+For actual deployments, use the **platform-specific package** directly:
 
 ```typescript
+// Production on Bun
 import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
-
-// Select runtime from environment or code
-const runtime =
-  process.env.WSKIT_RUNTIME ??
-  (process.env.NODE_ENV === "production" ? "bun" : "auto");
-
-serve(router, {
-  port: 3000,
-  runtime: runtime as "bun" | "cloudflare-do" | "deno" | "auto",
-});
-```
-
-## Example: Integration Test with Multiple Runtimes
-
-```typescript
-import { describe, it } from "bun:test";
-import { serve } from "@ws-kit/bun";
-import { createRouter } from "@ws-kit/zod";
-import { wsClient } from "@ws-kit/client/zod";
-
-const router = createRouter();
-router.on(PingMessage, (ctx) => {
-  ctx.send(PongMessage, { reply: "pong" });
-});
-
-// Test the same router under multiple runtimes
-for (const runtime of ["bun", "cloudflare-do"] as const) {
-  describe(`Router under ${runtime}`, () => {
-    it("handles messages", async () => {
-      // Start server on a unique port
-      const port = 3000 + (runtime === "bun" ? 0 : 1);
-      await serve(router, { port, runtime });
-
-      // Connect and test
-      const client = wsClient(`ws://localhost:${port}`);
-      await client.connect();
-
-      const reply = await client.request(PingMessage, {}, PongMessage);
-      console.assert(reply.payload.reply === "pong");
-
-      await client.disconnect();
-    });
-  });
-}
-```
-
-## Caveats
-
-### Limited Type Narrowing
-
-When using generic `serve()`, TypeScript cannot narrow platform-specific options. You lose:
-
-- **Type-safe options** — Can't use Bun-specific backpressure config or Cloudflare binding names
-- **Type-checked errors** — Misconfigurations aren't caught at compile time
-- **IDE autocomplete** — Options available are generic, not platform-specific
-
-### Not Recommended for Production
-
-For production deployments, use [platform-specific entrypoints](../index#platform-specific-entrypoints-recommended) instead:
-
-```typescript
-// ✅ Production: platform-specific, type-safe
-import { serve } from "@ws-kit/bun";
+// ... register handlers
 serve(router, { port: 3000 });
 
-// ❌ Avoid in production: limited type safety
-import { serve } from "@ws-kit/bun";
-serve(router, { runtime: "bun", port: 3000 });
+// Production on Cloudflare DO
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+
+export default {
+  fetch: createDurableObjectHandler(router).fetch,
+};
 ```
 
-**Why?** Platform entrypoints:
-
-- Encode runtime semantics (options, error types, bindings)
-- Fail fast with clear, platform-specific error messages
-- Tree-shake better (zero detection overhead)
-- Make the deployment target explicit in your codebase
-
-## Production Safety
-
-In production (`NODE_ENV === "production"`), explicit runtime selection is required. Auto-detection is disabled:
-
-```typescript
-// ❌ Production error: must specify runtime
-serve(router, { port: 3000 });
-// Error: Auto-detection disabled in production.
-// Use serve(router, { runtime: "bun" }) or WSKIT_RUNTIME env var.
-```
+**No runtime detection or environment variables needed** — choose your platform at compile time.
 
 ## See Also
 
-- [ADR-006: Multi-Runtime serve()](../adr/006-multi-runtime-serve-with-explicit-selection) — Design decision and rationale
+- [ADR-006: Per-Platform Packages](../adr/006-multi-runtime-serve-with-explicit-selection.md) — Design rationale
+- [Deployment Guide](../deployment.md) — Production deployment patterns
+- [Platform Adapters](../specs/adapters.md) — Platform adapter responsibilities

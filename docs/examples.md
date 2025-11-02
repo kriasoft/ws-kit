@@ -308,19 +308,19 @@ router.use(AdminAction, (ctx, next) => {
   return next();
 });
 
-router.on(AdminAction, (ctx) => {
+router.on(AdminAction, async (ctx) => {
   const { action, targetUserId } = ctx.payload;
   console.log(`Admin ${ctx.ws.data.userId} executed: ${action}`);
 
   // Handle admin actions
   switch (action) {
     case "kick":
-      router.publish(targetUserId, Kicked, {
+      await router.publish(targetUserId, Kicked, {
         reason: ctx.payload.reason || "No reason provided",
       });
       break;
     case "mute":
-      router.publish(targetUserId, Muted, {
+      await router.publish(targetUserId, Muted, {
         reason: ctx.payload.reason || "No reason provided",
       });
       break;

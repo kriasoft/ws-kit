@@ -32,6 +32,7 @@ Complete chat application demonstrating:
 - Connection lifecycle hooks (onOpen, onClose, onError)
 - Global and per-route middleware
 - Stats endpoint for monitoring
+- Embedded HTML client with real-time chat UI
 
 **Run the chat example:**
 
@@ -77,7 +78,42 @@ Revision-based state synchronization example perfect for collaborative apps:
 
 ```bash
 bun examples/delta-sync/server.ts
-bun examples/delta-sync/client.ts
+```
+
+Run conformance tests:
+
+```bash
+bun test examples/delta-sync/conformance.test.ts
+```
+
+### [`state-channels/`](./state-channels)
+
+Reliable FIFO state updates with client sequence tracking and recovery from gaps:
+
+- Message sequence numbering for idempotent delivery
+- Gap detection and catch-up recovery
+- Duplicate message handling (silent ack)
+- Conformance tests validating protocol semantics
+
+**Run conformance tests:**
+
+```bash
+bun test examples/state-channels/conformance.test.ts
+```
+
+### [`flow-control/`](./flow-control)
+
+Backpressure strategies (drop-oldest, drop-new, queue) with server retry hints:
+
+- Queue overflow policies with configurable strategies
+- Retry hint protocol with `retryAfterMs`
+- Queue depth monitoring and metrics
+- Conformance tests for each backpressure strategy
+
+**Run conformance tests:**
+
+```bash
+bun test examples/flow-control/conformance.test.ts
 ```
 
 ### [`typed-client-usage.ts`](./typed-client-usage.ts)
@@ -110,7 +146,15 @@ Start with [`quick-start/`](./quick-start) to learn the basics, then choose your
 
 - Bandwidth-efficient state sync with operations history and optimistic updates
 
-**5. Browser Clients** → [`typed-client-usage.ts`](./typed-client-usage.ts)
+**5. Reliable FIFO Updates** → [`state-channels/`](./state-channels)
+
+- Message sequencing with gap detection and recovery for reliable state channels
+
+**6. Backpressure Handling** → [`flow-control/`](./flow-control)
+
+- Queue overflow strategies with retry hints for resource-constrained scenarios
+
+**7. Browser Clients** → [`typed-client-usage.ts`](./typed-client-usage.ts)
 
 - Type-safe client implementation using `@ws-kit/client/zod`
 

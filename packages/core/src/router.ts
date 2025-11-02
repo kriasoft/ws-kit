@@ -481,7 +481,7 @@ export class WebSocketRouter<
    * });
    *
    * // Later: broadcast to subscribers
-   * router.publish("room:123", { text: "Hello all" });
+   * router.publish("room:123", RoomMessage, { text: "Hello all" });
    * ```
    */
   topic<Schema extends MessageSchemaType>(
@@ -883,11 +883,11 @@ export class WebSocketRouter<
    * Publish a typed message to a channel (broadcasts to all subscribers).
    *
    * **Design** (ADR-019): Single canonical publishing entry point. Validates the payload
-   * against the schema before publishing. Returns Promise<number> for testing/metrics.
+   * against the schema before publishing. Returns Promise<PublishResult> for testing/metrics.
    *
-   * **Type Safety**: Payload is validated against schema. Invalid payloads return 0 and
-   * log errors; valid payloads are broadcast to all subscribers on the topic. This
-   * ensures that subscribers always receive well-formed messages.
+   * **Type Safety**: Payload is validated against schema. Invalid payloads return
+   * `{ ok: false }` and log errors; valid payloads are broadcast to all subscribers on the topic.
+   * This ensures that subscribers always receive well-formed messages.
    *
    * **Validation Semantics**: Reuses the same schema validation as `ctx.send()` to maintain
    * consistency across send/reply/publish APIs. The message is constructed and validated
@@ -909,11 +909,11 @@ export class WebSocketRouter<
    * checks; that's delegated to subscription guards (who can subscribe to what topics).
    * See docs/specs/broadcasting.md for auth patterns.
    *
-   * **Return Value**: Returns `Promise<number>` indicating matched subscriber count.
+   * **Return Value**: Returns `Promise<PublishResult>` with success status and subscriber match info.
+   * - On success: `{ ok: true, capability, matched?: number }` indicates matched subscriber count
+   * - On failure: `{ ok: false, reason, error }` with details (validation, adapter, etc.)
    * - Useful for testing (assert specific fan-out count)
    * - Useful for metrics/observability (track broadcast scope)
-   * - Current implementation: returns 1 as sentinel (distributed pubsub can override)
-   * - Future: PubSub interface may add subscriberCount() for exact metrics
    *
    * **Scope** depends on PubSub implementation:
    * - MemoryPubSub: This process instance only
@@ -930,29 +930,34 @@ export class WebSocketRouter<
    * @param schema - Message schema (used for validation, identifies message type)
    * @param payload - Message payload (must match schema; validated)
    * @param options - Publish options (excludeSelf, partitionKey, meta)
-   * @returns Promise<number> - Resolves to matched subscriber count
+   * @returns Promise<PublishResult> - Resolves to publish result with subscriber match info
    *
    * @example
    * ```typescript
    * // From handler (use ctx.publish() for ergonomics)
    * router.on(UserCreated, async (ctx) => {
    *   const user = await db.create(ctx.payload);
-   *   const count = await ctx.publish(
+   *   const result = await ctx.publish(
    *     `org:${ctx.payload.orgId}:users`,
    *     UserListInvalidated,
    *     { orgId: ctx.payload.orgId }
    *   );
-   *   console.log(`Notified ${count} subscribers`);
+   *   if (result.ok && result.matched !== undefined) {
+   *     console.log(`Notified ${result.matched} subscribers`);
+   *   }
    * });
    * ```
    *
    * ```typescript
    * // Outside handlers (cron, queue, lifecycle)
-   * const count = await router.publish(
+   * const result = await router.publish(
    *   "system:announcements",
    *   System.Announcement,
    *   { text: "Server maintenance at 02:00 UTC" }
    * );
+   * if (result.ok) {
+   *   console.log("Announcement published");
+   * }
    * ```
    */
   async publish(

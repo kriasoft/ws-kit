@@ -24,12 +24,12 @@ import type { Server } from "bun";
  * **Usage**:
  * ```typescript
  * const pubsub = new BunPubSub(server);
- * await pubsub.publish("room:123", { text: "Hello" });
+ * await pubsub.publish("room:123", JSON.stringify({ type: "ROOM:UPDATE", text: "Hello" }));
  *
- * // In message handlers:
- * router.on(SomeSchema, (ctx) => {
+ * // In message handlers via router:
+ * router.on(SomeSchema, async (ctx) => {
  *   ctx.ws.subscribe("room:123");  // Connection subscribes
- *   await router.publish("room:123", response);  // Broadcast to all subscribers
+ *   await router.publish("room:123", ResponseMessage, response);  // Broadcast to all subscribers
  * });
  * ```
  */

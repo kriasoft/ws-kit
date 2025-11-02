@@ -5,54 +5,60 @@
 [![GitHub Actions](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
 [![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
-Type-safe WebSocket router for Bun and Cloudflare with **Zod** or **Valibot** validation. Routes messages to handlers with full TypeScript support on both server and client.
+WebSocket server for Bun and Cloudflare. WS-Kit combines type-safe message routing, schema-validated broadcasting, and request-response patterns with full TypeScript inference on both server and client. Choose your validator (Zod or Valibot) and platform (Bun, Cloudflare Workers, or Node.js). Perfect for real-time apps: chat, multiplayer games, collaborative editing, live dashboards.
 
-## ⚠️ Environment Requirements
+## Requirements
 
-**WS-Kit is ESM-only** and optimized for modern runtimes:
+WS-Kit is **ESM-only** and optimized for modern runtimes:
 
-- **Bun** (recommended) — native ESM and WebSocket support
-- **Cloudflare Workers/Durable Objects** — native ESM support
-- **Node.js** (with bundler) — requires Node 18+ and a bundler like Vite, esbuild, or Rollup
-- **Browser** — works with modern bundlers
+- **Bun 1.0+** (recommended) — native ESM and WebSocket support
+- **Cloudflare Workers/Durable Objects** — native ESM environment
+- **Node.js 18+** (with bundler) — requires Vite, esbuild, or Rollup
+- **Browser** — standard ESM bundler (Webpack, Vite, esbuild)
 
-**Not compatible** with CommonJS-only projects or legacy runtimes.
+Not compatible with CommonJS-only projects or legacy Node versions.
 
-## Monorepo Structure
+## Features
 
-WS-Kit is organized as a modular monorepo with independent packages:
+What you get out of the box (things you'd otherwise build manually):
 
-- **`@ws-kit/core`** — Platform-agnostic router and type system (foundation)
-- **`@ws-kit/zod`** — Zod validator adapter with `createRouter()` helper
-- **`@ws-kit/valibot`** — Valibot validator adapter with `createRouter()` helper
-- **`@ws-kit/bun`** — Bun platform adapter with `serve()` high-level and `createBunHandler()` low-level
+- **Type-safe routing** — Message handlers with full TypeScript inference from schema to handler
+- **Schema validation** — Automatic request validation with Zod or Valibot; invalid messages rejected before handlers
+- **Request-response** — RPC-style patterns with `ctx.reply()`, `ctx.progress()` (streaming), auto-correlation on client
+- **Broadcasting** — Schema-validated `router.publish()` to topics; subscribers get typed messages
+- **Lifecycle hooks** — `onOpen()`, `onClose()`, `onError()` with full context access
+- **Middleware** — Global or per-handler middleware for auth, rate limiting, logging
+- **Auto-reconnection** — Client-side exponential backoff with configurable timeouts
+- **Offline queueing** — Client queues messages while disconnected; sends on reconnect
+- **Connection data** — Type-safe per-connection state (user ID, session, room, etc.)
+- **Error handling** — Standardized error codes (13 gRPC-aligned codes) with automatic retry inference
+- **Single schema source** — Shared validator packages eliminate dual-package hazards
+
+## Architecture
+
+WS-Kit is a modular monorepo. Mix any validator with any platform:
+
+- **`@ws-kit/core`** — Platform-agnostic router and type system
+- **`@ws-kit/zod`** / **`@ws-kit/valibot`** — Validator adapters with `createRouter()`
+- **`@ws-kit/bun`** — Bun platform adapter with `serve()` and `createBunHandler()`
 - **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
-- **`@ws-kit/client`** — Universal browser/Node.js client
-- **`@ws-kit/redis-pubsub`** — Optional Redis PubSub for multi-server scaling
+- **`@ws-kit/client`** — Universal WebSocket client
+- **`@ws-kit/redis-pubsub`** — Optional Redis for multi-server deployments
 
-Combine any validator adapter with platform-specific packages. Each platform package (e.g., `@ws-kit/bun`) exports both high-level convenience (`serve()`) and low-level APIs (`createBunHandler()`).
+## Patterns & Advanced Use Cases
 
-### Key Features
+WS-Kit's core APIs support sophisticated real-time patterns without external libraries. See [`examples/`](./examples) for reference implementations:
 
-**Server (Bun)**
+- **State Channels** — Efficient state synchronization with minimal bandwidth (subscribe to changes, get deltas)
+- **Delta Sync** — Incremental updates: server publishes only what changed, clients rebuild state
+- **Flow Control** — Backpressure handling: queue management, rate limiting, throttling
+- **Throttling** — Aggregate rapid client messages; batch updates for efficiency
+- **Exponential Backoff** — Built-in client reconnection with configurable backoff strategy
+- **Rate Limiting** — Per-user, per-message-type buckets with distributed (Redis) or in-memory adapters
+- **Error Recovery** — Automatic retry inference from standardized error codes; custom retry logic via `retryable` and `retryAfterMs` hints
+- **Multiplayer Sync** — Concurrent editing with per-connection data, subscription management, and conflict resolution patterns
 
-- 🔒 Type-safe message routing with Zod/Valibot validation
-- 🚀 Built on Bun's native WebSocket implementation
-- 📡 PubSub with schema-validated broadcasts
-- 🧩 Composable routers and middleware support
-
-**Client (Browser)**
-
-- 🔄 Auto-reconnection with exponential backoff
-- 📦 Configurable offline message queueing
-- ⏱️ Request/response pattern with timeouts
-- 🔐 Built-in auth (query param or protocol header)
-
-**Shared**
-
-- ✨ Shared schemas between server and client
-- ⚡ Choose Zod (familiar) or Valibot (60-80% smaller)
-- 🔒 Full TypeScript inference on both sides
+Each pattern is production-tested and fully typed. Mix and match with your application's needs.
 
 ## Installation
 
@@ -442,7 +448,7 @@ router.on(JoinRoom, (ctx) => {
   ctx.send(UserJoined, { roomId, userId: userId || "anonymous" });
 });
 
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const { text } = ctx.payload;
   const userId = ctx.ws.data?.userId;
   const roomId = ctx.ws.data?.roomId;
@@ -450,18 +456,21 @@ router.on(SendMessage, (ctx) => {
   console.log(`[${roomId}] ${userId}: ${text}`);
 
   // Broadcast to room subscribers (type-safe!)
-  router.publish(roomId, SendMessage, { text, userId: userId || "anonymous" });
+  await router.publish(roomId, SendMessage, {
+    text,
+    userId: userId || "anonymous",
+  });
 });
 
 // Handle disconnections
-router.onClose((ctx) => {
+router.onClose(async (ctx) => {
   const userId = ctx.ws.data?.userId;
   const roomId = ctx.ws.data?.roomId;
 
   if (roomId) {
     ctx.unsubscribe(roomId);
     // Notify others
-    router.publish(roomId, UserLeft, { userId: userId || "anonymous" });
+    await router.publish(roomId, UserLeft, { userId: userId || "anonymous" });
   }
   console.log(`Disconnected: ${userId}`);
 });
@@ -475,6 +484,7 @@ router.onClose((ctx) => {
 - `ctx.meta` — Client metadata (correlationId, timestamp)
 - `ctx.receivedAt` — Server receive timestamp
 - `ctx.send()` — Type-safe send to this client only
+- `ctx.getData()` — Type-safe single field access from connection data
 - `ctx.assignData()` — Type-safe partial data updates
 - `ctx.subscribe()` / `ctx.unsubscribe()` — Topic management
 - `ctx.error(code, message?, details?, options?)` — Send type-safe error with optional retry hints
@@ -494,7 +504,7 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 const router = createRouter<{ roomId?: string }>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to room updates
@@ -504,29 +514,29 @@ router.on(JoinRoom, (ctx) => {
   console.log(`User joined: ${roomId}`);
 
   // Broadcast to all room subscribers (type-safe!)
-  router.publish(roomId, RoomUpdate, {
+  await router.publish(roomId, RoomUpdate, {
     roomId,
     users: 5,
     message: "A user has joined",
   });
 });
 
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
 
   // Broadcast message to room (fully typed, no JSON.stringify needed!)
-  router.publish(roomId, RoomUpdate, {
+  await router.publish(roomId, RoomUpdate, {
     roomId,
     users: 5,
     message: ctx.payload.text,
   });
 });
 
-router.onClose((ctx) => {
+router.onClose(async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
     ctx.unsubscribe(roomId);
-    router.publish(roomId, RoomUpdate, {
+    await router.publish(roomId, RoomUpdate, {
       roomId,
       users: 4,
       message: "A user has left",
@@ -537,8 +547,20 @@ router.onClose((ctx) => {
 
 **Broadcasting API:**
 
-- `router.publish(scope, schema, payload)` — Type-safe broadcast to all subscribers on a scope
+- `router.publish(scope, schema, payload, options?)` — Type-safe broadcast to all subscribers on a scope, returns `Promise<PublishResult>` with delivery info
+- `ctx.publish(scope, schema, payload, options?)` — Same as `router.publish()` but available within a handler context
 - `ctx.subscribe(topic)` — Subscribe connection to a topic (adapter-dependent)
+- `ctx.unsubscribe(topic)` — Unsubscribe from a topic
+
+Optional `options` parameter for `publish()`:
+
+```ts
+{
+  excludeSelf?: boolean;   // Exclude sender from recipients (default: false)
+  partitionKey?: string;   // Route to specific partition (optional, for sharded pubsub)
+  meta?: Record<string, unknown>; // Additional metadata (e.g., { senderId: "user:123" })
+}
+```
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -574,7 +596,7 @@ router.on(JoinRoom, (ctx) => {
   ctx.send(UserJoined, { roomId, userId });
 
   // Broadcast to room subscribers with schema validation
-  ctx.publish(roomId, UserJoined, { roomId, userId });
+  await ctx.publish(roomId, UserJoined, { roomId, userId });
 });
 
 router.on(SendMessage, (ctx) => {
@@ -584,7 +606,7 @@ router.on(SendMessage, (ctx) => {
   console.log(`Message in room ${roomId} from ${userId}: ${msg}`);
 
   // Broadcast the message to all room subscribers
-  ctx.publish(roomId, NewMessage, { roomId, userId, message: msg });
+  await ctx.publish(roomId, NewMessage, { roomId, userId, message: msg });
 });
 
 router.onClose((ctx) => {
@@ -594,7 +616,7 @@ router.onClose((ctx) => {
   if (roomId) {
     ctx.unsubscribe(roomId);
     // Notify others in the room
-    router.publish(roomId, UserLeft, { userId });
+    await router.publish(roomId, UserLeft, { userId });
   }
 });
 ```
@@ -904,7 +926,7 @@ try {
 }
 
 // Graceful disconnect
-await client.disconnect();
+await client.close();
 ```
 
 You can also use explicit response schemas for backward compatibility (traditional style):

@@ -17,12 +17,12 @@ import type { PubSub } from "@ws-kit/core";
  * **Usage**:
  * ```typescript
  * const pubsub = new DurablePubSub();
- * await pubsub.publish("notifications", { text: "Hello" });
+ * await pubsub.publish("notifications", JSON.stringify({ type: "NOTIFICATION", text: "Hello" }));
  *
- * // In message handlers:
- * router.on(SomeSchema, (ctx) => {
+ * // In message handlers via router:
+ * router.on(SomeSchema, async (ctx) => {
  *   ctx.ws.subscribe("room:123");  // Subscribe to channel
- *   await router.publish("room:123", response);  // Broadcast within this DO
+ *   await router.publish("room:123", ResponseMessage, response);  // Broadcast within this DO
  * });
  * ```
  *

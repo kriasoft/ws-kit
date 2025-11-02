@@ -59,7 +59,7 @@ client.on(Broadcast, (msg) => {
 });
 
 // Gracefully disconnect
-await client.disconnect();
+await client.close();
 ```
 
 ### 3. Use Schemas on Server
@@ -105,14 +105,14 @@ if (client.isConnected) {
 // Listen to state changes
 client.onState((state) => {
   console.log(`State: ${state}`);
-  // States: "disconnected", "connecting", "connected", "closing"
+  // States: "closed", "connecting", "open", "closing", "reconnecting"
 });
 
 // Wait for connection to open
 await client.onceOpen();
 
-// Disconnect
-await client.disconnect();
+// Close
+await client.close();
 ```
 
 ### Sending Messages
@@ -270,7 +270,7 @@ Messages are automatically queued while connecting or offline:
 const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "drop-newest", // Queue mode: "drop-newest" (default), "drop-oldest", or "off"
-  queueSize: 1000, // Max queued messages (default: 1000)
+  queueSize: 50, // Max queued messages (default: 50)
 });
 
 // This will be queued if not connected yet

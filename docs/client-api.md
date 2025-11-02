@@ -254,7 +254,7 @@ request<S extends AnyMessageSchema, R extends AnyMessageSchema>(
 ): Promise<InferMessage<R>>
 ```
 
-**Note:** RPC-style auto-detected response schemas (using `rpc()` helper) are supported at the implementation level but the typed client interface currently requires explicit response schema parameter. The implementation will auto-detect `schema.response` when available.
+**Note:** RPC schemas created with the `rpc()` helper automatically bind the response type. When using `client.request(rpcSchema, payload, options)`, the response type is auto-detected from the RPC schema, eliminating the need for an explicit response schema parameter.
 
 **Returns:** Promise resolving to reply message
 

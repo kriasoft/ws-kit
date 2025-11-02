@@ -561,6 +561,17 @@ Middleware functions have the signature:
 - **Async/Await Support**: Middleware can be async; use `await next()` to wait for downstream completion
 - **Skip Behavior**: If middleware doesn't call `next()`, the handler is skipped and the chain stops
 
+```mermaid
+graph TD
+    A["Message arrives"] --> B["Global middleware runs"]
+    B -->|calls next| C["Per-route middleware runs"]
+    B -->|skips or error| D["Handler skipped"]
+    C -->|calls next| E["Handler runs"]
+    C -->|skips or error| D
+    E --> F["Complete"]
+    D --> F
+```
+
 ## Example: Async Middleware with Waiting
 
 ```typescript

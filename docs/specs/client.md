@@ -482,6 +482,24 @@ client.send(
 
 **Inbound message pipeline:**
 
+```mermaid
+graph TD
+    A["Raw WebSocket<br/>message"] --> B["JSON.parse()"]
+    B -->|parse error| C["console.warn()<br/>drop"]
+    B -->|success| D["Extract type field"]
+    D -->|missing| C
+    D -->|found| E["Lookup schema<br/>in registry"]
+    E -->|found| F["Validate with schema<br/>strict mode"]
+    E -->|not found| G["Validate<br/>structure only"]
+    F -->|valid| H["Invoke on handler"]
+    F -->|invalid| C
+    G -->|valid| I["Invoke onUnhandled<br/>if registered"]
+    G -->|invalid| C
+    H --> J["Done"]
+    I --> J
+    C --> J
+```
+
 1. **Receive** — WebSocket `onmessage` event fires
 2. **Parse** — JSON.parse() the raw string
 3. **Extract type** — Read `type` field (drop if missing)
