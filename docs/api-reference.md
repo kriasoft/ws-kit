@@ -464,7 +464,7 @@ publish(
   schema: MessageSchemaType,
   payload: unknown,
   options?: PublishOptions
-): Promise<number>;
+): Promise<PublishResult>;
 ```
 
 **Parameters:**
@@ -484,25 +484,30 @@ interface PublishOptions {
 }
 ```
 
-**Returns:** Promise resolving to subscriber count (currently returns 1 as sentinel)
+**Returns:** `Promise<PublishResult>` with subscriber match count and capability info
 
 **Example:**
 
 ```typescript
 // Inside a handler
 router.on(UserCreated, async (ctx) => {
-  const count = await ctx.publish(
+  const result = await ctx.publish(
     `org:${ctx.payload.orgId}:users`,
     UserListInvalidated,
     { orgId: ctx.payload.orgId },
   );
-  console.log(`Notified ${count} subscribers`);
+  if (result.ok && result.matched !== undefined) {
+    console.log(`Notified ${result.matched} subscribers`);
+  }
 });
 
 // Outside handlers (cron, queue, lifecycle)
-await router.publish("system:announcements", Announcement, {
+const result = await router.publish("system:announcements", Announcement, {
   text: "Server maintenance at 02:00 UTC",
 });
+if (result.ok) {
+  console.log("Announcement published");
+}
 ```
 
 #### `reset()`
@@ -555,7 +560,7 @@ interface EventMessageContext<TSchema, TData> {
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
-  ): Promise<number>;
+  ): Promise<PublishResult>;
 }
 ```
 
@@ -604,7 +609,7 @@ interface RpcMessageContext<TSchema, TData> {
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
-  ): Promise<number>;
+  ): Promise<PublishResult>;
 }
 ```
 
@@ -825,17 +830,20 @@ router.on(LeaveRoom, (ctx) => {
 Publish a message to a channel (convenience method, delegates to `router.publish()`).
 
 ```typescript
-publish(channel: string, schema: MessageSchemaType, payload: unknown, options?: PublishOptions): Promise<number>;
+publish(channel: string, schema: MessageSchemaType, payload: unknown, options?: PublishOptions): Promise<PublishResult>;
 ```
 
 **Example:**
 
 ```typescript
-router.on(SendMessage, (ctx) => {
-  ctx.publish(`room:${ctx.payload.roomId}`, ChatMessage, {
+router.on(SendMessage, async (ctx) => {
+  const result = await ctx.publish(`room:${ctx.payload.roomId}`, ChatMessage, {
     text: ctx.payload.text,
     roomId: ctx.payload.roomId,
   });
+  if (result.ok) {
+    console.log(`Published to ${result.matched ?? "?"} subscribers`);
+  }
 });
 ```
 
@@ -1030,7 +1038,7 @@ request<S extends MessageSchema, R extends MessageSchema>(
   payload: InferPayload<S>,
   reply: R,
   options?: RequestOptions
-): Promise<InferPayload<R>>;
+): Promise<InferMessage<R>>;
 ```
 
 **Options:**
@@ -1044,7 +1052,7 @@ interface RequestOptions {
 }
 ```
 
-**Returns:** Promise resolving to response payload
+**Returns:** Promise resolving to the full response message object `{type, meta, payload}` with the response type and validated payload
 
 **Behavior:**
 
@@ -1061,7 +1069,7 @@ interface RequestOptions {
 // RPC-style with auto-detected response
 const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
 const response = await client.request(Ping, { text: "hello" });
-console.log(response.reply); // Fully typed
+console.log(response.payload.reply); // Fully typed - access via payload
 
 // Traditional style with explicit response schema
 const response = await client.request(

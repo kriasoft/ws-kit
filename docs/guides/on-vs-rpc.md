@@ -62,11 +62,11 @@ const RoomUpdate = message("ROOM_UPDATE", {
   message: z.string(),
 });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const roomId = ctx.payload.roomId;
   ctx.subscribe(`room:${roomId}`);
   // Broadcast to all room subscribers
-  router.publish(`room:${roomId}`, RoomUpdate, {
+  await router.publish(`room:${roomId}`, RoomUpdate, {
     roomId,
     message: `User joined`,
   });
@@ -123,18 +123,16 @@ Use `router.rpc()` for request/response patterns where the client waits for a gu
 Client asks for data, handler replies with result:
 
 ```typescript
-const GetUser = message("GET_USER", {
-  payload: { id: z.string() },
-  response: { user: UserSchema },
-});
+const GetUser = message("GET_USER", { id: z.string() });
+const UserResponse = message("USER_RESPONSE", { user: UserSchema });
 
 router.rpc(GetUser, async (ctx) => {
   const user = await db.users.findById(ctx.payload.id);
   if (!user) {
-    ctx.error?.("NOT_FOUND", "User not found");
+    ctx.error("NOT_FOUND", "User not found");
     return;
   }
-  ctx.reply?.({ user }); // ✅ Terminal, one-shot, guaranteed
+  ctx.reply(UserResponse, { user }); // ✅ Terminal, one-shot, guaranteed
 });
 ```
 
@@ -150,10 +148,14 @@ router.rpc(GetUser, async (ctx) => {
 Handler emits progress updates before terminal reply:
 
 ```typescript
-const ProcessFile = message("PROCESS_FILE", {
-  payload: { fileUrl: z.string() },
-  response: { result: z.string() },
-});
+const ProcessFile = rpc(
+  "PROCESS_FILE",
+  { fileUrl: z.string() },
+  "PROCESS_RESULT",
+  {
+    result: z.string(),
+  },
+);
 
 router.rpc(ProcessFile, async (ctx) => {
   try {
@@ -163,7 +165,7 @@ router.rpc(ProcessFile, async (ctx) => {
 
     for (const chunk of file.chunks) {
       // Progress update (non-terminal)
-      ctx.progress?.({ processed });
+      ctx.progress({ processed });
       processed += chunk.size;
 
       // Long operation
@@ -171,9 +173,9 @@ router.rpc(ProcessFile, async (ctx) => {
     }
 
     // Terminal reply
-    ctx.reply?.({ result: "success" });
+    ctx.reply({ result: "success" });
   } catch (err) {
-    ctx.error?.("INTERNAL", err.message);
+    ctx.error("INTERNAL", err.message);
   }
 });
 ```
@@ -189,19 +191,24 @@ router.rpc(ProcessFile, async (ctx) => {
 Handler validates credentials, replies with result:
 
 ```typescript
-const Login = message("LOGIN", {
-  payload: { email: z.string(), password: z.string() },
-  response: { token: z.string(), userId: z.string() },
-});
+const Login = rpc(
+  "LOGIN",
+  { email: z.string(), password: z.string() },
+  "LOGIN_RESPONSE",
+  {
+    token: z.string(),
+    userId: z.string(),
+  },
+);
 
 router.rpc(Login, async (ctx) => {
   const user = await verifyCredentials(ctx.payload);
   if (!user) {
-    ctx.error?.("UNAUTHENTICATED", "Invalid credentials");
+    ctx.error("UNAUTHENTICATED", "Invalid credentials");
     return;
   }
   const token = generateToken(user.id);
-  ctx.reply?.({ token, userId: user.id });
+  ctx.reply({ token, userId: user.id });
 });
 ```
 
@@ -213,16 +220,18 @@ router.rpc(Login, async (ctx) => {
 
 ### ✅ RPC Context Methods
 
-When registered with `router.rpc()`, handlers have access to:
+When registered with `router.rpc()`, handlers have access to additional methods:
 
 ```typescript
-ctx.reply?.(data); // Terminal reply (one-shot, schema-enforced)
-ctx.progress?.(data); // Progress update (non-terminal, optional)
+ctx.reply(data); // Terminal reply (one-shot, schema-enforced)
+ctx.progress(data); // Progress update (non-terminal, optional)
 ctx.abortSignal; // AbortSignal fires on client cancel/disconnect
-ctx.onCancel?.(callback); // Callback on cancellation
+ctx.onCancel(callback); // Callback on cancellation
 ctx.deadline; // Request deadline (epoch ms)
 ctx.timeRemaining(); // ms until deadline
 ```
+
+All RPC context methods (`reply()`, `progress()`, `error()`) are always available when using `router.rpc()` — they are guaranteed to exist.
 
 ---
 
@@ -249,14 +258,14 @@ router.on(GetStatus, (ctx) => {
 ### After (RPC Handler):
 
 ```typescript
-const GetStatus = message("GET_STATUS", {
-  payload: undefined, // No input needed
-  response: { status: z.enum(["active", "idle"]) },
+const GetStatus = message("GET_STATUS", {});
+const StatusResponse = message("STATUS_RESPONSE", {
+  status: z.enum(["active", "idle"]),
 });
 
 router.rpc(GetStatus, (ctx) => {
   const status = getSystemStatus();
-  ctx.reply?.({ status }); // ✅ RPC semantics, guaranteed
+  ctx.reply(StatusResponse, { status }); // ✅ RPC semantics, guaranteed
 });
 ```
 
@@ -276,16 +285,16 @@ TypeScript enforces which methods are available based on the handler type:
 ```typescript
 // Event handler: NO reply/progress methods
 router.on(UserLoggedIn, (ctx) => {
-  ctx.reply?.({ ... });      // ❌ Type error (method is never)
-  ctx.progress?.({ ... });   // ❌ Type error (method is never)
+  ctx.reply?.(Message, { ... });      // ❌ Type error (method is never)
+  ctx.progress?.(Message, { ... });   // ❌ Type error (method is never)
   ctx.send(Message, { ... }); // ✅ Available
   ctx.publish(topic, ...);   // ✅ Available
 });
 
 // RPC handler: YES reply/progress methods
 router.rpc(GetUser, (ctx) => {
-  ctx.reply?.({ ... });      // ✅ Available
-  ctx.progress?.({ ... });   // ✅ Available
+  ctx.reply(Message, { ... });      // ✅ Available
+  ctx.progress(Message, { ... });   // ✅ Available
   ctx.send(Message, { ... }); // ✅ Available (for side effects)
   ctx.publish(topic, ...);   // ✅ Available (for side effects)
 });

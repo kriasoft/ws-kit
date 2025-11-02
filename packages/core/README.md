@@ -102,7 +102,9 @@ new WebSocketRouter<V, TData>(options?: WebSocketRouterOptions<V, TData>)
 **Router Operations**:
 
 - `merge(router): this` — Merge handlers from another router
-- `publish(channel, message): Promise<void>` — Broadcast to channel
+- `publish(channel, schema, payload, options?): Promise<PublishResult>` — Type-safe broadcast with delivery info
+  - `options.excludeSelf?: boolean` — Exclude sender from recipients (default: false)
+  - Returns `PublishResult` with `ok` status and `matched` count
 
 **Platform Adapter Integration** (called by platform adapters):
 

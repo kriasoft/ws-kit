@@ -60,12 +60,12 @@ type AppData = { userId?: string; roomId?: string };
 const router = createRouter<AppData>();
 
 // Handle room joins with pub/sub
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   ctx.assignData({ roomId: ctx.payload.roomId });
   ctx.subscribe(ctx.payload.roomId); // Join topic
 
   // Broadcast to all room subscribers (type-safe!)
-  router.publish(ctx.payload.roomId, RoomUpdate, {
+  await router.publish(ctx.payload.roomId, RoomUpdate, {
     userId: ctx.ws.data.userId || "anonymous",
     action: "joined",
     messageCount: 1,
@@ -73,9 +73,9 @@ router.on(JoinRoom, (ctx) => {
 });
 
 // Handle messages with full type inference
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
-  router.publish(roomId, RoomUpdate, {
+  await router.publish(roomId, RoomUpdate, {
     userId: ctx.ws.data?.userId || "anonymous",
     action: "joined",
     messageCount: 2, // In real app, track actual count

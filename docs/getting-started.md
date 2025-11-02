@@ -82,12 +82,12 @@ router.on(JoinRoom, (ctx) => {
   ctx.subscribe(roomId);
 });
 
-router.on(ChatMessage, (ctx) => {
+router.on(ChatMessage, async (ctx) => {
   const { text, roomId } = ctx.payload;
   const userId = ctx.ws.data.userId || "anonymous";
 
   // Broadcast to room subscribers
-  router.publish(roomId, ChatMessage, {
+  await router.publish(roomId, ChatMessage, {
     text,
     roomId,
   });
@@ -104,12 +104,12 @@ serve(router, {
   onOpen(ctx) {
     console.log(`Client ${ctx.ws.data.userId} connected`);
   },
-  onClose(ctx) {
+  async onClose(ctx) {
     const { roomId, userId } = ctx.ws.data;
     console.log(`Client ${userId} disconnected from ${roomId}`);
 
     if (roomId) {
-      router.publish(roomId, UserLeft, { userId: userId || "unknown" });
+      await router.publish(roomId, UserLeft, { userId: userId || "unknown" });
     }
   },
 });

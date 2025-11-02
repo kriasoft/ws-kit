@@ -195,7 +195,9 @@ router.on(LoginSchema, (ctx) => {
 router.use((ctx, next) => {
   /* ... */
 });
-router.publish("scope", message);
+router.publish("scope", message, {
+  /* payload */
+});
 const debug = router.debug();
 
 // ✅ SAFE: Explicit escape hatch (advanced introspection only)

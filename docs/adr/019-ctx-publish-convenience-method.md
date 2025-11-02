@@ -94,10 +94,10 @@ No need for a third API; two entry points suffice.
 
 **Two canonical entry points:**
 
-| Context                | Method                                               | Return                  |
-| ---------------------- | ---------------------------------------------------- | ----------------------- |
-| **Handler/Middleware** | `ctx.publish(channel, schema, payload, options?)`    | `Promise&lt;number&gt;` |
-| **Outside handler**    | `router.publish(channel, schema, payload, options?)` | `Promise&lt;number&gt;` |
+| Context                | Method                                               | Return                   |
+| ---------------------- | ---------------------------------------------------- | ------------------------ |
+| **Handler/Middleware** | `ctx.publish(channel, schema, payload, options?)`    | `Promise<PublishResult>` |
+| **Outside handler**    | `router.publish(channel, schema, payload, options?)` | `Promise<PublishResult>` |
 
 Both enforce schema validation. `ctx.publish` is a thin passthrough:
 

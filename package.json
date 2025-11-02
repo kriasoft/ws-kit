@@ -37,11 +37,15 @@
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
     "lint-staged": "^16.2.6",
+    "mermaid": "^11.12.1",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
     "valibot": "^1.1.0",
     "vitepress": "^1.6.4",
+    "vitepress-mermaid-renderer": "^1.0.19",
+    "vitepress-plugin-mermaid": "^2.0.17",
+    "vue": "^3.5.22",
     "zod": "^4.1.12"
   },
   "scripts": {

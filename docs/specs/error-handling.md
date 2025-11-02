@@ -103,6 +103,35 @@ For the complete error taxonomy, detailed rationale, and decision tree, see **[A
 - **Transient Issues**: `DEADLINE_EXCEEDED` (timeout), `RESOURCE_EXHAUSTED` (rate limit/buffer full), `UNAVAILABLE` (temporarily unreachable)
 - **Server/Evolution**: `UNIMPLEMENTED` (feature not deployed), `INTERNAL` (unexpected error), `CANCELLED` (user/peer cancelled)
 
+**Error Code Decision Tree:**
+
+```mermaid
+graph TD
+    A["What's the problem?"] -->|Auth issue| B["Missing/invalid<br/>credentials?"]
+    A -->|Input/State issue| C["Validation<br/>failed?"]
+    A -->|Resource issue| D["What's missing?"]
+    A -->|Transient issue| E["What's temporary?"]
+    A -->|Server issue| F["What's wrong?"]
+
+    B -->|Missing/invalid| G["UNAUTHENTICATED"]
+    B -->|Bad permissions| H["PERMISSION_DENIED"]
+
+    C -->|Input invalid| I["INVALID_ARGUMENT"]
+    C -->|State not ready| J["FAILED_PRECONDITION"]
+
+    D -->|Doesn't exist| K["NOT_FOUND"]
+    D -->|Already exists| L["ALREADY_EXISTS"]
+    D -->|Race detected| M["ABORTED"]
+
+    E -->|Timed out| N["DEADLINE_EXCEEDED"]
+    E -->|Rate/quota hit| O["RESOURCE_EXHAUSTED"]
+    E -->|Down temporarily| P["UNAVAILABLE"]
+
+    F -->|Not deployed| Q["UNIMPLEMENTED"]
+    F -->|Unexpected bug| R["INTERNAL"]
+    F -->|User cancelled| S["CANCELLED"]
+```
+
 Use `ctx.error(code, message, details)` for type-safe responses. The framework logs all errors with connection identity for traceability.
 
 ### Authoritative Error Code Table

@@ -27,18 +27,15 @@ import {
 } from "@ws-kit/client";
 ```
 
-**Core error classes** (currently in use):
+**Error classes:**
 
 - `ValidationError` - Message validation failures
 - `TimeoutError` - Request timeouts
-- `ServerError` - Server error responses (current implementation)
+- `ServerError` - Server error responses with error codes and optional retry hints
 - `ConnectionClosedError` - Connection closed during request
 - `StateError` - Invalid operation state
-
-**Future error classes** (defined but not yet used in client implementation):
-
 - `RpcError` - Enhanced RPC error with retry hints, `retryAfterMs`, and correlation tracking
-- `WsDisconnectedError` - Disconnection with idempotency support for safe auto-resend
+- `WsDisconnectedError` - Disconnection error for auto-resend and idempotency support
 - `RpcErrorCode` - Type for 13 standard error codes aligned with gRPC (per ADR-015)
 
 **Note**: Error codes are aligned with the server-side error handling specification (see `/Users/koistya/Projects/ws-kit/docs/specs/error-handling.md`). The same 13 standard codes are used on both client and server for consistency.

@@ -261,7 +261,7 @@ const router = createRouter<AppData>();
 
 const members = new Set<string>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { room } = ctx.payload;
   const { clientId } = ctx.ws.data;
 
@@ -270,17 +270,17 @@ router.on(JoinRoom, (ctx) => {
   ctx.subscribe(`room:${room}`);
 
   // Broadcast updated member list using schema
-  router.publish(`room:${room}`, RoomList, {
+  await router.publish(`room:${room}`, RoomList, {
     users: Array.from(members),
   });
 });
 
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const room = ctx.ws.data.room || "general";
   const { clientId } = ctx.ws.data;
 
   // Broadcast message using schema
-  router.publish(`room:${room}`, RoomMessage, {
+  await router.publish(`room:${room}`, RoomMessage, {
     user: clientId!,
     text: ctx.payload.text,
   });
@@ -290,12 +290,20 @@ router.on(SendMessage, (ctx) => {
 ### Game Server with State
 
 ```typescript
+const GameStateMessage = message("GAME:STATE", {
+  action: z.string(),
+  playerId: z.string(),
+});
+
 router.on(GameActionSchema, async (ctx) => {
   // Save state
   await state.storage.put(`action:${Date.now()}`, ctx.payload);
 
   // Broadcast to all players in this game
-  await router.publish("game:state", ctx.payload);
+  await router.publish("game:state", GameStateMessage, {
+    action: ctx.payload.action,
+    playerId: ctx.payload.playerId,
+  });
 });
 ```
 

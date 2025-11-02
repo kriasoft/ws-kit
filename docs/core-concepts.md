@@ -368,20 +368,23 @@ router.rpc(GetUser, async (ctx) => {
 **Client-side usage:**
 
 ```typescript
-import { wsClient } from "@ws-kit/client/zod";
+import { wsClient, message } from "@ws-kit/client/zod";
 
 const client = wsClient({ url: "ws://localhost:3000" });
 
-// Make RPC call
-const call = client.request(GetUser, { id: "123" });
+// Define a progress message schema (optional, for streaming updates)
+const UserLoadProgress = message("USER_LOAD_PROGRESS", {
+  stage: z.enum(["fetching", "validating"]),
+});
 
-// Optional: listen to progress updates
-for await (const p of call.progress()) {
-  console.log("Progress:", p);
-}
+// Listen for progress updates (optional)
+client.on(UserLoadProgress, (msg) => {
+  console.log("Progress:", msg.payload.stage);
+});
 
-// Wait for terminal response
-const { user } = await call.result();
+// Make RPC call and await the terminal response
+const response = await client.request(GetUser, { id: "123" });
+const { user } = response.payload;
 ```
 
 See [RPC Guide](./rpc.md) and ADR-015 for complete RPC documentation.
@@ -422,7 +425,7 @@ router.on(LeaveRoomMessage, async (ctx) => {
 - **`ctx.publish(topic, schema, data)`** — Broadcasts to topic subscribers (1-to-many)
 - **`router.publish(topic, schema, data)`** — Use outside handlers (cron jobs, system events)
 
-Both `ctx.publish()` and `router.publish()` return `Promise<number>` (recipient count).
+Both `ctx.publish()` and `router.publish()` return `Promise<PublishResult>` with subscription capability and matched count.
 
 See [Broadcasting](./specs/broadcasting.md) and ADR-018/ADR-019 for complete documentation.
 

@@ -59,9 +59,11 @@ bun install
 # Run server
 bun run server.ts
 
-# In another terminal, run client
-bun run client.ts
+# Run conformance tests (validates schema and state machine)
+bun test conformance.test.ts
 ```
+
+**Note:** The `client.ts` file contains the `DeltaSyncClient` state management class. See `conformance.test.ts` for integration examples showing how to connect the client to the server.
 
 ## Key Patterns
 

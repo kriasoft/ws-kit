@@ -79,7 +79,7 @@ For lower-level control, you can construct the router directly:
 import { WebSocketRouter } from "@ws-kit/core";
 import { createBunAdapter } from "@ws-kit/bun";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-import { zodValidator } from "@ws-kit/zod";
+import { message, zodValidator } from "@ws-kit/zod";
 import { z } from "zod";
 
 // Create router with Redis PubSub for multi-instance broadcasting
@@ -91,16 +91,16 @@ const router = new WebSocketRouter({
   }),
 });
 
-// Define message schemas (low-level)
-const ChatMessage = {
-  type: "CHAT",
-  schema: z.object({ userId: z.string(), text: z.string() }),
-};
+// Define message schemas using the idiomatic helper
+const ChatMessage = message("CHAT", {
+  userId: z.string(),
+  text: z.string(),
+});
 
 // Register handler
 router.on(ChatMessage, async (ctx) => {
-  // This broadcasts to all instances
-  await router.publish("chat:general", {
+  // This broadcasts to all instances via Redis
+  await router.publish("chat:general", ChatMessage, {
     userId: ctx.payload.userId,
     text: ctx.payload.text,
   });
@@ -285,7 +285,8 @@ const pubsub = createRedisPubSub({
 const router = new WebSocketRouter({ pubsub });
 
 // Now all channels are prefixed with "tenant:acme-corp:"
-await router.publish("notifications", { ... });
+const NotificationMessage = message("NOTIFICATION", { text: z.string() });
+await router.publish("notifications", NotificationMessage, { text: "..." });
 // Actually publishes to: "tenant:acme-corp:notifications"
 ```
 

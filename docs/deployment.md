@@ -308,11 +308,11 @@ const RoomUpdate = message("ROOM_UPDATE", {
   message: z.string(),
 });
 
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const { text, roomId } = ctx.payload;
 
   // Type-safe broadcast (validated against schema)
-  router.publish(roomId, RoomUpdate, {
+  await router.publish(roomId, RoomUpdate, {
     roomId,
     message: text,
   });
