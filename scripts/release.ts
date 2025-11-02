@@ -289,6 +289,7 @@ async function prepackPackage(
   const outDir = path.join(pkgDir, publishDir);
   await fs.mkdir(outDir, { recursive: true });
 
+  // Write package.json
   const outPath = path.join(outDir, "package.json");
   await fs.writeFile(
     outPath,
@@ -296,6 +297,25 @@ async function prepackPackage(
     "utf8",
   );
   console.log(`[prepack] Wrote ${path.relative(root, outPath)}`);
+
+  // Copy README.md from package directory and LICENSE from repo root
+  const filesToCopy = [
+    { src: path.join(pkgDir, "README.md"), dest: "README.md" },
+    { src: path.join(root, "LICENSE"), dest: "LICENSE" },
+  ];
+  for (const { src, dest } of filesToCopy) {
+    try {
+      const srcExists = await Bun.file(src).exists();
+      if (srcExists) {
+        const destPath = path.join(outDir, dest);
+        const content = await fs.readFile(src, "utf8");
+        await fs.writeFile(destPath, content, "utf8");
+        console.log(`[prepack] Copied ${path.relative(root, src)} → ${dest}`);
+      }
+    } catch {
+      // Silently skip if file doesn't exist or copy fails
+    }
+  }
 }
 
 async function main() {
