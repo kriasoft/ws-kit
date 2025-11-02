@@ -1,5 +1,14 @@
 # @ws-kit/adapters
 
+## 2.0.0
+
+### Patch Changes
+
+- [#34](https://github.com/kriasoft/ws-kit/pull/34) [`7f9bec8`](https://github.com/kriasoft/ws-kit/commit/7f9bec81a47f1d70b72dadc87731b26f76dac913) Thanks [@koistya](https://github.com/koistya)! - Fix workspace dependency resolution in published package. Ensure "workspace:^" versions are properly converted to valid semver ranges during publish.
+
+- Updated dependencies [[`7f9bec8`](https://github.com/kriasoft/ws-kit/commit/7f9bec81a47f1d70b72dadc87731b26f76dac913), [`7f9bec8`](https://github.com/kriasoft/ws-kit/commit/7f9bec81a47f1d70b72dadc87731b26f76dac913)]:
+  - @ws-kit/core@0.4.0
+
 ## 1.0.1
 
 ### Patch Changes
