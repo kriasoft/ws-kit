@@ -53,7 +53,7 @@ async function main() {
     console.log(`[prepack] ${pkg}`);
 
     try {
-      await $`cd ${pkgDir} && bun run prepack`;
+      await $`cd ${pkgDir} && bun ../../scripts/prepack.ts`;
     } catch (err) {
       console.error(`[prepack] Failed for ${pkg}:`, err);
       process.exit(1);
