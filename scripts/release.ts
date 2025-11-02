@@ -522,6 +522,10 @@ function sanitizeManifest(pkg: Pkg, versions: Map<string, string>): Pkg {
     Object.assign(out, rest);
   }
 
+  // Remove publishConfig since the dist/package.json will be published as-is
+  // (npm won't look for another subdirectory within the publish directory)
+  delete out.publishConfig;
+
   return out;
 }
 
