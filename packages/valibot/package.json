@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/valibot",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Valibot validator adapter for WS-Kit with lightweight runtime validation and minimal bundle size",
   "type": "module",
   "sideEffects": false,

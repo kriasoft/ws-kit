@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/adapters",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Adapter implementations for WS-Kit: memory, Redis, Durable Objects, and more",
   "type": "module",
   "sideEffects": false,

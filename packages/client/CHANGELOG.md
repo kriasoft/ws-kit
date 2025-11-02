@@ -1,5 +1,15 @@
 # @ws-kit/client
 
+## 0.2.2
+
+### Patch Changes
+
+- [#32](https://github.com/kriasoft/ws-kit/pull/32) [`031f4ba`](https://github.com/kriasoft/ws-kit/commit/031f4ba077998c2374ae1ee8ff39187bc60a132d) Thanks [@koistya](https://github.com/koistya)! - Fix workspace dependency resolution in published packages. Use workspace:^ instead of workspace:\* to ensure proper semantic version resolution during publishing.
+
+- Updated dependencies [[`031f4ba`](https://github.com/kriasoft/ws-kit/commit/031f4ba077998c2374ae1ee8ff39187bc60a132d)]:
+  - @ws-kit/zod@0.2.2
+  - @ws-kit/valibot@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes
