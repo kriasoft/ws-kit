@@ -1,5 +1,14 @@
 # @ws-kit/cloudflare-do
 
+## 0.2.2
+
+### Patch Changes
+
+- [#40](https://github.com/kriasoft/ws-kit/pull/40) [`04fe01d`](https://github.com/kriasoft/ws-kit/commit/04fe01d40337af27cacac838d972b91cc008860b) Thanks [@koistya](https://github.com/koistya)! - Fix misleading PubSub usage examples in documentation. The examples now correctly show the expected API signatures: direct `pubsub.publish()` for raw messages, and router `router.publish()` with schema and payload. This clarifies the distinction between low-level and high-level broadcasting APIs.
+
+- Updated dependencies [[`04fe01d`](https://github.com/kriasoft/ws-kit/commit/04fe01d40337af27cacac838d972b91cc008860b)]:
+  - @ws-kit/core@0.4.2
+
 ## 0.2.1
 
 ### Patch Changes
