@@ -1,5 +1,14 @@
 # bun-zod-chat-example
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [[`77f2a31`](https://github.com/kriasoft/ws-kit/commit/77f2a31aa26088c2f20e017f3a51111470c85c9c)]:
+  - @ws-kit/bun@0.3.1
+  - @ws-kit/core@0.4.1
+  - @ws-kit/zod@0.3.1
+
 ## 0.1.4
 
 ### Patch Changes
