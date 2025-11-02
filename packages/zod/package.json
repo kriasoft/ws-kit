@@ -47,7 +47,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ws-kit/core": "workspace:*"
+    "@ws-kit/core": "workspace:^"
   },
   "peerDependencies": {
     "zod": ">=4.0.0"

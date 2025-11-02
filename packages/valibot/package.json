@@ -49,7 +49,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ws-kit/core": "workspace:*"
+    "@ws-kit/core": "workspace:^"
   },
   "peerDependencies": {
     "valibot": ">=1.0.0"
