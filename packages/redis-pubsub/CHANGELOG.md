@@ -1,5 +1,14 @@
 # @ws-kit/redis-pubsub
 
+## 0.1.5
+
+### Patch Changes
+
+- [#38](https://github.com/kriasoft/ws-kit/pull/38) [`77f2a31`](https://github.com/kriasoft/ws-kit/commit/77f2a31aa26088c2f20e017f3a51111470c85c9c) Thanks [@koistya](https://github.com/koistya)! - Include README.md and LICENSE files in published npm packages. Previous releases were missing these critical files in their dist/ directories.
+
+- Updated dependencies [[`77f2a31`](https://github.com/kriasoft/ws-kit/commit/77f2a31aa26088c2f20e017f3a51111470c85c9c)]:
+  - @ws-kit/core@0.4.1
+
 ## 0.1.4
 
 ### Patch Changes
