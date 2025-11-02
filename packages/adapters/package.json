@@ -54,7 +54,7 @@
     "dist"
   ],
   "peerDependencies": {
-    "@ws-kit/core": "workspace:*"
+    "@ws-kit/core": "workspace:^"
   },
   "engines": {
     "node": ">=22"

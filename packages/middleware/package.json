@@ -43,10 +43,10 @@
     "dist"
   ],
   "peerDependencies": {
-    "@ws-kit/core": "workspace:*"
+    "@ws-kit/core": "workspace:^"
   },
   "devDependencies": {
-    "@ws-kit/adapters": "workspace:*"
+    "@ws-kit/adapters": "workspace:^"
   },
   "engines": {
     "node": ">=22"
