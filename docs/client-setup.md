@@ -115,6 +115,8 @@ await client.onceOpen();
 await client.close();
 ```
 
+See [Client API - Connection State Machine](./client-api.md#connection-state-machine) for complete state diagram and transition rules.
+
 ### Sending Messages
 
 **Fire-and-forget (no response expected):**
@@ -197,6 +199,8 @@ client.onError((error, context) => {
 
 ## Authentication
 
+**For complete auth patterns, protocol merging, and setup validation, see [Client Authentication Guide](./client-auth.md).**
+
 ### Query Parameter
 
 ```typescript
@@ -264,13 +268,13 @@ serve(router, {
 
 ## Message Queueing
 
-Messages are automatically queued while connecting or offline:
+Messages are automatically queued while connecting or offline. For detailed queue behavior and delivery semantics, see [Client API Reference - Queue Behavior](./client-api.md#queue-overflow-handling):
 
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
   queue: "drop-newest", // Queue mode: "drop-newest" (default), "drop-oldest", or "off"
-  queueSize: 50, // Max queued messages (default: 50)
+  queueSize: 1000, // Max queued messages (default: 1000)
 });
 
 // This will be queued if not connected yet
@@ -279,6 +283,8 @@ client.send(SomeMessage, { text: "hello" });
 await client.connect();
 // Queued messages are sent automatically
 ```
+
+For detailed queue overflow handling and decision patterns, see [Client API - Queue Overflow Handling](./client-api.md#queue-overflow-handling).
 
 ## Auto-Reconnection
 

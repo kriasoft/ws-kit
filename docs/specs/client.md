@@ -3,6 +3,8 @@
 > **Goal:** A tiny, type-safe WebSocket client for browsers and Node.js that reuses the same message schemas as the server.
 > **Non-goals:** State management, persistence, plugin systems, or anything not essential to sending/receiving typed messages.
 
+**Note:** For practical API usage and examples, see [Client API Reference](../client-api.md). This document focuses on specifications and protocol contracts.
+
 ## Section Map
 
 Quick navigation for AI tools:
@@ -75,7 +77,7 @@ export type ClientOptions = {
   //   - "drop-oldest": Queue up to queueSize; evict oldest on overflow
   //   - "drop-newest": Queue up to queueSize; reject newest on overflow
   //   - "off": Drop immediately; send() returns false
-  queueSize?: number; // default: 50 (maximum pending messages while offline)
+  queueSize?: number; // default: 1000 (maximum pending messages while offline)
 
   autoConnect?: boolean; // default: false
   // When true, client auto-connects on first send/request if state === "closed" and never connected.
@@ -827,6 +829,8 @@ try {
 ```
 
 **Important:** `StateError` is always a **Promise rejection**, never a synchronous throw.
+
+**For error handling patterns and examples**, see [Client API Reference - Error Classes](../client-api.md#error-classes) and [Client Error Handling Guide](../client-errors.md).
 
 ## Error Contract {#error-contract}
 

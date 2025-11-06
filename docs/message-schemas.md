@@ -1,6 +1,6 @@
 # Message Schemas
 
-Message schemas define the structure and validation for your WebSocket messages. ws-kit provides a simple, type-safe API for creating and using schemas.
+Message schemas define the structure and validation for your WebSocket messages. WS-Kit provides a simple, type-safe API for creating and using schemas.
 
 ## Export-with-Helpers Pattern
 
@@ -214,7 +214,7 @@ if (result.success) {
   console.error("Validation failed:", result.error);
 }
 
-// Or use the ws-kit client which handles validation automatically
+// Or use the WS-Kit client which handles validation automatically
 import { wsClient } from "@ws-kit/client/zod";
 
 const client = wsClient({ url: "ws://localhost:3000" });

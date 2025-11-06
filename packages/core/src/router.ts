@@ -39,6 +39,12 @@ import type {
 } from "./types.js";
 
 /**
+ * Internal symbol for marking publish calls that originate from within a message handler.
+ * Used for handler context detection without polluting user-facing options object.
+ */
+const HANDLER_CONTEXT_MARKER = Symbol.for("ws-kit.handler-context");
+
+/**
  * Heartbeat state tracking per connection.
  */
 interface HeartbeatState<TData extends WebSocketData = WebSocketData> {
@@ -141,9 +147,6 @@ export class WebSocketRouter<
 
   // RPC state management (encapsulated in RpcManager)
   readonly #rpc: RpcManager;
-
-  // Handler context tracking for excludeSelf support (used as execution marker)
-  private currentHandler: unknown;
 
   // Testing utilities (only available when testing mode is enabled)
   _testing?: TestingUtils<TData>;
@@ -501,8 +504,11 @@ export class WebSocketRouter<
   /**
    * Register a handler for WebSocket open events.
    *
-   * Called after successful authentication when a client connects.
+   * Called when a client connects, before authentication validation.
    * Multiple handlers can be registered and execute in order.
+   *
+   * Authentication is enforced per-message via middleware, not at connection time.
+   * Use global middleware if you need to block unauthenticated connections entirely.
    *
    * @param handler - Handler function
    * @returns This router for method chaining
@@ -1012,12 +1018,15 @@ export class WebSocketRouter<
         pubsubOptions.partitionKey = options.partitionKey;
       }
 
-      // Handle excludeSelf: only meaningful in handler context (with currentHandler)
-      // In server-initiated calls (no currentHandler), silently ignore excludeSelf
-      if (options?.excludeSelf && this.currentHandler) {
-        // TODO: excludeSelf implementation for handler context
-        // Requires tracking WebSocket connection identity through PubSub layer
-        // Currently deferred - all subscribers receive message
+      // Reject excludeSelf unconditionally until pubsub layer can actually filter the sender.
+      // This prevents devs from trusting a flag that currently does nothing, regardless of call site.
+      // (Rejecting only for ctx.publish would create a silent no-op if router.publish() is called directly.)
+      if (options?.excludeSelf) {
+        throw new Error(
+          "[ws] publish({ excludeSelf: true }) is not yet supported. " +
+            "Sender filtering requires pubsub adapter support. " +
+            "Workarounds: use dedicated channels per connection or check message origin in subscriber handlers.",
+        );
       }
 
       // Publish validated message to pubsub
@@ -1034,11 +1043,12 @@ export class WebSocketRouter<
       if (memoryPubSub && typeof memoryPubSub.subscriberCount === "function") {
         const count = memoryPubSub.subscriberCount(channel);
         capability = "exact";
-        // Adjust for excludeSelf if applicable (handler context only)
-        matched =
-          options?.excludeSelf && this.currentHandler && count > 0
-            ? count - 1
-            : count;
+        // Report count only if excludeSelf is not used (since we can't exclude the sender yet).
+        // Note: excludeSelf is rejected unconditionally above, so this code is defensive.
+        // When excludeSelf is implemented, check HANDLER_CONTEXT_MARKER to determine sender.
+        if (!options?.excludeSelf) {
+          matched = count;
+        }
       }
 
       return {
@@ -1571,7 +1581,13 @@ export class WebSocketRouter<
         payload: unknown,
         options?: PublishOptions,
       ): Promise<PublishResult> => {
-        return this.publish(channel, schema, payload, options);
+        // Mark handler context via Symbol to enable future excludeSelf filtering.
+        // Symbol key is invisible to user code (can't collide with string keys) and
+        // documents that this is internal implementation detail, not part of the public API.
+        return this.publish(channel, schema, payload, {
+          ...options,
+          [HANDLER_CONTEXT_MARKER]: true,
+        } as PublishOptions & Record<symbol, boolean>);
       };
 
       // Calculate deadline for RPC requests
@@ -1632,6 +1648,12 @@ export class WebSocketRouter<
             return this.#rpc.onCancel(clientId, correlationId, cb);
           }
         : undefined;
+
+      // Get AbortSignal for RPC request (always present for RPC, never undefined)
+      const abortSignal: AbortSignal | undefined =
+        isRpc && correlationId
+          ? this.#rpc.getAbortSignal(clientId, correlationId)
+          : undefined; // undefined for non-RPC, which won't be spread to context
 
       // Create timeRemaining function
       const timeRemaining = (): number => {
@@ -1805,6 +1827,7 @@ export class WebSocketRouter<
         unsubscribe,
         publish,
         ...(isRpc && { onCancel }),
+        ...(isRpc && { abortSignal }),
         ...(isRpc && { deadline }),
         ...(isRpc && { reply }),
         ...(isRpc && { progress }),
@@ -1837,15 +1860,10 @@ export class WebSocketRouter<
             // All middleware executed, now dispatch handler
             // Type assertion is safe: context structure matches handler expectations
             // based on schema.response presence (RPC vs Event determination)
-            this.currentHandler = handlerEntry.handler;
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const result = handlerEntry.handler(context as any);
-              if (result instanceof Promise) {
-                await result;
-              }
-            } finally {
-              this.currentHandler = undefined;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = handlerEntry.handler(context as any);
+            if (result instanceof Promise) {
+              await result;
             }
           }
         };
@@ -1897,6 +1915,7 @@ export class WebSocketRouter<
             observed: number;
             limit: number;
             retryAfterMs?: number | null;
+            tentativeCorrelationId?: string;
           }
         | undefined;
 
@@ -1923,41 +1942,97 @@ export class WebSocketRouter<
         if (onExceeded === "send") {
           // Send RESOURCE_EXHAUSTED error response, keep connection open
           // Use fallbackContext to ensure wire format consistency with protocol
+          // If correlationId was extracted from the raw payload, include it in meta
+          const fallbackMeta: MessageMeta = {
+            clientId,
+            receivedAt,
+          };
+          if (limitInfo.tentativeCorrelationId) {
+            fallbackMeta.correlationId = limitInfo.tentativeCorrelationId;
+          }
+
           const fallbackContext = this.createMessageContext(
             ws,
             "",
             clientId,
             receivedAt,
             send,
+            fallbackMeta,
           );
 
           // If retryAfterMs is null, it's an impossible operation (cost > capacity)
           if (limitInfo.retryAfterMs === null) {
-            fallbackContext.error(
-              "FAILED_PRECONDITION",
-              `Operation cost exceeds limit capacity (${limitInfo.observed} > ${limitInfo.limit})`,
-              {
-                observed: limitInfo.observed,
-                limit: limitInfo.limit,
-              },
-            );
+            if (fallbackMeta.correlationId) {
+              // RPC error path: preserve correlation for RPC client to match response to request.
+              // Payload size limits can trigger before JSON parsing, so we detect RPC by checking
+              // if correlationId was extracted from the raw payload (tentativeCorrelationId).
+              this.sendErrorEnvelope(
+                ws,
+                "FAILED_PRECONDITION",
+                `Operation cost exceeds limit capacity (${limitInfo.observed} > ${limitInfo.limit})`,
+                {
+                  observed: limitInfo.observed,
+                  limit: limitInfo.limit,
+                },
+                {
+                  errorKind: {
+                    kind: "rpc",
+                    correlationId: fallbackMeta.correlationId as string,
+                  },
+                },
+              );
+            } else {
+              // Non-RPC error path: send via context (defaults to oneway error kind)
+              fallbackContext.error(
+                "FAILED_PRECONDITION",
+                `Operation cost exceeds limit capacity (${limitInfo.observed} > ${limitInfo.limit})`,
+                {
+                  observed: limitInfo.observed,
+                  limit: limitInfo.limit,
+                },
+              );
+            }
           } else {
             // Retryable limit: forward computed retryAfterMs, or default to 100ms for payload limits
             const retryAfterMs =
               limitInfo.retryAfterMs ??
               (limitInfo.type === "payload" ? 100 : undefined);
-            fallbackContext.error(
-              "RESOURCE_EXHAUSTED",
-              `Limit exceeded (${limitInfo.observed} > ${limitInfo.limit})`,
-              {
-                observed: limitInfo.observed,
-                limit: limitInfo.limit,
-              },
-              {
-                retryable: true,
-                ...(retryAfterMs !== undefined && { retryAfterMs }),
-              },
-            );
+            if (fallbackMeta.correlationId) {
+              // RPC error path: preserve correlation even though schema validation hasn't run yet.
+              // This is critical for RPC callers that sent oversized payloads (validation happens
+              // after size check, so we extract correlationId from raw JSON before full parsing).
+              this.sendErrorEnvelope(
+                ws,
+                "RESOURCE_EXHAUSTED",
+                `Limit exceeded (${limitInfo.observed} > ${limitInfo.limit})`,
+                {
+                  observed: limitInfo.observed,
+                  limit: limitInfo.limit,
+                },
+                {
+                  errorKind: {
+                    kind: "rpc",
+                    correlationId: fallbackMeta.correlationId as string,
+                  },
+                  retryable: true,
+                  ...(retryAfterMs !== undefined && { retryAfterMs }),
+                },
+              );
+            } else {
+              // Non-RPC error path: send via context (defaults to oneway error kind)
+              fallbackContext.error(
+                "RESOURCE_EXHAUSTED",
+                `Limit exceeded (${limitInfo.observed} > ${limitInfo.limit})`,
+                {
+                  observed: limitInfo.observed,
+                  limit: limitInfo.limit,
+                },
+                {
+                  retryable: true,
+                  ...(retryAfterMs !== undefined && { retryAfterMs }),
+                },
+              );
+            }
           }
         } else if (onExceeded === "close") {
           // Close connection with configured code (default: 1009 "Message Too Big")
@@ -2012,6 +2087,25 @@ export class WebSocketRouter<
   // ———————————————————————————————————————————————————————————————————————————
 
   /**
+   * Lenient extraction of correlationId from raw message bytes.
+   * Uses regex scan to find "correlationId": "..." without full parsing.
+   * Safe for large payloads—we only scan, never execute.
+   * @internal
+   */
+  private extractCorrelationIdFromRaw(
+    message: string | Buffer,
+  ): string | undefined {
+    const str =
+      typeof message === "string" ? message : message.toString("utf8");
+
+    // Lenient regex: find "correlationId":"xxx" in meta object
+    // Matches: "correlationId": "value" with optional whitespace
+    const match = /"correlationId"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/;
+    const result = match.exec(str);
+    return result?.[1]?.trim();
+  }
+
+  /**
    * Check if payload size is within limits.
    *
    * Returns the payload size for tracking.
@@ -2032,11 +2126,17 @@ export class WebSocketRouter<
       const error = new Error(
         `Payload size ${size} exceeds limit of ${this.maxPayloadBytes}`,
       );
+
+      // Try lenient extraction of correlationId before throwing
+      // This allows RPC payload limit errors to be correlated back to the client
+      const tentativeCorrelationId = this.extractCorrelationIdFromRaw(message);
+
       // Mark this as a limit exceeded error for special handling
       (error as unknown as Record<string, unknown>)._limitExceeded = {
         type: "payload",
         observed: size,
         limit: this.maxPayloadBytes,
+        ...(tentativeCorrelationId && { tentativeCorrelationId }),
       };
       throw error;
     }

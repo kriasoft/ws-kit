@@ -6,7 +6,7 @@ import { defineConfig } from "vitepress";
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   base: "/ws-kit/",
-  title: "WS-Kit",
+  title: "⚡ WS-Kit",
   description:
     "Schema-first WebSocket message router for Bun with TypeScript validation",
   lang: "en-US",
@@ -46,6 +46,7 @@ export default defineConfig({
     nav: [
       { text: "Home", link: "/" },
       { text: "Docs", link: "/getting-started" },
+      { text: "Blog", link: "/posts/" },
     ],
 
     search: {

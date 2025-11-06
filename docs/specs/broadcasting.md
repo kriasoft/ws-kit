@@ -125,8 +125,9 @@ type PublishResult =
 **Benefits**:
 
 - **Honest delivery reporting** — No more sentinel values (always `1`). Different adapters report what they actually know.
-- **Error handling** — Distinguish between validation failures, permission denials, and adapter errors.
-- **Feature negotiation** — Know if `excludeSelf` or `partitionKey` are supported before attempting.
+- **Error handling** — Distinguish between validation failures, permission denials, adapter errors, and reserved option usage.
+- **Reserved options** — `excludeSelf` and `partitionKey` are validated; using unimplemented features raises clear errors.
+- **Future extensibility** — Options can be implemented in adapters without breaking the API.
 - **Debugging** — Detailed error messages for failed publishes.
 
 ### Naming: "publish" not "broadcast"

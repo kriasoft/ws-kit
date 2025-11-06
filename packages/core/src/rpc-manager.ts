@@ -8,6 +8,7 @@ interface RpcRequestState {
   cancelled: boolean;
   terminalSent: boolean;
   onCancelCallbacks: (() => void)[];
+  abortController: AbortController;
   createdAt: number;
   lastActivityAt: number;
 }
@@ -32,8 +33,9 @@ export class RpcManager {
   private readonly inflightByClient = new Map<string, number>();
 
   // Track recently-completed RPC IDs (for detecting incomplete handlers)
-  // Format: `${clientId}:${correlationId}` to track across clients
-  private readonly recentlyTerminated = new Set<string>();
+  // Format: `${clientId}:${correlationId}` -> timestamp for bounded memory
+  private readonly recentlyTerminated = new Map<string, number>();
+  private readonly MAX_RECENTLY_TERMINATED = 10000;
 
   // Idle cleanup interval handle
   private idleCleanupHandle: ReturnType<typeof setInterval> | undefined =
@@ -103,7 +105,16 @@ export class RpcManager {
     state.terminalSent = true;
 
     // Track that this RPC was terminated (persists after pruning)
-    this.recentlyTerminated.add(`${clientId}:${correlationId}`);
+    const key = `${clientId}:${correlationId}`;
+    this.recentlyTerminated.set(key, Date.now());
+
+    // Enforce bounded storage: evict oldest entry if exceeded
+    if (this.recentlyTerminated.size > this.MAX_RECENTLY_TERMINATED) {
+      const oldest = this.recentlyTerminated.entries().next().value;
+      if (oldest) {
+        this.recentlyTerminated.delete(oldest[0]);
+      }
+    }
 
     // Prune immediately to free memory
     this.prune(clientId, correlationId);
@@ -123,6 +134,9 @@ export class RpcManager {
     }
 
     state.cancelled = true;
+
+    // Abort the signal with reason for diagnostics
+    state.abortController.abort("client-abort");
 
     // Fire all cancel callbacks
     for (const callback of state.onCancelCallbacks) {
@@ -151,6 +165,7 @@ export class RpcManager {
           `[ws] Cancelling in-flight RPC ${correlationId} due to disconnect`,
         );
         state.cancelled = true;
+        state.abortController.abort("disconnect");
         for (const callback of state.onCancelCallbacks) {
           try {
             callback();
@@ -177,8 +192,10 @@ export class RpcManager {
    * Checks both current state and recently-terminated tracking.
    */
   isTerminal(clientId: string, correlationId: string): boolean {
+    const key = `${clientId}:${correlationId}`;
+
     // Check if marked as recently terminated (persists after pruning)
-    if (this.recentlyTerminated.has(`${clientId}:${correlationId}`)) {
+    if (this.recentlyTerminated.has(key)) {
       return true;
     }
 
@@ -254,6 +271,7 @@ export class RpcManager {
           // Fire cancel callbacks if not already cancelled
           if (!state.cancelled) {
             state.cancelled = true;
+            state.abortController.abort("idle-timeout");
             for (const callback of state.onCancelCallbacks) {
               try {
                 callback();
@@ -272,6 +290,15 @@ export class RpcManager {
           // Also clean up from recently-terminated tracking
           this.recentlyTerminated.delete(`${clientId}:${correlationId}`);
         }
+      }
+    }
+
+    // Clean up old entries from recentlyTerminated that have exceeded TTL
+    // Keep 1 hour TTL for duplicate detection
+    const ttlMs = 3600_000;
+    for (const [key, timestamp] of this.recentlyTerminated) {
+      if (now - timestamp > ttlMs) {
+        this.recentlyTerminated.delete(key);
       }
     }
   }
@@ -295,6 +322,7 @@ export class RpcManager {
         cancelled: false,
         terminalSent: false,
         onCancelCallbacks: [],
+        abortController: new AbortController(),
         createdAt: Date.now(),
         lastActivityAt: Date.now(),
       });
@@ -330,5 +358,40 @@ export class RpcManager {
     if (stateMap.size === 0) {
       this.statesByClient.delete(clientId);
     }
+  }
+
+  /**
+   * Get the AbortSignal for an RPC request.
+   * Always returns a valid AbortSignal (pre-aborted if state doesn't exist).
+   * This ensures handlers always have a real signal to work with.
+   * @internal
+   */
+  getAbortSignal(clientId: string, correlationId: string): AbortSignal {
+    const stateMap = this.statesByClient.get(clientId);
+    if (!stateMap) {
+      // State missing (e.g., race condition with disconnect)
+      // Return a pre-aborted signal as fallback
+      return AbortSignal.abort("disconnect");
+    }
+
+    const state = stateMap.get(correlationId);
+    if (!state) {
+      // State for this RPC doesn't exist
+      return AbortSignal.abort("disconnect");
+    }
+
+    return state.abortController.signal;
+  }
+
+  /**
+   * Get internal RPC state for testing purposes only.
+   * @internal
+   */
+  _getState(
+    clientId: string,
+    correlationId: string,
+  ): RpcRequestState | undefined {
+    const stateMap = this.statesByClient.get(clientId);
+    return stateMap?.get(correlationId);
   }
 }

@@ -1,4 +1,13 @@
-# Two Timestamps, One Message: Why WebSocket Systems Need Both
+---
+title: "Two Timestamps, One Message: Why WebSocket Systems Need Both"
+summary: "Never trust client-provided timestamps (meta.timestamp) for server logic like rate limiting or message ordering — it's a security vulnerability. Servers must capture their own authoritative ingress time (ctx.receivedAt) at arrival for security, data integrity, and audits. Client time is only for UI display."
+author: koistya
+sidebar: false
+head:
+  - - link
+    - rel: canonical
+      href: https://dev.to/koistya/two-timestamps-one-message-why-websocket-systems-need-both-44ff
+---
 
 > **TL;DR**: Using client-provided timestamps (`meta.timestamp`) for server-side logic like rate limiting or message ordering is a silent security bug. Server systems need their own authoritative timestamp (`receivedAt`) captured at ingress.
 

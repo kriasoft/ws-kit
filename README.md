@@ -294,7 +294,7 @@ serve(router, {
     }
   },
   onError(error, ctx) {
-    console.error(`ws-kit error in ${ctx?.type}:`, error);
+    console.error(`WS-Kit error in ${ctx?.type}:`, error);
   },
   onOpen(ctx) {
     console.log(`User ${ctx.ws.data?.email} connected`);
@@ -342,6 +342,20 @@ export const JoinRoom = message("JOIN_ROOM", {
 ```
 
 Simple, no factories, one canonical import source.
+
+### Validation: Strict Mode & Reserved Keys
+
+All schemas are validated in **strict mode** by default — unknown keys at the root and payload levels are rejected. This protects against typos and ensures type safety:
+
+```ts
+// ✅ Valid
+client.send(JoinRoom, { roomId: "room-1" });
+
+// ❌ Rejected (unknown key `userId` not in schema)
+client.send(JoinRoom, { roomId: "room-1", userId: "u123" });
+```
+
+Reserved keys (`clientId`, `receivedAt`, `meta`) are automatically stripped from client messages before validation, preventing clients from spoofing server-assigned metadata.
 
 ### Request-Response Pairs with `rpc()`
 
@@ -556,7 +570,7 @@ Optional `options` parameter for `publish()`:
 
 ```ts
 {
-  excludeSelf?: boolean;   // Exclude sender from recipients (default: false)
+  excludeSelf?: boolean;   // Throws error if true (not yet implemented)
   partitionKey?: string;   // Route to specific partition (optional, for sharded pubsub)
   meta?: Record<string, unknown>; // Additional metadata (e.g., { senderId: "user:123" })
 }
@@ -857,6 +871,31 @@ serve(router, {
 ```
 
 For complete documentation, see [docs/proposals/rate-limiting.md](docs/proposals/rate-limiting.md) and [docs/guides/rate-limiting.md](docs/guides/rate-limiting.md).
+
+## Multi-Instance Deployments
+
+For distributed deployments across multiple server instances, use Redis to coordinate subscriptions and broadcasting:
+
+```ts
+import { createRouter } from "@ws-kit/zod";
+import { redisPubSub } from "@ws-kit/redis-pubsub";
+import { createClient } from "redis";
+
+const redisClient = createClient({ url: process.env.REDIS_URL });
+await redisClient.connect();
+
+const router = createRouter({
+  pubsub: redisPubSub(redisClient),
+});
+
+// Now ctx.publish() and ctx.subscribe() work across all instances
+router.on(JoinRoom, (ctx) => {
+  ctx.subscribe(ctx.payload.roomId);
+  ctx.publish(ctx.payload.roomId, UserJoined, { userId: ctx.ws.data?.userId });
+});
+```
+
+Without explicit `pubsub` configuration, broadcasting is scoped to the current instance. Redis enables cross-instance pub/sub for chat rooms, notifications, and real-time dashboards.
 
 ## How to compose routes
 
