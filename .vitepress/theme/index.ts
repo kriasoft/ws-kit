@@ -6,13 +6,14 @@ import { useData } from "vitepress";
 import { createMermaidRenderer } from "vitepress-mermaid-renderer";
 import DefaultTheme from "vitepress/theme";
 import { h, nextTick, watch } from "vue";
+import PostLayout from "./PostLayout.vue";
 import "./style.css";
 
 // https://vitepress.dev/guide/custom-theme
 export default {
   extends: DefaultTheme,
   Layout: () => {
-    const { isDark } = useData();
+    const { isDark, page } = useData();
     const initMermaid = () => {
       nextTick(() =>
         createMermaidRenderer({
@@ -30,7 +31,13 @@ export default {
       },
     );
 
-    return h(DefaultTheme.Layout, null, {
+    // Use PostLayout for blog posts
+    const filePath = page.value.filePath;
+    const isPost =
+      typeof filePath === "string" && filePath.startsWith("posts/");
+    const Layout = isPost ? PostLayout : DefaultTheme.Layout;
+
+    return h(Layout, null, {
       // https://vitepress.dev/guide/extending-default-theme#layout-slots
     });
   },

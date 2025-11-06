@@ -553,22 +553,27 @@ export interface SendOptions {
  * Allows fine-tuning publish behavior and future routing capabilities.
  *
  * **Design note** (ADR-019): These options are reserved for extensibility without breaking
- * API changes. Current implementations use only `meta`; `excludeSelf` and `partitionKey`
- * are placeholders for future distributed pubsub and sharding features.
+ * API changes. Currently, only `meta` is fully implemented; `excludeSelf` and `partitionKey`
+ * are reserved for future distributed pubsub and sharding features.
  */
 export interface PublishOptions {
   /**
    * Exclude the sender from receiving the published message (default: false).
    *
-   * When false (default), the sender is included in the subscriber list.
-   * When true, the sender will not receive their own published message.
+   * **Status**: Not yet implemented. Setting this to `true` will raise an error.
    *
-   * **Default: false** to avoid surprises — sender usually wants to know the state changed.
-   * This aligns with the principle of least surprise in pub/sub systems.
+   * **Planned behavior**: When true, the sender will not receive their own published message.
+   * When called from within a handler context, this will filter out that specific sender.
+   * Server-initiated calls (no clientId context) will not use this option.
    *
-   * **Implementation**: When called from within a handler context (with clientId),
-   * excludeSelf filters out that specific sender. Server-initiated calls (no clientId)
-   * ignore this option as there is no sender to exclude.
+   * **Why not yet supported**: Requires pubsub adapter support for sender filtering.
+   * Different pubsub backends (MemoryPubSub, Redis, Kafka, etc.) have different
+   * capabilities for filtering subscribers at publish time.
+   *
+   * **Workarounds**: Use dedicated channels per connection or check message origin
+   * in subscriber handlers.
+   *
+   * @throws Error if set to `true` — feature is not yet available.
    */
   excludeSelf?: boolean;
 

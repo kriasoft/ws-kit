@@ -8,20 +8,20 @@ This guide shows you how to build type-safe WebSocket applications with ws-kit. 
 
 ```bash
 # With Zod (recommended)
-bun add @ws-kit/zod @ws-kit/bun
+bun add zod @ws-kit/zod @ws-kit/bun
 
 # With Valibot (lighter bundles)
-bun add @ws-kit/valibot @ws-kit/bun
+bun add valibot @ws-kit/valibot @ws-kit/bun
 ```
 
 ### Client (Browser)
 
 ```bash
 # With Zod
-bun add @ws-kit/client/zod
+bun add zod @ws-kit/client
 
 # With Valibot (recommended for browsers due to smaller bundle)
-bun add @ws-kit/client/valibot
+bun add valibot @ws-kit/client
 ```
 
 ::: tip
@@ -87,7 +87,7 @@ router.on(ChatMessage, async (ctx) => {
   const userId = ctx.ws.data.userId || "anonymous";
 
   // Broadcast to room subscribers
-  await router.publish(roomId, ChatMessage, {
+  await ctx.publish(roomId, ChatMessage, {
     text,
     roomId,
   });
@@ -109,8 +109,12 @@ serve(router, {
     console.log(`Client ${userId} disconnected from ${roomId}`);
 
     if (roomId) {
-      await router.publish(roomId, UserLeft, { userId: userId || "unknown" });
+      await ctx.publish(roomId, UserLeft, { userId: userId || "unknown" });
     }
+  },
+  // Optional: handle connection errors
+  onError(ctx, err) {
+    console.error(`Connection error for ${ctx.ws.data.userId}:`, err.message);
   },
 });
 
@@ -124,11 +128,22 @@ console.log("WebSocket server running on ws://localhost:3000");
 import { wsClient } from "@ws-kit/client/zod";
 import { JoinRoom, ChatMessage, UserJoined, UserLeft } from "./shared/schemas";
 
-// Create type-safe client
+// Create type-safe client with auto-reconnect and message queueing
 const client = wsClient({
   url: "ws://localhost:3000",
   auth: {
     getToken: () => localStorage.getItem("access_token"),
+  },
+  // Auto-reconnect with exponential backoff (optional)
+  reconnect: {
+    maxAttempts: 5,
+    initialDelayMs: 1000,
+    maxDelayMs: 30_000,
+  },
+  // Queue messages while offline (optional)
+  queue: {
+    mode: "drop-oldest", // or "drop-newest", "off"
+    maxSize: 100,
   },
 });
 
@@ -161,6 +176,15 @@ await client.close();
 
 ::: tip Full Type Safety
 Notice how both server and client have complete TypeScript inference from the shared schemas. No manual type annotations needed!
+:::
+
+::: tip Server Lifecycle Hooks
+The `serve()` function supports additional lifecycle hooks beyond `onOpen`, `onClose`, and `onError`:
+
+- `onUpgrade(req)` — Customize HTTP upgrade response before WebSocket handshake
+- `onBroadcast(ctx, topic, data)` — Observe or intercept broadcast events
+
+See the [API Reference](./api-reference) for details.
 :::
 
 ## Basic Concepts
@@ -212,19 +236,35 @@ The browser client provides:
 - **Auto-reconnection** with exponential backoff
 - **Offline message queueing** when disconnected
 - **Request/response pattern (RPC)** with timeouts and correlation tracking
+- **Progress updates** for long-running operations
 - **Built-in authentication** via token or headers
 - **Full type inference** from shared schemas
 
+#### Request/Response Pattern (RPC)
+
+Define RPC schemas using either the modern `message()` syntax or legacy `rpc()` helper:
+
 ```typescript
-import { z, rpc } from "@ws-kit/zod";
+import { z, message, rpc } from "@ws-kit/zod";
 import { wsClient } from "@ws-kit/client/zod";
 import { createRouter } from "@ws-kit/zod";
 
-// Define RPC schema (binds request and response)
+// Modern syntax (recommended)
+const QueryUsers = message("QUERY_USERS", {
+  payload: { query: z.string() },
+  response: { users: z.array(UserSchema) },
+});
+
+// Legacy syntax (still supported)
 const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
 
 // Server setup
 const router = createRouter();
+
+router.rpc(QueryUsers, async (ctx) => {
+  const users = await db.query(ctx.payload.query);
+  ctx.reply(QueryUsers.response, { users });
+});
 
 router.rpc(Ping, (ctx) => {
   ctx.reply(Ping.response, { reply: `Got: ${ctx.payload.text}` });
@@ -234,16 +274,79 @@ router.rpc(Ping, (ctx) => {
 const client = wsClient({ url: "ws://localhost:3000" });
 await client.connect();
 
-// Request/response with auto-detected response schema
+// Make RPC request with timeout
 try {
   const response = await client.request(
-    Ping,
-    { text: "ping" },
+    QueryUsers,
+    { query: "active" },
     { timeoutMs: 5000 },
   );
-  console.log("Got response:", response.payload.reply);
+  console.log("Users:", response.payload.users);
 } catch (err) {
   console.error("Request failed or timed out:", err);
+}
+```
+
+#### Progress Updates for Long-Running Operations
+
+For operations that take time (uploads, processing, etc.), send progress updates without terminating the RPC:
+
+```typescript
+// Server: send multiple progress updates before final reply
+router.rpc(ProcessFile, async (ctx) => {
+  const { fileId } = ctx.payload;
+
+  ctx.progress({ status: "validating", percent: 10 });
+  await validateFile(fileId);
+
+  ctx.progress({ status: "processing", percent: 50 });
+  const result = await processFile(fileId);
+
+  ctx.progress({ status: "storing", percent: 90 });
+  await storeResult(fileId, result);
+
+  // Terminal response ends the RPC
+  ctx.reply(ProcessFile.response, { success: true, resultId: result.id });
+});
+
+// Client: listen to progress updates
+const call = client.request(ProcessFile, { fileId: "file_123" });
+
+// Listen to progress events
+call.progress.on("message", (msg) => {
+  console.log(`${msg.payload.status}: ${msg.payload.percent}%`);
+});
+
+// Wait for final reply
+const response = await call;
+console.log("Done:", response.payload.resultId);
+```
+
+#### Request Cancellation
+
+Cancel in-flight RPC requests using AbortSignal:
+
+```typescript
+const controller = new AbortController();
+
+const requestPromise = client.request(
+  QueryUsers,
+  { query: "active" },
+  {
+    timeoutMs: 30_000,
+    signal: controller.signal,
+  },
+);
+
+// Cancel after 5 seconds if still pending
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  const response = await requestPromise;
+} catch (err) {
+  if (err.name === "AbortError") {
+    console.log("Request was cancelled");
+  }
 }
 ```
 

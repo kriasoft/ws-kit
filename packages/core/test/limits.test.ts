@@ -293,7 +293,7 @@ describe("Message Payload Limits", () => {
       await expect(router.handleMessage(ws, "")).resolves.toBeUndefined();
     });
 
-    it("should handle message exactly at limit", async () => {
+    it("should accept message just under limit", async () => {
       const router = new WebSocketRouter({
         validator: mockValidator,
         limits: {
@@ -304,26 +304,24 @@ describe("Message Payload Limits", () => {
       const ws = createMockWebSocket();
       await router.handleOpen(ws);
 
-      // Create a valid message that is approximately 100 bytes
-      const baseMsg = JSON.stringify({
-        type: "TEST",
-        meta: {},
-      });
-      const msgLength = Buffer.byteLength(baseMsg, "utf8");
-      const paddingLength = 100 - msgLength - 2; // -2 for quotes around payload
+      // Construct message to be just under 100 bytes (target 99)
+      const target = 99;
+      const base = JSON.stringify({ type: "TEST", meta: {} });
+      const baseBytes = Buffer.byteLength(base, "utf8");
+      // Account for the ,"payload":"" structure (13 extra bytes)
+      const paddingBytes = Math.max(0, target - baseBytes - 13);
 
       const message = JSON.stringify({
         type: "TEST",
         meta: {},
-        payload: paddingLength > 0 ? "x".repeat(paddingLength) : "",
+        payload: "x".repeat(paddingBytes),
       });
 
-      const byteLength = Buffer.byteLength(message, "utf8");
-      if (byteLength <= 100) {
-        await expect(
-          router.handleMessage(ws, message),
-        ).resolves.toBeUndefined();
-      }
+      const actualBytes = Buffer.byteLength(message, "utf8");
+      // Verify construction actually landed under the limit
+      expect(actualBytes).toBeLessThanOrEqual(target);
+
+      await expect(router.handleMessage(ws, message)).resolves.toBeUndefined();
     });
 
     it("should reject message one byte over limit", async () => {
@@ -642,6 +640,204 @@ describe("Message Payload Limits", () => {
       // Give async handler time to complete
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(limitExceededCalls.length).toBe(1);
+    });
+  });
+
+  describe("Limit Exceeded Errors with RPC Correlation", () => {
+    it("should preserve correlationId in RPC limit-exceeded error response", async () => {
+      let sentMessage: string | null = null;
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "send",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      // Send RPC message with correlationId that exceeds limit
+      const largeMessage = JSON.stringify({
+        type: "TEST_RPC",
+        meta: { correlationId: "req-123" },
+        payload: "x".repeat(150), // Exceeds 100 byte limit
+      });
+
+      await router.handleMessage(ws, largeMessage);
+
+      expect(sentMessage).toBeTruthy();
+      const parsed = JSON.parse(sentMessage!);
+      expect(parsed.type).toBe("RPC_ERROR");
+      // RPC_ERROR should have the correlationId in meta
+      expect(parsed.meta.correlationId).toBe("req-123");
+    });
+
+    it("should use RPC error path when correlationId present in limit-exceeded", async () => {
+      let sentMessage: string | null = null;
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "send",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      // RPC message with correlationId
+      const message = JSON.stringify({
+        type: "TEST",
+        meta: { correlationId: "req-456" },
+        payload: "x".repeat(150),
+      });
+
+      await router.handleMessage(ws, message);
+
+      const parsed = JSON.parse(sentMessage!);
+      // Should use RPC_ERROR type, not generic ERROR
+      expect(parsed.type).toBe("RPC_ERROR");
+    });
+
+    it("should use oneway error path when correlationId absent in limit-exceeded", async () => {
+      let sentMessage: string | null = null;
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "send",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      // Non-RPC message without correlationId
+      const message = JSON.stringify({
+        type: "TEST",
+        meta: {},
+        payload: "x".repeat(150),
+      });
+
+      await router.handleMessage(ws, message);
+
+      const parsed = JSON.parse(sentMessage!);
+      // Should use generic ERROR type when no correlationId
+      expect(parsed.type).toBe("ERROR");
+    });
+
+    it("should send RESOURCE_EXHAUSTED for RPC when limit exceeded", async () => {
+      let sentMessage: string | null = null;
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 100,
+          onExceeded: "send",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      // Message exceeds limit (150 bytes > 100 byte limit)
+      const message = JSON.stringify({
+        type: "TEST",
+        meta: { correlationId: "req-789" },
+        payload: "x".repeat(150),
+      });
+
+      await router.handleMessage(ws, message);
+
+      const parsed = JSON.parse(sentMessage!);
+      // Should be RESOURCE_EXHAUSTED error for exceeded limit
+      expect(parsed.payload.code).toBe("RESOURCE_EXHAUSTED");
+      expect(parsed.meta.correlationId).toBe("req-789");
+    });
+
+    it("should preserve correlationId in retryable limit errors", async () => {
+      let sentMessage: string | null = null;
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 1000,
+          onExceeded: "send",
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessage = msg;
+      };
+
+      await router.handleOpen(ws);
+
+      // RPC message slightly over limit (retryable)
+      const message = JSON.stringify({
+        type: "TEST",
+        meta: { correlationId: "req-999" },
+        payload: "x".repeat(1200),
+      });
+
+      await router.handleMessage(ws, message);
+
+      const parsed = JSON.parse(sentMessage!);
+      expect(parsed.type).toBe("RPC_ERROR");
+      expect(parsed.meta.correlationId).toBe("req-999");
+    });
+
+    it("should handle socket buffer limits for RPC correlation", async () => {
+      const sentMessages: string[] = [];
+      const router = new WebSocketRouter({
+        validator: mockValidator,
+        limits: {
+          maxPayloadBytes: 1000,
+        },
+      });
+
+      const ws = createMockWebSocket();
+      ws.send = (msg) => {
+        if (typeof msg === "string") sentMessages.push(msg);
+      };
+      // Simulate high buffer pressure
+      Object.defineProperty(ws, "bufferedAmount", {
+        configurable: true,
+        value: 1_000_000,
+      });
+
+      await router.handleOpen(ws);
+
+      // Message over limit with correlationId
+      const message = JSON.stringify({
+        type: "TEST",
+        meta: { correlationId: "req-buffer" },
+        payload: "x".repeat(1200),
+      });
+
+      await router.handleMessage(ws, message);
+
+      // Should still preserve correlation in error
+      const lastMessage = sentMessages[sentMessages.length - 1];
+      const parsed = JSON.parse(lastMessage);
+      if (parsed.type === "RPC_ERROR" || parsed.type === "ERROR") {
+        expect(parsed.meta?.correlationId).toBe("req-buffer");
+      }
     });
   });
 });

@@ -111,14 +111,15 @@ const publish = async (channel, schema, payload, options) => {
 
 ```ts
 interface PublishOptions {
-  excludeSelf?: boolean; // Future: suppress sender echo
+  excludeSelf?: boolean; // Raises error if true (not yet implemented)
   partitionKey?: string; // Future: distributed sharding
   meta?: Record<string, unknown>; // Custom metadata
 }
 ```
 
 - **Current**: Only `meta` is used; validation enforced for all options
-- **Future**: `excludeSelf` and `partitionKey` enable distributed pubsub without breaking API
+- **excludeSelf**: Reserved and validated (raises error if set to `true`)
+- **partitionKey**: Future feature for distributed pubsub without breaking API
 
 ## Return Value: Promise&lt;PublishResult&gt;
 
@@ -141,8 +142,8 @@ type PublishResult =
 **Improvements over `Promise<number>`**:
 
 - **Honest reporting**: No sentinel values (always `1`). MemoryPubSub returns exact count, distributed systems return "unknown"
-- **Error handling**: Distinguish validation failures, ACL denial, and adapter errors
-- **Feature negotiation**: Know if `excludeSelf` or `partitionKey` are supported before using
+- **Error handling**: Distinguish validation failures, ACL denial, and adapter errors (includes reserved option rejection)
+- **Future extensibility**: Reserved options (`excludeSelf`, `partitionKey`) can be implemented without breaking the API
 - **Testing**: Assert specific fan-out count only when capability is "exact"
 - **Metrics**: Track broadcast scope and delivery capability together
 

@@ -33,6 +33,7 @@
     "expect-type": "^1.1.6",
     "gh-pages": "^6.3.0",
     "globals": "^16.4.0",
+    "gray-matter": "^4.0.3",
     "hono": "^4.10.4",
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
@@ -42,7 +43,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
     "valibot": "^1.1.0",
-    "vitepress": "^1.6.4",
+    "vitepress": "2.0.0-alpha.12",
     "vitepress-mermaid-renderer": "^1.0.19",
     "vitepress-plugin-mermaid": "^2.0.17",
     "vue": "^3.5.22",
@@ -50,7 +51,6 @@
   },
   "scripts": {
     "prepare": "husky",
-    "prepack": "bun run scripts/prepack.ts",
     "build": "bun tsc -b",
     "rebuild": "bun tsc -b --clean && bun tsc -b",
     "clean": "bun tsc -b --clean",
@@ -62,6 +62,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:build": "vitepress build",
+    "docs:dev": "vitepress dev",
+    "docs:preview": "vitepress preview",
     "docs:deploy": "gh-pages -d .vitepress/dist"
   },
   "lint-staged": {

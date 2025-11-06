@@ -51,7 +51,7 @@ import { serve, createBunHandler } from "@ws-kit/bun";
 
 ### `message()`
 
-Create a type-safe message schema.
+Create a type-safe message schema. Supports both fire-and-forget messages and RPC-style request-response patterns.
 
 **Signatures:**
 
@@ -72,7 +72,7 @@ function message<
   M extends ZodRawShape,
 >(type: T, payload: P, meta: M): MessageSchema<T, P, M>;
 
-// With config object (payload and/or response)
+// Unified API with config object (payload, response, and/or meta)
 function message<T extends string>(
   type: T,
   config: { payload?: P; response?: R; meta?: M },
@@ -81,11 +81,20 @@ function message<T extends string>(
 
 **Parameters:**
 
-- `type` - Unique message type identifier (string literal)
+- `type` - Unique message type identifier (string literal). Must not start with `$ws:` (reserved for internal control messages).
 - `payload` - Zod object, raw shape, or config object for payload validation (optional)
 - `meta` - Custom metadata schema fields (optional, cannot use reserved keys: clientId, receivedAt)
 
 **Returns:** MessageSchema with full TypeScript inference
+
+**Strict Validation:** All message schemas automatically reject unknown keys at root, meta, and payload levels. This prevents security issues and ensures wire format cleanliness.
+
+**Reserved Message Type Prefix:** Message types starting with `$ws:` are reserved for internal control messages and will throw an error at schema creation time:
+
+```typescript
+// ❌ Throws: Reserved prefix "$ws:" not allowed
+const BadMessage = message("$ws:custom", { data: z.string() });
+```
 
 **Examples:**
 
@@ -116,6 +125,24 @@ const TrackedMessage = message(
   { action: z.string() },
   { traceId: z.string() },
 );
+
+// ✅ RECOMMENDED: Unified config-based syntax (RPC/request-response)
+const GetUser = message("GET_USER", {
+  payload: { id: z.string() },
+  response: { user: UserSchema },
+});
+
+// RPC with metadata
+const TrackedAction = message("TRACKED_ACTION", {
+  payload: { action: z.string() },
+  response: { result: z.string() },
+  meta: { traceId: z.string() },
+});
+
+// RPC with response only (no request payload)
+const GetTime = message("GET_TIME", {
+  response: { timestamp: z.number() },
+});
 ```
 
 **Reserved Meta Keys:** Cannot use `clientId` or `receivedAt` in custom metadata - these are server-controlled fields injected after validation.
@@ -123,6 +150,8 @@ const TrackedMessage = message(
 ### `rpc()`
 
 Create a request-response (RPC) schema that binds request and response types.
+
+**Note:** The `rpc()` function is maintained for backward compatibility. For new code, prefer the unified `message()` API with config object (see examples above). Both approaches work identically at runtime.
 
 **Signature:**
 
@@ -139,6 +168,8 @@ function rpc<
   responsePayload: ResP,
 ): RpcSchema<ReqT, ReqP, ResT, ResP>;
 ```
+
+**Reserved Prefix Validation:** Both `message()` and `rpc()` will throw an error at schema creation time if the message type starts with `$ws:`, as this prefix is reserved for internal control messages.
 
 **Parameters:**
 
@@ -203,10 +234,11 @@ interface WebSocketRouterOptions<V, TData> {
     onError?: ErrorHandler<TData>;
   };
 
-  // Heartbeat configuration (opt-in, not initialized by default)
+  // Heartbeat configuration (opt-in — NOT initialized by default)
+  // Only enable when explicitly configured in options.heartbeat
   heartbeat?: {
-    intervalMs?: number; // Default: 30000
-    timeoutMs?: number; // Default: 5000
+    intervalMs?: number; // Default: 30000 (milliseconds between heartbeats)
+    timeoutMs?: number; // Default: 5000 (milliseconds to wait for heartbeat response)
     onStaleConnection?: (clientId: string, ws: ServerWebSocket<TData>) => void;
   };
 
@@ -290,16 +322,27 @@ rpc<Schema extends MessageSchemaType>(
 ): this;
 ```
 
+**IMPORTANT:** The schema **must have a `.response` field** to be registered with `router.rpc()`. Use the `rpc()` helper function or `message()` with config object to create RPC schemas. For fire-and-forget messaging without a response, use `router.on()` instead.
+
 **Parameters:**
 
-- `schema` - RPC message schema created with `rpc()`
+- `schema` - RPC message schema created with `rpc()` or `message()` with `response` field
 - `handler` - RPC handler function (receives `RpcMessageContext`)
 
 **Returns:** Router instance for chaining
 
+**Throws:** Error if schema does not have a `.response` field
+
 **Example:**
 
 ```typescript
+// Using config-based message (recommended)
+const GetUser = message("GET_USER", {
+  payload: { userId: z.string() },
+  response: { user: UserSchema },
+});
+
+// Using legacy rpc() helper (still supported)
 const GetUser = rpc("GET_USER", { userId: z.string() }, "USER_RESPONSE", {
   user: UserSchema,
 });
@@ -428,6 +471,59 @@ router.onError((error, ctx) => {
 });
 ```
 
+#### `onLimitExceeded(handler)`
+
+Register a handler for limit exceeded events (payload size, rate limiting, etc.).
+
+```typescript
+onLimitExceeded(handler: LimitExceededHandler<TData>): this;
+```
+
+**Handler Signature:**
+
+```typescript
+type LimitExceededHandler<TData> = (
+  info: LimitExceededInfo<TData>,
+) => void | Promise<void>;
+
+type LimitExceededInfo<TData> =
+  | {
+      type: "payload";
+      clientId: string;
+      ws: ServerWebSocket<TData>;
+      observed: number; // Actual payload size (bytes)
+      limit: number; // Configured max payload size
+    }
+  | {
+      type: "rate";
+      clientId: string;
+      ws: ServerWebSocket<TData>;
+      observed: number; // Attempted cost (tokens)
+      limit: number; // Rate limit capacity
+      retryAfterMs: number | null; // null = impossible (cost > capacity)
+    };
+```
+
+**Returns:** Router instance for chaining
+
+**Example:**
+
+```typescript
+router.onLimitExceeded((info) => {
+  if (info.type === "payload") {
+    console.warn(
+      `Client ${info.clientId} exceeded payload limit: ` +
+        `${info.observed} > ${info.limit} bytes`,
+    );
+  } else if (info.type === "rate") {
+    console.warn(
+      `Client ${info.clientId} exceeded rate limit ` +
+        `(attempted: ${info.observed}, capacity: ${info.limit})`,
+    );
+  }
+});
+```
+
 #### `merge(router)`
 
 Merge routes from another router.
@@ -436,15 +532,19 @@ Merge routes from another router.
 merge(router: WebSocketRouter<V, TData>): this;
 ```
 
+**IMPORTANT:** Merging routers with different validators (e.g., Zod + Valibot) is type-safe but will cause runtime validation errors. Use `createRouter()` from the same package (`@ws-kit/zod` or `@ws-kit/valibot`) for all routers in a merge chain to avoid inconsistent validation.
+
 **Parameters:**
 
-- `router` - Another router to merge (same validator and data type)
+- `router` - Another router to merge (must use same validator)
 
 **Returns:** Router instance for chaining
 
 **Example:**
 
 ```typescript
+import { createRouter } from "@ws-kit/zod"; // Use same package
+
 const authRouter = createRouter();
 authRouter.on(LoginMessage, handleLogin);
 
@@ -478,11 +578,13 @@ publish(
 
 ```typescript
 interface PublishOptions {
-  excludeSelf?: boolean; // Exclude sender (default: false)
+  excludeSelf?: boolean; // Throws error if true (not yet implemented)
   partitionKey?: string; // For sharding (future use)
   meta?: Record<string, unknown>; // Custom metadata
 }
 ```
+
+**Note on `excludeSelf`:** This option will raise an error if set to `true`. The feature is not yet implemented and requires pubsub adapter support. Use workarounds like dedicated channels per connection or checking message origin in subscriber handlers. See the `PublishOptions` type definition for details.
 
 **Returns:** `Promise<PublishResult>` with subscriber match count and capability info
 
@@ -520,7 +622,10 @@ reset(): this;
 
 **Returns:** Router instance for chaining
 
-**Note:** Preserves configuration (validator, platform, limits). Does not reset active connection heartbeat states.
+**Note:** Useful for resetting the router in tests without creating a new instance. Preserves configuration (validator, platform, limits). Does NOT reset:
+
+- Heartbeat states for active connections
+- RPC state (managed by RpcManager, survives router reset)
 
 ---
 
@@ -566,7 +671,7 @@ interface EventMessageContext<TSchema, TData> {
 
 **Note:** For messages without a payload (e.g., `message("PING")`), `ctx.payload` will be `undefined`.
 
-### RPC Message Context
+### RPC Message Context (RPC-Only Contexts)
 
 Context for request-response messages (via `router.rpc()`).
 
@@ -657,33 +762,48 @@ Send a type-safe error response with optional retry semantics.
 
 ```typescript
 error(
-  code: string,
+  code: string | ErrorCode,
   message?: string,
   details?: Record<string, unknown>,
   options?: {
-    retryable?: boolean;
-    retryAfterMs?: number;
+    retryable?: boolean;    // Override auto-inferred retry behavior
+    retryAfterMs?: number;  // Backoff hint for transient errors
   }
 ): void;
 ```
 
 **Parameters:**
 
-- `code` - Standard error code (see Error Codes section)
+- `code` - Standard error code (see Error Codes section). Auto-infers retry semantics unless explicitly overridden.
 - `message` - Optional human-readable error description
-- `details` - Optional error context
-- `options` - Optional retry semantics:
-  - `retryable` - Whether error is retryable (auto-inferred from code if omitted)
-  - `retryAfterMs` - Backoff interval hint for transient errors
+- `details` - Optional error context. Must not contain sensitive data; server sanitizes before sending to clients.
+- `options` - Optional retry semantics (overrides code-based inference):
+  - `retryable` - Explicitly set whether error is retryable (optional; client infers from code if omitted)
+  - `retryAfterMs` - Backoff interval hint for transient errors (only valid for retryable errors)
 
 **Examples:**
 
-Non-retryable error with details:
+Non-retryable error with context details:
 
 ```typescript
 router.on(JoinRoom, (ctx) => {
   if (!roomExists(ctx.payload.roomId)) {
+    // Client will auto-infer NOT_FOUND as non-retryable
     ctx.error("NOT_FOUND", "Room not found", { roomId: ctx.payload.roomId });
+    return;
+  }
+});
+```
+
+Terminal error (explicit non-retryable):
+
+```typescript
+router.on(DeleteResource, (ctx) => {
+  if (!userOwnsResource(ctx)) {
+    // Explicit retryable: false (though inferred anyway)
+    ctx.error("PERMISSION_DENIED", "You do not own this resource", undefined, {
+      retryable: false,
+    });
     return;
   }
 });
@@ -697,10 +817,13 @@ router.on(ProcessPayment, (ctx) => {
     processPayment(ctx.payload);
   } catch (err) {
     if (isRateLimited(err)) {
+      // Client infers RESOURCE_EXHAUSTED as retryable, uses retryAfterMs
       ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, {
-        retryable: true,
-        retryAfterMs: 5000,
+        retryAfterMs: 5000, // Client will wait 5s before retrying
       });
+    } else if (isTemporaryFailure(err)) {
+      // Default: infer retryable from code
+      ctx.error("UNAVAILABLE", "Processing service unavailable");
     } else {
       ctx.error("INTERNAL", "Payment processing failed");
     }
@@ -847,6 +970,37 @@ router.on(SendMessage, async (ctx) => {
 });
 ```
 
+#### `ctx.getData(key)`
+
+Access connection data fields with type safety.
+
+```typescript
+getData<K extends keyof TData>(key: K): TData[K];
+```
+
+**Parameters:**
+
+- `key` - Property name from your custom connection data type
+
+**Returns:** Value of the property, or `undefined` if not set
+
+**Example:**
+
+```typescript
+type AppData = { userId?: string; roles?: string[] };
+const router = createRouter<AppData>();
+
+router.on(SecureMessage, (ctx) => {
+  const userId = ctx.getData("userId"); // Type: string | undefined
+  const roles = ctx.getData("roles"); // Type: string[] | undefined
+
+  if (!userId) {
+    ctx.error("UNAUTHENTICATED", "Not authenticated");
+    return;
+  }
+});
+```
+
 #### `ctx.assignData(partial)`
 
 Merge partial data into connection data.
@@ -891,12 +1045,12 @@ interface ClientOptions {
     maxAttempts?: number; // Default: Infinity
     initialDelayMs?: number; // Default: 300
     maxDelayMs?: number; // Default: 10000
-    jitter?: "full" | "none"; // Default: "full"
+    jitter?: "full" | "none"; // Default: "full" (randomize delay to prevent thundering herd)
   };
 
   // Queue configuration
   queue?: "drop-oldest" | "drop-newest" | "off"; // Default: "drop-newest"
-  queueSize?: number; // Default: 1000
+  queueSize?: number; // Default: 1000 (pending messages while offline)
 
   // Behavior
   autoConnect?: boolean; // Default: false
@@ -912,7 +1066,7 @@ interface ClientOptions {
   };
 
   // Advanced
-  wsFactory?: (url: string | URL, protocols?: string | string[]) => WebSocket;
+  wsFactory?: (url: string | URL, protocols?: string | string[]) => WebSocket; // For dependency injection in tests
 }
 ```
 
@@ -1024,15 +1178,19 @@ const success = client.send(ChatMessage, {
 
 Send a request and wait for response (RPC).
 
+**RPC-style overload (recommended):**
+
 ```typescript
-// RPC-style (auto-detected response schema)
 request<S extends RpcSchema>(
   schema: S,
-  payload: InferPayload<S>,
+  payload?: InferPayload<S>,
   options?: RequestOptions
-): Promise<InferResponse<S>>;
+): Promise<InferMessage<S["response"]>>;
+```
 
-// Traditional style (explicit response schema)
+**Traditional style overload (explicit response schema):**
+
+```typescript
 request<S extends MessageSchema, R extends MessageSchema>(
   schema: S,
   payload: InferPayload<S>,
@@ -1065,25 +1223,57 @@ interface RequestOptions {
 
 **Examples:**
 
+**RPC-style with auto-detected response (recommended):**
+
 ```typescript
-// RPC-style with auto-detected response
+const GetUser = message("GET_USER", {
+  payload: { id: z.string() },
+  response: { user: UserSchema },
+});
+
+const response = await client.request(GetUser, { id: "123" });
+// response.payload is fully typed: { user: UserSchema }
+console.log(response.payload.user.name);
+
+// Or using legacy rpc() helper
 const Ping = rpc("PING", { text: z.string() }, "PONG", { reply: z.string() });
 const response = await client.request(Ping, { text: "hello" });
-console.log(response.payload.reply); // Fully typed - access via payload
+console.log(response.payload.reply); // Fully typed
+```
 
-// Traditional style with explicit response schema
+**Traditional style with explicit response schema:**
+
+```typescript
 const response = await client.request(
   PingMessage,
   { text: "hello" },
   PongMessage,
   { timeoutMs: 5000 },
 );
+console.log(response.payload.reply);
+```
 
-// With AbortSignal
+**With custom metadata and auto-correlation:**
+
+```typescript
+const response = await client.request(
+  GetUser,
+  { id: "123" },
+  {
+    timeoutMs: 10000,
+    meta: { source: "ui" },
+    // correlationId auto-generated if not provided
+  },
+);
+```
+
+**With AbortSignal for cancellation:**
+
+```typescript
 const controller = new AbortController();
 const promise = client.request(
-  Ping,
-  { text: "hello" },
+  GetUser,
+  { id: "123" },
   {
     signal: controller.signal,
   },
@@ -1247,7 +1437,7 @@ Bun.serve({
 
 13 standard error codes aligned with gRPC conventions (from `ErrorCode` enum):
 
-**Terminal errors (don't retry):**
+**Terminal errors (do NOT retry):**
 
 - `UNAUTHENTICATED` - Not authenticated / auth token missing, expired, or invalid
 - `PERMISSION_DENIED` - Permission denied / authenticated but lacks rights (authZ)
@@ -1256,6 +1446,7 @@ Bun.serve({
 - `NOT_FOUND` - Not found / target resource absent
 - `ALREADY_EXISTS` - Already exists / uniqueness or idempotency replay violation
 - `ABORTED` - Aborted / concurrency conflict (race condition)
+- `CANCELLED` - Cancelled / call cancelled (client disconnect, timeout abort)
 
 **Transient errors (retry with backoff):**
 
@@ -1267,7 +1458,40 @@ Bun.serve({
 
 - `UNIMPLEMENTED` - Unimplemented / feature not supported or deployed
 - `INTERNAL` - Internal / unexpected server error (bug)
-- `CANCELLED` - Cancelled / call cancelled (client disconnect, timeout abort)
+
+#### Client Inference Rules for Retry Semantics
+
+The client automatically infers whether to retry based on the error code. If the server omits the `retryable` field, the client uses these rules:
+
+| Error Code            | Retryable | Notes                                         |
+| --------------------- | --------- | --------------------------------------------- |
+| `DEADLINE_EXCEEDED`   | ✅ Yes    | Transient timeout                             |
+| `RESOURCE_EXHAUSTED`  | ✅ Yes    | Rate limit or quota, may have `retryAfterMs`  |
+| `UNAVAILABLE`         | ✅ Yes    | Transient infrastructure issue                |
+| `ABORTED`             | ✅ Yes    | Concurrency conflict, safe to retry           |
+| `UNAUTHENTICATED`     | ❌ No     | Fix auth, then retry                          |
+| `PERMISSION_DENIED`   | ❌ No     | Insufficient privileges, don't retry          |
+| `INVALID_ARGUMENT`    | ❌ No     | Fix input, then retry                         |
+| `FAILED_PRECONDITION` | ❌ No     | Server state issue, don't retry               |
+| `NOT_FOUND`           | ❌ No     | Resource absent, don't retry                  |
+| `ALREADY_EXISTS`      | ❌ No     | Duplicate, don't retry                        |
+| `UNIMPLEMENTED`       | ❌ No     | Feature not available, don't retry            |
+| `INTERNAL`            | ❌ No     | Server bug, don't retry without investigation |
+| `CANCELLED`           | ❌ No     | Request cancelled, don't auto-retry           |
+
+**Server Behavior:** If the server explicitly sends `retryable: true` or `retryable: false`, the client uses the server's value instead of inferring from the code.
+
+#### `retryAfterMs` Validation Rules
+
+| Error Code           | `retryAfterMs` Status | When Used            | Example                     |
+| -------------------- | --------------------- | -------------------- | --------------------------- |
+| `RESOURCE_EXHAUSTED` | Should include        | Rate limiting, quota | `{ retryAfterMs: 5000 }`    |
+| `DEADLINE_EXCEEDED`  | Optional              | Long operations      | Omit or use default backoff |
+| `UNAVAILABLE`        | Optional              | Service degradation  | Omit or suggest delay       |
+| Terminal errors      | Forbidden             | N/A                  | Must NOT include            |
+| Other transient      | Optional              | Custom delays        | Omit for default            |
+
+**Validation:** Server rejects `retryAfterMs` for terminal errors (codes marked "do NOT retry" above).
 
 ### Error Response Methods
 
@@ -1314,27 +1538,33 @@ Standardized error object for structured error handling. Follows WHATWG Error st
 
 ```typescript
 class WsKitError extends Error {
+  // Public properties
+  name: "WsKitError";
   code: string;
-  message: string;
+  override message: string;
   details: Record<string, unknown>;
-  cause?: unknown; // WHATWG standard: original error
+  override cause?: unknown; // WHATWG standard: original error
 
   // Convenience accessor
   get originalError(): Error | undefined;
 
+  // Static factory methods
   static from(
     code: string,
     message: string,
     details?: Record<string, unknown>,
   ): WsKitError;
+
   static wrap(
     error: unknown,
     code: string,
     message?: string,
     details?: Record<string, unknown>,
   ): WsKitError;
+
   static isWsKitError(value: unknown): value is WsKitError;
 
+  // Serialization methods
   toJSON(): {
     code: string;
     message: string;
@@ -1344,6 +1574,7 @@ class WsKitError extends Error {
       | { name: string; message: string; stack: string | undefined }
       | string;
   };
+
   toPayload(): ErrorPayload;
 }
 ```

@@ -8,7 +8,7 @@ The WebSocket client provides comprehensive error handling with type-safe error 
 - **Error Codes**: See [RpcError section](#rpcerror-advanced) for the 13 standard error codes (gRPC-aligned)
 - **Error Patterns**: See [#error-patterns](#error-patterns) for common error handling examples
 - **Centralized Reporting**: See [#centralized-error-reporting](#centralized-error-reporting) for logging integration
-- **Server-side errors**: See `/Users/koistya/Projects/ws-kit/docs/specs/error-handling.md` for server error specification
+- **Server-side errors**: See `docs/specs/error-handling.md` for server error specification
 
 ## Error Classes
 
@@ -38,7 +38,7 @@ import {
 - `WsDisconnectedError` - Disconnection error for auto-resend and idempotency support
 - `RpcErrorCode` - Type for 13 standard error codes aligned with gRPC (per ADR-015)
 
-**Note**: Error codes are aligned with the server-side error handling specification (see `/Users/koistya/Projects/ws-kit/docs/specs/error-handling.md`). The same 13 standard codes are used on both client and server for consistency.
+**Note**: Error codes are aligned with the server-side error handling specification (see `docs/specs/error-handling.md`). The same 13 standard codes are used on both client and server for consistency.
 
 ### ValidationError
 
@@ -202,9 +202,9 @@ try {
 }
 ```
 
-### RpcError (Future)
+### RpcError
 
-Enhanced error class for RPC operations with retry hints and correlation tracking. Defined in the codebase but **not yet used** by the client implementation. Future versions will use this instead of `ServerError`.
+Enhanced error class for RPC operations with retry hints and correlation tracking. **Preferred over `ServerError` for new code.** Includes gRPC-aligned error codes and client-driven retry semantics.
 
 ```typescript
 class RpcError<TCode extends RpcErrorCode = RpcErrorCode> extends Error {
@@ -243,9 +243,9 @@ class RpcError<TCode extends RpcErrorCode = RpcErrorCode> extends Error {
 - `INTERNAL` - Unexpected server error (unhandled exception)
 - `CANCELLED` - Call cancelled (client disconnect, abort)
 
-**Migration path**: When `RpcError` is integrated, it will replace `ServerError` and use `details` instead of `context` to match the server-side specification. Until then, use `ServerError` with the understanding that `context` will become `details`.
+See [Error Handling Spec](./specs/error-handling.md) for complete error code taxonomy and retry semantics.
 
-**Future usage example:**
+**Usage example:**
 
 ```typescript
 try {

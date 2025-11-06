@@ -1,4 +1,4 @@
-# ws-kit
+# WS-Kit
 
 WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 

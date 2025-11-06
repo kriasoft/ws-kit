@@ -29,19 +29,33 @@ ws-kit uses a message-based architecture where all communication follows a consi
 Every message consists of three parts:
 
 ```typescript
-interface Message<T = unknown> {
+// Client-side message (what clients send)
+interface ClientMessage<T = unknown> {
   type: string; // Unique identifier for routing
-  meta: {
-    // Metadata (optional, auto-populated on send)
+  meta?: {
+    // Optional metadata (client-provided, untrusted)
     timestamp?: number; // Producer time (client clock, UI display only)
     correlationId?: string; // Optional request tracking
+    [key: string]?: unknown; // Custom metadata fields
   };
   payload?: T; // Optional validated data
+}
+
+// Server-side context message (what handlers receive)
+// Includes server-injected fields added after validation
+interface ServerMessage<T = unknown> extends ClientMessage<T> {
+  meta: {
+    clientId: string; // ← Server-injected, UUID v7
+    receivedAt: number; // ← Server-injected, authoritative timestamp
+    timestamp?: number; // ← Client-provided (untrusted, may be missing/skewed)
+    correlationId?: string;
+    [key: string]?: unknown;
+  };
 }
 ```
 
 ::: tip Server Timestamp Usage
-**Server logic must use `ctx.receivedAt`** (authoritative server time), not `meta.timestamp` (client clock, untrusted). See [Timestamp Handling](#timestamp-handling) below for guidance.
+**Server logic must use `ctx.receivedAt`** (server-injected, authoritative time), not `meta.timestamp` (client clock, untrusted). Client can send any timestamp; server always captures authoritative time before parsing. See [Timestamp Handling](#timestamp-handling) below for guidance.
 :::
 
 ## Connection Lifecycle
@@ -65,16 +79,17 @@ router.onOpen((ctx) => {
 
 When a message arrives, the router processes it through a security-focused pipeline:
 
-1. **Capture Timestamp** - `ctx.receivedAt = Date.now()` (before parsing, authoritative server time)
-2. **Parse** - JSON.parse() the raw WebSocket message
-3. **Type Check** - Ensure `type` field exists
-4. **Handler Lookup** - Find registered handler for this message type
-5. **Normalize (Security Boundary)** - Strip reserved keys (`clientId`, `receivedAt`) to prevent client spoofing
-6. **Validate** - Schema validation on normalized message (strict mode rejects unknown keys)
-7. **Handler Execution** - Your handler receives validated message + server context
+1. **Capture Timestamp** — `ctx.receivedAt = Date.now()` (before parsing, authoritative server time)
+2. **Parse** — JSON.parse() the raw WebSocket message
+3. **Type Check** — Ensure `type` field exists
+4. **Handler Lookup** — Find registered handler for this message type
+5. **Normalize** — Strip reserved keys (e.g., client-sent `clientId`) to prevent spoofing
+6. **Validate** — Schema validation on normalized message (strict mode rejects unknown keys)
+7. **Inject Metadata** — Server-controlled fields (`clientId`, `receivedAt`) added **after validation** as security boundary
+8. **Handler Execution** — Your handler receives validated message + server context
 
-::: warning Security
-Normalization is a **security boundary** that prevents clients from spoofing server-only fields. Handlers receive only validated, normalized messages.
+::: warning Security Boundary
+Metadata injection occurs **after validation**, ensuring server values (`clientId`, `receivedAt`) are trusted and immune to client tampering. Handlers receive only validated, normalized messages with authoritative server fields.
 :::
 
 ```typescript
@@ -286,65 +301,95 @@ serve(router, {
 Handler contexts provide access to message data and WebSocket operations:
 
 ```typescript
-interface MessageContext<TPayload, TData = unknown> {
+// Event message context (fire-and-forget messaging)
+interface EventMessageContext<TPayload, TData = unknown> {
   ws: ServerWebSocket<TData>; // WebSocket instance
   type: string; // Message type literal
   meta: {
-    // Validated metadata
-    timestamp?: number; // Client timestamp (optional, for UI only)
+    // Server-injected metadata (after validation)
+    clientId: string; // Connection ID (UUID v7, always present)
+    receivedAt: number; // Server receive timestamp (authoritative, always present)
+    timestamp?: number; // Client timestamp (optional, for UI only—untrusted)
     correlationId?: string; // Optional correlation ID
     [key: string]: unknown; // Custom metadata fields
   };
   receivedAt: number; // Server receive timestamp (authoritative)
 
   // All handlers
-  send: SendFunction; // Type-safe send to current connection (1-to-1)
-  publish: PublishFunction; // Type-safe publish to topic subscribers (1-to-many)
-  error: ErrorFunction; // Type-safe error responses
-  assignData: AssignDataFunction; // Merge partial data into ctx.ws.data
-  subscribe: SubscribeFunction; // Subscribe to a channel
-  unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
-  timeRemaining: () => number; // ms until deadline (Infinity for events)
-  isRpc: boolean; // Flag: is this an RPC message?
+  send(schema: Schema, data: unknown): void; // Type-safe send to current connection (1-to-1)
+  publish(
+    topic: string,
+    schema: Schema,
+    payload: unknown,
+  ): Promise<PublishResult>; // Broadcast to subscribers (1-to-many)
+  error(
+    code: ErrorCode,
+    message?: string,
+    data?: unknown,
+    options?: ErrorOptions,
+  ): void; // Send typed error
+  assignData(partial: Partial<TData>): void; // Merge partial data into ctx.ws.data
+  subscribe(channel: string): void; // Subscribe to a topic
+  unsubscribe(channel: string): void; // Unsubscribe from a topic
+  timeRemaining(): number; // ms until deadline (Infinity for events)
+  isRpc: false; // Discriminant: false for event messages
 
   payload?: TPayload; // Validated payload (conditional)
-
-  // RPC handlers only (when using router.rpc())
-  reply?: (schema: Schema, data: ResponseType) => void; // Terminal reply, one-shot guarded
-  progress?: (data?: unknown) => void; // Progress update (non-terminal)
-  abortSignal?: AbortSignal; // Fires on client cancel/disconnect
-  onCancel?: (cb: () => void) => () => void; // Register cancel callback
-  deadline?: number; // Server-derived deadline (epoch ms)
 }
+
+// RPC message context (request-response with guaranteed correlation)
+interface RpcMessageContext<TPayload, TData = unknown>
+  extends Omit<EventMessageContext<TPayload, TData>, "isRpc"> {
+  isRpc: true; // Discriminant: true for RPC messages
+
+  // RPC-specific methods
+  reply(schema: Schema, data: unknown, options?: Record<string, unknown>): void; // Terminal response (one-shot)
+  progress(data?: unknown): void; // Non-terminal progress update
+  abortSignal: AbortSignal; // Fires on client cancel/disconnect
+  onCancel(cb: () => void): () => void; // Register cancel callback
+  deadline: number; // Server-derived deadline (epoch ms)
+}
+
+// Union type for handler context (discriminated by isRpc)
+type MessageContext<TPayload, TData = unknown> =
+  | EventMessageContext<TPayload, TData>
+  | RpcMessageContext<TPayload, TData>;
 ```
 
 **Key points:**
 
-- Access client ID via `ctx.ws.data.clientId` (not `ctx.clientId`)
-- Use `ctx.receivedAt` for server-side logic (rate limiting, ordering, TTL, auditing)
-- Use `ctx.meta.timestamp` only for UI display (not authoritative)
-- **Subscriptions**: `ctx.subscribe(topic)` and `ctx.unsubscribe(topic)`
-- **Publishing**: `await ctx.publish(topic, schema, payload)` (1-to-many) or `await router.publish()` outside handlers
-- **Sending**: `ctx.send(schema, payload)` (1-to-1, to current connection)
-- **Custom data**: Access `ctx.ws.data` directly or use `ctx.assignData()` to merge partial updates
-- **RPC**: Use `ctx.reply(schema, data)` for terminal responses, `ctx.progress(data)` for streaming updates (only available in `router.rpc()` handlers)
+- **Type safety**: Use `if (ctx.isRpc)` to discriminate between event and RPC handlers and access RPC-specific methods
+- **Client identity**: Access via `ctx.ws.data.clientId` (auto-generated UUID v7, not `ctx.clientId`)
+- **Metadata injection**: `ctx.meta.clientId` and `ctx.meta.receivedAt` are server-injected after validation (security boundary—prevents client spoofing)
+- **Timestamps**: Use `ctx.receivedAt` for server logic (rate limiting, ordering, TTL, auditing); use `ctx.meta.timestamp` only for UI display (untrusted client clock)
+- **Subscriptions**: `ctx.subscribe(topic)` and `ctx.unsubscribe(topic)` for PubSub
+- **Publishing**: `await ctx.publish(topic, schema, payload)` broadcasts to subscribers (1-to-many), or use `await router.publish()` outside handlers
+- **Sending**: `ctx.send(schema, payload)` sends to current connection only (1-to-1)
+- **Custom data**: Access `ctx.ws.data` directly, or use `ctx.assignData()` to merge partial updates
+- **RPC only** (`ctx.isRpc === true`): Use `ctx.reply(schema, data)` for terminal response, `ctx.progress(data)` for non-terminal updates, `ctx.abortSignal` for cancellation
 
 ## Request-Response Pattern (RPC)
 
-ws-kit provides first-class support for request-response messaging with automatic correlation tracking. Use `router.rpc()` for handlers that need guaranteed responses:
+ws-kit provides first-class support for request-response messaging with automatic correlation tracking and optional streaming progress updates. RPC handlers guarantee a single terminal response with full type safety.
+
+### Server-Side Setup
+
+**Modern (Recommended)** — Unified message API with config object:
 
 ```typescript
-import { z, rpc, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 
-// Define RPC schema - binds request to response type
-const GetUser = rpc("GET_USER", { id: z.string() }, "USER_RESPONSE", {
-  user: UserSchema,
+// Define RPC schema with response shape
+const GetUser = message("GET_USER", {
+  payload: { id: z.string() },
+  response: { user: UserSchema },
 });
 
 const router = createRouter();
 
-// Use router.rpc() for RPC handlers
-router.rpc(GetUser, async (ctx) => {
+// Register with router.on() — handler type is inferred from schema
+router.on(GetUser, async (ctx) => {
+  // ctx has RPC-specific methods because schema includes response
   const user = await db.users.findById(ctx.payload.id);
 
   if (!user) {
@@ -352,40 +397,66 @@ router.rpc(GetUser, async (ctx) => {
     return;
   }
 
-  // Terminal reply (type-safe to response schema)
+  // ctx.progress and ctx.reply are type-safe
+  ctx.progress?.({ stage: "validating" });
+  ctx.reply({ user }); // Type-safe to response schema
+});
+```
+
+**Legacy (Supported)** — Separate `rpc()` function with positional args:
+
+```typescript
+import { z, rpc, createRouter } from "@ws-kit/zod";
+
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_RESPONSE", {
+  user: UserSchema,
+});
+
+const router = createRouter();
+
+// Legacy: use router.rpc() entry point
+router.rpc(GetUser, async (ctx) => {
+  const user = await db.users.findById(ctx.payload.id);
+  if (!user) {
+    ctx.error("NOT_FOUND", "User not found");
+    return;
+  }
   ctx.reply(GetUser.response, { user });
 });
 ```
 
-**Key RPC features:**
+### Server-Side Features
 
-- **`ctx.reply(schema, data)`** — Terminal response, one-shot guarded (only called once)
-- **`ctx.progress(data)`** — Optional streaming updates before terminal reply
-- **`ctx.abortSignal`** — AbortSignal for cancellation (integrates with fetch, etc.)
-- **`ctx.onCancel(cb)`** — Register cleanup callbacks for cancellation
-- **Automatic correlation** — No manual tracking needed; client requests match responses
+- **`ctx.reply(data)`** — Terminal response (type-safe to response schema, one-shot guarded)
+- **`ctx.progress(data)`** — Optional non-terminal updates (streamed before reply)
+- **`ctx.abortSignal`** — Cancellation signal (integrates with fetch, AbortController, etc.)
+- **`ctx.onCancel(cb)`** — Register cleanup callbacks on client cancel/disconnect
+- **`ctx.deadline`** — Server-derived deadline (epoch ms) for timeout logic
+- **Automatic correlation** — No manual ID tracking needed; client requests auto-match responses
 
-**Client-side usage:**
+### Client-Side Usage
+
+Use the dual-surface API to handle progress and terminal response separately:
 
 ```typescript
-import { wsClient, message } from "@ws-kit/client/zod";
+import { wsClient } from "@ws-kit/client/zod";
 
 const client = wsClient({ url: "ws://localhost:3000" });
 
-// Define a progress message schema (optional, for streaming updates)
-const UserLoadProgress = message("USER_LOAD_PROGRESS", {
-  stage: z.enum(["fetching", "validating"]),
-});
+// Make RPC call
+const call = client.request(GetUser, { id: "123" });
 
-// Listen for progress updates (optional)
-client.on(UserLoadProgress, (msg) => {
-  console.log("Progress:", msg.payload.stage);
-});
+// Optional: listen to progress updates (if server sends them)
+for await (const progress of call.progress()) {
+  console.log("Progress:", progress);
+}
 
-// Make RPC call and await the terminal response
-const response = await client.request(GetUser, { id: "123" });
+// Wait for terminal response
+const response = await call.result();
 const { user } = response.payload;
 ```
+
+**Progress updates** (server-side) are streamed without blocking the terminal response. The client consumes them via `for await (const p of call.progress())` before awaiting `call.result()`.
 
 See [RPC Guide](./rpc.md) and ADR-015 for complete RPC documentation.
 
@@ -462,12 +533,54 @@ router.on(ChatMessage, (ctx) => {
 });
 ```
 
+## Heartbeat (Connection Health Checks)
+
+Heartbeat is **opt-in** and allows the server to detect stale or unresponsive connections. When enabled, the router periodically pings clients and disconnects if they don't respond within the timeout window:
+
+```typescript
+const router = createRouter({
+  heartbeat: {
+    intervalMs: 30_000, // Send ping every 30 seconds (default)
+    timeoutMs: 5_000, // Wait 5 seconds for pong (default)
+    onStaleConnection(clientId, ws) {
+      // Cleanup: connection failed to respond to heartbeat
+      console.log(`Stale connection: ${clientId}`);
+      ws.close(1000, "Heartbeat timeout");
+    },
+  },
+});
+```
+
+**When to enable:**
+
+- Long-lived connections with idle periods
+- Applications where dead connection detection is important
+- When you need to clean up resources for unresponsive clients
+
+**Overhead**: Minimal when disabled (zero); when enabled, one ping per `intervalMs` per connection.
+
+## Message Validation & Security
+
+The router processes messages through a security-focused pipeline:
+
+1. **Capture Timestamp** — `ctx.receivedAt = Date.now()` (server clock, authoritative)
+2. **Parse** — JSON.parse() the WebSocket message
+3. **Type Check** — Verify `type` field exists
+4. **Handler Lookup** — Find registered handler
+5. **Normalize** — Strip reserved keys (`clientId` if present) to prevent spoofing
+6. **Validate** — Run schema validation (strict mode rejects unknown keys)
+7. **Inject Metadata** — Add server-controlled fields (`clientId`, `receivedAt`) **after validation**
+8. **Handler Execution** — Handler receives validated, normalized message + context
+
+**Security Boundary**: Metadata injection occurs **after validation**, ensuring server values are trusted and not subject to client tampering.
+
 ## Performance Considerations
 
 - **Message Parsing**: Messages are parsed once and cached
 - **Validation**: Schema validation happens before handler execution
 - **Error Boundaries**: Handlers are wrapped with minimal overhead
-- **PubSub**: Uses platform-native implementations (Bun, Cloudflare DO, etc.) for maximum performance
+- **PubSub**: Lazily initialized—zero overhead for applications that don't use broadcasting. Uses platform-native implementations (Bun, Cloudflare DO, etc.) for maximum performance when enabled
+- **Heartbeat**: Opt-in feature—disabled by default, zero overhead when not configured
 - **Type Safety**: Zero runtime overhead—all type checking happens at compile time
 - **Modular Design**: Tree-shakeable imports ensure minimal bundle size
 

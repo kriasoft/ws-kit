@@ -4,7 +4,7 @@ outline: deep
 
 # Examples
 
-Real-world examples demonstrating common WebSocket patterns with ws-kit.
+Real-world examples demonstrating common WebSocket patterns with WS-Kit.
 
 All examples are located in the [`examples/`](https://github.com/kriasoft/ws-kit/tree/main/examples) directory of the repository.
 
