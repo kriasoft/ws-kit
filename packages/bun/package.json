@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/bun",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Bun platform adapter for WS-Kit leveraging native WebSocket API with built-in pub/sub and low-latency message routing",
   "type": "module",
   "sideEffects": false,

@@ -1,5 +1,11 @@
 # @ws-kit/core
 
+## 0.5.0
+
+### Minor Changes
+
+- [#43](https://github.com/kriasoft/ws-kit/pull/43) [`f99884b`](https://github.com/kriasoft/ws-kit/commit/f99884be6613f87b6e3384edd410f61531138b18) Thanks [@koistya](https://github.com/koistya)! - feature: add AbortController support to RPC with abort reasons (client-abort, disconnect, idle-timeout); refactor excludeSelf to throw error instead of silently ignoring
+
 ## 0.4.2
 
 ### Patch Changes

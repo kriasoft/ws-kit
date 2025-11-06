@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/middleware",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Cross-runtime middleware for WS-Kit: rate limiting, deduplication, and observability hooks",
   "type": "module",
   "sideEffects": false,

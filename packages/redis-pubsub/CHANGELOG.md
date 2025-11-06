@@ -1,5 +1,12 @@
 # @ws-kit/redis-pubsub
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [[`f99884b`](https://github.com/kriasoft/ws-kit/commit/f99884be6613f87b6e3384edd410f61531138b18)]:
+  - @ws-kit/core@0.5.0
+
 ## 0.1.5
 
 ### Patch Changes
