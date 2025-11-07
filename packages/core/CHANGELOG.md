@@ -1,5 +1,11 @@
 # @ws-kit/core
 
+## 0.6.0
+
+### Minor Changes
+
+- [#46](https://github.com/kriasoft/ws-kit/pull/46) [`a76d00b`](https://github.com/kriasoft/ws-kit/commit/a76d00b61db65ddbd725a4806cbc20af3b9608da) Thanks [@koistya](https://github.com/koistya)! - Add isRetryableError helper function for determining retry semantics
+
 ## 0.5.0
 
 ### Minor Changes

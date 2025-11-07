@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/core",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "WS-Kit — Type-safe WebSocket router for Bun and Cloudflare with pluggable validators and zero vendor lock-in",
   "type": "module",
   "sideEffects": false,
