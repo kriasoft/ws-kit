@@ -1563,6 +1563,8 @@ First, install the client SDK:
 npm install @ws-kit/client
 ```
 
+> **Note:** The `@ws-kit/client` package provides the complete client SDK with full TypeScript support. Import from `@ws-kit/client/zod` for Zod-based validation or `@ws-kit/client/valibot` for Valibot-based validation, matching your server-side validator choice.
+
 Create a `public` folder for our static files:
 
 ```bash
@@ -2507,6 +2509,8 @@ router.on(schema.LeaveRoom, (ctx) => {
 });
 ```
 
+> **When to Use EnhancedPubSub:** WS-Kit's native `ctx.publish()` and `ctx.subscribe()` are sufficient for most applications, providing simple topic-based broadcasting with automatic message validation. Consider implementing a custom PubSub extension only when you need role-based filtering, metadata-based message delivery, or complex subscriber filtering logic that goes beyond basic topic subscriptions. For typical chat applications, room management, and notification systems, stick with the native approach shown above.
+
 \*\*For advanced filtering use cases, here's a custom PubSub extension:
 
 ```typescript
@@ -2757,7 +2761,9 @@ router.rpc(FetchProfile, async (ctx) => {
 - ✅ Automatic correlation ID generation
 - ✅ Built-in timeout handling
 - ✅ Full type safety on both request and response
-- ✅ Structured error responses
+- ✅ Structured error responses with gRPC-standard error codes
+
+> **Error Codes:** WS-Kit uses gRPC-standard error codes for consistency across your application. Common codes include: `NOT_FOUND` (resource doesn't exist), `PERMISSION_DENIED` (insufficient permissions), `INVALID_ARGUMENT` (malformed request), `INTERNAL` (server error), `RESOURCE_EXHAUSTED` (rate limit exceeded), `UNAUTHENTICATED` (missing or invalid credentials), and `UNAVAILABLE` (service temporarily down). Use these standard codes in `ctx.error()` for predictable client-side error handling.
 
 #### Client-Side RPC Call
 
@@ -2815,7 +2821,7 @@ const profile = await getUserProfile("user-123");
 
 #### Cancellation with AbortSignal
 
-Cancel requests if needed (e.g., user navigates away):
+The client SDK supports standard `AbortSignal` for cancelling in-flight RPC requests. This is useful when users navigate away from a page, close a modal, or when you want to implement request debouncing. Cancelled requests are cleaned up immediately without waiting for timeouts.
 
 ```javascript
 const controller = new AbortController();
@@ -2844,6 +2850,8 @@ The `@ws-kit/client` SDK automatically handles correlation, timeouts, and retrie
 ### Connection Health Monitoring with Heartbeats
 
 WebSocket connections can silently die or become "zombies" where the TCP connection is technically open but no longer passing messages. **WS-Kit** provides built-in heartbeat support through router configuration:
+
+> **Note:** WS-Kit's heartbeat system operates on two layers: (1) the framework's automatic WebSocket ping/pong frames for detecting broken connections, and (2) optional application-level custom heartbeat messages for measuring client latency and application responsiveness. The example below demonstrates both layers working together.
 
 ```typescript
 import { z, createRouter, message } from "@ws-kit/zod";

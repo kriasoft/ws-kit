@@ -68,15 +68,11 @@ const client = wsClient({
 // Connects to: wss://api.example.com/ws?access_token=abc123
 ```
 
-**Security notes:**
-
-- Tokens in URLs may be logged by browsers, proxies, or servers
-- Use short-lived tokens
-- Always use `wss://` (TLS) in production
+**Security note:** Tokens in URLs may be logged by browsers, proxies, or servers. For sensitive applications, prefer `attach: "protocol"` instead. See [Security Best Practices](#security-best-practices) below.
 
 ### WebSocket Protocol
 
-Send token via `Sec-WebSocket-Protocol` header.
+Send token via `Sec-WebSocket-Protocol` header instead of URL query parameters.
 
 ```typescript
 const client = wsClient({
@@ -86,121 +82,59 @@ const client = wsClient({
     getToken: () => "abc123",
     attach: "protocol",
     protocolPrefix: "bearer.", // default
-    protocolPosition: "append", // default
+    protocolPosition: "append", // "append" (default) or "prepend"
   },
 });
 
-// WebSocket receives protocols: ["chat-v2", "bearer.abc123"]
+// Append (default): protocols sent as ["chat-v2", "bearer.abc123"]
+// Prepend: protocols sent as ["bearer.abc123", "chat-v2"]
 ```
 
-**Security notes:**
+When combining app-defined protocols with auth tokens, specify `protocolPosition`:
 
-- Headers visible in plaintext over non-TLS
-- Always use `wss://` (TLS) for production
-- Avoid logging headers on proxies
+- **`append` (default):** Token protocol added after user protocols
+- **`prepend`:** Token protocol added before user protocols (some servers require auth first)
 
-## Protocol Merging
+**Edge cases:**
 
-When using `attach: "protocol"` with user protocols, the client merges them intelligently.
+- No user protocols: Auth protocol appears alone
+- Token is `null`: Only user protocols sent
+- Duplicate protocols: First occurrence kept
 
-### Append (Default)
-
-Token protocol added after user protocols:
-
-```typescript
-wsClient({
-  url: "wss://api.example.com",
-  protocols: "chat-v2",
-  auth: {
-    getToken: () => "abc123",
-    attach: "protocol",
-    protocolPosition: "append", // default
-  },
-});
-
-// WebSocket constructor receives: ["chat-v2", "bearer.abc123"]
-```
-
-### Prepend
-
-Token protocol added before user protocols (some servers require auth first):
-
-```typescript
-wsClient({
-  url: "wss://api.example.com",
-  protocols: "chat-v2",
-  auth: {
-    getToken: () => "abc123",
-    attach: "protocol",
-    protocolPosition: "prepend",
-  },
-});
-
-// WebSocket constructor receives: ["bearer.abc123", "chat-v2"]
-```
-
-### Edge Cases
-
-| Scenario            | Result (append)       | Result (prepend)      |
-| ------------------- | --------------------- | --------------------- |
-| No user protocols   | `["bearer.abc123"]`   | `["bearer.abc123"]`   |
-| Token is `null`     | `["chat-v2"]`         | `["chat-v2"]`         |
-| Duplicate protocols | First occurrence kept | First occurrence kept |
+**Security note:** More secure than query parameters (tokens not logged in URLs). Always use `wss://` (TLS) for production. See [Security Best Practices](#security-best-practices) below.
 
 ## Token Refresh
 
 The `getToken()` function is called on every connection attempt, enabling automatic token refresh:
 
 ```typescript
-let currentToken = "initial-token";
+let cachedToken: string | null = null;
 
 const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: { enabled: true },
   auth: {
-    getToken: () => currentToken, // Fetched on each (re)connect
-    attach: "query",
-  },
-});
-
-// Later: update token (will be used on next reconnect)
-currentToken = "refreshed-token";
-```
-
-### Async Token Refresh
-
-```typescript
-const client = wsClient({
-  url: "wss://api.example.com/ws",
-  auth: {
     getToken: async () => {
-      // Fetch fresh token from auth service
+      // Sync: return cached value
+      if (cachedToken) return cachedToken;
+
+      // Async: fetch fresh token from auth service
       const response = await fetch("/api/auth/token");
       const { token } = await response.json();
+
+      // Storage: optionally save to localStorage
+      localStorage.setItem("access_token", token);
+      cachedToken = token;
       return token;
-    },
-    attach: "protocol",
-  },
-});
-```
-
-### With Token Storage
-
-```typescript
-const client = wsClient({
-  url: "wss://api.example.com/ws",
-  auth: {
-    getToken: () => {
-      // Get token from localStorage, sessionStorage, or cookie
-      return localStorage.getItem("access_token");
     },
     attach: "query",
   },
 });
 
-// When user logs out, clear token
+// On logout: clear token and close connection
 function logout() {
   localStorage.removeItem("access_token");
+  cachedToken = null;
   client.close();
 }
 ```
@@ -230,32 +164,38 @@ client.onState((state) => {
 
 ## Validation
 
-The client validates `protocolPrefix` before connecting:
+The client validates `protocolPrefix` during client creation if protocol auth is configured.
+
+**Valid prefixes** (any characters except spaces and commas):
 
 ```typescript
-// ✅ Valid prefixes
 "bearer.";
 "auth-";
 "token_";
-
-// ❌ Invalid prefixes (throws TypeError)
-"bearer "; // Contains space
-"auth,"; // Contains comma
-"my token"; // Contains space
+"bearer:"; // Also valid
+"token/v2"; // Also valid
 ```
 
-**Error:**
+**Invalid prefixes** (must not contain spaces or commas):
+
+```typescript
+"bearer "; // ❌ space
+"auth,"; // ❌ comma
+"my token"; // ❌ space
+```
+
+**Error handling:**
 
 ```typescript
 try {
-  wsClient({
+  const client = wsClient({
     url: "wss://api.example.com",
     auth: {
       getToken: () => "token",
       attach: "protocol",
       protocolPrefix: "bearer ", // Invalid!
     },
-  }).connect();
+  }); // Error thrown here, not at connect()
 } catch (err) {
   // TypeError: Invalid protocolPrefix: "bearer " (must not contain spaces/commas)
 }
@@ -270,17 +210,31 @@ Your server must be configured to accept the auth protocol.
 The `authenticate` function is called during WebSocket upgrade. Return connection data to accept, return `undefined` to accept without custom data, or throw an error to reject:
 
 ```typescript
-import { createRouter } from "@ws-kit/zod";
+import { z, message, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 
 const router = createRouter<AppData>();
 
-// Register your message handlers
+// Define message schema
+const SomeMessage = message("SOME_MESSAGE", { text: z.string() });
+
+// Register message handler
 router.on(SomeMessage, (ctx) => {
   console.log("User:", ctx.ws.data?.userId);
 });
+
+// User-provided token validation function (implement based on your auth scheme)
+function validateToken(token: string): boolean {
+  // Verify JWT signature, check expiry, etc.
+  return true;
+}
+
+function getUserIdFromToken(token: string): string {
+  // Extract user ID from token (e.g., JWT payload claim)
+  return "user-123";
+}
 
 serve(router, {
   port: 3000,
@@ -294,7 +248,7 @@ serve(router, {
     }
 
     if (!validateToken(token)) {
-      throw new Error("Unauthorized"); // Reject: connection fails with HTTP 500
+      throw new Error("Unauthorized"); // Reject: HTTP 500 response, client receives connection error
     }
 
     const userId = getUserIdFromToken(token);
@@ -308,7 +262,7 @@ serve(router, {
 - `authenticate()` is called during the WebSocket upgrade (before the connection is established)
 - Return custom data to attach it to `ctx.ws.data` (merged with auto-generated `clientId`)
 - Return `undefined` to accept the connection without custom data
-- Throw an error to reject the connection (client receives HTTP 500)
+- Throw an error to reject the connection (HTTP 500 response in Bun adapter; client receives connection error)
 - The function can be async (return `Promise<TData>`) for database lookups or API calls
 
 **Connection Identity:**
@@ -327,6 +281,15 @@ import { serve } from "@ws-kit/bun";
 type AppData = { userId?: string };
 
 const router = createRouter<AppData>();
+
+// User-provided helper functions (implement based on your auth scheme)
+function validateToken(token: string): boolean {
+  return true;
+}
+
+function getUserIdFromToken(token: string): string {
+  return "user-123";
+}
 
 serve(router, {
   port: 3000,
@@ -377,6 +340,22 @@ type AppData = { userId: string; email: string; roles: string[] };
 
 const router = createRouter<AppData>();
 
+// User-provided database access (adapt to your ORM/driver)
+const db = {
+  users: {
+    async findById(userId: string) {
+      // Fetch from database
+      return { id: userId, email: "user@example.com", roles: ["user"] };
+    },
+  },
+};
+
+// User-provided JWT verification (use a library like `jose`)
+async function verifyJWT(token: string) {
+  // Verify signature and decode JWT payload
+  return { userId: "user-123", iat: Date.now() };
+}
+
 serve(router, {
   port: 3000,
   async authenticate(req) {
@@ -422,7 +401,7 @@ serve(router, {
 
 **Error Handling:**
 
-- Throwing an error rejects the connection (HTTP 500)
+- Throwing an error rejects the connection (HTTP 500 response in Bun adapter; client receives connection error)
 - Returning `undefined` accepts anonymous connections
 - Authentication runs once per connection (not per message)
 
@@ -475,16 +454,35 @@ console.log("Has token:", !!token);
 
 ### Custom Auth Mechanisms
 
-For custom auth (cookies, headers via proxy):
+**Browser Limitation:** The WebSocket API doesn't allow setting arbitrary HTTP headers (e.g., `Authorization`, custom headers) from JavaScript. Use one of the documented auth methods above instead.
+
+**For special cases**, you can provide a custom WebSocket factory. This is useful for:
+
+- Testing (injecting a fake WebSocket)
+- Non-browser environments (Node.js, Bun) with custom header support
+- Customizing the WebSocket constructor call
 
 ```typescript
-// Use wsFactory for custom WebSocket creation
 const client = wsClient({
   url: "wss://api.example.com/ws",
-  wsFactory: (url) => {
-    const ws = new WebSocket(url);
-    // Custom headers or auth handled by server proxy
+  auth: { getToken: () => "token", attach: "protocol" },
+  protocols: "chat-v2",
+  wsFactory: (url, protocols) => {
+    // Pass protocols through so auth subprotocols and user protocols reach WebSocket
+    const ws = new WebSocket(url, protocols, {
+      headers: { Authorization: "Bearer token" }, // Node.js/Bun only
+    });
     return ws;
   },
+});
+```
+
+**For cookie-based authentication**, the browser sends cookies automatically without any code:
+
+```typescript
+// Cookies are sent by browser automatically (same-site requests)
+const client = wsClient({
+  url: "wss://api.example.com/ws",
+  // No auth config needed—cookies attached by browser
 });
 ```

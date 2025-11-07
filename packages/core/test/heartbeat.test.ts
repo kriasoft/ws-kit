@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import {
   WebSocketRouter,
   type ServerWebSocket,
-  type WebSocketData,
   type ValidatorAdapter,
+  type WebSocketData,
 } from "../src/index.js";
 
 // ============================================================================
@@ -245,16 +245,20 @@ describe("Heartbeat Management", () => {
       const testWs = createMockWebSocket();
       await shortTimeoutRouter.handleOpen(testWs);
 
-      // Wait for timeout to trigger
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Wait for pong timeout to trigger: intervalMs + timeoutMs + buffer
+      // Bun doesn't yet support mock timers, so we use real timers with sufficient delay
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
-      // Connection should be closed due to heartbeat timeout
-      const mockWs = testWs as unknown as { _isClosed(): boolean };
-      const isClosed = mockWs._isClosed?.();
+      // Verify connection was closed with heartbeat timeout code
+      const mockWs = testWs as unknown as {
+        _isClosed(): boolean;
+        _getCloseCode(): number | undefined;
+        _getCloseReason(): string | undefined;
+      };
 
-      // Note: This test depends on timing and may be flaky
-      // In production, heartbeat is managed by platform adapters
-      expect(typeof isClosed).toBe("boolean");
+      expect(mockWs._isClosed?.()).toBe(true);
+      expect(mockWs._getCloseCode?.()).toBe(4000);
+      expect(mockWs._getCloseReason?.()).toBe("HEARTBEAT_TIMEOUT");
     });
   });
 

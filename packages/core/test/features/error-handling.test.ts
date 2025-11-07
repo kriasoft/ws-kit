@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach } from "bun:test";
 import {
+  ErrorCode,
   WebSocketRouter,
   WsKitError,
-  ErrorCode,
-  type ServerWebSocket,
   type MessageSchemaType,
+  type ServerWebSocket,
   type ValidatorAdapter,
 } from "@ws-kit/core";
+import { beforeEach, describe, expect, it } from "bun:test";
 
 /**
  * Mock validator adapter for testing.
@@ -101,11 +101,21 @@ describe("WsKitError - Standardized Error Handling", () => {
       expect(wrapped.originalError?.message).toBe("Database connection failed");
     });
 
-    it("should return WsKitError as-is if already wrapped", () => {
+    it("should re-wrap WsKitError with new code when code is provided", () => {
       const original = WsKitError.from("INTERNAL", "Original error");
       const wrapped = WsKitError.wrap(original, "DIFFERENT_CODE");
 
-      expect(wrapped).toBe(original);
+      expect(wrapped).not.toBe(original);
+      expect(wrapped.code).toBe("DIFFERENT_CODE");
+      expect(wrapped.originalError).toBe(original);
+    });
+
+    it("should preserve WsKitError as-is when no code is provided", () => {
+      const original = WsKitError.from("INTERNAL", "Original error");
+      const preserved = WsKitError.wrap(original);
+
+      expect(preserved).toBe(original);
+      expect(preserved.code).toBe("INTERNAL");
     });
 
     it("should convert non-Error values to Error", () => {
@@ -207,6 +217,46 @@ describe("WsKitError - Standardized Error Handling", () => {
       expect(payload.code).toBe(ErrorCode.NOT_FOUND);
       expect(payload.message).toBe("Resource not found");
       expect(payload.details).toBeUndefined();
+    });
+
+    it("should preserve retryAfterMs as a number", () => {
+      const wsKitError = WsKitError.from(
+        ErrorCode.RESOURCE_EXHAUSTED,
+        "Rate limited",
+        undefined,
+        1250, // retryAfterMs
+      );
+      const payload = wsKitError.toPayload();
+
+      expect(payload.code).toBe(ErrorCode.RESOURCE_EXHAUSTED);
+      expect(payload.message).toBe("Rate limited");
+      expect(payload.retryAfterMs).toBe(1250);
+    });
+
+    it("should preserve retryAfterMs as null (impossible under policy)", () => {
+      const wsKitError = WsKitError.from(
+        ErrorCode.RESOURCE_EXHAUSTED,
+        "Operation cost exceeds capacity",
+        { cost: 5, capacity: 3 },
+        null, // retryAfterMs: null signals impossible under policy
+      );
+      const payload = wsKitError.toPayload();
+
+      expect(payload.code).toBe(ErrorCode.RESOURCE_EXHAUSTED);
+      expect(payload.message).toBe("Operation cost exceeds capacity");
+      expect(payload.details).toEqual({ cost: 5, capacity: 3 });
+      expect(payload.retryAfterMs).toBe(null);
+    });
+
+    it("should omit retryAfterMs field if undefined", () => {
+      const wsKitError = WsKitError.from(
+        ErrorCode.INVALID_ARGUMENT,
+        "Bad input",
+      );
+      const payload = wsKitError.toPayload();
+
+      expect(payload.code).toBe(ErrorCode.INVALID_ARGUMENT);
+      expect((payload as any).retryAfterMs).toBeUndefined();
     });
   });
 
@@ -1033,16 +1083,21 @@ describe("Unified Error Envelope Wire Format", () => {
       // Otherwise entire nested object might be stripped
     });
 
-    it("should handle 500-char boundary for detail values", async () => {
+    it("should apply 500-char JSON limit only to nested objects, not strings", async () => {
       const TestMsg = { type: "TEST" };
-      const longString = "x".repeat(500); // Exactly 500 chars
-      const veryLongString = "y".repeat(501); // Over 500 chars
+      // The 500-char limit applies to JSON representation of objects/arrays,
+      // but NOT to primitive strings (which can be arbitrarily large)
+      const hugeString = "x".repeat(600); // No limit for strings
+      const smallObject = { id: "123" }; // ~15 chars JSON, kept
+      const largeObject = { data: "x".repeat(400) }; // ~410 chars JSON, kept
+      const WAY_TOO_LARGE = { data: "x".repeat(500) }; // ~512 chars JSON, dropped
 
       router.on(TestMsg, (ctx) => {
-        ctx.error("INTERNAL", "Error", {
-          normalField: "short",
-          atBoundary: longString, // 500 chars
-          tooLarge: veryLongString, // 501 chars
+        ctx.error("INTERNAL", "Boundary test", {
+          hugeString, // Strings have no size limit
+          smallObject,
+          largeObject,
+          WAY_TOO_LARGE,
         });
       });
 
@@ -1053,24 +1108,27 @@ describe("Unified Error Envelope Wire Format", () => {
       const parsed = JSON.parse(sentMessages[0]!);
       const details = parsed.payload.details;
 
-      // Both should either be included or excluded based on implementation
-      // but not partially truncated
-      expect(details).toBeDefined();
-      if (details.tooLarge !== undefined) {
-        // If included, should be complete string, not truncated
-        expect(details.tooLarge).toBe(veryLongString);
-      }
+      // Strings always kept, regardless of size
+      expect(details.hugeString).toBe(hugeString);
+      // Small objects always kept
+      expect(details.smallObject).toEqual(smallObject);
+      // Large but under-limit objects kept
+      expect(details.largeObject).toEqual(largeObject);
+      // Objects exceeding ~500 chars JSON are dropped
+      expect(details.WAY_TOO_LARGE).toBeUndefined();
     });
 
-    it("should preserve non-forbidden keys even if values are large", async () => {
+    it("should strip both forbidden keys and oversized objects independently", async () => {
       const TestMsg = { type: "TEST" };
-      const largeData = "a".repeat(600);
+      const hugeString = "a".repeat(1000); // Strings: no limit
+      const hugeObject = { nested: "x".repeat(600) }; // ~610 chars JSON, dropped
 
       router.on(TestMsg, (ctx) => {
         ctx.error("INTERNAL", "Error", {
-          description: largeData, // Large but not forbidden
-          shortId: "123",
-          token: "secret", // Forbidden
+          hugeString, // Large string: kept
+          hugeObject, // Large object: dropped
+          shortId: "123", // Normal value: kept
+          token: "secret", // Forbidden: dropped
         });
       });
 
@@ -1081,10 +1139,13 @@ describe("Unified Error Envelope Wire Format", () => {
       const parsed = JSON.parse(sentMessages[0]!);
       const details = parsed.payload.details;
 
-      // Non-forbidden keys should be preserved
-      expect(details.description).toBe(largeData);
+      // Large strings are kept
+      expect(details.hugeString).toBe(hugeString);
+      // Large objects are dropped (not truncated)
+      expect(details.hugeObject).toBeUndefined();
+      // Normal values kept
       expect(details.shortId).toBe("123");
-      // Forbidden key should be stripped
+      // Forbidden keys stripped (independent of size)
       expect(details.token).toBeUndefined();
     });
 
@@ -1116,6 +1177,315 @@ describe("Unified Error Envelope Wire Format", () => {
       // But id variants should be preserved
       expect(details.id).toBe("123");
       expect(details.ID).toBe("456");
+    });
+  });
+
+  describe("WsKitError.wrap() and retag() behavior", () => {
+    it("should preserve code type when wrapping existing WsKitError", () => {
+      const original = WsKitError.from("NOT_FOUND", "User not found");
+      const wrapped = WsKitError.wrap(original);
+
+      // Runtime: same instance
+      expect(wrapped).toBe(original);
+      // Runtime: code unchanged
+      expect(wrapped.code).toBe("NOT_FOUND");
+    });
+
+    it("should wrap non-WsKitError with requested code", () => {
+      const err = new Error("Database error");
+      const wrapped = WsKitError.wrap(err, "UNAVAILABLE", "DB unavailable");
+
+      expect(wrapped).not.toBe(err);
+      expect(wrapped.code).toBe("UNAVAILABLE");
+      expect(wrapped.message).toBe("DB unavailable");
+      expect(wrapped.cause).toBe(err);
+    });
+
+    it("should retag existing WsKitError with new code", () => {
+      const original = WsKitError.from("NOT_FOUND", "User not found");
+      const retagged = WsKitError.retag(
+        original,
+        "INTERNAL",
+        "Unexpected error",
+      );
+
+      // Runtime: new instance
+      expect(retagged).not.toBe(original);
+      // Runtime: code changed
+      expect(retagged.code).toBe("INTERNAL");
+      expect(retagged.message).toBe("Unexpected error");
+      // Original is preserved as cause
+      expect(retagged.cause).toBe(original);
+    });
+
+    it("should retag non-WsKitError with requested code and preserve as cause", () => {
+      const err = new Error("Timeout");
+      const retagged = WsKitError.retag(
+        err,
+        "DEADLINE_EXCEEDED",
+        "Request timed out",
+      );
+
+      expect(retagged.code).toBe("DEADLINE_EXCEEDED");
+      expect(retagged.message).toBe("Request timed out");
+      expect(retagged.cause).toBe(err);
+    });
+
+    it("should use retag message or fallback to cause message", () => {
+      const err = new Error("Original message");
+      const retagged = WsKitError.retag(err, "INTERNAL");
+
+      expect(retagged.message).toBe("Original message");
+    });
+
+    it("should use wrap message or fallback to original error message", () => {
+      const err = new Error("DB connection failed");
+      const wrapped = WsKitError.wrap(err, "UNAVAILABLE");
+
+      expect(wrapped.message).toBe("DB connection failed");
+    });
+
+    it("should handle non-Error values in retag", () => {
+      const retagged = WsKitError.retag("string error", "INTERNAL");
+
+      expect(retagged.code).toBe("INTERNAL");
+      expect(retagged.cause).toBeInstanceOf(Error);
+      expect((retagged.cause as Error).message).toBe("string error");
+    });
+
+    it("should chain errors using retag for domain mapping", () => {
+      // Simulate domain error → standard error mapping
+      const domainError = new Error("User already registered");
+      const mapped = WsKitError.retag(
+        domainError,
+        "ALREADY_EXISTS",
+        "Email already in use",
+      );
+
+      expect(mapped.code).toBe("ALREADY_EXISTS");
+      expect(mapped.message).toBe("Email already in use");
+      expect(mapped.originalError).toBe(domainError);
+    });
+  });
+
+  describe("Auth failure policy (message scope)", () => {
+    it("should keep connection open by default on UNAUTHENTICATED error", async () => {
+      const ProtectedMsg = { type: "PROTECTED" };
+      const routerDefault = new WebSocketRouter({
+        validator: mockValidator,
+      });
+      routerDefault.on(ProtectedMsg, (ctx) => {
+        ctx.error("UNAUTHENTICATED", "Not authenticated");
+      });
+
+      const closeCode: number[] = [];
+      const wsWithClose = {
+        ...ws,
+        close: (code?: number) => {
+          if (code) closeCode.push(code);
+        },
+      };
+
+      await routerDefault.handleOpen(wsWithClose);
+      sentMessages = [];
+      await routerDefault.handleMessage(
+        wsWithClose,
+        JSON.stringify({ type: "PROTECTED" }),
+      );
+
+      // Should send error but NOT close (closeCode array should be empty)
+      expect(sentMessages.length).toBe(1);
+      expect(closeCode.length).toBe(0);
+      const parsed = JSON.parse(sentMessages[0]!);
+      expect(parsed.payload.code).toBe("UNAUTHENTICATED");
+    });
+
+    it("should close connection when auth.closeOnUnauthenticated is true", async () => {
+      const ProtectedMsg = { type: "PROTECTED" };
+      const routerStrict = new WebSocketRouter({
+        validator: mockValidator,
+        auth: { closeOnUnauthenticated: true },
+      });
+      routerStrict.on(ProtectedMsg, (ctx) => {
+        ctx.error("UNAUTHENTICATED", "Not authenticated");
+      });
+
+      const closeCode: number[] = [];
+      const closeReason: string[] = [];
+      const wsWithClose = {
+        ...ws,
+        close: (code?: number, reason?: string) => {
+          if (code) closeCode.push(code);
+          if (reason) closeReason.push(reason);
+        },
+      };
+
+      await routerStrict.handleOpen(wsWithClose);
+      sentMessages = [];
+      await routerStrict.handleMessage(
+        wsWithClose,
+        JSON.stringify({ type: "PROTECTED" }),
+      );
+
+      // Should send error AND close with 1008
+      expect(sentMessages.length).toBe(1);
+      expect(closeCode).toContain(1008);
+      expect(closeReason).toContain("UNAUTHENTICATED");
+    });
+
+    it("should keep connection open by default on PERMISSION_DENIED error", async () => {
+      const AdminMsg = { type: "ADMIN" };
+      const routerDefault = new WebSocketRouter({
+        validator: mockValidator,
+      });
+      routerDefault.on(AdminMsg, (ctx) => {
+        ctx.error("PERMISSION_DENIED", "Insufficient permissions");
+      });
+
+      const closeCode: number[] = [];
+      const wsWithClose = {
+        ...ws,
+        close: (code?: number) => {
+          if (code) closeCode.push(code);
+        },
+      };
+
+      await routerDefault.handleOpen(wsWithClose);
+      sentMessages = [];
+      await routerDefault.handleMessage(
+        wsWithClose,
+        JSON.stringify({ type: "ADMIN" }),
+      );
+
+      // Should send error but NOT close
+      expect(sentMessages.length).toBe(1);
+      expect(closeCode.length).toBe(0);
+      const parsed = JSON.parse(sentMessages[0]!);
+      expect(parsed.payload.code).toBe("PERMISSION_DENIED");
+    });
+
+    it("should close connection when auth.closeOnPermissionDenied is true", async () => {
+      const AdminMsg = { type: "ADMIN" };
+      const routerStrict = new WebSocketRouter({
+        validator: mockValidator,
+        auth: { closeOnPermissionDenied: true },
+      });
+      routerStrict.on(AdminMsg, (ctx) => {
+        ctx.error("PERMISSION_DENIED", "Insufficient permissions");
+      });
+
+      const closeCode: number[] = [];
+      const closeReason: string[] = [];
+      const wsWithClose = {
+        ...ws,
+        close: (code?: number, reason?: string) => {
+          if (code) closeCode.push(code);
+          if (reason) closeReason.push(reason);
+        },
+      };
+
+      await routerStrict.handleOpen(wsWithClose);
+      sentMessages = [];
+      await routerStrict.handleMessage(
+        wsWithClose,
+        JSON.stringify({ type: "ADMIN" }),
+      );
+
+      // Should send error AND close with 1008
+      expect(sentMessages.length).toBe(1);
+      expect(closeCode).toContain(1008);
+      expect(closeReason).toContain("PERMISSION_DENIED");
+    });
+
+    it("should support mixed policy: closeOnUnauthenticated true, closeOnPermissionDenied false", async () => {
+      const MixedMsg = { type: "MIXED" };
+      const routerMixed = new WebSocketRouter({
+        validator: mockValidator,
+        auth: {
+          closeOnUnauthenticated: true,
+          closeOnPermissionDenied: false,
+        },
+      });
+
+      const closeCode: number[] = [];
+      const wsWithClose = {
+        ...ws,
+        close: (code?: number) => {
+          if (code) closeCode.push(code);
+        },
+      };
+
+      // Test UNAUTHENTICATED
+      routerMixed.on(MixedMsg, (ctx) => {
+        ctx.error("UNAUTHENTICATED", "Not authenticated");
+      });
+
+      await routerMixed.handleOpen(wsWithClose);
+      sentMessages = [];
+      await routerMixed.handleMessage(
+        wsWithClose,
+        JSON.stringify({ type: "MIXED" }),
+      );
+
+      expect(closeCode).toContain(1008); // Should close
+
+      // Test PERMISSION_DENIED
+      const closeCode2: number[] = [];
+      const wsWithClose2 = {
+        ...ws,
+        close: (code?: number) => {
+          if (code) closeCode2.push(code);
+        },
+      };
+
+      routerMixed.off(MixedMsg);
+      routerMixed.on(MixedMsg, (ctx) => {
+        ctx.error("PERMISSION_DENIED", "Access denied");
+      });
+
+      await routerMixed.handleOpen(wsWithClose2);
+      sentMessages = [];
+      await routerMixed.handleMessage(
+        wsWithClose2,
+        JSON.stringify({ type: "MIXED" }),
+      );
+
+      expect(closeCode2.length).toBe(0); // Should NOT close
+    });
+
+    it("should not close on other error codes regardless of auth policy", async () => {
+      const OtherMsg = { type: "OTHER" };
+      const routerStrict = new WebSocketRouter({
+        validator: mockValidator,
+        auth: {
+          closeOnUnauthenticated: true,
+          closeOnPermissionDenied: true,
+        },
+      });
+      routerStrict.on(OtherMsg, (ctx) => {
+        ctx.error("INVALID_ARGUMENT", "Bad input");
+      });
+
+      const closeCode: number[] = [];
+      const wsWithClose = {
+        ...ws,
+        close: (code?: number) => {
+          if (code) closeCode.push(code);
+        },
+      };
+
+      await routerStrict.handleOpen(wsWithClose);
+      sentMessages = [];
+      await routerStrict.handleMessage(
+        wsWithClose,
+        JSON.stringify({ type: "OTHER" }),
+      );
+
+      // Should NOT close even with strict auth policy
+      expect(sentMessages.length).toBe(1);
+      expect(closeCode.length).toBe(0);
+      const parsed = JSON.parse(sentMessages[0]!);
+      expect(parsed.payload.code).toBe("INVALID_ARGUMENT");
     });
   });
 });

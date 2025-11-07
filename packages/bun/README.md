@@ -54,8 +54,7 @@ bun add valibot @ws-kit/valibot
 
 ```typescript
 import { serve } from "@ws-kit/bun";
-import { createRouter, message } from "@ws-kit/zod";
-import { z } from "zod";
+import { z, createRouter, message } from "@ws-kit/zod";
 
 // Define message schemas
 const PingMessage = message("PING", { text: z.string() });
@@ -94,8 +93,7 @@ For more control over server configuration, use the low-level API:
 
 ```typescript
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { createRouter, message } from "@ws-kit/zod";
-import { z } from "zod";
+import { z, createRouter, message } from "@ws-kit/zod";
 
 // Create router with Bun platform adapter
 const router = createRouter({
@@ -331,8 +329,7 @@ router.onError((error, ctx) => {
 
 ```typescript
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { createRouter, message } from "@ws-kit/zod";
-import { z } from "zod";
+import { z, createRouter, message } from "@ws-kit/zod";
 
 // Message schemas
 const JoinRoomMessage = message("ROOM:JOIN", { room: z.string() });

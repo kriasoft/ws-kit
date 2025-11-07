@@ -47,26 +47,26 @@ const {
 } = createMessageSchema(v as any);
 
 // Main exports: export-with-helpers pattern
-export { v, message, rpc, ErrorMessage, createMessage };
-export { default as valibotValidator } from "./validator.js";
 export { createValibotRouter as createRouter } from "./router.js";
+export { default as valibotValidator } from "./validator.js";
+export { createMessage, ErrorMessage, message, rpc, v };
 
 // Utility exports for advanced use cases
 export { ValibotValidatorAdapter } from "./adapter.js";
 
 // Type exports
-export type { AnyMessageSchema, MessageSchema } from "./schema.js";
 export type { TypedValibotRouter } from "./router.js";
+export type { AnyMessageSchema, MessageSchema } from "./schema.js";
 export type {
   ErrorCode,
-  RpcErrorCode,
-  InferMeta,
   InferMessage,
+  InferMeta,
   InferPayload,
   MessageContext,
   MessageHandler,
   MessageHandlerEntry,
   MessageSchemaType,
+  RpcErrorCode,
   SendFunction,
 } from "./types.js";
 
@@ -76,6 +76,7 @@ export type { ErrorCodeMetadata } from "@ws-kit/core";
 
 // Re-export core types for convenience
 export type {
+  AuthFailurePolicy,
   CloseHandler,
   CloseHandlerContext,
   OpenHandler,

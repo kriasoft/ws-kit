@@ -118,6 +118,7 @@ export default {
 - **ALWAYS** log errors with `clientId` for traceability → @error-handling.md
 - **ALWAYS** implement `onError` hook in `serve()` for centralized error handling → ADR-009
 - **NEVER** include passwords, tokens, API keys, or credentials in error details (automatically stripped) → @error-handling.md#Error-Detail-Sanitization
+- **ALWAYS** treat [Connection Close Policy](#connection-close-policy) as authoritative source: (1) enumerate all auto-close cases in policy table, (2) test with explicit close codes, (3) link from all related sections → @error-handling.md#connection-close-policy
 
 ### Messaging
 

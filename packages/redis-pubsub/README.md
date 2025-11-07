@@ -79,8 +79,7 @@ For lower-level control, you can construct the router directly:
 import { WebSocketRouter } from "@ws-kit/core";
 import { createBunAdapter } from "@ws-kit/bun";
 import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-import { message, zodValidator } from "@ws-kit/zod";
-import { z } from "zod";
+import { z, message, zodValidator } from "@ws-kit/zod";
 
 // Create router with Redis PubSub for multi-instance broadcasting
 const router = new WebSocketRouter({
