@@ -1,5 +1,12 @@
 # @ws-kit/cloudflare-do
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [[`a76d00b`](https://github.com/kriasoft/ws-kit/commit/a76d00b61db65ddbd725a4806cbc20af3b9608da)]:
+  - @ws-kit/core@0.6.0
+
 ## 0.2.3
 
 ### Patch Changes

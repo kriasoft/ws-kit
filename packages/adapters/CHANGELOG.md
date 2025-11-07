@@ -1,5 +1,12 @@
 # @ws-kit/adapters
 
+## 4.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`a76d00b`](https://github.com/kriasoft/ws-kit/commit/a76d00b61db65ddbd725a4806cbc20af3b9608da)]:
+  - @ws-kit/core@0.6.0
+
 ## 3.0.0
 
 ### Patch Changes
