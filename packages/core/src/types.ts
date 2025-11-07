@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { WsKitError } from "./error.js";
+import type { ErrorCode, WsKitError } from "./error.js";
 
 /**
  * Platform-agnostic WebSocket abstraction.
@@ -111,14 +111,21 @@ export interface EventMessageContext<
    * Creates and sends an ERROR message with unified error structure.
    * Supports deterministic client backoff via retryable + retryAfterMs hints.
    *
+   * Overloaded to provide autocomplete and type narrowing for the 13 standard
+   * gRPC-aligned error codes, while still allowing custom domain-specific codes.
+   *
    * @param code - Standard error code (one of 13 gRPC-aligned codes per ERROR_CODE_META)
+   *               or custom domain-specific code
    * @param message - Optional human-readable error description
    * @param details - Optional error context/details (structured data safe for clients)
-   * @param options - Optional retry semantics: retryable (boolean) and retryAfterMs (ms hint)
+   * @param options - Optional retry semantics: retryable (boolean) and retryAfterMs (ms hint or null)
    *
    * @example
-   * // Non-retryable error
+   * // Standard code (autocomplete available)
    * ctx.error("NOT_FOUND", "User not found", { userId: "123" });
+   *
+   * // Custom code (literal type preserved)
+   * ctx.error("INVALID_ROOM_NAME", "Room name must be 3-50 chars");
    *
    * // Transient error with backoff hint
    * ctx.error("RESOURCE_EXHAUSTED", "Buffer full", undefined, {
@@ -127,12 +134,22 @@ export interface EventMessageContext<
    * });
    */
   error(
-    code: string,
+    code: ErrorCode,
     message?: string,
     details?: Record<string, unknown>,
     options?: {
       retryable?: boolean;
-      retryAfterMs?: number;
+      retryAfterMs?: number | null;
+    },
+  ): void;
+
+  error<C extends string>(
+    code: C,
+    message?: string,
+    details?: Record<string, unknown>,
+    options?: {
+      retryable?: boolean;
+      retryAfterMs?: number | null;
     },
   ): void;
 
@@ -263,14 +280,21 @@ export interface RpcMessageContext<
    * One-shot guarded: first error wins, subsequent calls are suppressed.
    * Supports deterministic client backoff via retryable + retryAfterMs hints.
    *
+   * Overloaded to provide autocomplete and type narrowing for the 13 standard
+   * gRPC-aligned error codes, while still allowing custom domain-specific codes.
+   *
    * @param code - Standard error code (one of 13 gRPC-aligned codes per ERROR_CODE_META)
+   *               or custom domain-specific code
    * @param message - Optional human-readable error description
    * @param details - Optional error context/details (structured data safe for clients)
-   * @param options - Optional retry semantics: retryable (boolean) and retryAfterMs (ms hint)
+   * @param options - Optional retry semantics: retryable (boolean) and retryAfterMs (ms hint or null)
    *
    * @example
-   * // Send non-retryable error
+   * // Standard code (autocomplete available)
    * ctx.error("INVALID_ARGUMENT", "Invalid user ID", { field: "userId" });
+   *
+   * // Custom code (literal type preserved)
+   * ctx.error("INVALID_ROOM_ID", "Room does not exist");
    *
    * // Send transient error with backoff
    * ctx.error("RESOURCE_EXHAUSTED", "Rate limited", undefined, {
@@ -279,12 +303,22 @@ export interface RpcMessageContext<
    * });
    */
   error(
-    code: string,
+    code: ErrorCode,
     message?: string,
     details?: Record<string, unknown>,
     options?: {
       retryable?: boolean;
-      retryAfterMs?: number;
+      retryAfterMs?: number | null;
+    },
+  ): void;
+
+  error<C extends string>(
+    code: C,
+    message?: string,
+    details?: Record<string, unknown>,
+    options?: {
+      retryable?: boolean;
+      retryAfterMs?: number | null;
     },
   ): void;
 
@@ -747,12 +781,21 @@ export type MessageHandler<
  * Use this to validate the client and potentially store auth data in ctx.ws.data.
  *
  * @param context - Message context (includes the first message)
- * @returns true if authenticated, false to reject and close connection
+ * @returns
+ *   - `true` — authenticated, connection is allowed
+ *   - `false` — authentication failed, close with "PERMISSION_DENIED" (legacy default)
+ *   - `"UNAUTHENTICATED"` — authentication failed, close with "UNAUTHENTICATED" reason
+ *   - `"PERMISSION_DENIED"` — authentication failed, close with "PERMISSION_DENIED" reason
+ *   - Promise variant of any of the above
  */
 export type AuthHandler<TData extends WebSocketData = WebSocketData> = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: MessageContext<any, TData>,
-) => boolean | Promise<boolean>;
+) =>
+  | boolean
+  | "UNAUTHENTICATED"
+  | "PERMISSION_DENIED"
+  | Promise<boolean | "UNAUTHENTICATED" | "PERMISSION_DENIED">;
 
 /**
  * Handler for error events.
@@ -1111,6 +1154,42 @@ export interface LimitsConfig {
 export interface AppDataDefault {}
 
 /**
+ * Authentication failure policy configuration.
+ *
+ * Controls whether message-scope authentication/authorization errors
+ * automatically close the connection or remain open for in-band error handling.
+ *
+ * **Default (false)**: Errors are sent as ERROR messages; connection stays open.
+ * **Strict (true)**: Connection closes after sending error message (code 1008).
+ *
+ * Handshake-scope auth failures (during upgrade or first message guard) always
+ * close with code 1008 regardless of these flags.
+ */
+export interface AuthFailurePolicy {
+  /**
+   * Close connection after sending UNAUTHENTICATED error in message scope (default: false).
+   *
+   * When false (default): UNAUTHENTICATED errors are sent as ERROR messages
+   * and the connection remains open, allowing graceful client recovery.
+   *
+   * When true: Connection closes with code 1008 after sending the error,
+   * enforcing a strict authentication policy at the application level.
+   */
+  closeOnUnauthenticated?: boolean;
+
+  /**
+   * Close connection after sending PERMISSION_DENIED error in message scope (default: false).
+   *
+   * When false (default): PERMISSION_DENIED errors are sent as ERROR messages
+   * and the connection remains open, allowing graceful client recovery.
+   *
+   * When true: Connection closes with code 1008 after sending the error,
+   * enforcing strict authorization at the application level.
+   */
+  closeOnPermissionDenied?: boolean;
+}
+
+/**
  * Router configuration options.
  *
  * Specifies the ValidatorAdapter (for schema validation), PlatformAdapter
@@ -1138,6 +1217,9 @@ export interface WebSocketRouterOptions<
 
   /** Message payload constraints */
   limits?: LimitsConfig;
+
+  /** Authentication failure policy for message-scope errors (default: keep open) */
+  auth?: AuthFailurePolicy;
 
   /**
    * Socket buffer limit in bytes before backpressure (default: 1000000).

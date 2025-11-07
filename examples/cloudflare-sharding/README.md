@@ -47,8 +47,7 @@ This example uses the **`getShardedStub()`** helper from `@ws-kit/cloudflare-do/
 4. **Connect a client**:
 
    ```typescript
-   import { wsClient, message } from "@ws-kit/client/zod";
-   import { z } from "zod";
+   import { z, wsClient, message } from "@ws-kit/client/zod";
 
    const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
    const RoomUpdate = message("ROOM_UPDATE", {

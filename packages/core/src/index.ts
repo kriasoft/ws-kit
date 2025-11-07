@@ -26,6 +26,7 @@
 
 export type {
   AppDataDefault,
+  AuthFailurePolicy,
   AuthHandler,
   CloseHandler,
   CloseHandlerContext,
@@ -73,6 +74,7 @@ export type {
 export {
   ERROR_CODE_META,
   ErrorCode,
+  isStandardErrorCode,
   WebSocketError,
   WsKitError,
 } from "./error.js";
@@ -81,6 +83,7 @@ export type {
   ErrorCodeValue,
   ErrorMessage,
   ErrorPayload,
+  ExtErrorCode,
 } from "./error.js";
 export type { ErrorWire, RpcErrorWire } from "./types.js";
 
@@ -224,9 +227,8 @@ export type { IdempotencyKeyOpts } from "./utils.js";
  * @example
  * ```typescript
  * // Recommended: Use typed router factory for full type inference
- * import { createRouter } from "@ws-kit/zod";
+ * import { createRouter, z, message } from "@ws-kit/zod";
  * import { createBunHandler } from "@ws-kit/bun";
- * import { z } from "zod";
  *
  * const PingMessage = message("PING", { text: z.string() });
  *

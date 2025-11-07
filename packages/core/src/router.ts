@@ -145,6 +145,12 @@ export class WebSocketRouter<
   private readonly exposeErrorDetails: boolean;
   private readonly warnIncompleteRpc: boolean;
 
+  // Auth failure policy
+  private readonly authConfig?: {
+    closeOnUnauthenticated?: boolean;
+    closeOnPermissionDenied?: boolean;
+  };
+
   // RPC state management (encapsulated in RpcManager)
   readonly #rpc: RpcManager;
 
@@ -157,6 +163,9 @@ export class WebSocketRouter<
     // Uses the constructor function as identity marker (works for both Zod and Valibot adapters)
     this.validatorId = this.validator?.constructor;
     this.platform = options.platform;
+    if (options.auth) {
+      this.authConfig = options.auth;
+    }
 
     // Mark this instance as a ws-kit router for merge() validation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1333,14 +1342,20 @@ export class WebSocketRouter<
       // Step 4: Authentication check (first message only)
       const heartbeat = this.heartbeatStates.get(clientId);
       if (heartbeat && !heartbeat.authenticated) {
-        const authenticated = await this.authenticateConnection(
+        const authResult = await this.authenticateConnection(
           ws,
           send,
           receivedAt,
         );
-        if (!authenticated) {
+        if (!authResult.ok) {
           console.warn(`[ws] Authentication failed for ${clientId}`);
-          ws.close(4403, "PERMISSION_DENIED");
+          // Close with RFC 6455 Policy Violation (1008), not custom code (4403).
+          // Rationale: Standard close codes ensure compatibility with client libraries, proxies, and logs.
+          // See docs/specs/error-handling.md#auto-close-behavior for the canonical mapping.
+          // Note: Auth is enforced on FIRST MESSAGE (not handshake), by design—client upgrades first, then auth.
+          // Reason defaults to "PERMISSION_DENIED" for backward compatibility if not specified.
+          const closeReason = authResult.reason ?? "PERMISSION_DENIED";
+          ws.close(1008, closeReason);
           return;
         }
         heartbeat.authenticated = true;
@@ -1448,7 +1463,7 @@ export class WebSocketRouter<
         details?: Record<string, unknown>,
         options?: {
           retryable?: boolean;
-          retryAfterMs?: number;
+          retryAfterMs?: number | null;
         },
       ) => {
         try {
@@ -1505,7 +1520,7 @@ export class WebSocketRouter<
           const envOptions: {
             errorKind?: ErrorKind;
             retryable?: boolean;
-            retryAfterMs?: number;
+            retryAfterMs?: number | null;
           } = { errorKind };
           if (options?.retryable !== undefined) {
             envOptions.retryable = options.retryable;
@@ -2147,17 +2162,22 @@ export class WebSocketRouter<
   /**
    * Authenticate the connection by calling auth handlers.
    *
-   * @returns true if authenticated, false otherwise
+   * @returns Object with `ok` (boolean) and optional `reason` ("UNAUTHENTICATED" or "PERMISSION_DENIED")
    */
   private async authenticateConnection(
     ws: ServerWebSocket<TData>,
     send: SendFunction,
     receivedAt: number,
-  ): Promise<boolean> {
+  ): Promise<{
+    ok: boolean;
+    reason?: "UNAUTHENTICATED" | "PERMISSION_DENIED";
+  }> {
     if (this.authHandlers.length === 0) {
       // No auth handlers = allow
-      return true;
+      return { ok: true };
     }
+
+    let failureReason: "UNAUTHENTICATED" | "PERMISSION_DENIED" | undefined;
 
     for (const handler of this.authHandlers) {
       try {
@@ -2170,21 +2190,35 @@ export class WebSocketRouter<
         );
 
         const result = handler(context);
-        const authenticated = result instanceof Promise ? await result : result;
+        const handlerResult = result instanceof Promise ? await result : result;
 
-        if (!authenticated) {
-          return false;
+        // Process handler result: boolean or explicit reason string
+        if (typeof handlerResult === "boolean") {
+          if (!handlerResult) {
+            // false means permission denied (legacy default)
+            if (!failureReason) failureReason = "PERMISSION_DENIED";
+            return { ok: false, reason: failureReason };
+          }
+        } else if (handlerResult === "UNAUTHENTICATED") {
+          // Highest precedence: if any handler says UNAUTHENTICATED, use that
+          failureReason = "UNAUTHENTICATED";
+          return { ok: false, reason: failureReason };
+        } else if (handlerResult === "PERMISSION_DENIED") {
+          // Use PERMISSION_DENIED if no higher-precedence reason yet
+          if (!failureReason) failureReason = "PERMISSION_DENIED";
+          return { ok: false, reason: failureReason };
         }
       } catch (error) {
         console.error(
           `[ws] Error in auth handler for ${ws.data.clientId}:`,
           error,
         );
-        return false;
+        // Caught errors default to PERMISSION_DENIED for security
+        return { ok: false, reason: "PERMISSION_DENIED" };
       }
     }
 
-    return true;
+    return { ok: true };
   }
 
   /**
@@ -2294,13 +2328,13 @@ export class WebSocketRouter<
       details?: Record<string, unknown>,
       options?: {
         retryable?: boolean;
-        retryAfterMs?: number;
+        retryAfterMs?: number | null;
       },
     ) => {
       const envOptions: {
         errorKind?: ErrorKind;
         retryable?: boolean;
-        retryAfterMs?: number;
+        retryAfterMs?: number | null;
       } = { errorKind: { kind: "oneway", clientId } };
       if (options?.retryable !== undefined) {
         envOptions.retryable = options.retryable;
@@ -2629,7 +2663,8 @@ export class WebSocketRouter<
     options?: {
       errorKind?: ErrorKind;
       retryable?: boolean;
-      retryAfterMs?: number;
+      retryAfterMs?: number | null;
+      inHandshakeScope?: boolean;
     },
   ): void {
     try {
@@ -2687,14 +2722,24 @@ export class WebSocketRouter<
       }
 
       // Include backoff hint if applicable (only if not forbidden)
-      // If retryAfterMs is set, imply retryable=true (for clarity)
+      // ADR-015 semantics for retryAfterMs:
+      // - number (≥0): retry after this many ms; implies retryable=true
+      // - null: operation impossible under policy (non-retryable; set retryable=false)
+      //   Example: operation cost exceeds rate limit capacity
+      // - undefined: omitted from payload; client infers default per ERROR_CODE_META
       if (
         retryAfterMs !== undefined &&
         meta?.retryAfterMsRule !== "forbidden"
       ) {
         payload.retryAfterMs = retryAfterMs;
-        // Make retryAfterMs imply retryable=true if not explicitly set
-        if (payload.retryable === undefined) {
+        // null semantics: impossible operation, don't retry
+        if (retryAfterMs === null && payload.retryable === undefined) {
+          payload.retryable = false;
+        } else if (
+          // numeric semantics: implied retryable if not explicitly set
+          typeof retryAfterMs === "number" &&
+          payload.retryable === undefined
+        ) {
           payload.retryable = true;
         }
       }
@@ -2716,14 +2761,29 @@ export class WebSocketRouter<
 
       ws.send(JSON.stringify(envelope));
 
-      // Close socket for certain error codes (auth/authz failures, policy violations)
-      const closeOnErrorCodes = new Set([
+      // Auto-close on auth/authz failures depends on scope.
+      // See docs/specs/error-handling.md#auto-close-behavior for details.
+      // Handshake scope (before connection established): always close
+      // Message scope (after connection established): close only if policy flags are set
+      const authErrorCodes = new Set([
         ErrorCode.UNAUTHENTICATED,
         ErrorCode.PERMISSION_DENIED,
       ]);
 
-      if (closeOnErrorCodes.has(code as ErrorCode)) {
-        ws.close(1008, code); // 1008 = Policy Violation
+      if (authErrorCodes.has(code as ErrorCode)) {
+        const inHandshakeScope = options?.inHandshakeScope ?? false;
+        const shouldClose =
+          inHandshakeScope ||
+          (code === ErrorCode.UNAUTHENTICATED &&
+            this.authConfig?.closeOnUnauthenticated) ||
+          (code === ErrorCode.PERMISSION_DENIED &&
+            this.authConfig?.closeOnPermissionDenied);
+
+        if (shouldClose) {
+          // 1008 = RFC 6455 Policy Violation. Standard codes ensure load balancers, proxies, and clients
+          // correctly classify auth failures as non-retryable connection-level failures.
+          ws.close(1008, code);
+        }
       }
     } catch (error) {
       console.error("[ws] Error sending error envelope:", error);

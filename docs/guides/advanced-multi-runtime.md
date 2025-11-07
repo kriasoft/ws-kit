@@ -18,8 +18,7 @@ To validate that your router works across platforms, create a test that runs the
 
 ```typescript
 import { describe, it, expect } from "bun:test";
-import { createRouter, message } from "@ws-kit/zod";
-import { z } from "zod";
+import { z, createRouter, message } from "@ws-kit/zod";
 
 // Define shared schemas (platform-independent)
 const PingMessage = message("PING", { text: z.string() });

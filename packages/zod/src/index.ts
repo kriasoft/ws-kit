@@ -46,26 +46,26 @@ const {
 } = createMessageSchema(z);
 
 // Main exports: export-with-helpers pattern
-export { z, message, rpc, ErrorMessage, createMessage };
-export { default as zodValidator } from "./validator.js";
 export { createZodRouter as createRouter } from "./router.js";
+export { default as zodValidator } from "./validator.js";
+export { createMessage, ErrorMessage, message, rpc, z };
 
 // Utility exports for advanced use cases
 export { ZodValidatorAdapter } from "./adapter.js";
 
 // Type exports
-export type { AnyMessageSchema, MessageSchema } from "./schema.js";
 export type { TypedZodRouter } from "./router.js";
+export type { AnyMessageSchema, MessageSchema } from "./schema.js";
 export type {
   ErrorCode,
-  RpcErrorCode,
-  InferMeta,
   InferMessage,
+  InferMeta,
   InferPayload,
   MessageContext,
   MessageHandler,
   MessageHandlerEntry,
   MessageSchemaType,
+  RpcErrorCode,
   SendFunction,
 } from "./types.js";
 
@@ -75,6 +75,7 @@ export type { ErrorCodeMetadata } from "@ws-kit/core";
 
 // Re-export core types for convenience
 export type {
+  AuthFailurePolicy,
   CloseHandler,
   CloseHandlerContext,
   OpenHandler,

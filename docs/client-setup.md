@@ -7,10 +7,10 @@ The ws-kit client provides a type-safe browser WebSocket client that reuses the 
 Choose your validator and install the client:
 
 ```bash
-# With Zod (recommended for familiar APIs)
+# With Zod
 bun add @ws-kit/client @ws-kit/zod zod
 
-# With Valibot (lighter bundles)
+# With Valibot (smaller bundle size)
 bun add @ws-kit/client @ws-kit/valibot valibot
 ```
 
@@ -26,7 +26,6 @@ import { z, message } from "@ws-kit/zod";
 
 export const Hello = message("HELLO", { name: z.string() });
 export const HelloReply = message("HELLO_REPLY", { greeting: z.string() });
-export const Broadcast = message("BROADCAST", { message: z.string() });
 ```
 
 ### 2. Create the Client
@@ -34,7 +33,7 @@ export const Broadcast = message("BROADCAST", { message: z.string() });
 ```typescript
 // client.ts
 import { wsClient } from "@ws-kit/client/zod";
-import { Hello, HelloReply, Broadcast } from "./shared/schemas";
+import { Hello, HelloReply } from "./shared/schemas";
 
 const client = wsClient({
   url: "wss://api.example.com/ws",
@@ -44,18 +43,13 @@ const client = wsClient({
 await client.connect();
 
 // Send a message (fire-and-forget)
-client.send(Hello, { name: "Alice" });
 // Returns true if sent/queued, false if dropped
+const sent = client.send(Hello, { name: "Alice" });
 
 // Listen for replies
 client.on(HelloReply, (msg) => {
   // ✅ msg.payload.greeting is typed as string
   console.log(msg.payload.greeting);
-});
-
-// Listen for broadcasts
-client.on(Broadcast, (msg) => {
-  console.log(`Broadcast: ${msg.payload.message}`);
 });
 
 // Gracefully disconnect
@@ -68,7 +62,7 @@ await client.close();
 // server.ts
 import { createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
-import { Hello, HelloReply, Broadcast } from "./shared/schemas";
+import { Hello, HelloReply } from "./shared/schemas";
 
 const router = createRouter();
 
@@ -79,336 +73,163 @@ router.on(Hello, (ctx) => {
   });
 });
 
-// Broadcast to all subscribed clients
-router.publish("all", Broadcast, {
-  message: "Server broadcast",
-});
-
 serve(router, { port: 3000 });
 ```
 
-## Client API
+## Request/Response (RPC)
 
-### Connection Management
+For request/response patterns, use the `request()` method with an explicit response schema:
 
 ```typescript
-const client = wsClient({ url: "wss://api.example.com/ws" });
+// Request with explicit response schema
+const reply = await client.request(
+  Hello, // Request message
+  { name: "Alice" }, // Request payload
+  HelloReply, // Response message
+  {
+    timeoutMs: 5000, // Optional timeout
+  },
+);
 
-// Connect
-await client.connect();
-
-// Check connection state
-if (client.isConnected) {
-  console.log("Connected!");
-}
-
-// Listen to state changes
-client.onState((state) => {
-  console.log(`State: ${state}`);
-  // States: "closed", "connecting", "open", "closing", "reconnecting"
-});
-
-// Wait for connection to open
-await client.onceOpen();
-
-// Close
-await client.close();
+console.log(reply.payload.greeting); // ✅ Fully typed
 ```
 
-See [Client API - Connection State Machine](./client-api.md#connection-state-machine) for complete state diagram and transition rules.
-
-### Sending Messages
-
-**Fire-and-forget (no response expected):**
+Or use the `rpc()` helper to bind request and response at schema creation time:
 
 ```typescript
-client.send(HelloMessage, { name: "Bob" });
-
-// Messages without payload
-client.send(PingMessage);
-```
-
-**Request/Response (RPC with auto-detected response):**
-
-```typescript
-import { z, rpc, message } from "@ws-kit/zod";
+import { z, rpc } from "@ws-kit/zod";
 
 // Define RPC schema - binds request to response
 const Hello = rpc("HELLO", { name: z.string() }, "HELLO_REPLY", {
   greeting: z.string(),
 });
 
-// Response schema auto-detected from RPC
-const reply = await client.request(
-  Hello,
-  { name: "Alice" },
-  {
-    timeoutMs: 5000,
-  },
-);
-
-console.log(reply.payload.greeting);
+// Response type is inferred automatically
+const reply = await client.request(Hello, { name: "Alice" });
 ```
 
-**Request/Response (with explicit response schema):**
+For streaming responses with progress updates, see [Client API Reference - Streaming Responses](./client-api.md#streaming-responses-with-progress-updates).
 
-```typescript
-const reply = await client.request(
-  HelloMessage,
-  { name: "Alice" },
-  HelloReplyMessage,
-  {
-    timeoutMs: 5000,
-  },
-);
+## Core API
 
-console.log(reply.payload.greeting);
-```
+The client provides three main APIs:
 
-### Receiving Messages
+- **Connection**: `connect()`, `close()`, `isConnected`, `onState()`, `onceOpen()`
+- **Messaging**: `send()` for fire-and-forget, `request()` for request/response (RPC)
+- **Handlers**: `on()` to register message handlers, `onUnhandled()` for unknown messages, `onError()` for centralized error handling
 
-**Register handlers:**
-
-```typescript
-client.on(BroadcastMessage, (msg) => {
-  // ✅ msg fully typed
-  console.log(`Message: ${msg.payload.text}`);
-});
-
-// Remove handler (calling returned function)
-const unsubscribe = client.on(SomeMessage, handler);
-unsubscribe();
-```
-
-**Handle unknown messages:**
-
-```typescript
-client.onUnhandled((msg) => {
-  console.log(`Unknown message type: ${msg.type}`);
-});
-```
-
-**Handle errors:**
-
-```typescript
-client.onError((error, context) => {
-  console.error(`Error (${context.type}): ${error.message}`);
-  // Types: "parse", "validation", "overflow", "unknown"
-});
-```
+See [Client API Reference](./client-api.md) for complete API documentation including connection state machine, streaming responses with `onProgress`, and advanced options like `autoConnect` and `pendingRequestsLimit`.
 
 ## Authentication
 
-**For complete auth patterns, protocol merging, and setup validation, see [Client Authentication Guide](./client-auth.md).**
-
-### Query Parameter
+Use token-based authentication via query parameters or WebSocket protocol headers:
 
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
   auth: {
     getToken: async () => localStorage.getItem("token"),
-    attach: "query", // default
-    queryParam: "access_token", // default parameter name
-  },
-});
-
-// Token is sent as ?access_token=<value>
-```
-
-### WebSocket Protocol (Sec-WebSocket-Protocol Header)
-
-```typescript
-const client = wsClient({
-  url: "wss://api.example.com/ws",
-  auth: {
-    getToken: async () => localStorage.getItem("token"),
-    attach: "protocol", // Use WebSocket subprotocol for auth
-    protocolPrefix: "bearer.", // default prefix
-    protocolPosition: "append", // default: append after user protocols
-  },
-});
-
-// Token is sent via Sec-WebSocket-Protocol header as "bearer.<token>"
-```
-
-### Server-Side Validation
-
-```typescript
-import { serve } from "@ws-kit/bun";
-
-serve(router, {
-  authenticate(req) {
-    // Option 1: Get token from query parameter
-    const url = new URL(req.url);
-    const tokenFromQuery = url.searchParams.get("access_token");
-
-    // Option 2: Get token from Sec-WebSocket-Protocol header
-    const protocols =
-      req.headers.get("sec-websocket-protocol")?.split(",") || [];
-    const tokenFromProtocol = protocols
-      .find((p) => p.trim().startsWith("bearer."))
-      ?.replace("bearer.", "");
-
-    const token = tokenFromQuery || tokenFromProtocol;
-
-    if (!token) {
-      return undefined; // Connection rejected
-    }
-
-    try {
-      const user = verifyToken(token);
-      return { userId: user.id, username: user.username };
-    } catch (err) {
-      return undefined; // Connection rejected
-    }
+    attach: "query", // or "protocol"
   },
 });
 ```
+
+For complete authentication patterns, server setup, protocol merging, and edge cases, see [Client Authentication Guide](./client-auth.md).
 
 ## Message Queueing
 
-Messages are automatically queued while connecting or offline. For detailed queue behavior and delivery semantics, see [Client API Reference - Queue Behavior](./client-api.md#queue-overflow-handling):
+Messages are automatically queued while connecting or offline:
 
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
-  queue: "drop-newest", // Queue mode: "drop-newest" (default), "drop-oldest", or "off"
-  queueSize: 1000, // Max queued messages (default: 1000)
+  queue: "drop-newest", // "drop-newest" (default), "drop-oldest", or "off"
+  queueSize: 1000, // Max queued messages
 });
 
-// This will be queued if not connected yet
+// Queued if offline, sent automatically when connected
 client.send(SomeMessage, { text: "hello" });
-
-await client.connect();
-// Queued messages are sent automatically
 ```
 
-For detailed queue overflow handling and decision patterns, see [Client API - Queue Overflow Handling](./client-api.md#queue-overflow-handling).
+For overflow behavior decisions (drop-newest vs drop-oldest), guidance, and advanced management, see [Client API Reference - Queue Overflow Handling](./client-api.md#queue-overflow-handling).
 
 ## Auto-Reconnection
 
-The client automatically reconnects with exponential backoff:
+The client reconnects automatically with exponential backoff when connection drops:
 
 ```typescript
 const client = wsClient({
   url: "wss://api.example.com/ws",
   reconnect: {
     enabled: true, // default
-    initialDelayMs: 300, // default: Start with 300ms
-    maxDelayMs: 10_000, // default: Cap at 10 seconds
-    maxAttempts: Infinity, // default: Retry forever
-    jitter: "full", // default: Full jitter to prevent thundering herd
-  },
-});
-
-await client.connect();
-// Reconnects automatically on failure
-```
-
-Disable reconnection if needed:
-
-```typescript
-const client = wsClient({
-  url: "wss://api.example.com/ws",
-  reconnect: {
-    enabled: false,
+    initialDelayMs: 300, // start delay
+    maxDelayMs: 10_000, // max delay
+    maxAttempts: Infinity, // retry forever
   },
 });
 ```
+
+**Note:** This is **auto-reconnect**—reconnecting after connection loss. To connect automatically on first `send()` or `request()` when offline, use the `autoConnect` option (see Client API Reference).
+
+For reconnection strategies, fine-tuning delays, handling reconnection events, and disabling reconnection, see [Client Advanced Guide](./client-advanced.md#reconnection).
 
 ## Error Handling
 
-### RPC Errors (ServerError)
-
-When using `request()`, server errors are thrown as `ServerError`:
+Use typed error classes for request failures and centralized error handler for message validation:
 
 ```typescript
-import { ServerError, TimeoutError, ValidationError } from "@ws-kit/client/zod";
+import {
+  RpcError,
+  ServerError,
+  TimeoutError,
+  ValidationError,
+} from "@ws-kit/client/zod";
 
 try {
-  const reply = await client.request(Hello, { name: "Alice" }, HelloReply, {
-    timeoutMs: 5000,
-  });
-  console.log(reply.payload.greeting);
+  // request() never throws synchronously
+  const reply = await client.request(Hello, { name: "Alice" });
 } catch (err) {
-  if (err instanceof ServerError) {
-    // Server sent ERROR message with standard error code
-    if (err.code === "UNAUTHENTICATED") {
-      console.log("Authentication failed");
-    } else if (err.code === "RESOURCE_EXHAUSTED") {
-      console.log("Rate limited");
-    }
+  if (err instanceof RpcError) {
+    // Server sent RPC_ERROR with error code (typical RPC failure)
+    console.log("RPC error:", err.code);
+  } else if (err instanceof ServerError) {
+    // Server sent ERROR (e.g., validation failed before correlationId extracted)
+    console.log("Server error:", err.code);
   } else if (err instanceof TimeoutError) {
     console.log("Request timed out");
-  } else if (err instanceof ValidationError) {
-    console.log("Invalid message");
   }
 }
-```
 
-### Handling Validation Errors
-
-```typescript
+// Handle message validation errors centrally
 client.onError((error, context) => {
   if (context.type === "validation") {
-    console.log("Invalid message received from server");
+    console.log("Invalid message from server");
   }
 });
 ```
 
+**Note:** The `request()` method always returns a Promise—it never throws synchronously. RPC errors are typically wrapped in RPC_ERROR messages, but if the server cannot extract a valid `correlationId` from the request (e.g., early validation failure), it sends an ERROR message instead (with code `INVALID_ARGUMENT`), which the client rejects as ServerError.
+
+For complete error taxonomy, RPC error patterns, handling validation errors with details, and recovery strategies, see [Client Error Handling Guide](./client-errors.md).
+
 ## Import Patterns
 
-Always use the typed client package for your validator:
+Always import from the typed client package to avoid dual-package hazards:
 
 ```typescript
-// ✅ CORRECT: Import everything from typed client package
+// ✅ PRIMARY: Import everything from typed client package
 import { z, message, rpc, wsClient } from "@ws-kit/client/zod";
 
-// Also correct: Import schemas from validator package
+// ✅ ALSO VALID: Import schemas from validator, client from typed package
 import { z, message, rpc } from "@ws-kit/zod";
 import { wsClient } from "@ws-kit/client/zod";
 
 // ❌ AVOID: Mixing validator instances
-import { z } from "zod"; // Different Zod instance!
-import { message } from "@ws-kit/zod";
-// May cause type mismatches
+import { z } from "zod"; // Different instance!
+import { message } from "@ws-kit/zod"; // Incompatible types
 ```
 
-## Advanced: Type-Safe Schemas
-
-Share schemas between client and server for full type safety:
-
-```typescript
-// shared/schemas.ts
-import { z, message } from "@ws-kit/zod";
-
-export const Hello = message("HELLO", { name: z.string() });
-export const HelloReply = message("HELLO_REPLY", { greeting: z.string() });
-
-// server.ts
-import { createRouter } from "@ws-kit/zod";
-import { Hello, HelloReply } from "./shared/schemas";
-
-const router = createRouter();
-
-router.on(Hello, (ctx) => {
-  ctx.send(HelloReply, { greeting: `Hi ${ctx.payload.name}!` });
-});
-
-// client.ts
-import { wsClient } from "@ws-kit/client/zod";
-import { Hello, HelloReply } from "./shared/schemas";
-
-const client = wsClient({ url: "wss://api.example.com/ws" });
-
-// Full type inference from shared schemas
-client.on(HelloReply, (msg) => {
-  console.log(msg.payload.greeting); // ✅ Fully typed as string
-});
-
-client.send(Hello, { name: "Alice" }); // ✅ Payload typed from schema
-```
+For details on why this matters, see [Core Concepts - Schema Identity](./core-concepts.md#schema-identity).
 
 ## Valibot Alternative
 
@@ -430,6 +251,16 @@ const client = wsClient({ url: "wss://api.example.com/ws" });
 
 ## See Also
 
-- `@ws-kit/zod` — Server-side Zod adapter
-- `@ws-kit/valibot` — Server-side Valibot adapter
-- `docs/examples.md` — Real-world example code
+**Next Steps**
+
+- [Client API Reference](./client-api.md) — Complete API documentation
+- [Client Advanced Guide](./client-advanced.md) — Reconnection, streaming, and advanced patterns
+- [Client Authentication Guide](./client-auth.md) — Auth patterns, protocol merging, edge cases
+- [Client Error Handling Guide](./client-errors.md) — Error taxonomy and recovery strategies
+
+**Other Resources**
+
+- [Getting Started Guide](./getting-started.md) — Full project setup
+- [Examples](./examples.md) — Real-world code examples
+- [Core Concepts](./core-concepts.md) — Message routing and handler patterns
+- [RPC Specification](./rpc.md) — Request/response protocol details

@@ -1,14 +1,16 @@
 # Error Handling
 
-The WebSocket client provides comprehensive error handling with type-safe error classes and centralized reporting.
+The client provides type-safe error classes, standard error codes, and tools for centralized error monitoring and recovery.
 
 ## Quick Reference
 
-- **Error Classes**: See [#error-classes](#error-classes) for all available error types
-- **Error Codes**: See [RpcError section](#rpcerror-advanced) for the 13 standard error codes (gRPC-aligned)
-- **Error Patterns**: See [#error-patterns](#error-patterns) for common error handling examples
-- **Centralized Reporting**: See [#centralized-error-reporting](#centralized-error-reporting) for logging integration
-- **Server-side errors**: See `docs/specs/error-handling.md` for server error specification
+This guide covers error handling across three layers: error classes you can catch, patterns for different scenarios, and strategies for recovery and monitoring.
+
+- **Error Classes**: All available error types and when they're thrown; see [#error-classes](#error-classes)
+- **Standard Codes**: The 13 gRPC-aligned error codes used in RPC responses and how to determine if they're retryable; see [RpcError section](#rpcerror-advanced)
+- **Common Patterns**: Fire-and-forget, request/response, and connection error handling; see [#error-patterns](#error-patterns)
+- **Centralized Reporting**: Monitoring and logging via `onError()` and service integration; see [#centralized-error-reporting](#centralized-error-reporting)
+- **Server-side**: For server-side error handling, see `docs/specs/error-handling.md`
 
 ## Error Classes
 
@@ -42,7 +44,7 @@ import {
 
 ### ValidationError
 
-Thrown when message validation fails (outbound or inbound).
+Thrown when a message fails validation (outbound or inbound).
 
 ```typescript
 class ValidationError extends Error {
@@ -75,7 +77,7 @@ try {
 
 ### TimeoutError
 
-Thrown when request times out.
+Thrown when a request exceeds its timeout without receiving a reply.
 
 ```typescript
 class TimeoutError extends Error {
@@ -105,14 +107,14 @@ try {
 
 ### ServerError
 
-Thrown when server sends error response.
+Thrown when the server sends an error response.
 
 ```typescript
 class ServerError extends Error {
   constructor(
     message: string,
     public readonly code: string,
-    public readonly context?: Record<string, unknown>
+    public readonly details?: Record<string, unknown>
   );
 }
 ```
@@ -128,7 +130,7 @@ try {
   await client.request(DeleteItem, { id: 123 }, DeleteItemOk);
 } catch (err) {
   if (err instanceof ServerError) {
-    console.error(`Server error: ${err.code}`, err.context);
+    console.error(`Server error: ${err.code}`, err.details);
 
     if (err.code === "NOT_FOUND") {
       console.warn("Item not found");
@@ -139,7 +141,7 @@ try {
 }
 ```
 
-**Note**: The server's ERROR payload uses `details` field (per ADR-015), but the client's `ServerError` class currently uses `context` for backward compatibility. This will be unified when `RpcError` replaces `ServerError` in a future release.
+**Note**: `ServerError` is now legacy. Use `RpcError` for new code. In a future release, `ServerError` will be replaced by `RpcError` with the unified `details` field.
 
 ### ConnectionClosedError
 
@@ -169,10 +171,12 @@ try {
 
 ### StateError
 
-Thrown when operation is invalid in current state.
+Thrown when an operation can't be performed in the current state.
 
 ```typescript
-class StateError extends Error {}
+class StateError extends Error {
+  constructor(message: string);
+}
 ```
 
 **Occurs when:**
@@ -204,7 +208,7 @@ try {
 
 ### RpcError
 
-Enhanced error class for RPC operations with retry hints and correlation tracking. **Preferred over `ServerError` for new code.** Includes gRPC-aligned error codes and client-driven retry semantics.
+Enhanced error class for RPC operations with correlation tracking and structured retry metadata. Provides gRPC-aligned error codes with retry information (code, retryable flag, retryAfterMs) to guide client-side retry logic. Currently the primary error type returned by `request()` for RPC-specific errors.
 
 ```typescript
 class RpcError<TCode extends RpcErrorCode = RpcErrorCode> extends Error {
@@ -229,21 +233,35 @@ class RpcError<TCode extends RpcErrorCode = RpcErrorCode> extends Error {
 - `FAILED_PRECONDITION` - Stateful precondition not met
 - `NOT_FOUND` - Resource does not exist
 - `ALREADY_EXISTS` - Uniqueness or idempotency violation
-- `ABORTED` - Concurrency conflict (race condition)
+- `UNIMPLEMENTED` - Feature not supported or deployed
+- `CANCELLED` - Call cancelled (client disconnect, abort)
 
 **Transient errors** (retry with backoff):
 
 - `DEADLINE_EXCEEDED` - RPC timed out
 - `RESOURCE_EXHAUSTED` - Rate limit, quota, or buffer overflow
 - `UNAVAILABLE` - Transient infrastructure error
+- `ABORTED` - Concurrency conflict (race condition)
 
 **Server/evolution**:
 
-- `UNIMPLEMENTED` - Feature not supported or deployed
 - `INTERNAL` - Unexpected server error (unhandled exception)
-- `CANCELLED` - Call cancelled (client disconnect, abort)
 
 See [Error Handling Spec](./specs/error-handling.md) for complete error code taxonomy and retry semantics.
+
+**Type Extensibility**
+
+The `RpcErrorCode` type allows any string for forward compatibility with future error codes. However, the 13 codes listed above are canonical and cover all standard use cases. Always use only these standard codes in production; custom strings are reserved for framework extensions and internal use.
+
+**Determining Retryability**
+
+When handling `RpcError`, the `retryable` field may be present or absent:
+
+- If `retryable` field is **present**: Use its value directly
+- If **absent**: Infer from the error code:
+  - Transient codes (DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE, ABORTED) → `true` (retry with backoff)
+  - Terminal codes (all others) → `false` (don't retry)
+  - Special case: `INTERNAL` → `false` (conservative default; assume a bug, don't retry blindly)
 
 **Usage example:**
 
@@ -252,20 +270,34 @@ try {
   const result = await client.request(GetUser, { id: "123" });
 } catch (err) {
   if (err instanceof RpcError) {
-    if (err.code === "RESOURCE_EXHAUSTED" && err.retryAfterMs) {
-      // Type-narrowed: retryAfterMs is present
-      await sleep(err.retryAfterMs);
+    // Check if the error is retryable
+    const shouldRetry =
+      err.retryable ??
+      [
+        "DEADLINE_EXCEEDED",
+        "RESOURCE_EXHAUSTED",
+        "UNAVAILABLE",
+        "ABORTED",
+      ].includes(err.code);
+
+    if (shouldRetry) {
+      // Respect retry delay if provided
+      if (err.retryAfterMs) {
+        await sleep(err.retryAfterMs);
+      }
       // Retry request
     } else if (err.code === "UNAUTHENTICATED") {
       redirectToLogin();
+    } else if (err.code === "PERMISSION_DENIED") {
+      showAccessDenied();
     }
   }
 }
 ```
 
-### WsDisconnectedError (Future)
+### WsDisconnectedError (Reserved for Future Use)
 
-Enhanced disconnection error with idempotency support. Defined in the codebase but **not yet used** by the client implementation. Future versions will use this for more sophisticated reconnection handling.
+This error is reserved for idempotency-aware reconnection (see [ADR-013](./adr/013-rpc-reconnect-idempotency.md)). Although the class is exported, it is **never thrown by the client currently**.
 
 ```typescript
 class WsDisconnectedError extends Error {
@@ -273,15 +305,9 @@ class WsDisconnectedError extends Error {
 }
 ```
 
-**Future behavior:**
+**Current behavior:** The client throws `ConnectionClosedError` for all disconnections during RPC requests.
 
-When connection closes during an RPC request:
-
-- If `idempotencyKey` is provided, client auto-resends on reconnect within `resendWindowMs` (default 5000ms)
-- This error is only thrown if reconnect happens too late or `idempotencyKey` is not set
-- Without `idempotencyKey`, the current `ConnectionClosedError` is thrown immediately
-
-**Current behavior**: The client currently throws `ConnectionClosedError` for all disconnections during RPC requests. Idempotency-aware reconnection is planned but not yet implemented.
+**When this becomes active:** Once idempotency support is implemented, `WsDisconnectedError` will be thrown when a request's `idempotencyKey` was provided but reconnection happens too late (after `resendWindowMs`, default 5000ms). See ADR-013 for implementation status and timeline.
 
 ## Error Patterns
 
