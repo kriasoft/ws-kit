@@ -5,6 +5,33 @@
  * Test helpers for client tests
  */
 
+import type { ReturnType as ClientReturnType } from "../../src/index.js";
+
+type Client = ReturnType<typeof ClientReturnType>;
+
+/**
+ * Deterministically wait for client state to reach expected value.
+ * Polls state with small intervals instead of fixed timeouts for reliability
+ * across fast and slow environments.
+ */
+export async function waitForState(
+  client: any,
+  expectedState: string,
+  timeoutMs = 1000,
+) {
+  const start = Date.now();
+  const pollIntervalMs = 5;
+
+  while (client.state !== expectedState) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(
+        `Timeout waiting for state "${expectedState}", got "${client.state}"`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+}
+
 /**
  * Creates a mock WebSocket for testing that properly simulates lifecycle events
  */

@@ -51,7 +51,7 @@
     "@ws-kit/core": "workspace:^"
   },
   "peerDependencies": {
-    "redis": "^5.9.0"
+    "redis": ">=5.0.0"
   },
   "devDependencies": {
     "redis": "^5.9.0"

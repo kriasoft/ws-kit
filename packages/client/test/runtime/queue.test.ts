@@ -12,7 +12,7 @@
  * See @docs/specs/client.md#queue-behavior
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createClient } from "../../src/index.js";
 import type { WebSocketClient } from "../../src/types.js";
 import { z, message } from "@ws-kit/zod";
@@ -28,7 +28,6 @@ describe("Client: Queue Behavior", () => {
 
     beforeEach(() => {
       mockWs = createMockWebSocket();
-
       client = createClient({
         url: "ws://test",
         queue: "drop-newest",
@@ -39,6 +38,10 @@ describe("Client: Queue Behavior", () => {
         },
         reconnect: { enabled: false },
       });
+    });
+
+    afterEach(async () => {
+      await client.close();
     });
 
     it("queues messages while disconnected", () => {
@@ -115,7 +118,6 @@ describe("Client: Queue Behavior", () => {
 
     beforeEach(() => {
       mockWs = createMockWebSocket();
-
       client = createClient({
         url: "ws://test",
         queue: "drop-oldest",
@@ -126,6 +128,10 @@ describe("Client: Queue Behavior", () => {
         },
         reconnect: { enabled: false },
       });
+    });
+
+    afterEach(async () => {
+      await client.close();
     });
 
     it("evicts oldest on overflow", () => {
@@ -171,7 +177,6 @@ describe("Client: Queue Behavior", () => {
 
     beforeEach(() => {
       mockWs = createMockWebSocket();
-
       client = createClient({
         url: "ws://test",
         queue: "off",
@@ -181,6 +186,10 @@ describe("Client: Queue Behavior", () => {
         },
         reconnect: { enabled: false },
       });
+    });
+
+    afterEach(async () => {
+      await client.close();
     });
 
     it("drops messages immediately when disconnected", () => {
@@ -220,9 +229,12 @@ describe("Client: Queue Behavior", () => {
   });
 
   describe("queue interaction with close()", () => {
-    it("clears queue on manual close", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
+    let mockWs: ReturnType<typeof createMockWebSocket>;
+    let client: WebSocketClient;
+
+    beforeEach(() => {
+      mockWs = createMockWebSocket();
+      client = createClient({
         url: "ws://test",
         queue: "drop-newest",
         queueSize: 10,
@@ -232,7 +244,13 @@ describe("Client: Queue Behavior", () => {
         },
         reconnect: { enabled: false },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("clears queue on manual close", async () => {
       // Queue messages while disconnected
       client.send(TestMsg, { id: 1 });
       client.send(TestMsg, { id: 2 });
@@ -246,6 +264,53 @@ describe("Client: Queue Behavior", () => {
 
       const sent = mockWs._getSentMessages();
       expect(sent).toHaveLength(0); // Queue cleared by close()
+    });
+  });
+
+  describe("invalid payloads", () => {
+    let mockWs: ReturnType<typeof createMockWebSocket>;
+    let client: WebSocketClient;
+
+    beforeEach(() => {
+      mockWs = createMockWebSocket();
+      client = createClient({
+        url: "ws://test",
+        wsFactory: () => {
+          setTimeout(() => mockWs._trigger.open(), 0);
+          return mockWs as unknown as WebSocket;
+        },
+        reconnect: { enabled: false },
+      });
+    });
+
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("returns false for invalid payload type", () => {
+      // TestMsg expects { id: number }, but we pass string
+      const sent = client.send(TestMsg, { id: "invalid" } as unknown as Record<
+        string,
+        number
+      >);
+      expect(sent).toBe(false);
+    });
+
+    it("returns false for missing required payload field", () => {
+      const sent = client.send(TestMsg, {} as Record<string, number>);
+      expect(sent).toBe(false);
+    });
+
+    it("drops nothing to queue when validation fails", async () => {
+      // Send invalid, then connect
+      client.send(TestMsg, { id: "invalid" } as unknown as Record<
+        string,
+        number
+      >);
+      await client.connect();
+
+      const sent = mockWs._getSentMessages();
+      expect(sent).toHaveLength(0); // No message sent, none queued
     });
   });
 });

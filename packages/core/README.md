@@ -22,8 +22,9 @@ Platform-agnostic WebSocket router and type system with composition-based adapte
 - **Validator implementations**: Zod/Valibot adapters live in separate packages
 - **Platform implementations**: Bun/Cloudflare adapters live in separate packages
 - **High-performance PubSub**: Provided by platform adapters (default `MemoryPubSub` for testing)
+- **Middleware & extensions**: Rate limiting, logging, auth helpers in `@ws-kit/middleware`
+- **Pluggable adapters**: Rate limiters and other adapters in `@ws-kit/adapters`
 - **Codec abstraction**: Uses JSON (post-launch feature)
-- **Middleware chain**: Use hooks (post-launch feature)
 - **Protocol versioning**: Handled per-platform (post-launch feature)
 - **Backpressure policies**: Platform-specific (handled by adapters)
 

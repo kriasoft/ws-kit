@@ -14,21 +14,29 @@
  * See @docs/specs/client.md#connection-state-machine
  */
 
-import { describe, expect, it } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "bun:test";
 import { createClient } from "../../src/index.js";
 import type { ClientState } from "../../src/types.js";
 import { z, message } from "@ws-kit/zod";
-import { createMockWebSocket } from "./helpers.js";
+import { createMockWebSocket, waitForState } from "./helpers.js";
 
 message("TEST", { id: z.number() });
 
 describe("Client: State Machine Transitions", () => {
   describe("Happy path: closed → connecting → open", () => {
-    it("transitions through connecting to open on successful connection", async () => {
-      const states: ClientState[] = [];
-      const mockWs = createMockWebSocket();
+    let client: ReturnType<typeof createClient>;
+    let mockWs: ReturnType<typeof createMockWebSocket>;
 
-      const client = createClient({
+    beforeEach(() => {
+      mockWs = createMockWebSocket();
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           setTimeout(() => mockWs._trigger.open(), 0);
@@ -36,7 +44,14 @@ describe("Client: State Machine Transitions", () => {
         },
         reconnect: { enabled: false },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("transitions through connecting to open on successful connection", async () => {
+      const states: ClientState[] = [];
       client.onState((state) => states.push(state));
 
       expect(client.state).toBe("closed");
@@ -52,16 +67,6 @@ describe("Client: State Machine Transitions", () => {
     });
 
     it("isConnected getter reflects state === open", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
-        url: "ws://test",
-        wsFactory: () => {
-          setTimeout(() => mockWs._trigger.open(), 0);
-          return mockWs as unknown as WebSocket;
-        },
-        reconnect: { enabled: false },
-      });
-
       expect(client.state).toBe("closed");
       expect(client.isConnected).toBe(false);
 
@@ -72,11 +77,12 @@ describe("Client: State Machine Transitions", () => {
   });
 
   describe("Graceful close: open → closing → closed", () => {
-    it("transitions through closing to closed on manual close", async () => {
-      const states: ClientState[] = [];
-      const mockWs = createMockWebSocket();
+    let client: ReturnType<typeof createClient>;
+    let mockWs: ReturnType<typeof createMockWebSocket>;
 
-      const client = createClient({
+    beforeEach(() => {
+      mockWs = createMockWebSocket();
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           setTimeout(() => mockWs._trigger.open(), 0);
@@ -84,6 +90,14 @@ describe("Client: State Machine Transitions", () => {
         },
         reconnect: { enabled: false },
       });
+    });
+
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("transitions through closing to closed on manual close", async () => {
+      const states: ClientState[] = [];
 
       await client.connect();
       states.length = 0; // Clear connection states
@@ -101,16 +115,6 @@ describe("Client: State Machine Transitions", () => {
     });
 
     it("isConnected becomes false after close", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
-        url: "ws://test",
-        wsFactory: () => {
-          setTimeout(() => mockWs._trigger.open(), 0);
-          return mockWs as unknown as WebSocket;
-        },
-        reconnect: { enabled: false },
-      });
-
       await client.connect();
       expect(client.isConnected).toBe(true);
 
@@ -121,10 +125,10 @@ describe("Client: State Machine Transitions", () => {
   });
 
   describe("Connection failure paths", () => {
-    it("transitions closed → connecting → closed on connection failure", async () => {
-      const states: ClientState[] = [];
+    let client: ReturnType<typeof createClient>;
 
-      const client = createClient({
+    beforeEach(() => {
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           const mockWs = createMockWebSocket();
@@ -134,7 +138,14 @@ describe("Client: State Machine Transitions", () => {
         },
         reconnect: { enabled: false },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("transitions closed → connecting → closed on connection failure", async () => {
+      const states: ClientState[] = [];
       client.onState((state) => states.push(state));
 
       try {
@@ -152,7 +163,7 @@ describe("Client: State Machine Transitions", () => {
       const states: ClientState[] = [];
       let attemptCount = 0;
 
-      const client = createClient({
+      const reconnectClient = createClient({
         url: "ws://test",
         wsFactory: () => {
           attemptCount++;
@@ -173,11 +184,15 @@ describe("Client: State Machine Transitions", () => {
         },
       });
 
-      client.onState((state) => states.push(state));
+      onTestFinished(async () => {
+        await reconnectClient.close();
+      });
+
+      reconnectClient.onState((state) => states.push(state));
 
       // First attempt will fail, but should auto-reconnect
       try {
-        await client.connect();
+        await reconnectClient.connect();
       } catch (error) {
         // First connection might fail, but reconnect should succeed
       }
@@ -187,16 +202,39 @@ describe("Client: State Machine Transitions", () => {
 
       // Should have: connecting → closed → reconnecting → connecting → open
       expect(states).toContain("reconnecting");
-      expect(client.state).toBe("open");
+      expect(reconnectClient.state).toBe("open");
     });
   });
 
   describe("Reconnect cycle", () => {
-    it.skip("transitions to reconnecting state after unexpected close", async () => {
+    let client: ReturnType<typeof createClient>;
+
+    beforeEach(() => {
+      client = createClient({
+        url: "ws://test",
+        wsFactory: () => {
+          const mockWs = createMockWebSocket();
+          setTimeout(() => mockWs._trigger.open(), 0);
+          return mockWs as unknown as WebSocket;
+        },
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 10,
+          maxAttempts: 5,
+          jitter: "none",
+        },
+      });
+    });
+
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("transitions to reconnecting state after unexpected close", async () => {
       const states: ClientState[] = [];
       let currentMockWs: ReturnType<typeof createMockWebSocket> | null = null;
 
-      const client = createClient({
+      const reconnectClient = createClient({
         url: "ws://test",
         wsFactory: () => {
           const mockWs = createMockWebSocket();
@@ -212,28 +250,35 @@ describe("Client: State Machine Transitions", () => {
         },
       });
 
-      client.onState((state) => states.push(state));
+      onTestFinished(async () => {
+        await reconnectClient.close();
+      });
 
-      await client.connect();
-      expect(client.state).toBe("open");
+      // Register state listener before connecting to capture all transitions
+      reconnectClient.onState((state) => states.push(state));
 
-      states.length = 0; // Clear initial connection states
+      await reconnectClient.connect();
+      expect(reconnectClient.state).toBe("open");
+
+      // Clear states captured during initial connection
+      const postConnectIndex = states.length;
 
       // Simulate server closing connection
       currentMockWs!.close(1006, "Connection lost");
 
-      // Wait briefly for state transition
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // Wait deterministically for reconnecting state
+      await waitForState(reconnectClient, "reconnecting", 500);
 
-      // Should have transitioned to reconnecting
-      expect(states).toContain("closed");
-      expect(states).toContain("reconnecting");
+      // On unexpected close, client immediately enters reconnecting state
+      const reconnectStates = states.slice(postConnectIndex);
+      expect(reconnectStates[0]).toBe("reconnecting");
+      expect(reconnectClient.state).toBe("reconnecting");
     });
 
     it("stops reconnecting after maxAttempts", async () => {
       const states: ClientState[] = [];
 
-      const client = createClient({
+      const failingClient = createClient({
         url: "ws://test",
         wsFactory: () => {
           const mockWs = createMockWebSocket();
@@ -249,10 +294,14 @@ describe("Client: State Machine Transitions", () => {
         },
       });
 
-      client.onState((state) => states.push(state));
+      onTestFinished(async () => {
+        await failingClient.close();
+      });
+
+      failingClient.onState((state) => states.push(state));
 
       try {
-        await client.connect();
+        await failingClient.connect();
       } catch (error) {
         // Expected - initial connection failed
       }
@@ -261,17 +310,20 @@ describe("Client: State Machine Transitions", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Should eventually reach closed state (not reconnecting)
-      expect(client.state).toBe("closed");
+      expect(failingClient.state).toBe("closed");
       // Should have attempted reconnecting
       expect(states).toContain("reconnecting");
     });
   });
 
   describe("Manual close prevents auto-reconnect", () => {
-    it("does not reconnect after manual close()", async () => {
-      let connectionCount = 0;
+    let client: ReturnType<typeof createClient>;
+    let connectionCount: number;
 
-      const client = createClient({
+    beforeEach(() => {
+      connectionCount = 0;
+
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           connectionCount++;
@@ -284,7 +336,13 @@ describe("Client: State Machine Transitions", () => {
           initialDelayMs: 10,
         },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("does not reconnect after manual close()", async () => {
       await client.connect();
       expect(connectionCount).toBe(1);
 
@@ -300,19 +358,6 @@ describe("Client: State Machine Transitions", () => {
     });
 
     it("allows manual reconnect after manual close", async () => {
-      let connectionCount = 0;
-
-      const client = createClient({
-        url: "ws://test",
-        wsFactory: () => {
-          connectionCount++;
-          const mockWs = createMockWebSocket();
-          setTimeout(() => mockWs._trigger.open(), 0);
-          return mockWs as unknown as WebSocket;
-        },
-        reconnect: { enabled: true },
-      });
-
       await client.connect();
       expect(connectionCount).toBe(1);
 
@@ -327,9 +372,12 @@ describe("Client: State Machine Transitions", () => {
   });
 
   describe("State transitions with onceOpen()", () => {
-    it("resolves immediately if already open", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
+    let client: ReturnType<typeof createClient>;
+    let mockWs: ReturnType<typeof createMockWebSocket>;
+
+    beforeEach(() => {
+      mockWs = createMockWebSocket();
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           setTimeout(() => mockWs._trigger.open(), 0);
@@ -337,7 +385,13 @@ describe("Client: State Machine Transitions", () => {
         },
         reconnect: { enabled: false },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("resolves immediately if already open", async () => {
       await client.connect();
       expect(client.state).toBe("open");
 
@@ -350,33 +404,40 @@ describe("Client: State Machine Transitions", () => {
     });
 
     it("waits for state transition to open", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
+      const delayedMockWs = createMockWebSocket();
+      const delayedClient = createClient({
         url: "ws://test",
         wsFactory: () => {
           // Delay open event
-          setTimeout(() => mockWs._trigger.open(), 20);
-          return mockWs as unknown as WebSocket;
+          setTimeout(() => delayedMockWs._trigger.open(), 20);
+          return delayedMockWs as unknown as WebSocket;
         },
         reconnect: { enabled: false },
       });
 
-      expect(client.state).toBe("closed");
+      onTestFinished(async () => {
+        await delayedClient.close();
+      });
+
+      expect(delayedClient.state).toBe("closed");
 
       // Start connection
-      const connectPromise = client.connect();
-      const onceOpenPromise = client.onceOpen();
+      const connectPromise = delayedClient.connect();
+      const onceOpenPromise = delayedClient.onceOpen();
 
       await Promise.all([connectPromise, onceOpenPromise]);
 
-      expect(client.state).toBe("open");
+      expect(delayedClient.state).toBe("open");
     });
   });
 
   describe("close() idempotency", () => {
-    it("is safe to call close() multiple times", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
+    let client: ReturnType<typeof createClient>;
+    let mockWs: ReturnType<typeof createMockWebSocket>;
+
+    beforeEach(() => {
+      mockWs = createMockWebSocket();
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           setTimeout(() => mockWs._trigger.open(), 0);
@@ -384,7 +445,13 @@ describe("Client: State Machine Transitions", () => {
         },
         reconnect: { enabled: false },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("is safe to call close() multiple times", async () => {
       await client.connect();
 
       // Multiple close() calls should not error
@@ -396,11 +463,6 @@ describe("Client: State Machine Transitions", () => {
     });
 
     it("is safe to call close() when already closed", async () => {
-      const client = createClient({
-        url: "ws://test",
-        reconnect: { enabled: false },
-      });
-
       expect(client.state).toBe("closed");
 
       // Close when already closed should not error
@@ -411,11 +473,15 @@ describe("Client: State Machine Transitions", () => {
   });
 
   describe("connect() idempotency", () => {
-    it("returns same promise when already connecting", async () => {
-      let wsFactoryCalls = 0;
-      const mockWs = createMockWebSocket();
+    let client: ReturnType<typeof createClient>;
+    let mockWs: ReturnType<typeof createMockWebSocket>;
+    let wsFactoryCalls: number;
 
-      const client = createClient({
+    beforeEach(() => {
+      wsFactoryCalls = 0;
+      mockWs = createMockWebSocket();
+
+      client = createClient({
         url: "ws://test",
         wsFactory: () => {
           wsFactoryCalls++;
@@ -424,7 +490,13 @@ describe("Client: State Machine Transitions", () => {
         },
         reconnect: { enabled: false },
       });
+    });
 
+    afterEach(async () => {
+      await client.close();
+    });
+
+    it("returns same promise when already connecting", async () => {
       const promise1 = client.connect();
       const promise2 = client.connect();
 
@@ -437,16 +509,6 @@ describe("Client: State Machine Transitions", () => {
     });
 
     it("resolves immediately when already open", async () => {
-      const mockWs = createMockWebSocket();
-      const client = createClient({
-        url: "ws://test",
-        wsFactory: () => {
-          setTimeout(() => mockWs._trigger.open(), 0);
-          return mockWs as unknown as WebSocket;
-        },
-        reconnect: { enabled: false },
-      });
-
       await client.connect();
       expect(client.state).toBe("open");
 

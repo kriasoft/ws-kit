@@ -14,7 +14,7 @@
  * See @docs/specs/rules.md#inbound-message-routing
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createClient } from "../../src/index.js";
 import type { WebSocketClient } from "../../src/types.js";
 import { z, message } from "@ws-kit/zod";
@@ -25,12 +25,11 @@ const TestMsg = message("TEST", { id: z.number() });
 const OtherMsg = message("OTHER", { value: z.string() });
 
 describe("Client: Multi-Handler Support", () => {
-  let client: WebSocketClient;
   let mockWs: ReturnType<typeof createMockWebSocket>;
+  let client: WebSocketClient;
 
   beforeEach(() => {
     mockWs = createMockWebSocket();
-
     client = createClient({
       url: "ws://test",
       wsFactory: () => {
@@ -39,6 +38,10 @@ describe("Client: Multi-Handler Support", () => {
       },
       reconnect: { enabled: false },
     });
+  });
+
+  afterEach(async () => {
+    await client.close();
   });
 
   // Helper to simulate receiving a message
@@ -148,12 +151,11 @@ describe("Client: Multi-Handler Support", () => {
 });
 
 describe("Client: onUnhandled Hook", () => {
-  let client: WebSocketClient;
   let mockWs: ReturnType<typeof createMockWebSocket>;
+  let client: WebSocketClient;
 
   beforeEach(() => {
     mockWs = createMockWebSocket();
-
     client = createClient({
       url: "ws://test",
       wsFactory: () => {
@@ -162,6 +164,10 @@ describe("Client: onUnhandled Hook", () => {
       },
       reconnect: { enabled: false },
     });
+  });
+
+  afterEach(async () => {
+    await client.close();
   });
 
   function simulateReceive(msg: any) {

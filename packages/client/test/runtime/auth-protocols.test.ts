@@ -15,15 +15,24 @@
  * See @docs/specs/client.md#auth
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import type { WebSocketClient } from "../../src/index.js";
 import { createClient } from "../../src/index.js";
 import { createMockWebSocket } from "./helpers.js";
 
 describe("Client: Auth - Query Mode", () => {
-  it("appends token to URL as query parameter", async () => {
-    let capturedUrl: string | URL | undefined;
+  let capturedUrl: string | URL | undefined;
+  let client: WebSocketClient;
 
-    const client = createClient({
+  afterEach(async () => {
+    // Close client if it exists and is still open
+    if (client && client.state !== "closed") {
+      await client.close();
+    }
+  });
+
+  it("appends token to URL as query parameter", async () => {
+    client = createClient({
       url: "ws://example.com/ws",
       auth: {
         getToken: () => "test-token-123",
@@ -47,9 +56,7 @@ describe("Client: Auth - Query Mode", () => {
   });
 
   it("uses custom query parameter name", async () => {
-    let capturedUrl: string | URL | undefined;
-
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       auth: {
         getToken: () => "token-xyz",
@@ -73,9 +80,7 @@ describe("Client: Auth - Query Mode", () => {
   });
 
   it("does not modify URL when getToken returns null", async () => {
-    let capturedUrl: string | URL | undefined;
-
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       auth: {
         getToken: () => null,
@@ -96,12 +101,12 @@ describe("Client: Auth - Query Mode", () => {
     expect(urlStr).toBe("ws://example.com/ws");
   });
 
-  it("refreshes token on reconnect", async () => {
+  it("refreshes token on manual reconnect", async () => {
     const tokens = ["token-1", "token-2"];
     let tokenIndex = 0;
     const capturedUrls: string[] = [];
 
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       auth: {
         getToken: () => tokens[tokenIndex++] ?? null,
@@ -113,31 +118,31 @@ describe("Client: Auth - Query Mode", () => {
         setTimeout(() => mockWs._trigger.open(), 0);
         return mockWs as unknown as WebSocket;
       },
-      reconnect: {
-        enabled: true,
-        maxAttempts: 2,
-        initialDelayMs: 10,
-        jitter: "none",
-      },
+      reconnect: { enabled: false },
     });
 
     await client.connect();
     expect(capturedUrls[0]).toContain("access_token=token-1");
 
-    // Simulate disconnect
-    await client.close();
-
-    // Reconnect manually
+    // Disconnect and reconnect (new token fetched)
+    if (client.state !== "closed") {
+      await client.close();
+    }
     await client.connect();
     expect(capturedUrls[1]).toContain("access_token=token-2");
   });
 });
 
 describe("Client: Auth - Protocol Mode (Append)", () => {
-  it("appends auth protocol after user protocols", async () => {
-    let capturedProtocols: string | string[] | undefined;
+  let capturedProtocols: string | string[] | undefined;
+  let client: WebSocketClient;
 
-    const client = createClient({
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it("appends auth protocol after user protocols", async () => {
+    client = createClient({
       url: "ws://example.com/ws",
       protocols: "chat-v2",
       auth: {
@@ -161,9 +166,7 @@ describe("Client: Auth - Protocol Mode (Append)", () => {
   });
 
   it("appends auth protocol with multiple user protocols", async () => {
-    let capturedProtocols: string | string[] | undefined;
-
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       protocols: ["chat-v2", "notifications-v1"],
       auth: {
@@ -190,9 +193,7 @@ describe("Client: Auth - Protocol Mode (Append)", () => {
   });
 
   it("uses only auth protocol when no user protocols", async () => {
-    let capturedProtocols: string | string[] | undefined;
-
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       auth: {
         getToken: () => "token",
@@ -215,10 +216,15 @@ describe("Client: Auth - Protocol Mode (Append)", () => {
 });
 
 describe("Client: Auth - Protocol Mode (Prepend)", () => {
-  it("prepends auth protocol before user protocols", async () => {
-    let capturedProtocols: string | string[] | undefined;
+  let capturedProtocols: string | string[] | undefined;
+  let client: WebSocketClient;
 
-    const client = createClient({
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it("prepends auth protocol before user protocols", async () => {
+    client = createClient({
       url: "ws://example.com/ws",
       protocols: "chat-v2",
       auth: {
@@ -242,9 +248,7 @@ describe("Client: Auth - Protocol Mode (Prepend)", () => {
   });
 
   it("prepends with multiple user protocols", async () => {
-    let capturedProtocols: string | string[] | undefined;
-
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       protocols: ["chat-v2", "notifications-v1"],
       auth: {
@@ -272,10 +276,15 @@ describe("Client: Auth - Protocol Mode (Prepend)", () => {
 });
 
 describe("Client: Auth - Protocol Deduplication", () => {
-  it("removes duplicate protocols (append - user wins)", async () => {
-    let capturedProtocols: string | string[] | undefined;
+  let capturedProtocols: string | string[] | undefined;
+  let client: WebSocketClient;
 
-    const client = createClient({
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it("removes duplicate protocols (append - user wins)", async () => {
+    client = createClient({
       url: "ws://example.com/ws",
       protocols: ["bearer.duplicate", "chat-v2"],
       auth: {
@@ -302,9 +311,7 @@ describe("Client: Auth - Protocol Deduplication", () => {
   });
 
   it("removes duplicate protocols (prepend - auth wins)", async () => {
-    let capturedProtocols: string | string[] | undefined;
-
-    const client = createClient({
+    client = createClient({
       url: "ws://example.com/ws",
       protocols: ["chat-v2", "bearer.duplicate"],
       auth: {
@@ -372,10 +379,15 @@ describe("Client: Auth - Protocol Validation", () => {
 });
 
 describe("Client: Auth - Async Token Provider", () => {
-  it("supports async getToken function", async () => {
-    let capturedUrl: string | URL | undefined;
+  let capturedUrl: string | URL | undefined;
+  let client: WebSocketClient;
 
-    const client = createClient({
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it("supports async getToken function", async () => {
+    client = createClient({
       url: "ws://example.com/ws",
       auth: {
         getToken: async () => {
@@ -401,9 +413,10 @@ describe("Client: Auth - Async Token Provider", () => {
 });
 
 describe("Client: Protocol Selection", () => {
+  // Note: Each test declares mockWs and client locally (not shared fixtures).
+  // Per test-requirements.md, ad-hoc resources are cleaned up inline.
   it("exposes selected protocol via client.protocol", async () => {
     const mockWs = createMockWebSocket();
-
     const client = createClient({
       url: "ws://example.com/ws",
       protocols: ["chat-v2", "chat-v1"],
@@ -421,11 +434,11 @@ describe("Client: Protocol Selection", () => {
     await client.connect();
 
     expect(client.protocol).toBe("chat-v2");
+    await client.close();
   });
 
   it("protocol is empty string when server selects none", async () => {
     const mockWs = createMockWebSocket();
-
     const client = createClient({
       url: "ws://example.com/ws",
       protocols: "chat-v2",
@@ -441,5 +454,6 @@ describe("Client: Protocol Selection", () => {
     await client.connect();
 
     expect(client.protocol).toBe("");
+    await client.close();
   });
 });

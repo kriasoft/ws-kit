@@ -320,6 +320,10 @@ const mockContext = {
 // ... test assertions here
 ```
 
+## Pre-Built Middleware
+
+For production-ready middleware utilities (rate limiting, authentication helpers, logging, metrics), see the [`@ws-kit/middleware` package](https://www.npmjs.com/package/@ws-kit/middleware).
+
 ## Architecture Decision
 
 For the design rationale and alternative patterns considered, see [ADR-008](./adr/008-middleware-support.md).

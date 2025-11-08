@@ -14,7 +14,14 @@
  * See @docs/specs/test-requirements.md#Runtime-Testing
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "bun:test";
 import {
   ConnectionClosedError,
   StateError,
@@ -37,12 +44,11 @@ const Query = rpc("QUERY", { id: z.string() }, "QUERY_RESULT", {
 });
 
 describe("Client: Request/Response Correlation", () => {
-  let client: WebSocketClient;
   let mockWs: ReturnType<typeof createMockWebSocket>;
+  let client: WebSocketClient;
 
   beforeEach(() => {
     mockWs = createMockWebSocket();
-
     client = createClient({
       url: "ws://test",
       wsFactory: () => {
@@ -51,6 +57,10 @@ describe("Client: Request/Response Correlation", () => {
       },
       reconnect: { enabled: false },
     });
+  });
+
+  afterEach(async () => {
+    await client.close();
   });
 
   // Helper to simulate receiving a message
@@ -214,6 +224,10 @@ describe("Client: Request/Response Correlation", () => {
       queue: "off",
     });
 
+    onTestFinished(async () => {
+      await offlineClient.close();
+    });
+
     // Not connected - queue disabled
     const promise = offlineClient.request(Hello, { name: "test" }, HelloOk, {
       timeoutMs: 1000,
@@ -308,6 +322,159 @@ describe("Client: Request/Response Correlation", () => {
     });
 
     // No errors thrown; late reply dropped silently
+  });
+
+  it("rejects with StateError when aborted before dispatch", async () => {
+    await client.connect();
+
+    const controller = new AbortController();
+    controller.abort(); // Abort before request
+
+    const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+      signal: controller.signal,
+    });
+
+    await expect(reqPromise).rejects.toThrow(StateError);
+    await expect(reqPromise).rejects.toMatchObject({
+      message: expect.stringContaining("Request aborted before dispatch"),
+    });
+  });
+
+  it("rejects with StateError when aborted while pending", async () => {
+    await client.connect();
+
+    const controller = new AbortController();
+
+    const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+      timeoutMs: 60000,
+      signal: controller.signal,
+    });
+
+    // Abort while pending
+    controller.abort();
+
+    await expect(reqPromise).rejects.toThrow(StateError);
+    await expect(reqPromise).rejects.toMatchObject({
+      message: expect.stringContaining("Request aborted"),
+    });
+  });
+
+  it("cleans up pending map and cancels timeout on abort", async () => {
+    await client.connect();
+
+    const controller = new AbortController();
+    const correlationId = "req-abort-cleanup";
+
+    const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
+      timeoutMs: 60000,
+      signal: controller.signal,
+      correlationId,
+    });
+
+    // Abort request
+    controller.abort();
+    await expect(reqPromise).rejects.toThrow(StateError);
+
+    // Server sends late reply (should be ignored - pending map cleaned)
+    simulateReceive({
+      type: "HELLO_OK",
+      meta: { correlationId },
+      payload: { text: "late reply" },
+    });
+
+    // No errors thrown; late reply dropped silently
+  });
+
+  it("rejects with StateError when pending limit exceeded", async () => {
+    const limitMockWs = createMockWebSocket();
+    const limitedClient = createClient({
+      url: "ws://test",
+      wsFactory: () => {
+        setTimeout(() => limitMockWs._trigger.open(), 0);
+        return limitMockWs as unknown as WebSocket;
+      },
+      pendingRequestsLimit: 2,
+      reconnect: { enabled: false },
+    });
+
+    onTestFinished(async () => {
+      await limitedClient.close();
+    });
+
+    await limitedClient.connect();
+
+    // Fill pending queue (server doesn't reply)
+    const req1 = limitedClient
+      .request(Hello, { name: "1" }, HelloOk, {
+        timeoutMs: 60000,
+      })
+      .catch(() => {}); // Observe rejection when client closes
+    const req2 = limitedClient
+      .request(Hello, { name: "2" }, HelloOk, {
+        timeoutMs: 60000,
+      })
+      .catch(() => {}); // Observe rejection when client closes
+
+    // Third request exceeds limit
+    await expect(
+      limitedClient.request(Hello, { name: "3" }, HelloOk, {
+        timeoutMs: 60000,
+      }),
+    ).rejects.toThrow(StateError);
+
+    await expect(
+      limitedClient.request(Hello, { name: "3" }, HelloOk, {
+        timeoutMs: 60000,
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("Pending request limit exceeded"),
+    });
+  });
+
+  // Verify pending limit prevents queueing without relying on wall-clock timing.
+  // Uses behavioral proof instead: if req1 resolves after req2's rejection,
+  // req2 must have hit the limit (not a timeout), since req1's timer is still running.
+  it("enforces pending request limit immediately", async () => {
+    const limitMockWs = createMockWebSocket();
+    const limitedClient = createClient({
+      url: "ws://test",
+      wsFactory: () => {
+        setTimeout(() => limitMockWs._trigger.open(), 0);
+        return limitMockWs as unknown as WebSocket;
+      },
+      pendingRequestsLimit: 1,
+      reconnect: { enabled: false },
+    });
+
+    onTestFinished(async () => {
+      await limitedClient.close();
+    });
+
+    await limitedClient.connect();
+
+    // Fill pending queue with a long timeout
+    const req1Promise = limitedClient.request(Hello, { name: "1" }, HelloOk, {
+      timeoutMs: 10000,
+      correlationId: "req-1",
+    });
+
+    // Second request should reject due to limit
+    await expect(
+      limitedClient.request(Hello, { name: "2" }, HelloOk, {
+        timeoutMs: 10000,
+      }),
+    ).rejects.toThrow(StateError);
+
+    // Prove req1 is still pending (not timed out) by replying to it
+    limitMockWs._trigger.message({
+      type: "HELLO_OK",
+      meta: { correlationId: "req-1" },
+      payload: { text: "still alive" },
+    });
+
+    const reply = (await req1Promise) as z.infer<typeof HelloOk>;
+    expect(reply.type).toBe("HELLO_OK");
+    // If req1 resolved, req2's rejection was due to limit, not timeout
   });
 
   describe("RPC-Style Requests (Auto-Detected Response)", () => {

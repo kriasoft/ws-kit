@@ -1281,8 +1281,22 @@ export interface WebSocketRouterOptions<
    * When a socket exceeds this limit, new RPC requests are rejected with
    * RPC_ERROR code "RESOURCE_EXHAUSTED". Helps prevent resource exhaustion from
    * misbehaving clients sending unbounded concurrent RPC requests.
+   *
+   * @deprecated Use `rpcMaxInflightPerSocket` instead (preferred for clarity among mixed options).
    */
   maxInflightRpcsPerSocket?: number;
+
+  /**
+   * Maximum in-flight (non-terminal) RPC requests per socket (default: 1000).
+   *
+   * When a socket exceeds this limit, new RPC requests are rejected with
+   * RPC_ERROR code "RESOURCE_EXHAUSTED". Helps prevent resource exhaustion from
+   * misbehaving clients sending unbounded concurrent RPC requests.
+   *
+   * Preferred over the legacy `maxInflightRpcsPerSocket` for clarity when mixed with
+   * other unrelated options (heartbeat, auth, logging, etc.).
+   */
+  rpcMaxInflightPerSocket?: number;
 
   /**
    * Timeout for orphaned/idle RPC cleanup in milliseconds (default: rpcTimeoutMs + 10000).
@@ -1292,6 +1306,33 @@ export interface WebSocketRouterOptions<
    * client disconnects that don't fire close handler or network partitions.
    */
   rpcIdleTimeoutMs?: number;
+
+  /**
+   * RPC cleanup scan cadence in milliseconds (default: 5000).
+   *
+   * Controls how frequently the router checks for idle RPC state and runs
+   * cleanup. Lower values reduce memory from lingering idle RPCs but increase
+   * CPU cost; higher values reduce CPU overhead but may accumulate more state.
+   *
+   * Useful for tuning in high-throughput systems. Typically left at default.
+   *
+   * @internal Advanced tuning; use only if profiling shows cleanup needs adjustment
+   */
+  rpcCleanupCadenceMs?: number;
+
+  /**
+   * RPC deduplication window in milliseconds (default: 3600000 / 1 hour).
+   *
+   * Controls how long the router remembers completed RPC IDs to detect duplicate
+   * requests from the same client. This prevents handling the same request twice
+   * if a completion message is lost and the client retries.
+   *
+   * Shorter values reduce memory but increase collision risk; longer values are safer
+   * but consume more memory. Typically left at default for production.
+   *
+   * @internal Advanced tuning; adjust only if analyzing memory usage under specific workloads
+   */
+  rpcDedupWindowMs?: number;
 
   /**
    * Automatically send INTERNAL response when handler throws uncaught exception (default: true).

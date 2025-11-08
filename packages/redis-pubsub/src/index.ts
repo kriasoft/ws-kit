@@ -1,14 +1,22 @@
 /**
- * @ws-kit/redis-pubsub - Redis PubSub adapter
+ * @ws-kit/redis-pubsub - Redis PubSub adapter for cross-process broadcasting
  *
- * Optional Redis-based PubSub adapter providing:
- * - createRedisPubSub() factory returning PubSub implementation
- * - Cross-process broadcasting for multi-server deployments
- * - Connection pooling and automatic reconnection with exponential backoff
+ * Provides a Redis-based PubSub adapter for WS-Kit, enabling:
+ * - Cross-process broadcasting across multiple server instances
+ * - Automatic connection management with exponential backoff
+ * - Strict message serialization (JSON/text contracts)
  * - Channel namespace support for multi-tenancy
- * - Works with any platform adapter (Bun, Cloudflare, Node.js, etc.)
+ * - Pattern subscriptions with Redis PSUBSCRIBE
  *
- * Example usage:
+ * ## Semantics
+ *
+ * - **Delivery**: At-least-once (messages may be redelivered on reconnect)
+ * - **Ordering**: Per-channel FIFO; unordered across reconnects
+ * - **Publish while disconnected**: Fails immediately (no buffering)
+ * - **Serialization**: Strict JSON/text; no auto-detection
+ * - **Lifecycle**: If you pass `client`, you own cleanup; RedisPubSub owns created clients
+ *
+ * ## Example
  *
  * ```typescript
  * import { createRouter } from "@ws-kit/zod";
@@ -22,47 +30,32 @@
  * ```
  */
 
-import { RedisPubSub } from "./pubsub.js";
-import type { RedisPubSubOptions } from "./types.js";
+export { RedisPubSub, createRedisPubSub } from "./pubsub.js";
+export type {
+  RedisPubSubOptions,
+  MessageHandler,
+  Unsubscribe,
+  EventHandler,
+  Subscription,
+  PublishResult,
+  PubSubStatus,
+  PubSubEvent,
+  Events,
+  PublishOpts,
+  SubscribeOpts,
+  OnceOpts,
+  PonceOpts,
+  RetryPolicy,
+} from "./types.js";
 
-export { RedisPubSub };
-export type { RedisPubSubOptions, MessageHandler } from "./types.js";
 export {
-  RedisPubSubError,
-  RedisConnectionError,
-  RedisPublishError,
-  RedisSubscribeError,
+  PubSubError,
+  PublishError,
+  SubscribeError,
   SerializationError,
   DeserializationError,
+  DisconnectedError,
+  ConfigurationError,
+  MaxSubscriptionsExceededError,
 } from "./errors.js";
-
-/**
- * Create a Redis-based PubSub adapter
- *
- * @param options Configuration options for Redis connection and behavior
- * @returns A PubSub instance implementing cross-process broadcasting
- *
- * @example
- * ```typescript
- * // Basic usage with URL
- * const pubsub = createRedisPubSub({ url: "redis://localhost:6379" });
- *
- * // With host/port
- * const pubsub = createRedisPubSub({ host: "localhost", port: 6379 });
- *
- * // With namespace for multi-tenancy
- * const pubsub = createRedisPubSub({
- *   url: "redis://localhost:6379",
- *   namespace: "myapp:prod",
- * });
- *
- * // With pre-configured Redis client
- * import { createClient } from "redis";
- * const redisClient = createClient({ url: "redis://localhost:6379" });
- * await redisClient.connect();
- * const pubsub = createRedisPubSub({ client: redisClient });
- * ```
- */
-export function createRedisPubSub(options?: RedisPubSubOptions) {
-  return new RedisPubSub(options);
-}
+export type { PubSubErrorCode } from "./errors.js";

@@ -12,6 +12,7 @@ import {
 } from "bun:test";
 import { createRouter, message, z } from "@ws-kit/zod";
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
+import { MemoryPubSub } from "../../src/pubsub.js";
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;
@@ -34,7 +35,104 @@ afterEach(() => {
   console.log = originalConsoleLog;
   console.warn = originalConsoleWarn;
   console.error = originalConsoleError;
+
+  // Verify console methods are ACTUALLY restored after each test
+  // Ensures no test crash leaves console mocked, preventing isolation issues
+  if (console.log !== originalConsoleLog) {
+    throw new Error(
+      "console.log was not properly restored - mock leak detected",
+    );
+  }
+  if (console.warn !== originalConsoleWarn) {
+    throw new Error(
+      "console.warn was not properly restored - mock leak detected",
+    );
+  }
+  if (console.error !== originalConsoleError) {
+    throw new Error(
+      "console.error was not properly restored - mock leak detected",
+    );
+  }
 });
+
+// ———————————————————————————————————————————————————————————————————————————
+// Test Helpers
+// ———————————————————————————————————————————————————————————————————————————
+
+/**
+ * Robustly connect to WebSocket server with automatic retries.
+ * Eliminates arbitrary timeouts; uses native WebSocket events.
+ */
+async function connectToServer(
+  port: number,
+  options: { maxAttempts?: number } = {},
+): Promise<WebSocket> {
+  const { maxAttempts = 10 } = options;
+  let attempts = 0;
+
+  return new Promise((resolve, reject) => {
+    const tryConnect = () => {
+      attempts++;
+      const socket = new WebSocket(`ws://localhost:${port}/ws`);
+
+      const cleanup = () => {
+        socket.removeEventListener("open", onOpen);
+        socket.removeEventListener("close", onClose);
+        socket.removeEventListener("error", onError);
+      };
+
+      const onOpen = () => {
+        cleanup();
+        resolve(socket);
+      };
+
+      const onClose = () => {
+        cleanup();
+        if (attempts < maxAttempts) {
+          setTimeout(tryConnect, 50);
+        } else {
+          reject(new Error(`Failed to connect after ${maxAttempts} attempts`));
+        }
+      };
+
+      const onError = (error: Event) => {
+        cleanup();
+        if (attempts < maxAttempts) {
+          setTimeout(tryConnect, 50);
+        } else {
+          reject(
+            new Error(`Connection failed: ${(error as ErrorEvent).message}`),
+          );
+        }
+      };
+
+      socket.addEventListener("open", onOpen);
+      socket.addEventListener("close", onClose);
+      socket.addEventListener("error", onError);
+    };
+
+    tryConnect();
+  });
+}
+
+/**
+ * Create a message listener for capturing server responses.
+ */
+function createMessageListener(): {
+  messages: unknown[];
+  attach: (socket: WebSocket) => void;
+} {
+  const messages: unknown[] = [];
+
+  return {
+    messages,
+    attach(socket: WebSocket) {
+      socket.addEventListener("message", (event) => {
+        messages.push(JSON.parse(event.data as string));
+      });
+    },
+  };
+}
 
 // Test message schemas
 const Ping = message("PING", {
@@ -53,20 +151,29 @@ const Error = message("ERROR", {
 
 describe("WebSocketServer E2E", () => {
   let server: ReturnType<typeof Bun.serve>;
-  let ws: ReturnType<typeof createRouter>;
+  let router: ReturnType<typeof createRouter>;
   let port: number;
+
+  // Handler call tracking (replaces mocks with simpler counters)
+  let openHandlerCalls: number;
+  let closeHandlerCalls: number;
 
   beforeEach(() => {
     // Use a random port for each test to avoid conflicts
     port = 50000 + Math.floor(Math.random() * 10000);
 
-    // Create a new router with platform adapter and validator
-    ws = createRouter({
+    // Reset handler tracking
+    openHandlerCalls = 0;
+    closeHandlerCalls = 0;
+
+    // Create a new router with platform adapter, validator, and pubsub
+    router = createRouter({
       platform: createBunAdapter(),
+      pubsub: new MemoryPubSub(),
     });
 
     // Set up message handlers
-    ws.on(Ping, (ctx) => {
+    router.on(Ping, (ctx) => {
       // Echo back a PONG with the same message and add a timestamp
       ctx.send(Pong, {
         message: ctx.payload.message,
@@ -75,26 +182,23 @@ describe("WebSocketServer E2E", () => {
     });
 
     // Add an error message handler
-    ws.on(Error, () => {
+    router.on(Error, () => {
       // Just for handling error messages in tests
     });
 
-    // Set up open handler
-    const openHandlerMock = mock(() => {
-      // Optional: send a welcome message
-      // ctx.send(...);
+    // Set up open handler with call tracking
+    router.onOpen(() => {
+      openHandlerCalls++;
     });
-    ws.onOpen(openHandlerMock);
 
-    // Set up close handler
-    const closeHandlerMock = mock(() => {
-      /* Mock implementation */
+    // Set up close handler with call tracking
+    router.onClose(() => {
+      closeHandlerCalls++;
     });
-    ws.onClose(closeHandlerMock);
 
     // Create Bun handler from router
     const { fetch, websocket } = createBunHandler(
-      (ws as any)[Symbol.for("ws-kit.core")],
+      (router as any)[Symbol.for("ws-kit.core")],
     );
 
     // Start the server
@@ -107,42 +211,37 @@ describe("WebSocketServer E2E", () => {
 
   afterEach(() => {
     // Shutdown the server after each test
-    server.stop();
+    try {
+      server.stop();
+    } catch {
+      // Server might already be stopped
+    }
+  });
+
+  it("should call onOpen handler when client connects", async () => {
+    const socket = await connectToServer(port);
+    expect(openHandlerCalls).toBe(1);
+    socket.close();
   });
 
   it("should establish a WebSocket connection and exchange messages", async () => {
-    // Wait a bit to ensure server is ready
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Connect to the server
-    const socket = new WebSocket(`ws://localhost:${port}/ws`);
-
-    // Keep track of messages received by the client
-    const receivedMessages: any[] = [];
-
-    // Set up message handler
-    socket.addEventListener("message", (event) => {
-      receivedMessages.push(JSON.parse(event.data as string));
-    });
-
-    // Wait for the connection to open
-    await new Promise<void>((resolve) => {
-      socket.addEventListener("open", () => resolve());
-    });
+    const socket = await connectToServer(port);
+    const listener = createMessageListener();
+    listener.attach(socket);
 
     // Send a PING message
     const pingMessage = {
       type: "PING",
-      meta: { clientId: "test-client" },
+      meta: { timestamp: Date.now() },
       payload: { message: "Hello Server!" },
     };
 
     socket.send(JSON.stringify(pingMessage));
 
-    // Wait for a response (PONG)
+    // Wait for response
     await new Promise<void>((resolve) => {
       const checkInterval = setInterval(() => {
-        if (receivedMessages.length > 0) {
+        if (listener.messages.length > 0) {
           clearInterval(checkInterval);
           resolve();
         }
@@ -150,43 +249,36 @@ describe("WebSocketServer E2E", () => {
     });
 
     // Check that we received the expected PONG message
-    expect(receivedMessages.length).toBe(1);
-    expect(receivedMessages[0].type).toBe("PONG");
-    expect(receivedMessages[0].payload.message).toBe("Hello Server!");
-    expect(receivedMessages[0].payload.timestamp).toBeGreaterThan(0);
+    expect(listener.messages.length).toBe(1);
+    expect(listener.messages[0]).toMatchObject({
+      type: "PONG",
+      payload: { message: "Hello Server!" },
+    });
+    expect((listener.messages[0] as any).payload.timestamp).toBeGreaterThan(0);
 
-    // Clean up
     socket.close();
   });
 
   it("should handle multiple clients simultaneously", async () => {
-    // Wait for server to be ready
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
     // Connect multiple clients
     const clients = await Promise.all(
       Array.from({ length: 3 }, async (_, i) => {
-        const socket = new WebSocket(`ws://localhost:${port}/ws`);
-        const messages: any[] = [];
+        const socket = await connectToServer(port);
+        const listener = createMessageListener();
+        listener.attach(socket);
 
-        socket.addEventListener("message", (event) => {
-          messages.push(JSON.parse(event.data as string));
-        });
-
-        // Wait for connection to open
-        await new Promise<void>((resolve) => {
-          socket.addEventListener("open", () => resolve());
-        });
-
-        return { socket, messages, id: `client-${i}` };
+        return { socket, listener, id: `client-${i}` };
       }),
     );
+
+    // Verify onOpen was called for each client
+    expect(openHandlerCalls).toBe(3);
 
     // Each client sends a message
     clients.forEach((client) => {
       const pingMessage = {
         type: "PING",
-        meta: { clientId: client.id },
+        meta: { timestamp: Date.now() },
         payload: { message: `Hello from ${client.id}` },
       };
       client.socket.send(JSON.stringify(pingMessage));
@@ -195,7 +287,7 @@ describe("WebSocketServer E2E", () => {
     // Wait for all clients to receive responses
     await new Promise<void>((resolve) => {
       const checkInterval = setInterval(() => {
-        if (clients.every((client) => client.messages.length > 0)) {
+        if (clients.every((client) => client.listener.messages.length > 0)) {
           clearInterval(checkInterval);
           resolve();
         }
@@ -204,9 +296,9 @@ describe("WebSocketServer E2E", () => {
 
     // Verify each client received the correct response
     clients.forEach((client) => {
-      expect(client.messages.length).toBe(1);
-      expect(client.messages[0].type).toBe("PONG");
-      expect(client.messages[0].payload.message).toBe(
+      expect(client.listener.messages.length).toBe(1);
+      expect((client.listener.messages[0] as any).type).toBe("PONG");
+      expect((client.listener.messages[0] as any).payload.message).toBe(
         `Hello from ${client.id}`,
       );
     });
@@ -216,19 +308,7 @@ describe("WebSocketServer E2E", () => {
   });
 
   it("should handle invalid message format gracefully", async () => {
-    // Connect to the server
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const socket = new WebSocket(`ws://localhost:${port}/ws`);
-
-    const receivedMessages: any[] = [];
-    socket.addEventListener("message", (event) => {
-      receivedMessages.push(JSON.parse(event.data as string));
-    });
-
-    // Wait for connection to open
-    await new Promise<void>((resolve) => {
-      socket.addEventListener("open", () => resolve());
-    });
+    const socket = await connectToServer(port);
 
     // Monitor console.error calls
     const errorSpy = spyOn(console, "error");
@@ -249,32 +329,312 @@ describe("WebSocketServer E2E", () => {
     socket.close();
   });
 
-  it("should handle client disconnection properly", async () => {
-    // Create a mock for the close handler
-    const closeHandlerMock = mock(() => {
-      /* Mock implementation */
-    });
-
-    // Register our mock as a close handler
-    ws.onClose(closeHandlerMock);
-
-    // Connect to the server
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const socket = new WebSocket(`ws://localhost:${port}/ws`);
-
-    // Wait for connection to open
-    await new Promise<void>((resolve) => {
-      socket.addEventListener("open", () => resolve());
-    });
+  it("should call onClose handler when client disconnects", async () => {
+    const socket = await connectToServer(port);
+    expect(openHandlerCalls).toBe(1);
 
     // Close the connection from the client side
     socket.close(1000, "Normal closure");
 
-    // Wait for close event to be processed
-    // Need a bit more time to ensure the close handler is called
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Wait for the socket's close event to actually fire
+    await new Promise<void>((resolve) => {
+      const onClose = () => {
+        socket.removeEventListener("close", onClose);
+        resolve();
+      };
+      socket.addEventListener("close", onClose);
+    });
 
-    // Verify close handler was called
-    expect(closeHandlerMock).toHaveBeenCalled();
+    // Verify close handler was called exactly once
+    expect(closeHandlerCalls).toBe(1);
+  });
+
+  describe("Message Schema & Normalization", () => {
+    it("should reject messages with unknown keys at root level", async () => {
+      const socket = await connectToServer(port);
+      const listener = createMessageListener();
+      listener.attach(socket);
+
+      // Send message with unknown field
+      socket.send(
+        JSON.stringify({
+          type: "PING",
+          meta: { timestamp: Date.now() },
+          payload: { message: "test" },
+          unknownField: "bad", // ❌ Unknown key
+        }),
+      );
+
+      // Handler should not receive malformed message
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(listener.messages.length).toBe(0);
+
+      socket.close();
+    });
+
+    it("should reject messages with unknown keys in meta", async () => {
+      const socket = await connectToServer(port);
+      const listener = createMessageListener();
+      listener.attach(socket);
+
+      socket.send(
+        JSON.stringify({
+          type: "PING",
+          meta: {
+            timestamp: Date.now(),
+            junk: "xyz", // ❌ Unknown meta key
+          },
+          payload: { message: "test" },
+        }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(listener.messages.length).toBe(0);
+
+      socket.close();
+    });
+
+    it("should reject messages with unknown keys in payload", async () => {
+      const socket = await connectToServer(port);
+      const listener = createMessageListener();
+      listener.attach(socket);
+
+      socket.send(
+        JSON.stringify({
+          type: "PING",
+          meta: { timestamp: Date.now() },
+          payload: { message: "test", extra: "field" }, // ❌ Extra field
+        }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(listener.messages.length).toBe(0);
+
+      socket.close();
+    });
+
+    it("should provide valid metadata to handlers", async () => {
+      let receivedMeta: unknown;
+
+      router.on(Ping, (ctx) => {
+        receivedMeta = ctx.meta;
+      });
+
+      const socket = await connectToServer(port);
+
+      // Send a valid message with clean meta
+      socket.send(
+        JSON.stringify({
+          type: "PING",
+          meta: {
+            timestamp: Date.now(),
+          },
+          payload: { message: "test" },
+        }),
+      );
+
+      // Wait for handler to process
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Handler should receive valid metadata
+      expect(receivedMeta).toBeDefined();
+      expect(receivedMeta).toHaveProperty("timestamp");
+
+      socket.close();
+    });
+
+    it("should reject message with payload key when schema defines none", async () => {
+      const NoPayloadMsg = message("NO_PAYLOAD");
+      const socket = await connectToServer(port);
+      const listener = createMessageListener();
+      listener.attach(socket);
+
+      // Send message with payload key when schema has no payload
+      socket.send(
+        JSON.stringify({
+          type: "NO_PAYLOAD",
+          meta: { timestamp: Date.now() },
+          payload: {}, // ❌ Unexpected - schema defines no payload
+        }),
+      );
+
+      // Wait for potential response
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Handler should not receive this invalid message
+      expect(listener.messages.length).toBe(0);
+
+      socket.close();
+    });
+
+    it("should reject message missing payload key when schema requires one", async () => {
+      const RequiresPayloadMsg = message("REQUIRES_PAYLOAD", {
+        id: z.number(),
+      });
+
+      router.on(RequiresPayloadMsg, () => {
+        // Should not be called
+      });
+
+      const socket = await connectToServer(port);
+      const listener = createMessageListener();
+      listener.attach(socket);
+
+      // Send message without payload when schema requires it
+      socket.send(
+        JSON.stringify({
+          type: "REQUIRES_PAYLOAD",
+          meta: { timestamp: Date.now() },
+          // ❌ Missing payload key
+        }),
+      );
+
+      // Wait for potential response
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Handler should not receive this invalid message
+      expect(listener.messages.length).toBe(0);
+
+      socket.close();
+    });
+
+    it("should override client-injected reserved meta keys", async () => {
+      let receivedMeta: unknown;
+      const maliciousClientId = "malicious-fake-id";
+      const maliciousReceivedAt = 999;
+
+      // Register handler in a separate test context to avoid handler accumulation
+      let capturedPing: any;
+      router.on(Ping, (ctx) => {
+        capturedPing = ctx;
+        receivedMeta = ctx.meta;
+      });
+
+      const socket = await connectToServer(port);
+
+      // Send message with reserved keys
+      socket.send(
+        JSON.stringify({
+          type: "PING",
+          meta: {
+            timestamp: Date.now(),
+            clientId: maliciousClientId, // ❌ Client tries to inject fake ID
+            receivedAt: maliciousReceivedAt, // ❌ Client tries to inject fake timestamp
+          },
+          payload: { message: "test" },
+        }),
+      );
+
+      // Wait for handler to process
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Handler should have received meta with server-injected values
+      expect(receivedMeta).toBeDefined();
+      expect((receivedMeta as any).clientId).toBeDefined();
+      // The clientId should be server-generated, NOT the malicious one
+      expect((receivedMeta as any).clientId).not.toBe(maliciousClientId);
+      // receivedAt should be server time, NOT the malicious value
+      expect((receivedMeta as any).receivedAt).toBeDefined();
+      expect((receivedMeta as any).receivedAt).not.toBe(maliciousReceivedAt);
+      expect((receivedMeta as any).receivedAt).toBeGreaterThan(0);
+
+      socket.close();
+    });
+
+    it("should provide ctx.receivedAt as authoritative server timestamp", async () => {
+      let receivedAt: number | undefined;
+      let receivedMetaTimestamp: number | undefined;
+      const beforeServerTime = Date.now();
+
+      router.on(Ping, (ctx) => {
+        receivedAt = ctx.receivedAt;
+        receivedMetaTimestamp = ctx.meta.timestamp;
+      });
+
+      const socket = await connectToServer(port);
+
+      // Send message with client's timestamp (which may be skewed)
+      const clientTime = beforeServerTime - 5000; // Fake old timestamp
+      socket.send(
+        JSON.stringify({
+          type: "PING",
+          meta: {
+            timestamp: clientTime, // ❌ Old/untrusted client time
+          },
+          payload: { message: "test" },
+        }),
+      );
+
+      // Wait for handler to process
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const afterServerTime = Date.now();
+
+      // ctx.receivedAt should be server time (authoritative)
+      expect(receivedAt).toBeGreaterThanOrEqual(beforeServerTime);
+      expect(receivedAt).toBeLessThanOrEqual(afterServerTime);
+
+      // meta.timestamp should be preserved from client (but untrusted)
+      expect(receivedMetaTimestamp).toBe(clientTime);
+
+      // Server time should be significantly different from client time
+      expect(receivedAt! - receivedMetaTimestamp!).toBeGreaterThan(4000);
+
+      socket.close();
+    });
+  });
+
+  describe("router.publish()", () => {
+    it("should not inject clientId into published messages", async () => {
+      const ChatMsg = message("CHAT", { text: z.string() });
+
+      // Access the internal router's pubsub
+      const coreRouter = (router as any)[Symbol.for("ws-kit.core")];
+      let publishedMessage: any;
+      coreRouter.pubsub.subscribe("test-topic", (msg: any) => {
+        publishedMessage = msg;
+      });
+
+      // Publish a message using the core router
+      await coreRouter.publish("test-topic", ChatMsg, { text: "test" });
+
+      // Verify the published message
+      expect(publishedMessage).toBeDefined();
+      expect(publishedMessage.meta).toBeDefined();
+      // clientId should NOT be in published messages
+      expect(publishedMessage.meta).not.toHaveProperty("clientId");
+      // But timestamp should be auto-injected
+      expect(publishedMessage.meta).toHaveProperty("timestamp");
+      expect(publishedMessage.payload).toEqual({ text: "test" });
+    });
+
+    it("should preserve custom metadata in published messages", async () => {
+      const ChatMsg = message(
+        "CHAT",
+        { text: z.string() },
+        { senderId: z.string().optional() },
+      );
+
+      // Access the internal router's pubsub
+      const coreRouter = (router as any)[Symbol.for("ws-kit.core")];
+      let publishedMessage: any;
+      coreRouter.pubsub.subscribe("test-topic-2", (msg: any) => {
+        publishedMessage = msg;
+      });
+
+      // Publish with custom metadata using the core router
+      await coreRouter.publish(
+        "test-topic-2",
+        ChatMsg,
+        { text: "hello" },
+        { meta: { senderId: "admin" } },
+      );
+
+      // Verify custom metadata is preserved
+      expect(publishedMessage).toBeDefined();
+      expect(publishedMessage.meta).toHaveProperty("senderId", "admin");
+      expect(publishedMessage.meta).toHaveProperty("timestamp");
+      expect(publishedMessage.payload).toEqual({ text: "hello" });
+    });
   });
 });

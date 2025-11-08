@@ -45,6 +45,35 @@ import { serve, createBunHandler } from "@ws-kit/bun";
 - **`serve()`** - High-level server function
 - **`createBunHandler()`** - Low-level handler for custom setups
 
+### Platform & Pub/Sub Adapters
+
+WS-Kit provides pluggable adapters for different deployment platforms and pub/sub implementations.
+
+**Built-in adapters:**
+
+```typescript
+// Memory adapter (default, included in @ws-kit/core)
+import { MemoryPubSub } from "@ws-kit/core";
+
+// Bun platform adapter (included in @ws-kit/bun)
+import { createBunHandler } from "@ws-kit/bun";
+
+// Cloudflare Durable Objects adapter
+import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+```
+
+**Optional add-ons:**
+
+```typescript
+// Redis pub/sub for distributed deployments
+import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+
+// Middleware helpers for composing adapters and handlers
+import {} from /* middleware utilities */ "@ws-kit/middleware";
+```
+
+For complete adapter documentation including configuration, guarantees, and platform-specific limits, see [Adapter Responsibilities](/specs/adapters).
+
 ---
 
 ## Schema Creation

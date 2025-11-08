@@ -86,15 +86,19 @@ const connectedUsers = new Map<
 const pubsub = createRedisPubSub({
   url: REDIS_URL,
   namespace: `chat:app:${INSTANCE_ID}`,
-  onConnect: () => {
-    console.log("✅ Connected to Redis");
-  },
-  onError: (err) => {
-    console.error("❌ Redis error:", err.message);
-  },
-  onDisconnect: () => {
-    console.log("⚠️  Disconnected from Redis (reconnecting...)");
-  },
+});
+
+pubsub.on("connect", () => {
+  console.log("✅ Connected to Redis");
+});
+
+pubsub.on("error", (err: unknown) => {
+  const error = err instanceof Error ? err : new Error(String(err));
+  console.error("❌ Redis error:", error.message);
+});
+
+pubsub.on("disconnect", () => {
+  console.log("⚠️  Disconnected from Redis (reconnecting...)");
 });
 
 const router = createRouter<WebSocketData>({
@@ -236,7 +240,7 @@ console.log(`   Health: http://localhost:${PORT}/health`);
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down...");
-  await pubsub.destroy();
+  await pubsub.close();
   server.stop();
   process.exit(0);
 });

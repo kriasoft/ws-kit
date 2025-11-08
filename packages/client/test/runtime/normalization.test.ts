@@ -11,9 +11,8 @@
  * See @docs/specs/rules.md#client-side-constraints
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createClient } from "../../src/index.js";
-import type { WebSocketClient } from "../../src/types.js";
 import { z, message } from "@ws-kit/zod";
 import { createMockWebSocket } from "./helpers.js";
 
@@ -27,25 +26,25 @@ const RoomMsg = message(
 
 describe("Client: Outbound Normalization", () => {
   let mockWs: ReturnType<typeof createMockWebSocket>;
-  let client: WebSocketClient;
+  let client: ReturnType<typeof createClient>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockWs = createMockWebSocket();
-
-    // Create client with mock WebSocket
     client = createClient({
       url: "ws://test",
       wsFactory: () => {
-        // Trigger open event on next tick to simulate connection
         setTimeout(() => mockWs._trigger.open(), 0);
         return mockWs as unknown as WebSocket;
       },
     });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client.close();
   });
 
   it("strips clientId from user meta (security boundary)", async () => {
-    await client.connect();
-
     client.send(TestMsg, { id: 123 }, { meta: { clientId: "fake-id" } as any });
 
     const sent = mockWs._getSentMessages();
@@ -55,8 +54,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("strips receivedAt from user meta (security boundary)", async () => {
-    await client.connect();
-
     client.send(TestMsg, { id: 123 }, { meta: { receivedAt: 999 } as any });
 
     const sent = mockWs._getSentMessages();
@@ -66,8 +63,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("strips correlationId from user meta (client-managed field)", async () => {
-    await client.connect();
-
     // User tries to set correlationId via meta (ignored)
     client.send(
       TestMsg,
@@ -85,8 +80,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("preserves user-provided timestamp", async () => {
-    await client.connect();
-
     // User provides timestamp
     client.send(TestMsg, { id: 123 }, { meta: { timestamp: 999 } });
 
@@ -96,8 +89,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("auto-injects timestamp if missing", async () => {
-    await client.connect();
-
     const beforeSend = Date.now();
     client.send(TestMsg, { id: 123 });
     const afterSend = Date.now();
@@ -111,8 +102,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("preserves extended meta fields", async () => {
-    await client.connect();
-
     client.send(RoomMsg, { text: "hello" }, { meta: { roomId: "general" } });
 
     const sent = mockWs._getSentMessages();
@@ -122,8 +111,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("merges meta in correct order: defaults < user < correlationId", async () => {
-    await client.connect();
-
     // User provides timestamp + correlationId
     client.send(
       RoomMsg,
@@ -147,8 +134,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("strips all reserved keys simultaneously", async () => {
-    await client.connect();
-
     client.send(
       TestMsg,
       { id: 123 },
@@ -178,8 +163,6 @@ describe("Client: Outbound Normalization", () => {
   });
 
   it("handles missing meta gracefully", async () => {
-    await client.connect();
-
     client.send(TestMsg, { id: 123 }); // No opts.meta
 
     const sent = mockWs._getSentMessages();
