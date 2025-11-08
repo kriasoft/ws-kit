@@ -15,11 +15,14 @@ export default {
   Layout: () => {
     const { isDark, page } = useData();
     const initMermaid = () => {
-      nextTick(() =>
-        createMermaidRenderer({
+      nextTick(() => {
+        const renderer = createMermaidRenderer({
           theme: isDark.value ? "dark" : "forest",
-        }).initialize(),
-      );
+        });
+        if (renderer?.initialize && typeof renderer.initialize === "function") {
+          renderer.initialize();
+        }
+      });
     };
 
     nextTick(() => initMermaid());

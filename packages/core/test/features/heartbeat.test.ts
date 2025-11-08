@@ -1,13 +1,20 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "bun:test";
 import {
   WebSocketRouter,
   type ServerWebSocket,
   type ValidatorAdapter,
   type WebSocketData,
-} from "../src/index.js";
+} from "../../src/index.js";
 
 // ============================================================================
 // Mock Implementations
@@ -84,12 +91,18 @@ describe("Heartbeat Management", () => {
     ws = createMockWebSocket();
   });
 
+  afterEach(() => {
+    // Clean up router to release heartbeat timers and resources
+    (router as any)?.dispose?.();
+  });
+
   describe("Heartbeat Initialization", () => {
     it("should initialize heartbeat on connection open", async () => {
       await router.handleOpen(ws);
 
-      // Router should be managing heartbeat without errors
-      expect(true).toBe(true);
+      // Connection should be open and actively monitored
+      const mockWs = ws as any;
+      expect(mockWs._isClosed()).toBe(false);
     });
 
     it("should use custom heartbeat config", () => {
@@ -101,12 +114,20 @@ describe("Heartbeat Management", () => {
         },
       });
 
+      onTestFinished(() => {
+        (customRouter as any)?.dispose?.();
+      });
+
       expect(customRouter).toBeDefined();
     });
 
     it("should use default heartbeat config if not provided", () => {
       const defaultRouter = new WebSocketRouter({
         validator: mockValidator,
+      });
+
+      onTestFinished(() => {
+        (defaultRouter as any)?.dispose?.();
       });
 
       expect(defaultRouter).toBeDefined();
@@ -118,30 +139,48 @@ describe("Heartbeat Management", () => {
         heartbeat: false as any,
       });
 
-      await noHeartbeatRouter.handleOpen(ws);
+      onTestFinished(() => {
+        (noHeartbeatRouter as any)?.dispose?.();
+      });
 
-      expect(true).toBe(true);
+      const testWs = createMockWebSocket();
+      await noHeartbeatRouter.handleOpen(testWs);
+
+      // Should remain open even after timeout period (heartbeat disabled)
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect((testWs as any)._isClosed()).toBe(false);
     });
   });
 
   describe("Pong Handling", () => {
-    it("should reset pong timeout on message received", async () => {
+    it("should reset pong timeout on pong signal", async () => {
       await router.handleOpen(ws);
 
-      // Simulate message received (which resets pong timeout)
+      // Wait part way through the timeout window
+      await new Promise((resolve) => setTimeout(resolve, 40));
+
+      // Send pong to reset timeout
       router.handlePong(ws.data.clientId);
 
-      expect(true).toBe(true);
+      // Wait a moderate amount more (not enough to trigger new timeout from pong)
+      await new Promise((resolve) => setTimeout(resolve, 40));
+
+      const mockWs = ws as any;
+      expect(mockWs._isClosed()).toBe(false);
     });
 
     it("should accept multiple pong signals", async () => {
       await router.handleOpen(ws);
 
-      router.handlePong(ws.data.clientId);
-      router.handlePong(ws.data.clientId);
-      router.handlePong(ws.data.clientId);
+      // Send multiple pongs at regular intervals to keep connection alive
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        router.handlePong(ws.data.clientId);
+      }
 
-      expect(true).toBe(true);
+      // Connection should still be open after multiple pongs
+      const mockWs = ws as any;
+      expect(mockWs._isClosed()).toBe(false);
     });
   });
 
@@ -149,51 +188,65 @@ describe("Heartbeat Management", () => {
     it("should reset pong timeout when message is received", async () => {
       await router.handleOpen(ws);
 
-      // Send a message
+      // Wait part way through the timeout window
+      await new Promise((resolve) => setTimeout(resolve, 40));
+
+      // Send a message (resets pong timeout)
       await router.handleMessage(
         ws,
         JSON.stringify({ type: "TEST", meta: {} }),
       );
 
-      // Should succeed without timeout
-      expect(true).toBe(true);
+      // Wait a bit more (not enough to trigger timeout from the reset)
+      await new Promise((resolve) => setTimeout(resolve, 40));
+
+      const mockWs = ws as any;
+      expect(mockWs._isClosed()).toBe(false);
     });
 
     it("should reset pong timeout for each message", async () => {
       await router.handleOpen(ws);
 
-      // Send multiple messages
+      // Send multiple messages at regular intervals to keep connection alive
       for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
         await router.handleMessage(
           ws,
           JSON.stringify({ type: "TEST", meta: {} }),
         );
-        // Add small delay between messages
-        await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
-      expect(true).toBe(true);
+      // Connection should still be open after multiple messages
+      const mockWs = ws as any;
+      expect(mockWs._isClosed()).toBe(false);
     });
   });
 
   describe("Heartbeat Cleanup", () => {
     it("should clean up heartbeat on close", async () => {
       await router.handleOpen(ws);
-      await router.handleClose(ws, 1000);
+      const mockWs = ws as any;
 
-      // Cleanup should succeed without errors
-      expect(true).toBe(true);
+      // Verify connection is open
+      expect(mockWs._isClosed()).toBe(false);
+
+      // Close the connection - should complete without error
+      await expect(router.handleClose(ws, 1000)).resolves.toBeUndefined();
     });
 
     it("should clear timers on close", async () => {
       await router.handleOpen(ws);
 
-      // Give timers time to be set up
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Close the connection - should complete without error
+      await expect(router.handleClose(ws, 1000)).resolves.toBeUndefined();
 
-      await router.handleClose(ws, 1000);
+      // Wait past the timeout period to ensure no lingering timers fire
+      const initialCode = (ws as any)._getCloseCode?.();
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
-      expect(true).toBe(true);
+      // Verify state hasn't changed (no lingering timers tried to re-close)
+      const finalCode = (ws as any)._getCloseCode?.();
+      expect(finalCode).toBe(initialCode);
     });
   });
 
@@ -207,14 +260,19 @@ describe("Heartbeat Management", () => {
       await router.handleOpen(ws2);
       await router.handleOpen(ws3);
 
-      // Close one connection
-      await router.handleClose(ws1, 1000);
+      // Let all approach timeout (wait 40ms into the timeout window)
+      await new Promise((resolve) => setTimeout(resolve, 40));
 
-      // Others should still be valid
-      router.handlePong("client-2");
+      // Only pong ws1 and ws3, let ws2 timeout
+      router.handlePong("client-1");
       router.handlePong("client-3");
 
-      expect(true).toBe(true);
+      // Wait longer to ensure ws2 times out and others don't
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect((ws1 as any)._isClosed()).toBe(false);
+      expect((ws2 as any)._isClosed()).toBe(true);
+      expect((ws3 as any)._isClosed()).toBe(false);
     });
 
     it("should handle pong for correct connection only", async () => {
@@ -224,11 +282,17 @@ describe("Heartbeat Management", () => {
       await router.handleOpen(ws1);
       await router.handleOpen(ws2);
 
-      // Pong for ws1 should not affect ws2's timeout
-      router.handlePong("client-1");
-      router.handlePong("client-2");
+      // Wait part way into timeout window
+      await new Promise((resolve) => setTimeout(resolve, 40));
 
-      expect(true).toBe(true);
+      // Pong only for ws1
+      router.handlePong("client-1");
+
+      // Wait longer to ensure ws2 times out, ws1 survives
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect((ws1 as any)._isClosed()).toBe(false);
+      expect((ws2 as any)._isClosed()).toBe(true);
     });
   });
 
@@ -240,6 +304,10 @@ describe("Heartbeat Management", () => {
           intervalMs: 100,
           timeoutMs: 50,
         },
+      });
+
+      onTestFinished(() => {
+        (shortTimeoutRouter as any)?.dispose?.();
       });
 
       const testWs = createMockWebSocket();
@@ -278,10 +346,10 @@ describe("Heartbeat Management", () => {
     it("should handle multiple closes for same connection", async () => {
       await router.handleOpen(ws);
 
-      await router.handleClose(ws, 1000);
-      await router.handleClose(ws, 1000); // Second close
-
-      expect(true).toBe(true);
+      // Both close calls should complete without error
+      // Tests idempotent cleanup: closing an already-closed connection is safe
+      await expect(router.handleClose(ws, 1000)).resolves.toBeUndefined();
+      await expect(router.handleClose(ws, 1000)).resolves.toBeUndefined();
     });
   });
 });

@@ -1,11 +1,12 @@
 # WS-Kit — Type-Safe WebSocket Router
 
-[![npm version](https://img.shields.io/npm/v/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
-[![npm downloads](https://img.shields.io/npm/dm/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
-[![GitHub Actions](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
-[![Chat on Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
+[![CI](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
+[![Coverage](https://codecov.io/gh/kriasoft/ws-kit/branch/main/graph/badge.svg)](https://app.codecov.io/gh/kriasoft/ws-kit)
+[![npm](https://img.shields.io/npm/v/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
+[![Downloads](https://img.shields.io/npm/dm/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
+[![Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
-WebSocket server for Bun and Cloudflare. WS-Kit combines type-safe message routing, schema-validated broadcasting, and request-response patterns with full TypeScript inference on both server and client. Choose your validator (Zod or Valibot) and platform (Bun, Cloudflare Workers, or Node.js). Perfect for real-time apps: chat, multiplayer games, collaborative editing, live dashboards.
+Type-safe WebSocket framework for real-time apps. Define message contracts with Zod or Valibot — get complete TypeScript inference in server handlers, browser clients, and Node.js clients. Includes RPC patterns, distributed broadcasting, standard error codes with automatic retry hints, and full connection lifecycle control. Server works on Bun, Cloudflare, or Node.js; client works in browsers and Node.js.
 
 ## Requirements
 
@@ -38,12 +39,25 @@ What you get out of the box (things you'd otherwise build manually):
 
 WS-Kit is a modular monorepo. Mix any validator with any platform:
 
+**Core Packages:**
+
 - **`@ws-kit/core`** — Platform-agnostic router and type system
 - **`@ws-kit/zod`** / **`@ws-kit/valibot`** — Validator adapters with `createRouter()`
+
+**Platform Adapters:**
+
 - **`@ws-kit/bun`** — Bun platform adapter with `serve()` and `createBunHandler()`
 - **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
-- **`@ws-kit/client`** — Universal WebSocket client
-- **`@ws-kit/redis-pubsub`** — Optional Redis for multi-server deployments
+
+**Client:**
+
+- **`@ws-kit/client`** — Universal WebSocket client (works with any server adapter)
+
+**Extensions:**
+
+- **`@ws-kit/middleware`** — Production-ready middleware (rate limiting, auth helpers, logging)
+- **`@ws-kit/adapters`** — Pluggable adapters (rate limiters for memory, Redis, Durable Objects)
+- **`@ws-kit/redis-pubsub`** — Optional Redis for multi-server pub/sub deployments
 
 ## Patterns & Advanced Use Cases
 

@@ -213,10 +213,28 @@ export class WebSocketRouter<
     // Initialize RPC manager with configuration
     const rpcIdleTimeoutMs =
       options.rpcIdleTimeoutMs ?? this.rpcTimeoutMs + 10_000; // Default: timeout + 10s
-    this.#rpc = new RpcManager({
-      maxInflightRpcsPerSocket: options.maxInflightRpcsPerSocket ?? 1000,
-      rpcIdleTimeoutMs,
-    });
+    const rpcConfig: {
+      maxInflightPerSocket?: number;
+      idleTimeoutMs?: number;
+      cleanupCadenceMs?: number;
+      dedupWindowMs?: number;
+    } = {
+      // Support both new and legacy option names for backwards compatibility
+      maxInflightPerSocket:
+        options.rpcMaxInflightPerSocket ??
+        ((options as Record<string, unknown>).maxInflightRpcsPerSocket as
+          | number
+          | undefined) ??
+        1000,
+      idleTimeoutMs: rpcIdleTimeoutMs,
+    };
+    if (options.rpcCleanupCadenceMs !== undefined) {
+      rpcConfig.cleanupCadenceMs = options.rpcCleanupCadenceMs;
+    }
+    if (options.rpcDedupWindowMs !== undefined) {
+      rpcConfig.dedupWindowMs = options.rpcDedupWindowMs;
+    }
+    this.#rpc = new RpcManager(rpcConfig);
 
     // Start idle RPC cleanup timer
     this.#rpc.start();
@@ -713,6 +731,29 @@ export class WebSocketRouter<
     // NOTE: RPC state is managed by RpcManager and not cleared on reset
     // NOTE: intentionally preserve heartbeatStates for active connections
     return this;
+  }
+
+  /**
+   * @internal Testing only - Configure RPC manager for integration tests.
+   *
+   * Provides safe access to RPC manager configuration for tests that need
+   * different cleanup timing than production defaults (e.g., shorter dedup window for
+   * faster test execution).
+   *
+   * @example
+   * ```typescript
+   * const rpc = router._testingConfigureRpc();
+   * rpc.setDedupWindow(100); // Override dedup window to 100ms for fast test cleanup
+   * ```
+   */
+  _testingConfigureRpc(): {
+    setDedupWindow(dedupWindowMs: number): void;
+  } {
+    return {
+      setDedupWindow: (dedupWindowMs: number) => {
+        this.#rpc.setDedupWindow(dedupWindowMs);
+      },
+    };
   }
 
   // ———————————————————————————————————————————————————————————————————————————

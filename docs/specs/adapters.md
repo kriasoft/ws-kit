@@ -121,6 +121,10 @@ function publish(scope: string, message: any) {
 - ✅ Automatic cleanup on disconnect
 - ⚠️ **No persistence across server restart** — Subscriptions are in-memory
 
+## Adapter Composition with Middleware
+
+For composing and extending adapters with custom behaviors, see [middleware patterns](/middleware) and [`@ws-kit/middleware` package](https://www.npmjs.com/package/@ws-kit/middleware) for production-ready utilities (rate limiting, authentication, logging, etc.).
+
 ## Adapter Interfaces
 
 WS-Kit uses adapter patterns for cross-platform features that require atomic semantics. Each feature defines a public interface that adapters implement.

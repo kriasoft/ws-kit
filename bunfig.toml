@@ -5,3 +5,6 @@
 # Path aliases that match tsconfig.json paths
 # Enables module resolution for @ws-kit/* imports at runtime
 "@ws-kit/*" = "packages/*/src"
+
+[install]
+linker = "isolated"

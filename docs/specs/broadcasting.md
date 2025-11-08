@@ -4,13 +4,22 @@
 
 ## Overview
 
-Broadcasting enables multicast messaging to multiple WebSocket clients via topic subscriptions. Uses Bun's native WebSocket pubsub (`subscribe()`, `publish()`, `unsubscribe()`).
+Broadcasting enables multicast messaging to multiple WebSocket clients via topic subscriptions. The router provides platform-agnostic APIs with pluggable pub/sub adapters for different deployment scenarios.
 
 **Key patterns**:
 
 - **Unicast**: `ctx.send()` sends to single connection (see @router.md#Type-Safe-Sending)
 - **Multicast**: `publish()` broadcasts to topic subscribers (this spec)
 - **Throttled Broadcast**: Coalesce rapid publishes to reduce bandwidth 80-95% (see @patterns.md#Throttled-Broadcast-Pattern, ADR-010)
+
+**Adapter Support**:
+
+- **Single-instance**: Built-in in-memory adapter (included, default)
+- **Multi-instance**: `@ws-kit/redis-pubsub` for cross-server broadcasts
+- **Cloudflare Workers**: Durable Objects adapter for distributed pub/sub
+- **Custom**: Implement the `PubSub` interface for other backends
+
+See [Adapter Responsibilities](/specs/adapters#pubsub-engine-interface) for implementation details and guarantees.
 
 ## Type-Safe Publishing
 

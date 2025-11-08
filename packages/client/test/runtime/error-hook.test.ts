@@ -15,7 +15,14 @@
  * See @docs/specs/client.md#centralized-error-reporting
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "bun:test";
 import { z, message } from "@ws-kit/zod";
 import { StateError } from "../../src/errors.js";
 import { createClient } from "../../src/index.js";
@@ -47,6 +54,10 @@ describe("Client: onError Hook", () => {
     client.onError((error, context) => {
       errors.push({ error, context });
     });
+  });
+
+  afterEach(async () => {
+    await client.close();
   });
 
   describe("Parse failures", () => {
@@ -152,6 +163,10 @@ describe("Client: onError Hook", () => {
         reconnect: { enabled: false },
       });
 
+      onTestFinished(async () => {
+        await client.close();
+      });
+
       client.onError((error, context) => {
         errors.push({ error, context });
       });
@@ -173,6 +188,10 @@ describe("Client: onError Hook", () => {
         queue: "drop-oldest",
         queueSize: 2,
         reconnect: { enabled: false },
+      });
+
+      onTestFinished(async () => {
+        await client.close();
       });
 
       client.onError((error, context) => {

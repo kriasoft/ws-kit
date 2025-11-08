@@ -19,11 +19,11 @@ describe("RedisPubSub Types", () => {
     const options: RedisPubSubOptions = {
       url: "redis://localhost:6379",
       namespace: "myapp",
-      onConnect: () => {},
-      onError: (err) => {
-        expectTypeOf(err).toBeInstanceOf(Error);
+      logger: {
+        info: console.log,
+        warn: console.warn,
+        error: console.error,
       },
-      onDisconnect: () => {},
     };
 
     const pubsub = createRedisPubSub(options);
@@ -51,26 +51,29 @@ describe("RedisPubSub Types", () => {
     pubsub.subscribe("test:channel", handler);
   });
 
-  test("RedisPubSub.unsubscribe() removes handler", () => {
+  test("Subscription.unsubscribe() removes handler", () => {
     const pubsub = new RedisPubSub();
 
     const handler = (msg: unknown) => {
       /* no-op */
     };
 
-    pubsub.subscribe("test:channel", handler);
-    pubsub.unsubscribe("test:channel", handler);
+    const sub = pubsub.subscribe("test:channel", handler);
+    expectTypeOf(sub.unsubscribe).toBeFunction();
+    sub.unsubscribe();
   });
 
   test("RedisPubSub options support custom serialization", () => {
     const options: RedisPubSubOptions = {
-      serializeMessage: (msg) => {
-        expectTypeOf(msg).toBeUnknown();
-        return JSON.stringify(msg);
-      },
-      deserializeMessage: (msg) => {
-        expectTypeOf(msg).toBeString();
-        return JSON.parse(msg);
+      serializer: {
+        encode: (msg) => {
+          expectTypeOf(msg).toBeUnknown();
+          return JSON.stringify(msg);
+        },
+        decode: (msg) => {
+          expectTypeOf(msg).toBeString();
+          return JSON.parse(msg);
+        },
       },
     };
 
@@ -85,7 +88,10 @@ describe("RedisPubSub Types", () => {
       connect?(): Promise<void>;
       quit?(): Promise<void>;
       publish?(channel: string, message: string): Promise<unknown>;
-      subscribe?(channel: string, callback: () => void): Promise<unknown>;
+      subscribe?(
+        channel: string,
+        listener: (message: string | Buffer) => void,
+      ): Promise<unknown>;
       unsubscribe?(channel: string): Promise<unknown>;
       on?(event: string, handler: (data: unknown) => void): void;
     }
@@ -106,15 +112,15 @@ describe("RedisPubSub Types", () => {
     expectTypeOf(pubsub2).toMatchTypeOf<PubSub>();
   });
 
-  test("Error callbacks receive Error type", () => {
-    const options: RedisPubSubOptions = {
-      onError: (error) => {
-        expectTypeOf(error).toBeInstanceOf(Error);
-        expectTypeOf(error.message).toBeString();
-      },
-    };
+  test("Event listeners receive proper error types", () => {
+    const pubsub = new RedisPubSub();
 
-    expectTypeOf(options.onError).toBeFunction();
+    const unsubError = pubsub.on("error", (error) => {
+      expectTypeOf(error).toBeInstanceOf(Error);
+      expectTypeOf(error.message).toBeString();
+    });
+
+    expectTypeOf(unsubError).toBeFunction();
   });
 
   test("isConnected method exists and returns boolean", () => {
@@ -123,9 +129,9 @@ describe("RedisPubSub Types", () => {
     expectTypeOf(pubsub.isConnected()).toBeBoolean();
   });
 
-  test("destroy method returns promise", () => {
+  test("close method returns promise", () => {
     const pubsub = new RedisPubSub();
-    expectTypeOf(pubsub.destroy).toBeFunction();
-    expectTypeOf(pubsub.destroy()).resolves.toBeVoid();
+    expectTypeOf(pubsub.close).toBeFunction();
+    expectTypeOf(pubsub.close()).resolves.toBeVoid();
   });
 });

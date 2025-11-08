@@ -1,20 +1,13 @@
 # Testing Requirements
 
-**Status**: ✅ Implemented (type-level tests with expectTypeOf)
-
 ## Test Organization
 
-Tests are organized by package. Each package owns its test directory:
+Every package owns its tests under `packages/<name>/test`. Use sub-folders consistently:
 
-```text
-packages/
-├── core/test/              # Core router tests + features/
-├── zod/test/               # Zod validator tests + features/
-├── valibot/test/           # Valibot validator tests + features/
-├── bun/test/               # Bun adapter tests
-├── client/test/            # Client tests (runtime/ + types/)
-└── cloudflare-do/test/     # Cloudflare DO adapter tests
-```
+- `runtime/` (behavioral tests, normalization, queue)
+- `types/` (expectTypeOf suites)
+- `features/` (integration-style specs per feature area)
+- Adapter-specific folders (`bun/`, `cloudflare-do/`, etc.) follow the same pattern
 
 ### When Adding Tests
 
@@ -31,6 +24,92 @@ bun test packages/zod/test         # Specific package
 bun test --grep "pattern"          # By pattern
 bun test --watch                   # Watch mode
 ```
+
+## Test Harness Basics
+
+### Lifecycle Hooks
+
+| Scenario                                                                    | Hook(s) to use                 | Where to register                                                                                                                                      | Why                                                                                                                                                                               |
+| --------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared fixtures created in `beforeEach` (most suites)                       | `beforeEach` + `afterEach`     | Declare fixture in `beforeEach`, dispose in matching `afterEach`                                                                                       | Guarantees deterministic per-test setup/teardown                                                                                                                                  |
+| Ad-hoc resource created directly inside an `it` block (e.g., helper client) | `onTestFinished`               | Call `onTestFinished` **inside the same `it`** right after creating the resource                                                                       | Ensures cleanup even if the test fails midway; no shared state needed                                                                                                             |
+| Suite-level final assertion/cleanup (leak detection, metrics)               | `afterAll` (+ guard if needed) | Prefer `afterAll` for once-per-suite assertions; if `onTestFinished` is required, register it inside `afterAll` so it runs immediately after that hook | `onTestFinished` attaches to the currently running test/hook—calling it from `beforeEach`/`afterEach` still executes per test, so it cannot enforce suite-level checks on its own |
+
+> Rule of thumb: `afterEach` handles anything spawned in shared hooks; `onTestFinished` handles one-off resources or final suite checks.
+
+```typescript
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "bun:test";
+import { createClient } from "../../src/index.js";
+import { createMockWebSocket } from "./helpers.js";
+
+describe("Client runtime example", () => {
+  let client: ReturnType<typeof createClient>;
+  let mockWs: ReturnType<typeof createMockWebSocket>;
+
+  beforeEach(() => {
+    mockWs = createMockWebSocket();
+    client = createClient({
+      url: "ws://test",
+      wsFactory: () => {
+        setTimeout(() => mockWs._trigger.open(), 0);
+        return mockWs as unknown as WebSocket;
+      },
+      reconnect: { enabled: false },
+    });
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it("creates an ad-hoc client", async () => {
+    const mockWs = createMockWebSocket();
+    const localClient = createClient({
+      url: "ws://example",
+      wsFactory: () => {
+        setTimeout(() => mockWs._trigger.open(), 0);
+        return mockWs as unknown as WebSocket;
+      },
+    });
+    onTestFinished(async () => localClient.close());
+    await localClient.connect();
+  });
+});
+```
+
+### Mock WebSocket Helpers
+
+- Use `createMockWebSocket()` from `packages/client/test/runtime/helpers.ts` to deterministically simulate lifecycle events.
+- Define helpers once per suite and reuse them in tests:
+
+```typescript
+let simulateReceive: (msg: unknown) => void;
+let simulateRaw: (raw: string) => void;
+
+beforeEach(() => {
+  mockWs = createMockWebSocket();
+  simulateReceive = (msg) => mockWs._trigger.message(msg);
+  simulateRaw = (raw) => mockWs.onmessage?.({ data: raw });
+  client = createClient({
+    url: "ws://test",
+    wsFactory: () => {
+      setTimeout(() => mockWs._trigger.open(), 0);
+      return mockWs as unknown as WebSocket;
+    },
+    reconnect: { enabled: false },
+  });
+});
+```
+
+All runtime examples below assume `simulateReceive(payload)` JSON-encodes structured data, while `simulateRaw(rawJson)` feeds literal strings for parse-failure tests.
+When a snippet references `client`, `mockWs`, or these helpers without redefining them, it relies on this shared fixture.
 
 ## Section Map
 
@@ -127,6 +206,8 @@ sendFn(AnySchema, { invalid: "data" }, { validate: false });
 // Message sent as-is, no validation error
 expect(mockWs._getMessages().length).toBe(1);
 ```
+
+> **Note**: `(router as any).createSendFunction()` is an intentional internal testing hook, akin to `router._testing`. It lets tests drive the outbound pipeline with a specific connection while skipping validation—behavior that the public API intentionally does not expose. Use this pattern whenever you need to send raw messages for error-path coverage.
 
 **When to use**: Testing error handling, message processing pipelines, or edge cases that require bypassing validation.
 
@@ -553,85 +634,20 @@ test("custom metadata merges with auto-injected fields", async () => {
   expect(publishedMessage.meta.priority).toBe(5);
   expect(publishedMessage.meta).toHaveProperty("timestamp"); // Auto-injected
 });
+```
 
-// Client Multi-Handler Tests {#client-multiple-handlers}
+### Client multi-handler + reserved meta rules {#client-multiple-handlers}
 
-test("client: multiple handlers run in order", async () => {
-  const order: number[] = [];
+- Multiple handlers fire strictly in registration order, handler errors never short-circuit later handlers, and `unsubscribe()` removes only the targeted callback.
+- Reserved meta keys (`clientId`, `receivedAt`) are rejected at schema creation time, even when mixed with otherwise valid custom meta fields.
+- **Reference**: `packages/client/test/runtime/handlers.test.ts`, `packages/core/test/features/normalization.test.ts`.
 
-  client.on(TestMsg, () => order.push(1));
-  client.on(TestMsg, () => order.push(2));
+> **Standard Fixture Reminder**: Unless explicitly redefined, the runtime tests below reuse the shared `beforeEach` setup described in [Mock WebSocket Helpers](#mock-websocket-helpers) (`client`, `mockWs`, `simulateReceive`, `simulateRaw`). Recreate that scaffold when copying an individual test into a new suite.
 
-  simulateReceive(client, { type: "TEST", meta: {}, payload: {} });
-
-  expect(order).toEqual([1, 2]);
-});
-
-test("client: unsubscribe removes only target handler", async () => {
-  const calls: number[] = [];
-
-  client.on(TestMsg, () => calls.push(1));
-  const unsub2 = client.on(TestMsg, () => calls.push(2));
-  client.on(TestMsg, () => calls.push(3));
-
-  unsub2();
-  simulateReceive(client, { type: "TEST", meta: {}, payload: {} });
-
-  expect(calls).toEqual([1, 3]); // Handler 2 removed
-});
-
-test("client: handler error does not stop remaining handlers", async () => {
-  const calls: number[] = [];
-
-  client.on(TestMsg, () => {
-    throw new Error("boom");
-  });
-  client.on(TestMsg, () => calls.push(2));
-
-  simulateReceive(client, { type: "TEST", meta: {}, payload: {} });
-
-  expect(calls).toEqual([2]); // Handler 2 runs despite handler 1 error
-});
-
-test("schema creation rejects reserved meta keys", () => {
-  expect(() => {
-    message(
-      "TEST",
-      { id: z.number() },
-      {
-        clientId: z.string(), // ❌ Reserved key
-      },
-    );
-  }).toThrow("Reserved meta keys not allowed in schema: clientId");
-
-  expect(() => {
-    message(
-      "TEST",
-      { id: z.number() },
-      {
-        receivedAt: z.number(), // ❌ Reserved key
-      },
-    );
-  }).toThrow("Reserved meta keys not allowed in schema: receivedAt");
-
-  // Multiple reserved keys
-  expect(() => {
-    message(
-      "TEST",
-      { id: z.number() },
-      {
-        clientId: z.string(),
-        receivedAt: z.number(),
-        userId: z.string(), // Valid, but mixed with reserved
-      },
-    );
-  }).toThrow(/clientId.*receivedAt/);
-});
-
+```typescript
 test("request() timeout starts after flush, not enqueue", async () => {
   const client = createClient({
     url: "ws://test",
-    wsFactory: (url) => createFakeWS(url),
     reconnect: { enabled: false },
   });
 
@@ -643,7 +659,7 @@ test("request() timeout starts after flush, not enqueue", async () => {
   });
 
   // Wait 500ms while queued
-  await sleep(500);
+  await Bun.sleep(500);
 
   // Now connect (triggers flush)
   const flushTime = Date.now();
@@ -718,20 +734,20 @@ test("request() cleans up pending map and cancels timeout on abort", async () =>
   await client.connect();
 
   const controller = new AbortController();
+  const correlationId = "req-abort-cleanup";
 
   const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
     timeoutMs: 60000,
     signal: controller.signal,
+    correlationId,
   });
-
-  const correlationId = extractCorrelationId(reqPromise); // Test helper
 
   // Abort request
   controller.abort();
   await expect(reqPromise).rejects.toThrow(StateError);
 
   // Server sends late reply (should be ignored - pending map cleaned)
-  simulateReceive(client, {
+  simulateReceive({
     type: "HELLO_OK",
     meta: { correlationId },
     payload: { text: "late reply" },
@@ -748,13 +764,14 @@ test("request() rejects on wrong-type reply with matching correlationId", async 
 
   await client.connect();
 
+  const correlationId = "req-wrong-type";
   const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
     timeoutMs: 5000,
+    correlationId,
   });
 
   // Server sends wrong type but correct correlationId
-  const correlationId = extractCorrelationId(reqPromise); // Test helper
-  simulateReceive(client, {
+  simulateReceive({
     type: "GOODBYE", // ❌ Wrong type
     meta: { correlationId },
     payload: { message: "bye" },
@@ -773,13 +790,14 @@ test("request() rejects on malformed reply with matching correlationId", async (
 
   await client.connect();
 
+  const correlationId = "req-invalid-reply";
   const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
     timeoutMs: 5000,
+    correlationId,
   });
 
   // Server sends correct type but invalid payload
-  const correlationId = extractCorrelationId(reqPromise); // Test helper
-  simulateReceive(client, {
+  simulateReceive({
     type: "HELLO_OK", // ✅ Correct type
     meta: { correlationId },
     payload: { text: 123 }, // ❌ Invalid: should be string
@@ -803,14 +821,14 @@ test("request() ignores duplicate replies with same correlationId", async () => 
 
   await client.connect();
 
+  const correlationId = "req-duplicates";
   const reqPromise = client.request(Hello, { name: "test" }, HelloOk, {
     timeoutMs: 5000,
+    correlationId,
   });
 
-  const correlationId = extractCorrelationId(reqPromise);
-
   // First reply - settles the promise
-  simulateReceive(client, {
+  simulateReceive({
     type: "HELLO_OK",
     meta: { correlationId },
     payload: { text: "first" },
@@ -820,14 +838,14 @@ test("request() ignores duplicate replies with same correlationId", async () => 
   expect(reply.payload.text).toBe("first");
 
   // Second reply with same correlationId - dropped silently (no error)
-  simulateReceive(client, {
+  simulateReceive({
     type: "HELLO_OK",
     meta: { correlationId },
     payload: { text: "second" }, // Ignored
   });
 
   // Third reply - also dropped silently
-  simulateReceive(client, {
+  simulateReceive({
     type: "HELLO_OK",
     meta: { correlationId },
     payload: { text: "third" }, // Ignored
@@ -835,85 +853,16 @@ test("request() ignores duplicate replies with same correlationId", async () => 
 
   // No errors thrown; duplicates ignored after first settles
 });
+```
 
-test("send() returns true when sent immediately", async () => {
-  const client = createClient({ url: "ws://test" });
-  await client.connect(); // CONNECTED state
+### Send / queue semantics
 
-  const sent = client.send(ChatMsg, { text: "hello" });
+- Connected clients return `true` from `send()`; disconnected clients rely on queue mode (`drop-newest`, `drop-oldest`, `off`) to decide whether to buffer, drop newest, or reject immediately.
+- Queue overflow honors the configured strategy: `drop-newest` rejects the incoming message, `drop-oldest` evicts the oldest buffered entry before accepting the new payload.
+- Invalid payloads always return `false` synchronously (schema validation happens before enqueue).
+- **Reference**: `packages/client/test/runtime/queue.test.ts`.
 
-  expect(sent).toBe(true);
-});
-
-test("send() returns true when queued", () => {
-  const client = createClient({
-    url: "ws://test",
-    queue: "drop-newest",
-  });
-  // Not connected yet - will queue
-
-  const sent = client.send(ChatMsg, { text: "hello" });
-
-  expect(sent).toBe(true); // Queued successfully
-});
-
-test("send() returns false with queue: off", () => {
-  const client = createClient({
-    url: "ws://test",
-    queue: "off",
-  });
-  // Not connected - will discard
-
-  const sent = client.send(ChatMsg, { text: "hello" });
-
-  expect(sent).toBe(false); // Discarded, not queued
-});
-
-test("send() returns false on queue overflow with drop-newest", async () => {
-  const client = createClient({
-    url: "ws://test",
-    queue: "drop-newest",
-    queueSize: 2,
-  });
-  // Not open - messages will queue
-
-  // Fill queue
-  expect(client.send(ChatMsg, { text: "msg1" })).toBe(true);
-  expect(client.send(ChatMsg, { text: "msg2" })).toBe(true);
-
-  // Overflow - should drop new message
-  expect(client.send(ChatMsg, { text: "msg3" })).toBe(false);
-});
-
-test("send() evicts oldest on queue overflow with drop-oldest", async () => {
-  const client = createClient({
-    url: "ws://test",
-    queue: "drop-oldest",
-    queueSize: 2,
-  });
-  // Not connected - messages will queue
-
-  // Fill queue
-  expect(client.send(ChatMsg, { text: "msg1" })).toBe(true); // Queue: [msg1]
-  expect(client.send(ChatMsg, { text: "msg2" })).toBe(true); // Queue: [msg1, msg2]
-
-  // Overflow - should evict oldest (msg1), accept new (msg3)
-  expect(client.send(ChatMsg, { text: "msg3" })).toBe(true); // Queue: [msg2, msg3]
-
-  // When connection opens, only msg2 and msg3 are sent
-  await client.connect();
-  // Verify msg1 was dropped (test implementation-specific assertion)
-});
-
-test("send() returns false on invalid payload", () => {
-  const client = createClient({ url: "ws://test" });
-
-  // @ts-expect-error - testing runtime validation
-  const sent = client.send(ChatMsg, { text: 123 }); // Invalid type
-
-  expect(sent).toBe(false); // Validation failure returns false
-});
-
+```typescript
 test("request() rejects with ValidationError on invalid payload", async () => {
   const client = createClient({ url: "ws://test" });
   await client.connect();
@@ -997,656 +946,41 @@ test("pending request limit enforced before timeout check", async () => {
   const elapsed = Date.now() - startTime;
   expect(elapsed).toBeLessThan(50); // Fails fast, doesn't wait for timeout
 });
-
-test("onUnhandled() receives valid messages with no schema handler", async () => {
-  const client = createClient({ url: "ws://test" });
-  const TestMsg = message("TEST", { id: z.number() });
-  const UnknownMsg = message("UNKNOWN", { value: z.string() });
-
-  const handledMessages: any[] = [];
-  const unhandledMessages: any[] = [];
-
-  // Register handler for TEST only
-  client.on(TestMsg, (msg) => {
-    handledMessages.push(msg);
-  });
-
-  // Hook for unhandled messages (receives AnyInboundMessage)
-  client.onUnhandled((msg) => {
-    // Message is structurally valid but type not registered
-    // Treat as readonly (do not mutate)
-    unhandledMessages.push(msg);
-  });
-
-  await client.connect();
-
-  // Simulate receiving messages
-  simulateReceive(client, { type: "TEST", meta: {}, payload: { id: 123 } });
-  simulateReceive(client, {
-    type: "UNKNOWN",
-    meta: {},
-    payload: { value: "hi" },
-  });
-
-  // TEST goes to schema handler
-  expect(handledMessages).toHaveLength(1);
-  expect(handledMessages[0].type).toBe("TEST");
-
-  // UNKNOWN goes to onUnhandled (no schema registered)
-  expect(unhandledMessages).toHaveLength(1);
-  expect(unhandledMessages[0].type).toBe("UNKNOWN");
-});
-
-test("onUnhandled() never receives invalid messages", async () => {
-  const client = createClient({ url: "ws://test" });
-  const unhandledMessages: any[] = [];
-
-  client.onUnhandled((msg) => {
-    unhandledMessages.push(msg);
-  });
-
-  await client.connect();
-
-  // Invalid JSON
-  simulateReceive(client, "not json");
-
-  // Missing type
-  simulateReceive(client, { meta: {}, payload: {} });
-
-  // Invalid structure
-  simulateReceive(client, { type: "TEST", payload: "not an object" });
-
-  // onUnhandled should NOT be called for any invalid message
-  expect(unhandledMessages).toHaveLength(0);
-});
-
-test("schema handlers execute before onUnhandled", async () => {
-  const client = createClient({ url: "ws://test" });
-  const TestMsg = message("TEST", { id: z.number() });
-
-  const executionOrder: string[] = [];
-
-  client.on(TestMsg, (msg) => {
-    executionOrder.push("schema-handler");
-  });
-
-  client.onUnhandled((msg) => {
-    executionOrder.push("onUnhandled");
-  });
-
-  await client.connect();
-
-  // Send message with registered schema
-  simulateReceive(client, { type: "TEST", meta: {}, payload: { id: 123 } });
-
-  // Schema handler executes, onUnhandled does NOT
-  expect(executionOrder).toEqual(["schema-handler"]);
-});
-
-// Auto-Connect Tests
-
-test("autoConnect triggers connection on first send", async () => {
-  const client = createClient({
-    url: "ws://test",
-    autoConnect: true,
-    wsFactory: (url) => createFakeWS(url),
-  });
-
-  expect(client.state).toBe("closed");
-
-  // First send triggers connection
-  client.send(Hello, { name: "test" });
-
-  expect(client.state).toBe("connecting"); // Observable state change
-});
-
-test("autoConnect triggers connection on first request", async () => {
-  const client = createClient({
-    url: "ws://test",
-    autoConnect: true,
-    wsFactory: (url) => createFakeWS(url),
-  });
-
-  expect(client.state).toBe("closed");
-
-  // First request triggers connection
-  const promise = client.request(Hello, { name: "test" }, HelloOk, {
-    timeoutMs: 5000,
-  });
-
-  expect(client.state).toBe("connecting");
-});
-
-test("autoConnect does NOT trigger connection on on()", async () => {
-  const client = createClient({
-    url: "ws://test",
-    autoConnect: true,
-    wsFactory: (url) => createFakeWS(url),
-  });
-
-  expect(client.state).toBe("closed");
-
-  // Registering handler does NOT trigger connection
-  client.on(Hello, (msg) => {});
-
-  expect(client.state).toBe("closed"); // Still closed - connection not started
-
-  // First send() triggers connection
-  client.send(Hello, { name: "test" });
-  expect(client.state).toBe("connecting");
-});
-
-test("autoConnect fails fast on connection error", async () => {
-  const client = createClient({
-    url: "ws://invalid",
-    autoConnect: true,
-    wsFactory: () => {
-      throw new Error("Connection failed");
-    },
-  });
-
-  // send() never throws - returns false on auto-connect failure
-  const sent = client.send(Hello, { name: "test" });
-  expect(sent).toBe(false);
-
-  // request() rejects on auto-connect failure
-  await expect(
-    client.request(Hello, { name: "test" }, HelloOk, { timeoutMs: 1000 }),
-  ).rejects.toThrow("Connection failed");
-});
-
-test("autoConnect + queue: off rejects with connection error (not StateError)", async () => {
-  const client = createClient({
-    url: "ws://invalid",
-    autoConnect: true,
-    queue: "off", // Critical: queue disabled
-    wsFactory: () => {
-      throw new Error("Connection refused");
-    },
-  });
-
-  // Auto-connect triggers but fails
-  // Should reject with connection error, NOT StateError
-  await expect(
-    client.request(Hello, { name: "test" }, HelloOk, { timeoutMs: 1000 }),
-  ).rejects.toThrow("Connection refused");
-
-  // Verify it's NOT a StateError
-  try {
-    await client.request(Hello, { name: "test" }, HelloOk);
-  } catch (err) {
-    expect(err).not.toBeInstanceOf(StateError);
-  }
-});
-
-test("autoConnect failure + queue: off → subsequent requests reject with StateError", async () => {
-  const client = createClient({
-    url: "ws://invalid",
-    autoConnect: true,
-    queue: "off",
-    wsFactory: () => {
-      throw new Error("Connection refused");
-    },
-  });
-
-  // First request fails auto-connect
-  await expect(client.request(Hello, { name: "1" }, HelloOk)).rejects.toThrow(
-    "Connection refused",
-  );
-
-  expect(client.state).toBe("closed");
-
-  // Second request does NOT auto-reconnect (per spec: only on "never connected")
-  // Should reject with StateError (queue: off + disconnected)
-  await expect(client.request(Hello, { name: "2" }, HelloOk)).rejects.toThrow(
-    StateError,
-  );
-  await expect(
-    client.request(Hello, { name: "2" }, HelloOk),
-  ).rejects.toMatchObject({
-    message: expect.stringContaining(
-      "Cannot send request while disconnected with queue disabled",
-    ),
-  });
-});
-
-test("autoConnect does not trigger from closed state after manual close", async () => {
-  const client = createClient({
-    url: "ws://test",
-    autoConnect: true,
-    wsFactory: (url) => createFakeWS(url),
-  });
-
-  await client.connect();
-  await client.close();
-
-  expect(client.state).toBe("closed");
-
-  // send() should not auto-reconnect after manual close
-  const sent = client.send(Hello, { name: "test" });
-  expect(sent).toBe(false); // Dropped (or queued per queue policy)
-  expect(client.state).toBe("closed"); // Still closed
-});
-
-// Extended Meta Tests
-
-test("send() with extended meta (required field)", async () => {
-  const client = createClient({ url: "ws://test" });
-  const RoomMsg = message(
-    "CHAT",
-    { text: z.string() },
-    { roomId: z.string() }, // Required meta field
-  );
-
-  await client.connect();
-
-  // ✅ Provide required meta
-  const sent = client.send(
-    RoomMsg,
-    { text: "hello" },
-    {
-      meta: { roomId: "general" },
-    },
-  );
-
-  expect(sent).toBe(true);
-  // Verify message includes extended meta (test implementation-specific)
-});
-
-test("send() with extended meta type error on missing required field", () => {
-  const RoomMsg = message(
-    "CHAT",
-    { text: z.string() },
-    { roomId: z.string() }, // Required
-  );
-
-  // @ts-expect-error - missing required meta.roomId
-  client.send(RoomMsg, { text: "hello" });
-});
-
-test("send() with optional extended meta", async () => {
-  const OptionalMetaMsg = message(
-    "NOTIFY",
-    { text: z.string() },
-    { priority: z.enum(["low", "high"]).optional() },
-  );
-
-  await client.connect();
-
-  // ✅ Without optional meta
-  expect(client.send(OptionalMetaMsg, { text: "hello" })).toBe(true);
-
-  // ✅ With optional meta
-  expect(
-    client.send(
-      OptionalMetaMsg,
-      { text: "hello" },
-      {
-        meta: { priority: "high" },
-      },
-    ),
-  ).toBe(true);
-});
-
-// Client Outbound Normalization Tests
-// Note: Client does NOT strip inbound messages (server already normalized them)
-// These tests verify client strips reserved/managed keys from OUTBOUND opts.meta
-
-test("client normalization preserves user-provided timestamp", async () => {
-  const TestMsg = message("TEST", { id: z.number() });
-  const capturedMessages: any[] = [];
-
-  // Mock send to capture message
-  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
-
-  const client = createClient({
-    url: "ws://test",
-    wsFactory: () => ({ send: mockSend }) as any,
-  });
-
-  await client.connect();
-
-  // User provides timestamp
-  client.send(TestMsg, { id: 123 }, { meta: { timestamp: 999 } });
-
-  expect(capturedMessages[0].meta.timestamp).toBe(999); // User value preserved
-});
-
-test("client normalization auto-injects timestamp if missing", async () => {
-  const TestMsg = message("TEST", { id: z.number() });
-  const capturedMessages: any[] = [];
-  const beforeSend = Date.now();
-
-  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
-
-  const client = createClient({
-    url: "ws://test",
-    wsFactory: () => ({ send: mockSend }) as any,
-  });
-
-  await client.connect();
-
-  // User does not provide timestamp
-  client.send(TestMsg, { id: 123 });
-
-  const afterSend = Date.now();
-  const sentTimestamp = capturedMessages[0].meta.timestamp;
-
-  expect(sentTimestamp).toBeGreaterThanOrEqual(beforeSend);
-  expect(sentTimestamp).toBeLessThanOrEqual(afterSend);
-});
-
-test("client normalization strips reserved keys from user meta", async () => {
-  const TestMsg = message("TEST", { id: z.number() });
-  const capturedMessages: any[] = [];
-
-  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
-
-  const client = createClient({
-    url: "ws://test",
-    wsFactory: () => ({ send: mockSend }) as any,
-  });
-
-  await client.connect();
-
-  // User tries to spoof reserved keys
-  client.send(
-    TestMsg,
-    { id: 123 },
-    {
-      // @ts-expect-error - reserved keys not in type
-      meta: { clientId: "fake", receivedAt: 999 },
-    },
-  );
-
-  expect(capturedMessages[0].meta).not.toHaveProperty("clientId");
-  expect(capturedMessages[0].meta).not.toHaveProperty("receivedAt");
-  expect(capturedMessages[0].meta).toHaveProperty("timestamp"); // Auto-injected
-});
-
-test("client normalization strips correlationId from user meta", async () => {
-  const TestMsg = message("TEST", { id: z.number() });
-  const capturedMessages: any[] = [];
-
-  const mockSend = (msg: any) => capturedMessages.push(JSON.parse(msg));
-
-  const client = createClient({
-    url: "ws://test",
-    wsFactory: () => ({ send: mockSend }) as any,
-  });
-
-  await client.connect();
-
-  // User tries to set correlationId via meta (ignored)
-  client.send(
-    TestMsg,
-    { id: 123 },
-    {
-      // @ts-expect-error - correlationId not allowed in meta
-      meta: { correlationId: "sneaky" },
-      correlationId: "correct", // Only this is used
-    },
-  );
-
-  // Only opts.correlationId is used, meta.correlationId stripped
-  expect(capturedMessages[0].meta.correlationId).toBe("correct");
-});
-
-test("request() with extended meta", async () => {
-  const RoomMsg = message("CHAT", { text: z.string() }, { roomId: z.string() });
-  const RoomMsgOk = message("CHAT_OK", { success: z.boolean() });
-
-  const client = createClient({ url: "ws://test" });
-  await client.connect();
-
-  const promise = client.request(RoomMsg, { text: "hello" }, RoomMsgOk, {
-    meta: { roomId: "general" },
-    correlationId: "req-123",
-  });
-
-  // Simulate reply
-  simulateReceive(client, {
-    type: "CHAT_OK",
-    meta: { correlationId: "req-123" },
-    payload: { success: true },
-  });
-
-  const reply = await promise;
-  expect(reply.payload.success).toBe(true);
-});
-
-test("isConnected getter reflects state === open", async () => {
-  const client = createClient({ url: "ws://test" });
-
-  // Initial state
-  expect(client.state).toBe("closed");
-  expect(client.isConnected).toBe(false);
-
-  // After connect
-  await client.connect();
-  expect(client.state).toBe("open");
-  expect(client.isConnected).toBe(true);
-
-  // After close
-  await client.close();
-  expect(client.state).toBe("closed");
-  expect(client.isConnected).toBe(false);
-});
-
-test("onError fires for parse failures", async () => {
-  const client = createClient({ url: "ws://test" });
-  const errors: Array<{ error: Error; context: any }> = [];
-
-  client.onError((error, context) => {
-    errors.push({ error, context });
-  });
-
-  await client.connect();
-
-  // Simulate invalid JSON from server
-  simulateReceive(client, "not valid json");
-
-  expect(errors).toHaveLength(1);
-  expect(errors[0].context.type).toBe("parse");
-  expect(errors[0].error.message).toContain("JSON");
-});
-
-test("onError fires for validation failures", async () => {
-  const client = createClient({ url: "ws://test" });
-  const TestMsg = message("TEST", { id: z.number() });
-  const errors: Array<{ error: Error; context: any }> = [];
-
-  client.on(TestMsg, (msg) => {});
-
-  client.onError((error, context) => {
-    errors.push({ error, context });
-  });
-
-  await client.connect();
-
-  // Simulate invalid message (wrong payload type)
-  simulateReceive(client, {
-    type: "TEST",
-    meta: {},
-    payload: { id: "string" }, // Should be number
-  });
-
-  expect(errors).toHaveLength(1);
-  expect(errors[0].context.type).toBe("validation");
-  expect(errors[0].context.details).toBeDefined();
-});
-
-test("onError fires for queue overflow", async () => {
-  const client = createClient({
-    url: "ws://test",
-    queue: "drop-newest",
-    queueSize: 2,
-  });
-  const errors: Array<{ error: Error; context: any }> = [];
-
-  client.onError((error, context) => {
-    errors.push({ error, context });
-  });
-
-  // Fill queue (not connected)
-  client.send(TestMsg, { id: 1 });
-  client.send(TestMsg, { id: 2 });
-
-  // Overflow
-  client.send(TestMsg, { id: 3 });
-
-  expect(errors).toHaveLength(1);
-  expect(errors[0].context.type).toBe("overflow");
-});
-
-test("onError does NOT fire for request() rejections", async () => {
-  const client = createClient({
-    url: "ws://test",
-    queue: "off",
-  });
-  const errors: Array<{ error: Error; context: any }> = [];
-
-  client.onError((error, context) => {
-    errors.push({ error, context });
-  });
-
-  // request() rejects with StateError (queue off + disconnected)
-  await expect(
-    client.request(Hello, { name: "test" }, HelloOk),
-  ).rejects.toThrow(StateError);
-
-  // onError should NOT fire (caller handles rejection)
-  expect(errors).toHaveLength(0);
-});
 ```
+
+### `onUnhandled()` contract
+
+- Fires only for structurally valid messages with no registered schema; invalid JSON and validation failures are dropped before reaching the hook.
+- Schema handlers always execute before `onUnhandled()`, and the hook must treat the message as readonly.
+- **Reference**: `packages/client/test/runtime/handlers.test.ts`.
+
+### Auto-connect behavior
+
+- First `send()` or `request()` triggers connection when `autoConnect: true`; merely registering handlers does not.
+- Connection failures surface through the initiating API: `send()` returns `false`, while `request()` rejects with the original error. When `queue: "off"`, subsequent calls reject with `StateError` until the caller reconnects manually.
+- Auto-connect does not restart automatically after an explicit `close()`.
+- **Reference**: `packages/client/test/runtime/auto-connect.test.ts`.
+
+### Extended meta & outbound normalization
+
+- Required meta fields must be supplied when calling `send()`/`request()`; optional meta can be omitted. Type errors enforce this at compile time.
+- Outbound normalization preserves user-provided timestamps, auto-injects them when missing, strips reserved keys (`clientId`, `receivedAt`, `correlationId`) from `opts.meta`, and only trusts `opts.correlationId`.
+- Extended metadata travels with requests so replies can be scoped (e.g., `roomId`).
+- **Reference**: `packages/client/test/runtime/normalization.test.ts`, `packages/client/test/runtime/request-response.test.ts`.
+
+### `onError` hook expectations
+
+- Fires for parse failures, validation failures, and queue overflow events with structured context.
+- Does **not** fire for caller-managed rejections (e.g., `request()` throwing `StateError`).
+- **Reference**: `packages/client/test/runtime/error-hook.test.ts`.
 
 ## Client Type Inference Tests {#client-type-inference}
 
-**Requirement**: Typed clients (`/zod/client`, `/valibot/client`) MUST provide full inference via type overrides (see ADR-002).
-
-```typescript
-// Client typed handler inference (Zod)
-test("client: typed handler inference with Zod adapter", () => {
-  import { wsClient } from "@ws-kit/client/zod";
-  import { z, message } from "@ws-kit/zod";
-
-  const JoinRoomOK = message("JOIN_ROOM_OK", { roomId: z.string() });
-
-  const client = wsClient({ url: "ws://test" });
-
-  client.on(JoinRoomOK, (msg) => {
-    // ✅ Positive: msg fully typed
-    expectTypeOf(msg).toMatchTypeOf<{
-      type: "JOIN_ROOM_OK";
-      meta: { timestamp?: number; correlationId?: string };
-      payload: { roomId: string };
-    }>();
-    expectTypeOf(msg.payload.roomId).toBeString();
-    expectTypeOf(msg.type).toEqualTypeOf<"JOIN_ROOM_OK">();
-  });
-});
-
-// Negative: no payload for no-payload schemas
-test("client: no payload access for no-payload schema", () => {
-  const NoPayload = message("NO_PAYLOAD");
-  const client = createClient({ url: "ws://test" });
-
-  client.on(NoPayload, (msg) => {
-    expectTypeOf(msg.type).toEqualTypeOf<"NO_PAYLOAD">();
-    expectTypeOf(msg.meta).toBeDefined();
-
-    // @ts-expect-error - payload should not exist
-    msg.payload;
-  });
-});
-
-// Typed request inference
-test("client: typed request inference", async () => {
-  const RequestMsg = message("REQ", { id: z.number() });
-  const ReplyMsg = message("REPLY", { result: z.boolean() });
-
-  const client = createClient({ url: "ws://test" });
-
-  const reply = await client.request(RequestMsg, { id: 42 }, ReplyMsg);
-
-  // ✅ reply fully typed
-  expectTypeOf(reply).toMatchTypeOf<{
-    type: "REPLY";
-    meta: { timestamp?: number; correlationId?: string };
-    payload: { result: boolean };
-  }>();
-  expectTypeOf(reply.payload.result).toBeBoolean();
-});
-
-// Payload conditional typing (overloads)
-test("client: send() overloads enforce payload absence", () => {
-  const NoPayload = message("NO_PAYLOAD");
-  const WithPayload = message("WITH_PAYLOAD", { id: z.number() });
-
-  const client = createClient({ url: "ws://test" });
-
-  // @ts-expect-error - payload param should not exist for no-payload schema
-  client.send(NoPayload, {});
-
-  // @ts-expect-error - payload param should not exist
-  client.send(NoPayload, undefined);
-
-  // ✅ Correct: omit payload param
-  client.send(NoPayload);
-
-  // ✅ Correct: provide payload for with-payload schema
-  client.send(WithPayload, { id: 123 });
-
-  // @ts-expect-error - payload required for with-payload schema
-  client.send(WithPayload);
-});
-
-// Extended meta inference
-test("client: extended meta type enforcement", () => {
-  const RoomMsg = message(
-    "CHAT",
-    { text: z.string() },
-    { roomId: z.string() }, // Required meta field
-  );
-
-  const OptionalMetaMsg = message(
-    "NOTIFY",
-    { text: z.string() },
-    { priority: z.enum(["low", "high"]).optional() },
-  );
-
-  const client = createClient({ url: "ws://test" });
-
-  // @ts-expect-error - missing required meta.roomId
-  client.send(RoomMsg, { text: "hi" });
-
-  // ✅ Correct: provide required meta
-  client.send(RoomMsg, { text: "hi" }, { meta: { roomId: "general" } });
-
-  // ✅ Correct: optional meta can be omitted
-  client.send(OptionalMetaMsg, { text: "hi" });
-
-  // ✅ Correct: optional meta can be provided
-  client.send(OptionalMetaMsg, { text: "hi" }, { meta: { priority: "high" } });
-});
-
-// Generic client (fallback) uses unknown
-test("client: generic client handlers infer as unknown", () => {
-  import { createClient } from "@ws-kit/client"; // Generic client
-
-  const TestMsg = message("TEST", { id: z.number() });
-  const client = createClient({ url: "ws://test" });
-
-  client.on(TestMsg, (msg) => {
-    // ⚠️ msg is unknown in generic client
-    expectTypeOf(msg).toBeUnknown();
-
-    // Manual type assertion required
-    const typed = msg as InferMessage<typeof TestMsg>;
-    expectTypeOf(typed.payload.id).toBeNumber();
-  });
-});
-```
+- Typed adapters (`@ws-kit/client/zod`, `@ws-kit/client/valibot`) must surface fully inferred handler/request types, including meta/correlation fields.
+- Schemas without payload must produce compile-time errors when accessing `ctx.payload`; overloads enforce supplying payloads only when schemas require them.
+- Extended meta requirements/optionals are enforced by the type system.
+- The generic `@ws-kit/client` export intentionally returns `unknown` message payloads, forcing consumers to narrow manually.
+- **Reference**: `packages/client/test/types/client.test.ts`, ADR-002.
 
 ## Key Constraints
 

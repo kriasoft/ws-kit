@@ -2,6 +2,19 @@
 
 This guide covers best practices for deploying WS-Kit applications to production on Bun, Cloudflare Workers/Durable Objects, and other platforms.
 
+## Choosing an Adapter
+
+WS-Kit's pub/sub layer is pluggable, allowing you to choose the right adapter for your deployment scenario:
+
+| Scenario                     | Adapter             | Package                 | Notes                                                                                 |
+| ---------------------------- | ------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
+| Single-instance server       | In-memory (default) | `@ws-kit/core`          | Perfect for development and small deployments                                         |
+| Multi-instance load-balanced | Redis               | `@ws-kit/redis-pubsub`  | Automatic cross-instance broadcasting with atomic token bucket rate limiting          |
+| Cloudflare Workers           | Durable Objects     | `@ws-kit/cloudflare-do` | Serverless with stateful compute; 100 connections per DO, sharding required for scale |
+| Custom backend               | Your implementation | Custom                  | Implement the `PubSub` interface                                                      |
+
+For detailed adapter specifications, limits, and guarantees, see [Adapter Responsibilities](/specs/adapters).
+
 ## Environment Configuration
 
 Use environment variables for production settings:

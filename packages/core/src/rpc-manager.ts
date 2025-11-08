@@ -44,15 +44,21 @@ export class RpcManager {
   // Configuration
   private readonly maxInflightPerSocket: number;
   private readonly idleTimeoutMs: number;
+  private readonly cleanupCadenceMs: number;
+  private dedupWindowMs: number; // Mutable: allows testing override via setDedupWindow()
 
   constructor(
     options: {
-      maxInflightRpcsPerSocket?: number;
-      rpcIdleTimeoutMs?: number;
+      maxInflightPerSocket?: number;
+      idleTimeoutMs?: number;
+      cleanupCadenceMs?: number;
+      dedupWindowMs?: number;
     } = {},
   ) {
-    this.maxInflightPerSocket = options.maxInflightRpcsPerSocket ?? 1000;
-    this.idleTimeoutMs = options.rpcIdleTimeoutMs ?? 40_000;
+    this.maxInflightPerSocket = options.maxInflightPerSocket ?? 1000;
+    this.idleTimeoutMs = options.idleTimeoutMs ?? 40_000;
+    this.cleanupCadenceMs = options.cleanupCadenceMs ?? 5000;
+    this.dedupWindowMs = options.dedupWindowMs ?? 3600_000;
   }
 
   /**
@@ -239,10 +245,10 @@ export class RpcManager {
       clearInterval(this.idleCleanupHandle);
     }
 
-    // Run cleanup every 5 seconds
+    // Run cleanup at configured interval
     this.idleCleanupHandle = setInterval(() => {
       this.cleanupIdle();
-    }, 5000);
+    }, this.cleanupCadenceMs);
   }
 
   /**
@@ -253,6 +259,25 @@ export class RpcManager {
       clearInterval(this.idleCleanupHandle);
       this.idleCleanupHandle = undefined;
     }
+  }
+
+  /**
+   * Set the deduplication window for RPC requests (in milliseconds).
+   * Used to control how long completed RPC IDs are remembered for duplicate detection.
+   * Primarily useful for testing to verify cleanup with shorter durations.
+   *
+   * @internal Testing only; production code should configure via RpcManager constructor options
+   * @param dedupWindowMs Deduplication window in milliseconds (e.g., 100 for fast test cleanup)
+   *
+   * @example
+   * ```typescript
+   * const manager = new RpcManager({ dedupWindowMs: 3600_000 });
+   * // In tests, override for faster cleanup:
+   * manager.setDedupWindow(100); // Speed up dedup window to 100ms
+   * ```
+   */
+  setDedupWindow(dedupWindowMs: number): void {
+    this.dedupWindowMs = dedupWindowMs;
   }
 
   /**
@@ -294,10 +319,8 @@ export class RpcManager {
     }
 
     // Clean up old entries from recentlyTerminated that have exceeded TTL
-    // Keep 1 hour TTL for duplicate detection
-    const ttlMs = 3600_000;
     for (const [key, timestamp] of this.recentlyTerminated) {
-      if (now - timestamp > ttlMs) {
+      if (now - timestamp > this.dedupWindowMs) {
         this.recentlyTerminated.delete(key);
       }
     }
