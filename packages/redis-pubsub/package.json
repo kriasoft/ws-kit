@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/redis-pubsub",
-  "version": "0.1.7",
+  "version": "1.0.0",
   "description": "Redis PubSub adapter for WS-Kit enabling distributed WebSocket broadcasting across multiple server instances",
   "type": "module",
   "sideEffects": false,

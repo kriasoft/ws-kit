@@ -1,5 +1,15 @@
 # @ws-kit/cloudflare-do
 
+## 0.2.5
+
+### Patch Changes
+
+- [#48](https://github.com/kriasoft/ws-kit/pull/48) [`bb09178`](https://github.com/kriasoft/ws-kit/commit/bb09178437dc71d11ce2f5a5f9904fcb1bcc96bb) Thanks [@koistya](https://github.com/koistya)! - **Improvements:**
+  - Update dependencies for compatibility with latest WS-Kit packages
+
+- Updated dependencies [[`bb09178`](https://github.com/kriasoft/ws-kit/commit/bb09178437dc71d11ce2f5a5f9904fcb1bcc96bb)]:
+  - @ws-kit/core@0.7.0
+
 ## 0.2.4
 
 ### Patch Changes

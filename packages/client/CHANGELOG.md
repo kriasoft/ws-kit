@@ -1,5 +1,17 @@
 # @ws-kit/client
 
+## 0.3.2
+
+### Patch Changes
+
+- [#48](https://github.com/kriasoft/ws-kit/pull/48) [`bb09178`](https://github.com/kriasoft/ws-kit/commit/bb09178437dc71d11ce2f5a5f9904fcb1bcc96bb) Thanks [@koistya](https://github.com/koistya)! - **Improvements:**
+  - Update runtime tests for improved test coverage and reliability
+  - Enhance test suite with better state machine and error handling validation
+
+- Updated dependencies []:
+  - @ws-kit/valibot@0.3.4
+  - @ws-kit/zod@0.3.4
+
 ## 0.3.1
 
 ### Patch Changes
