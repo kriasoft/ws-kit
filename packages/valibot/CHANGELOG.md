@@ -1,5 +1,12 @@
 # @ws-kit/valibot
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [[`bb09178`](https://github.com/kriasoft/ws-kit/commit/bb09178437dc71d11ce2f5a5f9904fcb1bcc96bb)]:
+  - @ws-kit/core@0.7.0
+
 ## 0.3.3
 
 ### Patch Changes

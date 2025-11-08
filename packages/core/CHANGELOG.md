@@ -1,5 +1,18 @@
 # @ws-kit/core
 
+## 0.7.0
+
+### Minor Changes
+
+- [#48](https://github.com/kriasoft/ws-kit/pull/48) [`bb09178`](https://github.com/kriasoft/ws-kit/commit/bb09178437dc71d11ce2f5a5f9904fcb1bcc96bb) Thanks [@koistya](https://github.com/koistya)! - **Features:**
+  - Enhance RPC configuration options with backwards-compatible names (`rpcMaxInflightPerSocket`, `rpcCleanupCadenceMs`, `rpcDedupWindowMs`)
+  - Add internal testing API `_testingConfigureRpc()` for integration test configuration
+  - Organize test structure with features directory for better test discoverability
+
+  **Improvements:**
+  - Support both legacy and new option naming conventions for RPC settings
+  - Provide safe access to RPC dedup window configuration for test tuning
+
 ## 0.6.0
 
 ### Minor Changes
