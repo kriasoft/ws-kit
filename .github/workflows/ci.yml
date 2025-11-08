@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build:
@@ -59,10 +60,10 @@ jobs:
       - uses: codecov/codecov-action@v5
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           name: tests
           directory: ./coverage
+          use_oidc: true
           disable_search: true
           verbose: true
           fail_ci_if_error: true
