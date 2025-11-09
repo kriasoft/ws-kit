@@ -7,8 +7,8 @@
  * Validates that schemas reject unknown keys at all levels (root, meta, payload)
  * and enforce payload presence rules.
  *
- * Spec: @docs/specs/schema.md#Strict-Schemas
- * Spec: @docs/specs/validation.md#Strict-Mode-Enforcement
+ * Spec: docs/specs/schema.md#strict-schemas-required
+ * Spec: docs/specs/validation.md#strict-mode-enforcement
  */
 
 import { describe, expect, it } from "bun:test";

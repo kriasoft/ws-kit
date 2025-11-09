@@ -786,13 +786,13 @@ router.on(QueryMessage, (ctx) => {
 
 **RPC Pattern**: For request/response with guaranteed responses and timeouts, define RPC schemas and use `ctx.reply()` instead (see ADR-015 for RPC design).
 
-**Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
+**Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see docs/specs/schema.md#Which-timestamp-to-use).
 
-**For broadcasting to multiple clients**, see @pubsub.md for multicast patterns using Bun's native pubsub.
+**For broadcasting to multiple clients**, see docs/specs/pubsub.md for multicast patterns using Bun's native pubsub.
 
 ## Subscriptions & Publishing
 
-For comprehensive pub/sub API documentation, semantics, and patterns, see **[@pubsub.md](./pubsub.md)**.
+For comprehensive pub/sub API documentation, semantics, and patterns, see [docs/specs/pubsub.md](./pubsub.md).
 
 **Quick API reference:**
 
@@ -889,7 +889,7 @@ router.on(LoginMessage, (ctx) => {
 });
 ```
 
-For complete error code reference, error handling patterns, and structured logging integration, see **[@error-handling.md](./error-handling.md)** (design rationale in ADR-009).
+For complete error code reference, error handling patterns, and structured logging integration, see [docs/specs/error-handling.md](./error-handling.md) (design rationale in ADR-009).
 
 **Error Propagation**: If a handler throws an unhandled error, the router catches it and calls the `onError` lifecycle hook (if registered). See [Lifecycle Hooks](#lifecycle-hooks) for details.
 
@@ -1108,14 +1108,14 @@ This is the **recommended approach** for all production deployments.
 
 ## Key Constraints
 
-> See @rules.md for complete rules. Critical for routing:
+> See docs/specs/rules.md for complete rules. Critical for routing:
 
-1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see @rules.md#state-layering)
-2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)
+1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see docs/specs/rules.md#state-layering)
+2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see docs/specs/schema.md#Which-timestamp-to-use)
 3. **Payload typing** — `ctx.payload` exists only when schema defines it (see ADR-001)
 4. **Type-safe errors** — Use `ctx.error()` with discriminated union error codes (see ADR-009 for design rationale)
 5. **Connection data updates** — Use `ctx.assignData()` to merge partial updates (write-partial pattern)
 6. **Middleware execution** — Global runs first, then per-route, then handler (see ADR-008)
-7. **Validation flow** — Trust schema validation; never re-validate in handlers (see @rules.md#validation-flow)
-8. **Broadcasting** — For multicast messaging, see @pubsub.md (not covered in this spec)
+7. **Validation flow** — Trust schema validation; never re-validate in handlers (see docs/specs/rules.md#validation-flow)
+8. **Broadcasting** — For multicast messaging, see docs/specs/pubsub.md (not covered in this spec)
 9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare-do`)

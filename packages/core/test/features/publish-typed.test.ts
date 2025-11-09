@@ -7,7 +7,7 @@
  * Validates router.publish() and ctx.publish() with schema validation,
  * return value (recipient count), and PublishOptions (excludeSelf, meta).
  *
- * Spec: docs/specs/router.md#Publishing-Typed-Messages
+ * Spec: docs/specs/router.md#subscriptions--publishing
  */
 
 import { describe, expect, it } from "bun:test";

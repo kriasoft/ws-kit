@@ -10,7 +10,7 @@
  *
  * Tests the public API of router.publish() and ctx.publish()
  *
- * Spec: @docs/specs/pubsub.md#9.6-Origin-Tracking
+ * Spec: docs/specs/pubsub.md#origin-tracking-include-sender-identity
  * Related: ADR-022 (pub/sub API design), ADR-019 (ctx.publish), ADR-018 (publish terminology)
  */
 

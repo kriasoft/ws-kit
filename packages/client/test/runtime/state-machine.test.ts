@@ -11,7 +11,7 @@
  * - Reconnect cycle: closed → reconnecting → connecting → open
  * - Manual close prevents auto-reconnect
  *
- * See @docs/specs/client.md#connection-state-machine
+ * See docs/specs/client.md#connection-state-machine
  */
 
 import {

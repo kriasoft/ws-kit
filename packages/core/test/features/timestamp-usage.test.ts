@@ -7,8 +7,8 @@
  * Validates correct usage of ctx.receivedAt (server authoritative time)
  * vs meta.timestamp (client producer time).
  *
- * Spec: @docs/specs/schema.md#Which-timestamp-to-use
- * Spec: @docs/specs/router.md#Server-provided-context-fields
+ * Spec: docs/specs/schema.md#which-timestamp-to-use
+ * Spec: docs/specs/router.md#server-controlled-fields
  */
 
 import { describe, expect, expectTypeOf, it, mock } from "bun:test";

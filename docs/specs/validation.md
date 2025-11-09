@@ -6,13 +6,13 @@
 
 **This spec covers validation errors** (router rejects malformed messages before handlers run).
 
-For **application errors** (handlers send error messages to clients), see @error-handling.md.
+For **application errors** (handlers send error messages to clients), see docs/specs/error-handling.md.
 
-| Error Type              | Where Caught         | Handler Invoked? | Spec               |
-| ----------------------- | -------------------- | ---------------- | ------------------ |
-| Parse failures          | Router (pre-handler) | ❌ Never         | @validation.md     |
-| Schema validation       | Router (pre-handler) | ❌ Never         | @validation.md     |
-| Business logic failures | Handler (app code)   | ✅ Always        | @error-handling.md |
+| Error Type              | Where Caught         | Handler Invoked? | Spec                         |
+| ----------------------- | -------------------- | ---------------- | ---------------------------- |
+| Parse failures          | Router (pre-handler) | ❌ Never         | docs/specs/validation.md     |
+| Schema validation       | Router (pre-handler) | ❌ Never         | docs/specs/validation.md     |
+| Business logic failures | Handler (app code)   | ✅ Always        | docs/specs/error-handling.md |
 
 **Key distinction**: Validation errors are **transport-layer** concerns (malformed wire format); application errors are **business-layer** concerns (invalid state, unauthorized access, resource not found).
 
@@ -34,7 +34,7 @@ Message → JSON Parse → Type Check → Handler Lookup → Normalize → Middl
 
 Adapters MUST receive normalized messages for validation.
 
-**Strict mode validation**: Schemas MUST reject unknown keys, including unexpected `payload` when schema defines none. See @schema.md#Strict-Schemas for rationale and #Strict-Mode-Enforcement below for adapter requirements.
+**Strict mode validation**: Schemas MUST reject unknown keys, including unexpected `payload` when schema defines none. See docs/specs/schema.md#Strict-Schemas for rationale and #Strict-Mode-Enforcement below for adapter requirements.
 
 ## Strict Mode Enforcement
 
@@ -108,7 +108,7 @@ export function message<
 - Schema drift between client/server
 - Wire protocol violations (e.g., sending `payload` when schema defines none)
 
-See @test-requirements.md#Runtime-Testing for test requirements.
+See docs/specs/test-requirements.md#Runtime-Testing for test requirements.
 
 ## Adapter Pattern
 
@@ -217,11 +217,11 @@ Routers MUST strip reserved keys **before** validation to:
 // shared/normalize.ts
 
 // Reserved server-only meta keys (MUST be stripped before validation)
-// SOURCE: @rules.md#reserved-keys
+// SOURCE: docs/specs/rules.md#reserved-keys
 const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 // To reserve additional keys in future, add them here AND update:
-// - @schema.md#Reserved-Server-Only-Meta-Keys
-// - @rules.md#reserved-keys
+// - docs/specs/schema.md#Reserved-Server-Only-Meta-Keys
+// - docs/specs/rules.md#reserved-keys
 
 /**
  * Schema Creation Enforcement
@@ -291,7 +291,7 @@ Schema validation **MUST** reject messages with unknown keys (strict mode). This
 2. Client-side validation symmetry (same strictness rules)
 3. Fast failure on malformed/malicious inputs
 
-See @schema.md#Strict-Schemas for implementation requirements.
+See docs/specs/schema.md#Strict-Schemas for implementation requirements.
 
 **Reserved Server-Only Meta Keys**:
 
@@ -337,14 +337,14 @@ function buildContext<T>(
 - `receivedAt` is server ingress time; separate from optional `ctx.meta.timestamp` (producer time)
 - Keeps message schema clean and client-side validatable
 
-**Which timestamp to use**: `ctx.receivedAt` is captured at ingress before parsing (server clock, authoritative); `meta.timestamp` is producer time and may be missing or skewed (client's clock, untrusted). **Never** base server decisions on `meta.timestamp`. See @schema.md#Which-timestamp-to-use for detailed guidance.
+**Which timestamp to use**: `ctx.receivedAt` is captured at ingress before parsing (server clock, authoritative); `meta.timestamp` is producer time and may be missing or skewed (client's clock, untrusted). **Never** base server decisions on `meta.timestamp`. See docs/specs/schema.md#Which-timestamp-to-use for detailed guidance.
 
 ## Key Constraints
 
-> See @rules.md for complete rules. Critical for validation:
+> See docs/specs/rules.md for complete rules. Critical for validation:
 
-1. **Normalize before validate** — Strip reserved keys BEFORE schema validation (see @validation.md#normalization-rules)
-2. **Strict mode required** — Schemas MUST reject unknown keys (see @schema.md#Strict-Schemas and #Strict-Mode-Enforcement)
-3. **Validation flow** — Follow exact order: Parse → Type Check → Handler Lookup → Normalize → Validate → Handler (see @rules.md#validation-flow)
-4. **Trust validation** — Handlers MUST NOT re-validate; trust schema (see @rules.md#validation-flow)
-5. **Error handling** — Log validation failures with `clientId`; keep connections open (see @rules.md#error-handling)
+1. **Normalize before validate** — Strip reserved keys BEFORE schema validation (see docs/specs/validation.md#normalization-rules)
+2. **Strict mode required** — Schemas MUST reject unknown keys (see docs/specs/schema.md#Strict-Schemas and #Strict-Mode-Enforcement)
+3. **Validation flow** — Follow exact order: Parse → Type Check → Handler Lookup → Normalize → Validate → Handler (see docs/specs/rules.md#validation-flow)
+4. **Trust validation** — Handlers MUST NOT re-validate; trust schema (see docs/specs/rules.md#validation-flow)
+5. **Error handling** — Log validation failures with `clientId`; keep connections open (see docs/specs/rules.md#error-handling)

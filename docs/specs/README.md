@@ -31,30 +31,30 @@ When specs reference the same concept, the canonical source takes precedence:
 
 **Core Patterns:**
 
-- **Export-with-Helpers**: Import `z`, `message()`, and `createRouter()` from single source (`@ws-kit/zod` or `@ws-kit/valibot`) (@schema.md#canonical-import-patterns)
-- **Message Helper**: Use `message(type, payload?, meta?)` to create schemas; single validator instance prevents dual-package issues (@schema.md#message-helper)
-- **Router Creation**: Use `createRouter<TData>()` with explicit generic for full type inference in handlers (@router.md#Creating-a-Router)
+- **Export-with-Helpers**: Import `z`, `message()`, and `createRouter()` from single source (`@ws-kit/zod` or `@ws-kit/valibot`) (docs/specs/schema.md#canonical-import-patterns)
+- **Message Helper**: Use `message(type, payload?, meta?)` to create schemas; single validator instance prevents dual-package issues (docs/specs/schema.md#message-helper)
+- **Router Creation**: Use `createRouter<TData>()` with explicit generic for full type inference in handlers (docs/specs/router.md#Creating-a-Router)
 - **Typed Clients**: `/zod/client`, `/valibot/client` exports with `wsClient()` for full type inference; generic `/client` for custom validators only (ADR-002)
-- **Normalization**: Security boundary; strips reserved keys before validation (@validation.md#normalization-rules)
-- **Strict Mode**: Validation rejects unknown keys at root/meta/payload levels (@schema.md#Strict-Schemas)
+- **Normalization**: Security boundary; strips reserved keys before validation (docs/specs/validation.md#normalization-rules)
+- **Strict Mode**: Validation rejects unknown keys at root/meta/payload levels (docs/specs/schema.md#Strict-Schemas)
 
 **Message Structure:**
 
-- **Message Context**: Server handler context (`ctx`) with validated data + server-provided fields (`ws`, `receivedAt`, `send`) (@router.md#Router-API)
-- **Extended Meta**: Schema-defined metadata beyond defaults (`correlationId`, `timestamp`) (@schema.md#Extended-Meta)
-- **Reserved Keys**: Server-only meta fields (`clientId`, `receivedAt`); stripped during normalization (@validation.md#normalization-rules)
+- **Message Context**: Server handler context (`ctx`) with validated data + server-provided fields (`ws`, `receivedAt`, `send`) (docs/specs/router.md#Router-API)
+- **Extended Meta**: Schema-defined metadata beyond defaults (`correlationId`, `timestamp`) (docs/specs/schema.md#Extended-Meta)
+- **Reserved Keys**: Server-only meta fields (`clientId`, `receivedAt`); stripped during normalization (docs/specs/validation.md#normalization-rules)
 
 **Identity & Time:**
 
-- **Connection Identity**: `ctx.ws.data.clientId` (UUID v7, set during upgrade); transport-layer state, not message state (@schema.md#Why-clientId-is-not-in-meta)
-- **Producer Time**: `meta.timestamp` (client clock, optional, may be skewed); for UI display only (@schema.md#Which-timestamp-to-use)
-- **Authoritative Time**: `ctx.receivedAt` (server clock, captured at ingress); use for all server logic (@schema.md#Which-timestamp-to-use)
-- **Origin Tracking**: Include sender identity in payload or meta for audit and access control (@pubsub.md#9.6-Origin-Tracking)
+- **Connection Identity**: `ctx.ws.data.clientId` (UUID v7, set during upgrade); transport-layer state, not message state (docs/specs/schema.md#Why-clientId-is-not-in-meta)
+- **Producer Time**: `meta.timestamp` (client clock, optional, may be skewed); for UI display only (docs/specs/schema.md#Which-timestamp-to-use)
+- **Authoritative Time**: `ctx.receivedAt` (server clock, captured at ingress); use for all server logic (docs/specs/schema.md#Which-timestamp-to-use)
+- **Origin Tracking**: Include sender identity in payload or meta for audit and access control (docs/specs/pubsub.md#9.6-Origin-Tracking)
 
 **Messaging Patterns:**
 
-- **Unicast**: Single-client messaging via `ctx.send()` (@router.md#Type-Safe-Sending)
-- **Multicast**: Topic-based broadcasting via `publish()` to multiple subscribers (@pubsub.md)
+- **Unicast**: Single-client messaging via `ctx.send()` (docs/specs/router.md#Type-Safe-Sending)
+- **Multicast**: Topic-based broadcasting via `publish()` to multiple subscribers (docs/specs/pubsub.md)
 
 ## Core Specifications
 
@@ -90,7 +90,7 @@ See [docs/adr/README.md](../adr/README.md) for the complete decision index.
 
 **Server imports MUST follow ADR-007 (export-with-helpers pattern).**
 
-For complete canonical import patterns and usage examples, see **[@schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns)**.
+For complete canonical import patterns and usage examples, see [docs/specs/schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns).
 
 **Quick reference:**
 

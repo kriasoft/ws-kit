@@ -10,7 +10,7 @@
 
 ## 0. Prior Design Issues
 
-An earlier draft had namespace confusion, ambiguous return types, no batch operations, zero type safety, and unclear authorization semantics. See [ADR-022 § Context](../adr/022-namespace-first-pubsub-api.md#context) for the full analysis and design rationale.
+An earlier draft had namespace confusion, ambiguous return types, no batch operations, zero type safety, and unclear authorization semantics. See [ADR-022 Context](../adr/022-namespace-first-pubsub-api.md#context) for the full analysis and design rationale.
 
 ---
 
@@ -413,14 +413,15 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 **Behavior:**
 
 - `subscribe(topic)` when already subscribed → Returns `void` without error. No state change, no hook calls.
-- `unsubscribe(topic)` when not subscribed → Returns `void` without error. No state change, no hook calls.
-- Errors (invalid format, unauthorized) **still throw** on every call, even if idempotent. Only successful operations skip repeated effects.
+- `unsubscribe(topic)` when not subscribed → Returns `void` **without validation** (soft no-op). No state change, no hooks, no errors—even if topic format is invalid. Enables safe cleanup in error paths.
+- Errors (invalid format, unauthorized) **still throw** on every call, **except** `unsubscribe()` skips validation if not subscribed. Only successful state mutations skip repeated effects.
 
-**Rationale:** Idempotency means apps don't need defensive checks. Safe to call `subscribe()` unconditionally; if already subscribed, it's a no-op. This matters for:
+**Rationale:** Idempotency means apps don't need defensive checks. Safe to call `subscribe()` or `unsubscribe()` unconditionally. This matters for:
 
 - Reconnection logic: re-subscribe to desired topics without checking current state.
 - Race conditions: multiple handlers subscribing to same topic don't conflict.
-- Defensive programming: no need to guard with `if (!has(topic))`.
+- Defensive cleanup: `unsubscribe()` in error paths or finally blocks works without pre-checks, even with unvalidated topic strings (soft no-op if not subscribed).
+- No defensive guards: no need to check `if (!has(topic))` before unsubscribing.
 
 **Hook behavior:** `onSubscribe()` and `onUnsubscribe()` hooks are **not called** on idempotent no-ops. Only called on actual state changes.
 
@@ -432,9 +433,9 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 
 **Behavior:**
 
-- If validation fails on topic N, all N topics fail; none are subscribed.
-- If authorization fails on topic N, same: all fail.
-- Exception: idempotency means duplicate topics in the same call don't cause errors; they're coalesced into the unique set before atomicity check.
+- `subscribeMany`: If validation fails on topic N, all N topics fail; none are subscribed. If authorization fails, same: all fail.
+- `unsubscribeMany`: Soft no-op semantics—topics **not currently subscribed are skipped** (no validation, no error). Only subscribed topics are validated, mutated, and sent to adapter. If validation fails on any subscribed topic, entire operation fails and rolls back.
+- Exception: duplicate topics in the same call are coalesced before atomicity check (not an error).
 
 **Return values:**
 
@@ -733,7 +734,7 @@ The `Topics` instance is immutable at runtime. Callers MUST NOT mutate the objec
 
 **Note on iteration:** The `forEach()` method and other iteration methods (`keys()`, `values()`, `entries()`) MUST NOT expose the mutable internal `Set` via the callback's third argument. Implementations must pass a safe `ReadonlySet` reference (e.g., the TopicsImpl facade itself) to prevent bypassing validation and authorization.
 
-See § 11 (Implementation Invariants) for adapter compliance details.
+See § 11: Implementation Invariants for adapter compliance details.
 
 ---
 
@@ -932,7 +933,7 @@ router.onClose((ctx) => {
 
 ## 11. Implementation Invariants for Adapter Authors
 
-These invariants must hold for all adapters. See [ADR-022 § Implementation Invariants](../adr/022-namespace-first-pubsub-api.md#implementation-invariants-for-adapters) for the design rationale behind each invariant.
+These invariants must hold for all adapters. See [ADR-022 Implementation Invariants](../adr/022-namespace-first-pubsub-api.md#implementation-invariants-for-adapters) for the design rationale behind each invariant.
 
 **Normalization contract:**
 
@@ -944,8 +945,8 @@ These invariants must hold for all adapters. See [ADR-022 § Implementation Inva
 **Idempotency contract:**
 
 - `subscribe(topic)` when already subscribed: return `void`, **do not call hooks**, **do not throw**.
-- `unsubscribe(topic)` when not subscribed: return `void`, **do not call hooks**, **do not throw**.
-- Errors (validation, authorization) **always throw**, even on duplicate calls (not idempotent).
+- `unsubscribe(topic)` when not subscribed: return `void` **without validation**, **do not call hooks**, **do not throw** (even if topic format is invalid).
+- Errors (validation, authorization) **always throw** on `subscribe()`, even on duplicate calls. For `unsubscribe()`, validation errors only throw if the topic **is** subscribed (soft no-op if not).
 
 **Hook timing:**
 

@@ -18,7 +18,7 @@
  * - BACKPRESSURE: Adapter send queue full
  * - PAYLOAD_TOO_LARGE: Payload exceeds adapter limit
  *
- * See [docs/specs/pubsub.md § 7](../../docs/specs/pubsub.md#7-errors) for details.
+ * See docs/specs/pubsub.md#errors for details.
  */
 export type PubSubErrorCode =
   | "UNAUTHORIZED_SUBSCRIBE" // Denied by authorizeSubscribe() hook

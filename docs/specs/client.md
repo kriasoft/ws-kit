@@ -16,7 +16,7 @@ Quick navigation for AI tools:
 - [#Reconnect--Queueing](#reconnect--queueing) — Connection state machine and queue behavior
 - [#Error-Handling](#error-handling-client-side) — Error types and contract
 - [#Usage-Examples](#usage-examples) — Integration patterns
-- **Server-side routing**: See @router.md for server message handling
+- **Server-side routing**: See docs/specs/router.md for server message handling
 
 ## Design Principles
 
@@ -217,14 +217,14 @@ onceOpen(): Promise<void>;
 // Inbound routing with type-safe validation
 // Multiple handlers may be registered for the same schema (execute in registration order)
 // Returns unsubscribe function (removes only this handler)
-// See @client.md#Multiple-Handlers for multi-handler semantics
+// See docs/specs/client.md#Multiple-Handlers for multi-handler semantics
 on<S extends AnyMessageSchema>(
 schema: S,
 handler: (msg: InferMessage<S>) => void,
 ): () => void;
 
 // Fire-and-forget to server (unicast)
-// Returns true if sent/enqueued; false if dropped (see @client.md#fire-and-forget-return)
+// Returns true if sent/enqueued; false if dropped (see docs/specs/client.md#fire-and-forget-return)
 // Payload conditional: use overloads to omit payload param for no-payload schemas
 send<S extends AnyMessageSchema>(
 schema: S,
@@ -476,7 +476,7 @@ client.send(
 ); // Also OK
 ```
 
-**Normalization**: See @client.md#client-normalization for outbound meta merging rules (auto-injection, reserved key stripping).
+**Normalization**: See docs/specs/client.md#client-normalization for outbound meta merging rules (auto-injection, reserved key stripping).
 
 **Type safety**: `InferMeta<S>` enforces schema-defined meta fields at compile time. Required fields cause type errors if omitted; optional fields can be omitted.
 
@@ -553,7 +553,7 @@ graph TD
 
 Client auto-injects `meta.timestamp = Date.now()` on `send()`/`request()` if not provided in `opts.meta`. Server sets `receivedAt` when message arrives.
 
-**When to use which timestamp:** See @schema.md#Which-timestamp-to-use for canonical guidance (client UI vs server logic).
+**When to use which timestamp:** See docs/specs/schema.md#Which-timestamp-to-use for canonical guidance (client UI vs server logic).
 
 ### Correlation
 
@@ -614,7 +614,7 @@ If multiple inbound messages arrive with the same `correlationId`, only the **fi
   - Validation uses same strict mode as server (reject unknown keys).
 - **Strict mode:** The client **MUST** validate with strict schemas that reject unknown keys in `meta` or `payload`.
 
-**Validation consistency:** See @validation.md#normalization-rules for server normalization behavior.
+**Validation consistency:** See docs/specs/validation.md#normalization-rules for server normalization behavior.
 
 ### Normalization Rules {#client-normalization}
 
@@ -705,7 +705,7 @@ client.send(RoomMsg, { text: "hi" }, {
 
 ### Timestamp usage
 
-See @schema.md#Which-timestamp-to-use for when to use `meta.timestamp` (producer time, UI display) vs `receivedAt` (server logic, authoritative).
+See docs/specs/schema.md#Which-timestamp-to-use for when to use `meta.timestamp` (producer time, UI display) vs `receivedAt` (server logic, authoritative).
 
 ## Reconnect & Queueing
 
@@ -769,13 +769,13 @@ request() [second call]
   └─ Reject immediately with StateError
 ```
 
-See @test-requirements.md#L873 for edge case validation.
+See docs/specs/test-requirements.md#L873 for edge case validation.
 
 **Return values**:
 
-- `send()` returns `true` if sent/queued, `false` if discarded/auto-connect failed (see @client.md#fire-and-forget-return)
+- `send()` returns `true` if sent/queued, `false` if discarded/auto-connect failed (see docs/specs/client.md#fire-and-forget-return)
 - `request()` behavior when `state !== "open"`:
-  - `queue: "drop-newest"` or `"drop-oldest"`: Queues pending request; timeout starts after flush (see @client.md#request-timeout)
+  - `queue: "drop-newest"` or `"drop-oldest"`: Queues pending request; timeout starts after flush (see docs/specs/client.md#request-timeout)
   - `queue: "off"`: Rejects immediately with `StateError` ("Cannot send request while disconnected with queue disabled")
   - Auto-connect failure: Rejects with connection error (never throws synchronously)
 
@@ -786,7 +786,7 @@ See @test-requirements.md#L873 for edge case validation.
 - `send()` **never throws**
 - Returns `false` on outbound validation failure (logged to `console.error`)
 - Returns `false` when message is dropped (queue overflow or `queue: "off"`)
-- See @client.md#fire-and-forget-return for complete return value semantics
+- See docs/specs/client.md#fire-and-forget-return for complete return value semantics
 
 **Request/response errors (`request()`):**
 

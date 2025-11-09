@@ -11,8 +11,8 @@
  * - Protocol deduplication (first occurrence wins)
  * - Token refresh on reconnect
  *
- * See @docs/specs/client.md#protocol-merging
- * See @docs/specs/client.md#auth
+ * See docs/specs/client.md#protocol-merging
+ * See docs/specs/client.md#public-api-stable-v1
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";

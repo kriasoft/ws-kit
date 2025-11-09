@@ -9,7 +9,7 @@ This is a **rapid reference** to help you find rules quickly. For implementation
 **How to Use:**
 
 1. **Quickly find rules**: Scan this index for your use case
-2. **Get implementation details**: Click the linked `@spec.md#section` references
+2. **Get implementation details**: Click the linked `docs/specs/spec.md#section` references
 3. **Understand trade-offs**: Read the referenced spec section for "why" and detailed examples
 4. **When in doubt**: The linked canonical section always takes precedence
 
@@ -26,7 +26,7 @@ This is a **rapid reference** to help you find rules quickly. For implementation
 
 ### Import Patterns (ADR-007: Export-with-Helpers)
 
-See **[@schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns)** for complete patterns and examples.
+See [docs/specs/schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns) for complete patterns and examples.
 
 **MUST enforce:**
 
@@ -72,15 +72,15 @@ export default {
 
 ### Security & Validation
 
-- **NEVER** re-validate in handlers (trust schema) → @validation.md#Flow
-- **ALWAYS** use strict schemas (reject unknown keys) → @schema.md#Strict-Schemas
+- **NEVER** re-validate in handlers (trust schema) → docs/specs/validation.md#Flow
+- **ALWAYS** use strict schemas (reject unknown keys) → docs/specs/schema.md#Strict-Schemas
 
 ### Identity & Reserved Keys (Critical for Security)
 
-- **NEVER** access `clientId` via `ctx.meta.clientId` — server generates it; use `ctx.ws.data.clientId` instead → @validation.md#normalization-rules
-- **NEVER** allow clients to set reserved keys (`clientId`, `receivedAt`) — routers strip them during normalization → @validation.md#normalization-rules
-- **NEVER** trust client-provided `receivedAt` timestamps — use `ctx.receivedAt` for authoritative server time → @schema.md#Which-timestamp-to-use
-- **ALWAYS** access identity via `ctx.ws.data.clientId` in handlers and middleware → @router.md#Type-Safe-Sending
+- **NEVER** access `clientId` via `ctx.meta.clientId` — server generates it; use `ctx.ws.data.clientId` instead → docs/specs/validation.md#normalization-rules
+- **NEVER** allow clients to set reserved keys (`clientId`, `receivedAt`) — routers strip them during normalization → docs/specs/validation.md#normalization-rules
+- **NEVER** trust client-provided `receivedAt` timestamps — use `ctx.receivedAt` for authoritative server time → docs/specs/schema.md#Which-timestamp-to-use
+- **ALWAYS** access identity via `ctx.ws.data.clientId` in handlers and middleware → docs/specs/router.md#Type-Safe-Sending
 
 ---
 
@@ -88,23 +88,23 @@ export default {
 
 ### Schema & Validation {#validation-flow}
 
-- **ALWAYS** follow validation flow (Parse → Type Check → Lookup → Normalize → Validate → Middleware → Handler) → @validation.md#Flow
-- **ALWAYS** normalize before validate (strip reserved keys BEFORE schema) → @validation.md#normalization-rules
+- **ALWAYS** follow validation flow (Parse → Type Check → Lookup → Normalize → Validate → Middleware → Handler) → docs/specs/validation.md#Flow
+- **ALWAYS** normalize before validate (strip reserved keys BEFORE schema) → docs/specs/validation.md#normalization-rules
 
 ### Middleware
 
-- **ALWAYS** use `router.use(middleware)` for global middleware → @router.md#Middleware
-- **ALWAYS** use `router.use(schema, middleware)` for per-route middleware → @router.md#Middleware
-- **ALWAYS** call `next()` to continue to next middleware or handler → @router.md#Middleware
-- **ALWAYS** skip calling `next()` to prevent handler execution → @router.md#Middleware
-- **ALWAYS** register global middleware before per-route middleware → @router.md#Middleware
+- **ALWAYS** use `router.use(middleware)` for global middleware → docs/specs/router.md#Middleware
+- **ALWAYS** use `router.use(schema, middleware)` for per-route middleware → docs/specs/router.md#Middleware
+- **ALWAYS** call `next()` to continue to next middleware or handler → docs/specs/router.md#Middleware
+- **ALWAYS** skip calling `next()` to prevent handler execution → docs/specs/router.md#Middleware
+- **ALWAYS** register global middleware before per-route middleware → docs/specs/router.md#Middleware
 
 ### Connection & Context
 
-- **ALWAYS** access identity via `ctx.ws.data.clientId` → @validation.md#Reserved-Meta-Keys
-- **ALWAYS** use `ctx.receivedAt` for server logic → @schema.md#Which-timestamp-to-use
-- **ALWAYS** use `ctx.assignData(partial)` to merge connection data updates (write-partial pattern) → @router.md#Modifying-Connection-Data
-- **NEVER** mutate `ctx.ws.data` directly; use `assignData()` → @router.md#Modifying-Connection-Data
+- **ALWAYS** access identity via `ctx.ws.data.clientId` → docs/specs/validation.md#Reserved-Meta-Keys
+- **ALWAYS** use `ctx.receivedAt` for server logic → docs/specs/schema.md#Which-timestamp-to-use
+- **ALWAYS** use `ctx.assignData(partial)` to merge connection data updates (write-partial pattern) → docs/specs/router.md#Modifying-Connection-Data
+- **NEVER** mutate `ctx.ws.data` directly; use `assignData()` → docs/specs/router.md#Modifying-Connection-Data
 
 ### Type System
 
@@ -112,33 +112,33 @@ export default {
 
 ### Error Handling {#error-handling}
 
-- **ALWAYS** use `ctx.error(code, message, details)` for type-safe error responses → ADR-009, @error-handling.md
-- **ALWAYS** wrap async ops in try/catch → @error-handling.md
-- **ALWAYS** keep connections open (handler must close explicitly) → @error-handling.md
-- **ALWAYS** log errors with `clientId` for traceability → @error-handling.md
+- **ALWAYS** use `ctx.error(code, message, details)` for type-safe error responses → ADR-009, docs/specs/error-handling.md
+- **ALWAYS** wrap async ops in try/catch → docs/specs/error-handling.md
+- **ALWAYS** keep connections open (handler must close explicitly) → docs/specs/error-handling.md
+- **ALWAYS** log errors with `clientId` for traceability → docs/specs/error-handling.md
 - **ALWAYS** implement `onError` hook in `serve()` for centralized error handling → ADR-009
-- **NEVER** include passwords, tokens, API keys, or credentials in error details (automatically stripped) → @error-handling.md#Error-Detail-Sanitization
-- **ALWAYS** treat [Connection Close Policy](#connection-close-policy) as authoritative source: (1) enumerate all auto-close cases in policy table, (2) test with explicit close codes, (3) link from all related sections → @error-handling.md#connection-close-policy
+- **NEVER** include passwords, tokens, API keys, or credentials in error details (automatically stripped) → docs/specs/error-handling.md#Error-Detail-Sanitization
+- **ALWAYS** treat [Connection Close Policy](#connection-close-policy) as authoritative source: (1) enumerate all auto-close cases in policy table, (2) test with explicit close codes, (3) link from all related sections → docs/specs/error-handling.md#connection-close-policy
 
 ### Messaging
 
-- **ALWAYS** use `ctx.send()` for unicast → @router.md#Type-Safe-Sending
-- **ALWAYS** use `router.publish()` for multicast (validates before broadcast) → @pubsub.md
-- **ALWAYS** use `ctx.error()` for sending error messages to clients → @error-handling.md
-- **NEVER** inject `clientId` into meta (include sender in payload/meta instead) → @pubsub.md#9.6-Origin-Tracking
-- **ALWAYS** auto-inject `timestamp` in outbound messages → @router.md#Type-Safe-Sending
-- **NEVER** send `ERROR` from clients unless implementing custom protocol (server-to-client by default) → @error-handling.md#Error-Message-Direction
+- **ALWAYS** use `ctx.send()` for unicast → docs/specs/router.md#Type-Safe-Sending
+- **ALWAYS** use `router.publish()` for multicast (validates before broadcast) → docs/specs/pubsub.md
+- **ALWAYS** use `ctx.error()` for sending error messages to clients → docs/specs/error-handling.md
+- **NEVER** inject `clientId` into meta (include sender in payload/meta instead) → docs/specs/pubsub.md#9.6-Origin-Tracking
+- **ALWAYS** auto-inject `timestamp` in outbound messages → docs/specs/router.md#Type-Safe-Sending
+- **NEVER** send `ERROR` from clients unless implementing custom protocol (server-to-client by default) → docs/specs/error-handling.md#Error-Message-Direction
 
 ### Lifecycle Hooks (ADR-009)
 
-- **ALWAYS** implement lifecycle hooks in `serve()` options for observability → ADR-009, @router.md#Lifecycle-Hooks
+- **ALWAYS** implement lifecycle hooks in `serve()` options for observability → ADR-009, docs/specs/router.md#Lifecycle-Hooks
   - `onUpgrade(req)` — Before authentication (connection setup)
   - `onOpen(ctx)` — After authentication (safe to send messages)
   - `onClose(ctx)` — After disconnect (cleanup)
   - `onError(error, ctx)` — Centralized error handling
   - `onBroadcast(message, scope)` — Track broadcast events
-- **ALWAYS** unsubscribe in `onClose()` → @pubsub.md#9.7-Room-Management
-- **ALWAYS** store topic IDs in `ctx.ws.data` → @pubsub.md#9.7-Room-Management
+- **ALWAYS** unsubscribe in `onClose()` → docs/specs/pubsub.md#9.7-Room-Management
+- **ALWAYS** store topic IDs in `ctx.ws.data` → docs/specs/pubsub.md#9.7-Room-Management
 - **NEVER** throw in lifecycle hooks; errors are caught and logged → ADR-009
 
 ---
@@ -184,15 +184,15 @@ Accept these TypeScript violations for better DX:
 
 ## Reserved Server-Only Keys {#reserved-keys}
 
-**CANONICAL LIST** (see @validation.md#normalization-rules for implementation):
+**CANONICAL LIST** (see docs/specs/validation.md#normalization-rules for implementation):
 
 - `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
 - `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
 **Enforcement:**
 
-- Routers MUST strip reserved keys during normalization (security boundary) → @validation.md#normalization-rules
-- Schema creation MUST reject extended meta defining reserved keys (fails fast at design time) → @schema.md#Reserved-Server-Only-Meta-Keys
+- Routers MUST strip reserved keys during normalization (security boundary) → docs/specs/validation.md#normalization-rules
+- Schema creation MUST reject extended meta defining reserved keys (fails fast at design time) → docs/specs/schema.md#Reserved-Server-Only-Meta-Keys
 
 ---
 
@@ -202,39 +202,39 @@ Accept these TypeScript violations for better DX:
 
 ### Message Normalization (Outbound)
 
-- **ALWAYS** strip reserved/managed keys (`clientId`, `receivedAt`, `correlationId`) from `opts.meta` → @client.md#client-normalization
-- **ALWAYS** merge meta in order: `{ timestamp: Date.now(), ...sanitizedUserMeta, correlationId }` → @client.md#client-normalization
-- **ALWAYS** provide `correlationId` via `opts.correlationId` (NOT `opts.meta.correlationId`) → @client.md#client-normalization
-- **ALWAYS** auto-generate `correlationId` for `request()` if absent → @client.md#client-normalization
+- **ALWAYS** strip reserved/managed keys (`clientId`, `receivedAt`, `correlationId`) from `opts.meta` → docs/specs/client.md#client-normalization
+- **ALWAYS** merge meta in order: `{ timestamp: Date.now(), ...sanitizedUserMeta, correlationId }` → docs/specs/client.md#client-normalization
+- **ALWAYS** provide `correlationId` via `opts.correlationId` (NOT `opts.meta.correlationId`) → docs/specs/client.md#client-normalization
+- **ALWAYS** auto-generate `correlationId` for `request()` if absent → docs/specs/client.md#client-normalization
 
 ### Connection Behavior
 
-- **ALWAYS** reject pending `request()` on close (`ConnectionClosedError`) → @client.md#Error-Contract
-- **ALWAYS** reject `request()` with `StateError` when `state !== "open"` and `queue: "off"` → @client.md#Error-Contract
-- **NEVER** auto-retry `send()` or `request()` after close (at-most-once delivery) → @client.md
-- **ALWAYS** start timeout AFTER message flush on OPEN socket (not when queued) → @client.md#request-timeout
-- **ALWAYS** make `close()` fully idempotent (never throw/reject due to state) → @client.md#Error-Contract
+- **ALWAYS** reject pending `request()` on close (`ConnectionClosedError`) → docs/specs/client.md#Error-Contract
+- **ALWAYS** reject `request()` with `StateError` when `state !== "open"` and `queue: "off"` → docs/specs/client.md#Error-Contract
+- **NEVER** auto-retry `send()` or `request()` after close (at-most-once delivery) → docs/specs/client.md
+- **ALWAYS** start timeout AFTER message flush on OPEN socket (not when queued) → docs/specs/client.md#request-timeout
+- **ALWAYS** make `close()` fully idempotent (never throw/reject due to state) → docs/specs/client.md#Error-Contract
 
 ### Request/Response Correlation
 
-- **ALWAYS** reject `request()` with `ValidationError` when reply has wrong type (matching `correlationId`) → @client.md#Correlation
-- **ALWAYS** reject `request()` with `ServerError` when reply type is `ERROR` (matching `correlationId`) → @client.md#Correlation
-- **ALWAYS** drop duplicate replies silently (only first settles promise) → @client.md#Correlation
-- **ALWAYS** reject `request()` with `StateError` when `opts.signal.aborted === true` before dispatch → @client.md#request-timeout
-- **ALWAYS** clean up AbortSignal listeners automatically → @client.md#request-timeout
+- **ALWAYS** reject `request()` with `ValidationError` when reply has wrong type (matching `correlationId`) → docs/specs/client.md#Correlation
+- **ALWAYS** reject `request()` with `ServerError` when reply type is `ERROR` (matching `correlationId`) → docs/specs/client.md#Correlation
+- **ALWAYS** drop duplicate replies silently (only first settles promise) → docs/specs/client.md#Correlation
+- **ALWAYS** reject `request()` with `StateError` when `opts.signal.aborted === true` before dispatch → docs/specs/client.md#request-timeout
+- **ALWAYS** clean up AbortSignal listeners automatically → docs/specs/client.md#request-timeout
 
 ### Client Error Contract
 
-- **Synchronous throws (`TypeError`)**: Only during setup/preflight validation → @client.md#Error-Contract
-- **Fire-and-forget (`send()`)**: NEVER throws; returns `boolean` → @client.md#fire-and-forget-return
-- **Promise-based methods**: NEVER throw synchronously; return `Promise` that may reject → @client.md#Error-Contract
-- **StateError**: ALWAYS a Promise rejection, NEVER a synchronous throw → @client.md#Error-Contract
+- **Synchronous throws (`TypeError`)**: Only during setup/preflight validation → docs/specs/client.md#Error-Contract
+- **Fire-and-forget (`send()`)**: NEVER throws; returns `boolean` → docs/specs/client.md#fire-and-forget-return
+- **Promise-based methods**: NEVER throw synchronously; return `Promise` that may reject → docs/specs/client.md#Error-Contract
+- **StateError**: ALWAYS a Promise rejection, NEVER a synchronous throw → docs/specs/client.md#Error-Contract
 
 ### Inbound Message Routing
 
-- **ALWAYS** route schema handlers BEFORE `onUnhandled()` hook → @client.md#message-processing-order
-- **NEVER** pass invalid messages to `onUnhandled()` (drop at validation) → @client.md#message-processing-order
-- **ALWAYS** treat messages in `onUnhandled()` as readonly → @client.md#message-processing-order
+- **ALWAYS** route schema handlers BEFORE `onUnhandled()` hook → docs/specs/client.md#message-processing-order
+- **NEVER** pass invalid messages to `onUnhandled()` (drop at validation) → docs/specs/client.md#message-processing-order
+- **ALWAYS** treat messages in `onUnhandled()` as readonly → docs/specs/client.md#message-processing-order
 
 ---
 
@@ -247,7 +247,7 @@ Accept these TypeScript violations for better DX:
 | Server  | Last-write-wins (warns on overwrite) | Single authoritative handler per message type; simplified routing |
 | Client  | Multi-handler (registration order)   | Fan-out pattern common in UI; composability across modules        |
 
-See @client.md#Multiple-Handlers for client multi-handler semantics.
+See docs/specs/client.md#Multiple-Handlers for client multi-handler semantics.
 
 ---
 
@@ -263,7 +263,7 @@ See @client.md#Multiple-Handlers for client multi-handler semantics.
 
 - **Use `message()` helper** (export-with-helpers pattern) for type-safe schema creation → ADR-007
 - **Use `createRouter()`** to create a new router instance → ADR-007
-- **Use `ctx.assignData()`** for incremental connection data updates (write-partial pattern) → @router.md#Modifying-Connection-Data
+- **Use `ctx.assignData()`** for incremental connection data updates (write-partial pattern) → docs/specs/router.md#Modifying-Connection-Data
 - **Use `ctx.error()`** for type-safe error responses with discriminated union codes → ADR-009
 - **Use `ctx.send()`** for type-safe unicast messaging to the current client → ADR-020
 - **Use lifecycle hooks** (`onOpen`, `onClose`, `onError`, etc.) for observability → ADR-009
@@ -272,8 +272,8 @@ See @client.md#Multiple-Handlers for client multi-handler semantics.
 
 - **Use `message()` helper** (export-with-helpers pattern) for schema creation → ADR-007
 - **Use typed clients** (`@ws-kit/client/zod` or `@ws-kit/client/valibot`) for full type inference → ADR-002
-- **Share schemas** between client and server (single source of truth) → @client.md#Sharing-Schemas-Between-Client-and-Server
-- **Validate before sending** with strict mode (schemas work client-side) → @validation.md
-- **Use `request()`** for RPC-style request/response with automatic correlationId and timeout → @client.md#Public-API
-- **Use `send()`** for fire-and-forget (returns boolean, never throws) → @client.md#fire-and-forget-return
-- **Track broadcasts** — Include sender identity in payload or meta for audit → @pubsub.md#9.6-Origin-Tracking
+- **Share schemas** between client and server (single source of truth) → docs/specs/client.md#Sharing-Schemas-Between-Client-and-Server
+- **Validate before sending** with strict mode (schemas work client-side) → docs/specs/validation.md
+- **Use `request()`** for RPC-style request/response with automatic correlationId and timeout → docs/specs/client.md#Public-API
+- **Use `send()`** for fire-and-forget (returns boolean, never throws) → docs/specs/client.md#fire-and-forget-return
+- **Track broadcasts** — Include sender identity in payload or meta for audit → docs/specs/pubsub.md#9.6-Origin-Tracking

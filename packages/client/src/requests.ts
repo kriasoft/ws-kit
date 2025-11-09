@@ -3,7 +3,7 @@
 
 /**
  * Request/response correlation tracking.
- * See @docs/specs/client.md#request-response-timeout-semantics.
+ * See docs/specs/client.md#request-response-timeout-semantics.
  */
 
 import {

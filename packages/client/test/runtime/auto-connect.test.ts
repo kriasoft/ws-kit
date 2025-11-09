@@ -7,8 +7,8 @@
  * Tests autoConnect behavior with different queue modes,
  * focusing on edge cases around connection failure.
  *
- * See @docs/specs/client.md#queue-behavior
- * See @docs/specs/test-requirements.md#L873
+ * See docs/specs/client.md#queue-behavior
+ * See docs/specs/test-requirements.md#runtime-testing
  */
 
 import {

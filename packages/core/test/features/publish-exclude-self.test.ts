@@ -7,7 +7,7 @@
  * Validates that excludeSelf option is properly rejected with clear error message.
  * This is a breaking change: excludeSelf is not yet supported pending pubsub layer changes.
  *
- * Spec: docs/specs/pubsub.md § 3.3 (PublishOptions)
+ * Spec: docs/specs/pubsub.md#publish-options--result
  * Related: ADR-022 (pub/sub API design), ADR-019 (publish API convenience)
  */
 

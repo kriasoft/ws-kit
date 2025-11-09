@@ -97,7 +97,7 @@ export type { ErrorWire, RpcErrorWire } from "./types.js";
  * Topic subscription mutations (subscribe, unsubscribe) throw PubSubError on failure.
  * Message publication (publish) returns PublishResult with error code and retryability hint.
  *
- * See [docs/specs/pubsub.md § 7](../docs/specs/pubsub.md#7-errors) for error semantics.
+ * See docs/specs/pubsub.md#errors for error semantics.
  */
 export { PubSubError } from "./pubsub-error.js";
 export type { PubSubErrorCode } from "./pubsub-error.js";

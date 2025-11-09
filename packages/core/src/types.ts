@@ -727,9 +727,9 @@ export type PublishResult =
  * **Batch atomicity**: `subscribeMany()` and `unsubscribeMany()` either succeed entirely or fail
  * entirely—no partial state changes.
  *
- * **Error semantics**: All operations throw `PubSubError` on failure (see spec § 7).
+ * **Error semantics**: All operations throw `PubSubError` on failure (see docs/specs/pubsub.md#errors).
  *
- * See [docs/specs/pubsub.md § 3 & § 6](../../docs/specs/pubsub.md#3-public-api-surface)
+ * See docs/specs/pubsub.md#public-api-surface and docs/specs/pubsub.md#semantics
  * for complete semantics and examples.
  */
 export interface Topics extends ReadonlySet<string> {
@@ -765,35 +765,36 @@ export interface Topics extends ReadonlySet<string> {
   /**
    * Remove the current connection from a topic's membership.
    *
-   * **Best-effort semantics** (soft no-op for benign cases):
-   * - Early membership check: if not subscribed, returns successfully (no-op, no hooks).
+   * **Soft no-op semantics** (safe to call unconditionally):
+   * - If not subscribed to the topic, returns immediately without validation (soft no-op).
    * - If subscribed, validates topic format, then mutates, then calls adapter.
-   *
-   * **Throws on:**
-   * - Validation error (topic format invalid, when subscribed)
-   * - Adapter failure
+   * - This order enables defensive cleanup calls without pre-checks (e.g., in finally blocks).
    *
    * **Does NOT throw on:**
-   * - Not subscribed (soft no-op)
+   * - Topic not subscribed (returns void, no validation performed)
+   * - Invalid topic string when not subscribed
    * - Connection closed (membership irrelevant)
-   * - Invalid topic when not subscribed
+   *
+   * **Throws only on:**
+   * - Validation error (topic format invalid, only if currently subscribed)
+   * - Adapter failure
    *
    * **Idempotent**: calling unsubscribe twice for the same topic is a no-op (no error).
    * Hooks do not fire on no-ops.
    *
    * @param topic - Topic name to unsubscribe from
-   * @throws {PubSubError} with code: INVALID_TOPIC (if subscribed and format invalid) or ADAPTER_ERROR
+   * @throws {PubSubError} with code: INVALID_TOPIC (only if subscribed and format invalid) or ADAPTER_ERROR
    *
    * @example
    * ```typescript
-   * // Safe cleanup (no error even if not subscribed)
+   * // Safe cleanup (no error even if not subscribed or invalid format)
    * await ctx.topics.unsubscribe("room:123");
    *
-   * // Safe in error paths
+   * // Safe in error paths with any topic string
    * try {
    *   // ... handler code
    * } finally {
-   *   await ctx.topics.unsubscribe("room:123"); // Won't throw
+   *   await ctx.topics.unsubscribe(someUnvalidatedInput); // Won't throw if not subscribed
    * }
    * ```
    */
@@ -1355,7 +1356,7 @@ export interface LimitsConfig {
    * Helps prevent resource exhaustion from unlimited topic subscriptions.
    * Set to Infinity to disable the limit.
    *
-   * Spec: § 6.1, 6.3, 6.4
+   * See docs/specs/pubsub.md#order-of-checks-normative, docs/specs/pubsub.md#batch-atomicity, docs/specs/pubsub.md#replace-semantics
    */
   maxTopicsPerConnection?: number;
 

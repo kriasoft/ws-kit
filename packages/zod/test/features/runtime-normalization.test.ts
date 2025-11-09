@@ -10,7 +10,7 @@
  * This test ensures the contract between @ws-kit/core normalization and
  * @ws-kit/zod validation is never broken.
  *
- * Spec: @docs/specs/validation.md#normalization-rules
+ * Spec: docs/specs/validation.md#normalization-rules
  * See also: @ws-kit/core/test/features/normalization.test.ts
  */
 
