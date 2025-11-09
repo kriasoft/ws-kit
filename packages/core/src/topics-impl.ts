@@ -44,20 +44,27 @@ export type TopicValidator = (topic: string) => void;
  * Provides per-connection topic subscription state and operations.
  * Wraps the platform adapter's WebSocket.subscribe/unsubscribe methods.
  *
- * **Atomic batch operations**: subscribeMany/unsubscribeMany follow strict 3-phase pattern:
- * 1. Validate all topics (no state mutation, no adapter calls)
- * 2. Call adapter for all topics (no state mutation yet; if any fails, stop here)
- * 3. Mutate internal state (only after all adapters succeed)
- * This guarantees true all-or-nothing semantics per docs/specs/pubsub.md#batch-atomicity
- * and docs/specs/pubsub.md#adapter-compliance.
+ * **Adapter-first ordering** (all operations follow the same pattern):
+ * 1. Normalize (if provided by middleware)
+ * 2. Validate all topics (no state mutation, no adapter calls)
+ * 3. Serialize: wait for any in-flight operation on this topic (CRITICAL: before idempotency check)
+ * 4. Check idempotency based on current state (after serialization)
+ * 5. Check limits and authorization
+ * 6. Call adapter(s) for side-effects (no state mutation yet; if any fails, stop here)
+ * 7. Mutate internal state (only after all adapters succeed)
+ * This guarantees true atomicity and no ghost state per docs/specs/pubsub.md#semantics.
  *
- * **Normalization contract**: Topics are expected to be pre-normalized by the caller
- * (e.g., via router configuration). This class performs validation but not normalization.
- * See docs/specs/pubsub.md#order-of-checks-normative for the full operation order.
+ * **Sequential serialization**: All operations on the same topic are serialized via an in-flight map.
+ * If an operation is already in-flight for a topic, subsequent operations MUST wait for it to complete
+ * BEFORE checking idempotency. This prevents race conditions where subscribe and unsubscribe interleave.
+ * After waiting, idempotency is re-checked since the in-flight operation may have changed state.
  *
  * **Idempotency**: Single subscribe/unsubscribe calls are idempotent (safe to repeat).
+ * For subscribe: checked AFTER waiting for in-flight operations (to avoid stale state).
+ * For unsubscribe: safe to check early (unsubscribe is idempotent when not subscribed, soft no-op).
  *
  * **Error semantics**: Throws PubSubError on validation, authorization, or adapter failure.
+ * No rollback: if adapter call fails, local state remains unchanged.
  *
  * @template TData - Connection data type
  */
@@ -69,6 +76,7 @@ export class TopicsImpl<
   private readonly ws: ServerWebSocket<TData>;
   private readonly maxTopicsPerConnection: number;
   private readonly customValidator: TopicValidator | undefined;
+  private readonly inflight = new Map<string, Promise<void>>();
 
   /**
    * Create a Topics instance for managing a connection's subscriptions.
@@ -156,12 +164,27 @@ export class TopicsImpl<
     // Validate
     this.validateTopic(topic);
 
-    // Idempotency: already subscribed? → no-op
+    // Sequential serialization: wait for any in-flight operation on this topic FIRST.
+    // This prevents race conditions where subscribe and unsubscribe interleave.
+    // CRITICAL: This must happen BEFORE the idempotency check (docs/specs/pubsub.md#order-of-checks-normative)
+    // IMPORTANT: Catch rejections to decouple error semantics—this operation's outcome depends on
+    // its own work, not failures from previous operations (docs/specs/pubsub.md#concurrency-edge-cases-for-implementers)
+    const existing = this.inflight.get(topic);
+    if (existing) {
+      try {
+        await existing;
+      } catch {
+        // Previous operation failed; ignore and re-check current state.
+        // This operation's error semantics are independent of prior failures.
+      }
+    }
+
+    // Idempotency: already subscribed? → no-op (checked AFTER waiting for in-flight)
     if (this.subscriptions.has(topic)) {
       return;
     }
 
-    // Check topic limit (docs/specs/pubsub.md#order-of-checks-normative, docs/specs/pubsub.md#batch-atomicity)
+    // Check topic limit (docs/specs/pubsub.md#order-of-checks-normative)
     if (this.subscriptions.size >= this.maxTopicsPerConnection) {
       throw new PubSubError(
         "TOPIC_LIMIT_EXCEEDED",
@@ -173,20 +196,33 @@ export class TopicsImpl<
       );
     }
 
-    // Mutate state
-    this.subscriptions.add(topic);
+    // Create the side-effect operation: adapter call first, then local mutation.
+    // This ensures atomicity and linearization: no ghost state, no rollback needed.
+    // (docs/specs/pubsub.md#adapter-first-ordering)
+    const operation = (async () => {
+      // ADAPTER FIRST: call platform adapter before mutating local state
+      try {
+        this.ws.subscribe(topic); // May throw; local state remains unchanged
+      } catch (err) {
+        throw new PubSubError(
+          "ADAPTER_ERROR",
+          `Failed to subscribe to topic "${topic}"`,
+          err,
+        );
+      }
 
-    // Delegate to platform adapter
+      // MUTATE LOCAL STATE: only after adapter succeeds
+      this.subscriptions.add(topic);
+    })();
+
+    // CRITICAL: Track in-flight operation BEFORE awaiting it.
+    // This prevents concurrent calls from both slipping through the inflight check.
+    // If another operation checks inflight while this one is running, it will see this promise.
+    this.inflight.set(topic, operation);
     try {
-      this.ws.subscribe(topic);
-    } catch (err) {
-      // Rollback on adapter error
-      this.subscriptions.delete(topic);
-      throw new PubSubError(
-        "ADAPTER_ERROR",
-        `Failed to subscribe to topic "${topic}"`,
-        err,
-      );
+      await operation;
+    } finally {
+      this.inflight.delete(topic);
     }
   }
 
@@ -199,23 +235,53 @@ export class TopicsImpl<
     }
 
     // Normalize (none by default; apps use usePubSub() middleware)
-    // Validate
+    // Validate (only if currently subscribed; soft no-op if not)
     this.validateTopic(topic);
 
-    // Mutate state
-    this.subscriptions.delete(topic);
+    // In-flight coalescing: wait for any in-flight subscribe/unsubscribe on this topic.
+    // This ensures linearization and prevents duplicate adapter calls.
+    // IMPORTANT: Catch rejections to decouple error semantics. If a prior subscribe() failed,
+    // this unsubscribe() must still honor soft no-op semantics (docs/specs/pubsub.md#idempotency).
+    // (docs/specs/pubsub.md#concurrency-edge-cases-for-implementers)
+    const existing = this.inflight.get(topic);
+    if (existing) {
+      try {
+        await existing;
+      } catch {
+        // Previous operation failed; ignore and re-check current state.
+        // This operation's error semantics are independent of prior failures.
+      }
+      // Re-check if still subscribed after waiting (another operation may have removed it)
+      if (!this.subscriptions.has(topic)) {
+        return;
+      }
+    }
 
-    // Delegate to platform adapter
+    // Create the side-effect operation: adapter call first, then local mutation.
+    // This ensures atomicity and linearization: no ghost state, no rollback needed.
+    // (docs/specs/pubsub.md#adapter-first-ordering)
+    const operation = (async () => {
+      // ADAPTER FIRST: call platform adapter before mutating local state
+      try {
+        this.ws.unsubscribe(topic); // May throw; local state remains unchanged
+      } catch (err) {
+        throw new PubSubError(
+          "ADAPTER_ERROR",
+          `Failed to unsubscribe from topic "${topic}"`,
+          err,
+        );
+      }
+
+      // MUTATE LOCAL STATE: only after adapter succeeds
+      this.subscriptions.delete(topic);
+    })();
+
+    // Track in-flight operation
+    this.inflight.set(topic, operation);
     try {
-      this.ws.unsubscribe(topic);
-    } catch (err) {
-      // Rollback on adapter error
-      this.subscriptions.add(topic);
-      throw new PubSubError(
-        "ADAPTER_ERROR",
-        `Failed to unsubscribe from topic "${topic}"`,
-        err,
-      );
+      await operation;
+    } finally {
+      this.inflight.delete(topic);
     }
   }
 
@@ -265,20 +331,37 @@ export class TopicsImpl<
     }
 
     // PHASE 2: Call adapter for all non-subscribed topics.
-    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
-    // This is the key to atomicity: adapter calls happen before state mutation.
+    // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
+    // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
+    const successfulTopics = new Set<string>();
     try {
       for (const topic of newTopics) {
         if (!this.subscriptions.has(topic)) {
           this.ws.subscribe(topic); // May throw; internal state unchanged
+          successfulTopics.add(topic);
         }
       }
     } catch (err) {
-      // Adapter failure: state never mutated, so we can safely throw without cleanup.
+      // ROLLBACK: Unsubscribe from all topics we successfully subscribed to
+      // This ensures atomicity: if any topic fails, all are rolled back (no partial state).
+      const failedRollback = new Set<string>();
+      for (const topic of successfulTopics) {
+        try {
+          this.ws.unsubscribe(topic);
+        } catch {
+          // Rollback failure: adapter and local state are now divergent.
+          // Track failed rollbacks to surface in error details for monitoring.
+          failedRollback.add(topic);
+        }
+      }
       throw new PubSubError(
         "ADAPTER_ERROR",
         `Failed to subscribe to topic(s)`,
-        err,
+        {
+          cause: err,
+          rollbackFailed: failedRollback.size > 0,
+          failedRollbackTopics: Array.from(failedRollback),
+        },
       );
     }
 
@@ -337,18 +420,35 @@ export class TopicsImpl<
     }
 
     // PHASE 3: Call adapter for all subscribed topics.
-    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
-    // This is the key to atomicity: adapter calls happen before state mutation.
+    // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
+    // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
+    const successfulTopics = new Set<string>();
     try {
       for (const topic of subscribedTopics) {
         this.ws.unsubscribe(topic); // May throw; internal state unchanged
+        successfulTopics.add(topic);
       }
     } catch (err) {
-      // Adapter failure: state never mutated, so we can safely throw without cleanup.
+      // ROLLBACK: Re-subscribe to all topics we successfully unsubscribed from
+      // This ensures atomicity: if any topic fails, all are rolled back (no partial state).
+      const failedRollback = new Set<string>();
+      for (const topic of successfulTopics) {
+        try {
+          this.ws.subscribe(topic);
+        } catch {
+          // Rollback failure: adapter and local state are now divergent.
+          // Track failed rollbacks to surface in error details for monitoring.
+          failedRollback.add(topic);
+        }
+      }
       throw new PubSubError(
         "ADAPTER_ERROR",
         `Failed to unsubscribe from topic(s)`,
-        err,
+        {
+          cause: err,
+          rollbackFailed: failedRollback.size > 0,
+          failedRollbackTopics: Array.from(failedRollback),
+        },
       );
     }
 
@@ -378,19 +478,32 @@ export class TopicsImpl<
     const topicArray = Array.from(this.subscriptions);
 
     // PHASE 1: Call adapter to unsubscribe from all topics.
-    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
-    // This is the key to atomicity: adapter calls happen before state mutation.
+    // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
+    // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
+    const successfulTopics = new Set<string>();
     try {
       for (const topic of topicArray) {
         this.ws.unsubscribe(topic); // May throw; internal state unchanged
+        successfulTopics.add(topic);
       }
     } catch (err) {
-      // Adapter failure: state never mutated, so we can safely throw without cleanup.
-      throw new PubSubError(
-        "ADAPTER_ERROR",
-        `Failed to clear subscriptions`,
-        err,
-      );
+      // ROLLBACK: Re-subscribe to all topics we successfully unsubscribed from
+      // This ensures atomicity: if any topic fails, all are rolled back (no partial state).
+      const failedRollback = new Set<string>();
+      for (const topic of successfulTopics) {
+        try {
+          this.ws.subscribe(topic);
+        } catch {
+          // Rollback failure: adapter and local state are now divergent.
+          // Track failed rollbacks to surface in error details for monitoring.
+          failedRollback.add(topic);
+        }
+      }
+      throw new PubSubError("ADAPTER_ERROR", `Failed to clear subscriptions`, {
+        cause: err,
+        rollbackFailed: failedRollback.size > 0,
+        failedRollbackTopics: Array.from(failedRollback),
+      });
     }
 
     // PHASE 2: Mutate internal state only after all adapter calls succeed.
@@ -499,23 +612,61 @@ export class TopicsImpl<
     }
 
     // PHASE 5: Call adapter for all changes atomically
-    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
+    // Track successes for rollback if any topic fails (docs/specs/pubsub.md#replace-semantics).
+    // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
+    // CRITICAL: Unsubscribe FIRST (freeing space) before subscribing. This ensures adapter never
+    // sees a transient count exceeding maxTopicsPerConnection (docs/specs/pubsub.md:593-596).
+    const subscribedTopics = new Set<string>();
+    const unsubscribedTopics = new Set<string>();
     try {
-      // Subscribe to new topics
-      for (const topic of toAdd) {
-        this.ws.subscribe(topic); // May throw; internal state unchanged
-      }
-
-      // Unsubscribe from old topics
+      // UNSUBSCRIBE FIRST: Free up space before adding new topics
       for (const topic of toRemove) {
         this.ws.unsubscribe(topic); // May throw; internal state unchanged
+        unsubscribedTopics.add(topic);
+      }
+
+      // SUBSCRIBE SECOND: Add new topics to the freed space
+      for (const topic of toAdd) {
+        this.ws.subscribe(topic); // May throw; internal state unchanged
+        subscribedTopics.add(topic);
       }
     } catch (err) {
-      // Adapter failure: state never mutated, so we can safely throw without cleanup.
+      // ROLLBACK: Undo all successful adapter calls IN REVERSE ORDER
+      // This ensures atomicity: if any topic fails, all changes are rolled back (no partial state).
+      // CRITICAL: Unsubscribe newly-added topics FIRST (freeing space) before re-subscribing removed topics.
+      // This mirrors the forward order and respects maxTopicsPerConnection limits during rollback.
+      const failedRollback = new Set<string>();
+
+      // Rollback step 1: Unsubscribe newly-added topics (free space first)
+      for (const topic of subscribedTopics) {
+        try {
+          this.ws.unsubscribe(topic);
+        } catch {
+          // Rollback failure: adapter and local state are now divergent.
+          // Track failed rollbacks to surface in error details for monitoring.
+          failedRollback.add(topic);
+        }
+      }
+
+      // Rollback step 2: Re-subscribe removed topics (restore removed state)
+      for (const topic of unsubscribedTopics) {
+        try {
+          this.ws.subscribe(topic);
+        } catch {
+          // Rollback failure: adapter and local state are now divergent.
+          // Track failed rollbacks to surface in error details for monitoring.
+          failedRollback.add(topic);
+        }
+      }
+
       throw new PubSubError(
         "ADAPTER_ERROR",
         `Failed to replace subscriptions`,
-        err,
+        {
+          cause: err,
+          rollbackFailed: failedRollback.size > 0,
+          failedRollbackTopics: Array.from(failedRollback),
+        },
       );
     }
 

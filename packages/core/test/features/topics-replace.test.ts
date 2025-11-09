@@ -327,6 +327,84 @@ describe("TopicsImpl - replace()", () => {
       expect(topics.has("room:5")).toBe(true);
       expect(topics.has("room:6")).toBe(true);
     });
+
+    it("should rollback in correct order when adapter fails during subscribe at capacity", async () => {
+      // This test verifies the fix for the rollback order bug.
+      // When at capacity and swapping topics, if subscribe fails after unsubscribe succeeds,
+      // rollback must free space first (unsubscribe new) before restoring old (re-subscribe).
+      let subscribeCountInPhase = 0;
+      let inReplacePhase = false;
+      const adapterState = {
+        subscriptions: new Set<string>(["room:1", "room:2", "room:3"]),
+        capacity: 3,
+      };
+
+      const mockWs = {
+        data: { clientId: "test-123" },
+        subscribe: mock((topic: string) => {
+          if (inReplacePhase) {
+            subscribeCountInPhase++;
+            // Fail on the 2nd subscribe call in replace phase (room:5) to trigger rollback
+            if (subscribeCountInPhase === 2) {
+              throw new Error("Adapter failure");
+            }
+          }
+          // Simulate adapter enforcing capacity limit
+          if (
+            !adapterState.subscriptions.has(topic) &&
+            adapterState.subscriptions.size >= adapterState.capacity
+          ) {
+            throw new Error("CAPACITY_EXCEEDED");
+          }
+          adapterState.subscriptions.add(topic);
+        }),
+        unsubscribe: mock((topic: string) => {
+          adapterState.subscriptions.delete(topic);
+        }),
+      };
+
+      const topics = new TopicsImpl(mockWs, 3);
+
+      // Initial state: subscribed to room:1, room:2, room:3 (at capacity)
+      await topics.subscribeMany(["room:1", "room:2", "room:3"]);
+      expect(topics.size).toBe(3);
+      expect(adapterState.subscriptions).toEqual(
+        new Set(["room:1", "room:2", "room:3"]),
+      );
+
+      // Now attempt a replace that will fail during subscribe during rollback
+      // Scenario: we're at capacity (3/3), want to replace with room:3, room:4, room:5 (stays at capacity 3)
+      // Forward phase:
+      //   - Unsubscribe room:1, room:2 → adapter now has room:3 (size=1)
+      //   - Subscribe room:4 → adapter has room:3, room:4 (size=2) - succeeds, subscribeCountInPhase=1
+      //   - Subscribe room:5 → fails, subscribeCountInPhase=2
+      // Rollback must (in reverse order):
+      //   1. Unsubscribe room:4 (the newly-added one) → adapter has room:3 (size=1)
+      //   2. Re-subscribe room:1 and room:2 → adapter has room:3, room:1, room:2 (size=3) - succeeds
+      // If wrong order (re-sub first with room:4 still subscribed), adapter would be at capacity and reject
+      inReplacePhase = true;
+      subscribeCountInPhase = 0;
+      try {
+        await topics.replace(["room:3", "room:4", "room:5"]);
+        expect.unreachable("Should have thrown due to adapter failure");
+      } catch (err) {
+        expect(err).toBeInstanceOf(PubSubError);
+        expect((err as PubSubError).code).toBe("ADAPTER_ERROR");
+      }
+
+      // CRITICAL: After rollback, state should be fully restored (no partial state)
+      expect(topics.size).toBe(3);
+      expect(topics.has("room:1")).toBe(true);
+      expect(topics.has("room:2")).toBe(true);
+      expect(topics.has("room:3")).toBe(true);
+      expect(topics.has("room:4")).toBe(false);
+      expect(topics.has("room:5")).toBe(false);
+
+      // Adapter state should match local state (no divergence)
+      expect(adapterState.subscriptions).toEqual(
+        new Set(["room:1", "room:2", "room:3"]),
+      );
+    });
   });
 
   describe("edge cases", () => {

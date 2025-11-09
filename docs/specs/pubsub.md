@@ -493,23 +493,26 @@ router.use(
 
 ### 6.1 Order of Checks (Normative)
 
-Every subscription operation follows this strict invariant:
+Every subscription operation (single and batch) follows this strict invariant—adapter-first ordering:
 
 1. **Normalize** — Apply `normalize(topic)` if provided. Result is normalized topic.
 2. **Validate** — Check normalized topic against `validate()` or default pattern. Throws if invalid.
 3. **Authorize** — Call `authorizeSubscribe(ctx, normalized)` hook (if provided). Throws if denied.
-4. **Idempotency check** — Inspect current state before mutation. If already subscribed, return early (no hooks, no mutation).
-5. **Mutate** — Add/remove topic from connection's topic set.
-6. **Lifecycle** — Call `onSubscribe(ctx, normalized)` or `onUnsubscribe(ctx, normalized)` hook.
+4. **Idempotency check** — Inspect current state before any side-effects. If already subscribed/unsubscribed, return early (no hooks, no mutation, no adapter call).
+5. **Adapter call** — Delegate to platform adapter (`ws.subscribe()` / `ws.unsubscribe()`). If adapter throws, local state remains unchanged.
+6. **Mutate** — Add/remove topic from connection's topic set (only after adapter succeeds).
+7. **Lifecycle** — Call `onSubscribe(ctx, normalized)` or `onUnsubscribe(ctx, normalized)` hook (best-effort; hook failure does not rollback state).
 
 **Key invariants:**
 
 - Authorization always operates on the **normalized topic**, not the input. Prevents TOCTOU bugs.
 - Hooks receive the **normalized topic**, not the raw input.
-- If idempotency returns early (step 4), hooks are **not called**.
-- All checks happen **before** any state change; on error, state is unchanged.
+- If idempotency returns early (step 4), no side-effects occur (no adapter call, no mutation, no hooks).
+- **Adapter-first**: Side-effects (adapter calls) happen before local state mutation. Eliminates ghost state and rollback complexity.
+- On adapter failure, local state remains unchanged; no rollback is needed.
+- If a hook throws (step 7), state is already mutated (no automatic rollback). Apps requiring transactional semantics should implement try/catch at the handler level.
 
-**For batch operations:** Apply this order per topic in the batch. If any topic fails at any step, the entire batch fails atomically (no topics are mutated).
+**For batch operations:** Apply this order per topic in the batch. If any topic fails at any step (validation, authorization, adapter), the entire batch fails atomically—no topics are mutated and no adapter calls for any topic succeed.
 
 ### 6.2 Idempotency
 
@@ -549,6 +552,46 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 
 **Rationale:** Atomic prevents inconsistent state when batching operations. Apps can rely on: "after this call, either all topics are subscribed or none are, and state is consistent."
 
+**Atomicity via rollback:**
+
+To achieve atomicity for batch operations:
+
+1. **Validation phase** happens first (before any adapter calls). If any topic fails validation, the entire batch fails immediately—no adapter calls are made.
+2. **Adapter phase** processes all topics sequentially, tracking successful calls.
+3. **On adapter failure**: If any adapter call fails (e.g., `ws.subscribe("room:2")` throws after `ws.subscribe("room:1")` succeeded):
+   - All successfully-subscribed topics are immediately unsubscribed (rollback)
+   - Local state remains unchanged
+   - The operation throws `PubSubError<"ADAPTER_ERROR">`
+4. **On full success**: All adapter calls complete, then local state is mutated atomically.
+
+This ensures the invariant: either all topics are added/removed or none are. No partial state on error.
+
+**Rollback failure handling:**
+
+If rollback itself fails (e.g., `ws.unsubscribe("room:1")` fails during rollback), the primary error is still thrown, but the adapter is in an inconsistent state (some topics may remain subscribed in the adapter but not in local state).
+
+**Telemetry for divergent state:**
+
+When rollback fails, the thrown `PubSubError` includes metadata in `error.details`:
+
+- `rollbackFailed: boolean` — True if any rollback attempt failed
+- `failedRollbackTopics: string[]` — Topics whose rollback failed (exact topics depend on operation)
+- `cause: unknown` — The original adapter error that triggered the rollback
+
+Apps should monitor for `rollbackFailed: true` to detect inconsistent adapter/local state and trigger remediation (e.g., reconnect, reset state).
+
+```typescript
+try {
+  await ctx.topics.subscribeMany([...]);
+} catch (err) {
+  if (err instanceof PubSubError && (err.details as any)?.rollbackFailed) {
+    // Adapter and local state are divergent!
+    // Trigger monitoring alert and request user reconnection
+    logger.error("Rollback failed; adapter state may be inconsistent", err.details);
+  }
+}
+```
+
 ### 6.4 Replace Semantics
 
 `replace(topics)` atomically replaces current subscriptions with a desired set. Useful for reconnection: avoids manual diffing and ensures single atomic operation.
@@ -558,18 +601,43 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 1. **Normalize & validate** all desired topics
 2. **Authorize** desired topics (those being added)
 3. **Compute delta** and **idempotency check**: If no changes, return early (no adapter calls)
-4. **Adapter phase**: Subscribe to new topics and unsubscribe from removed topics atomically. On failure, state unchanged.
-5. **Mutate state** and return `{ added, removed, total }`
+4. **Limit check**: Verify `currentSize - removed + added <= maxTopicsPerConnection`
+5. **Adapter phase** (critical ordering):
+   - **Unsubscribe first** from topics being removed (frees space at adapter)
+   - **Subscribe second** to new topics (uses freed space)
+   - **On failure, rollback in reverse order**: Unsubscribe newly-added topics first (free space), then re-subscribe removed topics. This mirrors forward ordering and respects `maxTopicsPerConnection` during rollback.
+6. **Mutate state** and return `{ added, removed, total }`
 
 **Key invariants:**
 
 - **Atomic**: All changes apply or none apply. No partial state.
 - **Idempotent**: No adapter calls when desired set equals current set.
 - **Validation first**: All topics validated before any adapter calls. Invalid or unauthorized topics cause entire operation to fail.
+- **Adapter limit respect**: Unsubscribe before subscribe ensures adapter never sees a transient count above `maxTopicsPerConnection`. This enables users to "swap" topics when at the limit (e.g., leave one room to join another with the same quota).
 
-**Limit enforcement:**
+**Why unsubscribe first?**
 
-Verify `currentSize - removed + added <= maxTopicsPerConnection` before adapter calls. Throws `PubSubError<"TOPIC_LIMIT_EXCEEDED">` if exceeded.
+If `currentSize == maxTopicsPerConnection` and user wants to replace one topic with another:
+
+- Current: `["room:1", "room:2", "room:3"]` (limit=3)
+- Desired: `["room:1", "room:2", "room:4"]` (swapping room:3 for room:4)
+- Limit check: `3 - 1 + 1 = 3` ✓
+
+If we subscribed first:
+
+- Call `subscribe("room:4")` → adapter sees 4 topics (exceeds limit!) → throws ❌
+
+If we unsubscribe first:
+
+- Call `unsubscribe("room:3")` → adapter now has 2 topics
+- Call `subscribe("room:4")` → adapter now has 3 topics ✓
+
+**Rollback order (reverse):**
+
+If `subscribe("room:4")` fails after `unsubscribe("room:3")` succeeded:
+
+- ❌ Wrong: Re-subscribe "room:3" first → adapter is at limit with room:1+room:2, can't add room:3 back → rollback fails and adapter is left inconsistent
+- ✓ Correct: Unsubscribe "room:4" first (frees space) → adapter at 2 topics → then re-subscribe "room:3" → adapter back to 3 topics (original state preserved)
 
 **Error semantics:**
 
@@ -1067,23 +1135,33 @@ These invariants must hold for all adapters. See [ADR-022 Implementation Invaria
 - `unsubscribe(topic)` when not subscribed: return `void` **without validation**, **do not call hooks**, **do not throw** (even if topic format is invalid).
 - Errors (validation, authorization) **always throw** on `subscribe()`, even on duplicate calls. For `unsubscribe()`, validation errors only throw if the topic **is** subscribed (soft no-op if not).
 
+**Adapter-first ordering (critical for all operations):**
+
+- All operations (single and batch) follow: normalize → validate → authorize → **adapter call** → mutate → hooks
+- **Adapter calls happen before state mutation**, never after.
+- If adapter call fails, local state must remain unchanged (no mutation occurs).
+- This ordering eliminates ghost state, prevents rollback complexity, and ensures reads always reflect committed reality.
+- Hooks fire **only after successful mutation**, and only on actual state changes (not on idempotent no-ops).
+
 **Hook timing:**
 
-- `onSubscribe` called **only after** mutation succeeds (topic added to set).
-- `onUnsubscribe` called **only after** mutation succeeds (topic removed from set).
-- If hook throws, state is **already mutated** (adapt implementation accordingly or wrap hook in try/catch + rollback).
-- Hooks **not called** on idempotent no-ops.
+- `onSubscribe` called **only after** adapter succeeds and mutation completes (topic added to set).
+- `onUnsubscribe` called **only after** adapter succeeds and mutation completes (topic removed from set).
+- If hook throws, state is **already mutated**. Mutation is not rolled back; hooks are best-effort. Adapters may log hook exceptions but must not reverse the state change.
+- Hooks **not called** on idempotent no-ops or on failed adapter calls.
 
 **Batch atomicity:**
 
-- Validate all topics in the batch **before** mutating any state.
-- If any topic fails (invalid format, unauthorized, etc.), throw and **do not mutate**.
+- Validate all topics in the batch **before** any adapter calls or state mutations.
+- Call adapter for all topics **before** mutating any state.
+- If any adapter call fails, stop immediately; no state is mutated and no further adapter calls are made.
+- If any topic fails (invalid format, unauthorized, adapter error), entire batch fails atomically—no topics are added/removed.
 - Exception: duplicate topics in same call are coalesced before atomicity check (not an error).
 - On success, all topics are subscribed atomically; final state is consistent.
 
 **Replace atomicity:**
 
-`replace()` follows the same atomic pattern as `subscribeMany()`/`unsubscribeMany()`: normalize & validate → adapter calls → state mutation. Return early if delta is empty (no-op).
+`replace()` follows the same atomic pattern: validate all desired topics → authorize all new topics → call adapter for all changes → mutate state. Return early if delta is empty (idempotent no-op).
 
 **ReadonlySet semantics:**
 
@@ -1192,20 +1270,42 @@ Planned as `specs/pubsub-redis.md`.
 
 **Per-connection operations are sequential** (single event loop per connection in JS):
 
-- If handler A calls `subscribe(topic)` and handler B simultaneously calls `subscribe(topic)`, order is deterministic (whichever awaits first).
-- Idempotency check happens before mutation, so no race condition on duplicate subscriptions.
+- If handler A calls `subscribe(topic)` and handler B simultaneously calls `subscribe(topic)`, operations are serialized via the inflight map to prevent race conditions.
+- Concurrent operations on the same topic are guaranteed to be linear: the second operation waits for the first to complete, then re-checks idempotency conditions.
+- This serialization prevents race conditions like "subscribe waiting for a stale unsubscribe promise" or state inconsistencies from interleaved operations.
 - **No need for connection-level locking** in single-threaded adapters (Bun, Node).
+
+**Sequential serialization** (required for correctness):
+
+- All operations on the same topic are serialized: if an operation is in-flight, subsequent operations wait for it to complete.
+- This prevents race conditions where subscribe and unsubscribe interleave (e.g., subscribe waiting for a non-existent unsubscribe promise).
+- Implementation: Maintain an `inflight` map per connection, storing a `Promise<void>` for each topic with an in-flight operation. Before executing, check if `inflight[topic]` exists; if so, await it, then re-check idempotency conditions.
+- After the operation completes, remove the topic from `inflight` (in a `finally` block to ensure cleanup even on error).
+- This ensures linearization without complex type tracking or coalescing logic.
+
+**Error isolation in concurrent operations** (decoupling error semantics):
+
+- When a serialized operation waits for a prior operation that **rejected**, it MUST catch that rejection and re-check idempotency.
+- **Rationale**: Each operation's error semantics depend on its own work, not failures from previous operations.
+- **Example**: If `subscribe("room:1")` fails with adapter error, then `unsubscribe("room:1")` is called concurrently:
+  1. `unsubscribe` waits for `subscribe`'s promise to settle (rejection caught)
+  2. `unsubscribe` catches the rejection (does not propagate it)
+  3. `unsubscribe` re-checks idempotency: `has("room:1")` → `false` (subscribe failed)
+  4. `unsubscribe` returns void without error (soft no-op semantics preserved)
+- This ensures unsubscribe's soft no-op guarantee and allows retries after failures.
+- Implementation: Use `try { await existing; } catch { /* ignore */ }` when waiting for in-flight operations, then re-check state.
 
 **Hook execution model:**
 
-- Hooks run synchronously (or async awaited) **within** the operation.
-- If hook throws, operation throws; state is already mutated (hookdoesn't run inside try/catch by default).
+- Hooks run synchronously (or async awaited) **within** the operation, **after adapter succeeds**.
+- If hook throws, operation throws; state is already mutated (hook doesn't run inside try/catch by default).
 - Apps that need rollback should wrap hook in try/catch and call `unsubscribe()` if hook fails.
 
 **Concurrent batch and single ops:**
 
-- `subscribeMany([a, b])` and `subscribe(a)` running simultaneously: adapter must handle atomicity per operation, not globally.
+- `subscribeMany([a, b])` and `subscribe(a)` running simultaneously: both use the same inflight serialization mechanism.
 - Batch atomicity is per-batch; doesn't block other operations on same connection.
+- If `subscribeMany([a, b])` is in flight and `subscribe(a)` arrives, `subscribe(a)` will wait for the batch operation to complete (due to inflight tracking), ensuring linearization.
 
 **Publishing during subscribe/unsubscribe:**
 
@@ -1217,13 +1317,15 @@ Planned as `specs/pubsub-redis.md`.
 
 - If connection closes during `subscribe()`, operation fails with `PubSubError<"CONNECTION_CLOSED">`.
 - No partial state; adapter must ensure all-or-nothing semantics even on disconnect.
+- In-flight coalescing MUST be cleared on connection close to prevent hanging promises.
 
 ---
 
 ## 15. Compliance Checklist (for Adapter Implementers)
 
 - [ ] `subscribe()` and `unsubscribe()` are idempotent (no error on duplicate).
-- [ ] All ops follow order: normalize → validate → authorize → mutate → lifecycle hooks.
+- [ ] All ops follow order: normalize → validate → authorize → **adapter call** → mutate → lifecycle hooks (adapter-first).
+- [ ] If adapter call fails, local state must remain unchanged (no mutation).
 - [ ] `subscribeMany()` and `unsubscribeMany()` are atomic (all-or-nothing, per batch).
 - [ ] `publish()` respects schema validation and authorization.
 - [ ] `publish()` returns `PublishResult` with correct capability and matched count.
