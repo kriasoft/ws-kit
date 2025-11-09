@@ -80,7 +80,7 @@ interface ServeOptions<TData> {
    * Called when router.publish() is invoked (before actual send).
    * Hook should not throw; errors are logged and swallowed.
    */
-  onBroadcast?: (message: any, scope: string) => void;
+  onBroadcast?: (message: any, topic: string) => void;
 
   /**
    * Called during WebSocket upgrade (before authentication).
@@ -244,7 +244,7 @@ interface ServeOptions<TData> {
    * Use for broadcast analytics, message filtering, metrics.
    * Should not throw; errors are logged and swallowed.
    */
-  onBroadcast?(message: any, scope: string): void;
+  onBroadcast?(message: any, topic: string): void;
 }
 ```
 
@@ -268,10 +268,10 @@ serve(router, {
     });
   },
 
-  onBroadcast(message, scope) {
-    console.log(`Broadcast to ${scope}:`, message.type);
+  onBroadcast(message, topic) {
+    console.log(`Broadcast to ${topic}:`, message.type);
     // Track broadcast patterns for analytics
-    analytics.track("broadcast", { scope, messageType: message.type });
+    analytics.track("broadcast", { topic, messageType: message.type });
   },
 
   onUpgrade(req) {
@@ -374,12 +374,12 @@ serve(router, {
 
 ```typescript
 serve(router, {
-  onBroadcast(message, scope) {
-    console.log(`[BROADCAST] ${scope} <- ${message.type}`);
+  onBroadcast(message, topic) {
+    console.log(`[BROADCAST] ${topic} <- ${message.type}`);
 
     // Track broadcast patterns
     analytics.track("broadcast", {
-      scope,
+      topic,
       messageType: message.type,
       payloadSize: JSON.stringify(message).length,
     });

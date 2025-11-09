@@ -987,7 +987,7 @@ router.on(SendChat, (ctx) => {
 
 ### 10.7 Room Management: Subscribe, Broadcast, Cleanup
 
-Typical flow for multi-user spaces (rooms, channels, collaborative documents):
+Typical flow for multi-user spaces (rooms, topics, collaborative documents):
 
 ```typescript
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });

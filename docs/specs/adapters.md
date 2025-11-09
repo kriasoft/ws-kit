@@ -404,7 +404,7 @@ All adapters follow **identical error semantics**. See `docs/specs/error-handlin
 - [Connection Close Policy](./error-handling.md#connection-close-policy) table (when auto-close occurs)
 - Error behavior table (connection state, logging, handler invocation)
 - Explicit connection close strategies
-- Broadcasting errors to rooms/channels
+- Broadcasting errors to topics
 
 **Key principle**: Application errors do not auto-close connections by default. Only transport/policy violations trigger auto-close (handshake auth failures, payload limits with `onExceeded: "close"`). Handlers must explicitly call `ctx.ws.close()` for business logic decisions. See [Connection Close Policy](./error-handling.md#connection-close-policy) for details.
 

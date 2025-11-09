@@ -152,7 +152,7 @@ export interface TypedValibotRouter<
   /**
    * Register a handler for a topic (pub/sub) message.
    *
-   * Sugar method for messages typically published to channels.
+   * Sugar method for messages typically published to topics.
    * Optional handler executes when messages are published, but isn't required.
    *
    * @typeParam Schema - Message schema
@@ -267,7 +267,7 @@ export interface TypedValibotRouter<
   merge(router: IWebSocketRouter<TData>): this;
 
   /**
-   * Publish a type-safe message to all subscribers on a channel.
+   * Publish a type-safe message to all subscribers on a topic.
    *
    * Validates the payload against the schema before broadcasting.
    * Scope depends on the platform adapter (Bun: process-wide, Cloudflare DO: instance-wide).
@@ -291,7 +291,7 @@ export interface TypedValibotRouter<
    * ```
    */
   publish<Schema extends MessageSchemaType>(
-    channel: string,
+    topic: string,
     schema: Schema,
     payload: unknown,
     options?: PublishOptions,
@@ -449,12 +449,12 @@ export function createValibotRouter<
 
     // Publishing
     publish<Schema extends MessageSchemaType>(
-      channel: string,
+      topic: string,
       schema: Schema,
       payload: unknown,
       options?: PublishOptions,
     ) {
-      return coreRouter.publish(channel, schema, payload, options);
+      return coreRouter.publish(topic, schema, payload, options);
     },
 
     // Platform adapter handlers (delegating to core router)

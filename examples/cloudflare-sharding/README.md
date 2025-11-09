@@ -1,6 +1,6 @@
 # Cloudflare Durable Objects Sharding
 
-Production-ready example of scaling pub/sub across multiple Durable Object instances by sharding subscriptions based on scope (room/channel).
+Production-ready example of scaling pub/sub across multiple Durable Object instances by sharding subscriptions based on topic (room).
 
 ## Problem
 
@@ -107,7 +107,7 @@ return stub.fetch(req);
 ## Trade-offs & Considerations
 
 - **Uneven distribution**: If rooms have very different subscriber counts, some shards may reach 100 connections before others
-- **Fixed shard count**: Changing shard count remaps all existing scopes (requires migration period for persistent apps)
+- **Fixed shard count**: Changing shard count remaps all existing topics (requires migration period for persistent apps)
 - **Per-shard isolation**: Broadcasts only reach subscribers on the same DO; cross-shard federation requires explicit `federate()` calls (see `@ws-kit/cloudflare-do`)
 
 ## Files

@@ -17,7 +17,7 @@ Cloudflare Durable Objects platform adapter for WS-Kit with per-instance pub/sub
 - **`createDurableObjectHandler()`**: Factory returning fetch handler for DO integration
 - **`DurablePubSub`**: BroadcastChannel-based pub/sub for per-instance messaging
 - **`federate()` helpers**: Explicit multi-DO coordination functions
-- **Sharding helpers**: `scopeToDoName()`, `getShardedDoId()`, `getShardedStub()` for stable scope-to-shard routing
+- **Sharding helpers**: `topicToDoName()`, `getShardedDoId()`, `getShardedStub()` for stable topic-to-shard routing
 - **UUID v7 client IDs**: Time-ordered unique identifiers per connection
 - **Resource tracking**: Automatic `resourceId` and `connectedAt` metadata
 - **Connection limits**: Per-DO instance connection quota enforcement
@@ -198,18 +198,18 @@ await federateWithFilter(
 
 When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Use sharding helpers to distribute subscriptions across multiple DO instances by computing a stable shard from the scope name.
 
-**`scopeToDoName(scope, shards, prefix)`** - Compute shard name from scope
+**`topicToDoName(topic, shards, prefix)`** - Compute shard name from topic
 
 ```typescript
-import { scopeToDoName } from "@ws-kit/cloudflare-do";
+import { topicToDoName } from "@ws-kit/cloudflare-do";
 
-// Same scope always routes to same shard
-scopeToDoName("room:general", 10); // → "ws-router-2"
-scopeToDoName("room:general", 10); // → "ws-router-2" (consistent)
-scopeToDoName("room:random", 10); // → "ws-router-7"
+// Same topic always routes to same shard
+topicToDoName("room:general", 10); // → "ws-router-2"
+topicToDoName("room:general", 10); // → "ws-router-2" (consistent)
+topicToDoName("room:random", 10); // → "ws-router-7"
 ```
 
-**`getShardedDoId(env, scope, shards, prefix)`** - Get DO ID for a scope
+**`getShardedDoId(env, topic, shards, prefix)`** - Get DO ID for a topic
 
 ```typescript
 import { getShardedDoId } from "@ws-kit/cloudflare-do";
@@ -218,7 +218,7 @@ const doId = getShardedDoId(env, `room:${roomId}`, 10);
 const stub = env.ROUTER.get(doId);
 ```
 
-**`getShardedStub(env, scope, shards, prefix)`** - Get DO stub ready for fetch
+**`getShardedStub(env, topic, shards, prefix)`** - Get DO stub ready for fetch
 
 ```typescript
 import { getShardedStub } from "@ws-kit/cloudflare-do";
@@ -235,11 +235,11 @@ export default {
 **Benefits:**
 
 - ✅ **Linear scaling**: Add more DO instances to handle more concurrent connections
-- ✅ **Stable routing**: Same scope always routes to same DO instance
-- ✅ **No cross-shard coordination**: Each scope's subscribers live on one DO
+- ✅ **Stable routing**: Same topic always routes to same DO instance
+- ✅ **No cross-shard coordination**: Each topic's subscribers live on one DO
 - ✅ **Deterministic**: Same shard map every time (no crypto, stable hash)
 
-**Important**: Changing the shard count will remap existing scopes. Plan accordingly and consider a migration period if using persistent storage.
+**Important**: Changing the shard count will remap existing topics. Plan accordingly and consider a migration period if using persistent storage.
 
 ## Examples
 

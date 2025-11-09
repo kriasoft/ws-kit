@@ -40,7 +40,9 @@ export {
   federateWithErrors,
   federateWithFilter,
 } from "./federate.js";
-export { scopeToDoName, getShardedDoId, getShardedStub } from "./sharding.js";
+export { topicToDoName, getShardedDoId, getShardedStub } from "./sharding.js";
+// Backward compatibility alias
+export { topicToDoName as scopeToDoName } from "./sharding.js";
 
 // Export types
 export type {

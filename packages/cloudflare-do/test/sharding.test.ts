@@ -3,31 +3,31 @@
 
 import { describe, it, expect } from "bun:test";
 import {
-  scopeToDoName,
+  topicToDoName,
   getShardedDoId,
   getShardedStub,
 } from "../src/sharding.js";
 
-describe("scopeToDoName", () => {
-  it("should compute consistent hash for same scope", () => {
-    const result1 = scopeToDoName("room:general", 10);
-    const result2 = scopeToDoName("room:general", 10);
+describe("topicToDoName", () => {
+  it("should compute consistent hash for same topic", () => {
+    const result1 = topicToDoName("room:general", 10);
+    const result2 = topicToDoName("room:general", 10);
     expect(result1).toBe(result2);
   });
 
   it("should use default prefix", () => {
-    const result = scopeToDoName("room:general", 10);
+    const result = topicToDoName("room:general", 10);
     expect(result).toMatch(/^ws-router-\d+$/);
   });
 
   it("should use custom prefix", () => {
-    const result = scopeToDoName("room:general", 10, "custom");
+    const result = topicToDoName("room:general", 10, "custom");
     expect(result).toMatch(/^custom-\d+$/);
   });
 
   it("should distribute across shard range", () => {
     const shards = 10;
-    const result = scopeToDoName("room:general", shards);
+    const result = topicToDoName("room:general", shards);
     // Format is "ws-router-X", get the last part
     const num = result.split("-").pop();
     const shardNum = parseInt(num!, 10);
@@ -35,23 +35,23 @@ describe("scopeToDoName", () => {
     expect(shardNum).toBeLessThan(shards);
   });
 
-  it("should return different shards for different scopes", () => {
-    const scopes = [
+  it("should return different shards for different topics", () => {
+    const topics = [
       "room:general",
       "room:random",
       "room:gaming",
       "room:support",
     ];
-    const shardNames = scopes.map((s) => scopeToDoName(s, 10));
+    const shardNames = topics.map((t) => topicToDoName(t, 10));
     // Not all should be the same (statistically very unlikely)
     const unique = new Set(shardNames);
     expect(unique.size).toBeGreaterThan(1);
   });
 
   it("should respect shard count", () => {
-    const result5 = scopeToDoName("scope", 5);
-    const result10 = scopeToDoName("scope", 10);
-    const result20 = scopeToDoName("scope", 20);
+    const result5 = topicToDoName("room:test", 5);
+    const result10 = topicToDoName("room:test", 10);
+    const result20 = topicToDoName("room:test", 20);
 
     // Extract shard numbers
     const num5 = parseInt(result5.split("-").pop()!, 10);
@@ -63,29 +63,29 @@ describe("scopeToDoName", () => {
     expect(num20).toBeLessThan(20);
   });
 
-  it("should handle empty scope", () => {
-    const result = scopeToDoName("", 10);
+  it("should handle empty topic", () => {
+    const result = topicToDoName("", 10);
     expect(result).toMatch(/^ws-router-\d+$/);
   });
 
-  it("should handle special characters in scope", () => {
-    const result = scopeToDoName("room:special-!@#$%", 10);
+  it("should handle special characters in topic", () => {
+    const result = topicToDoName("room:special-!@#$%", 10);
     expect(result).toMatch(/^ws-router-\d+$/);
   });
 
   it("should handle single shard", () => {
-    const result = scopeToDoName("any-scope", 1);
+    const result = topicToDoName("any:topic", 1);
     expect(result).toBe("ws-router-0");
   });
 
-  it("should show distribution across multiple scopes", () => {
+  it("should show distribution across multiple topics", () => {
     // Test rough distribution across shards
     const shardCounts = new Map<number, number>();
     const shards = 10;
 
     for (let i = 0; i < 100; i++) {
-      const scope = `room:${i}`;
-      const name = scopeToDoName(scope, shards);
+      const topic = `room:${i}`;
+      const name = topicToDoName(topic, shards);
       const shardNum = parseInt(name.split("-").pop()!, 10);
       shardCounts.set(shardNum, (shardCounts.get(shardNum) ?? 0) + 1);
     }

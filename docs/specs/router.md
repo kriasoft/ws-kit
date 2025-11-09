@@ -931,11 +931,11 @@ serve(router, {
     });
   },
 
-  onBroadcast(message, scope) {
+  onBroadcast(message, topic) {
     // Called when router.publish() is invoked
-    console.log(`Broadcast to ${scope}:`, message.type);
+    console.log(`Broadcast to ${topic}:`, message.type);
     // Track broadcast patterns for analytics
-    analytics.track("broadcast", { scope, messageType: message.type });
+    analytics.track("broadcast", { topic, messageType: message.type });
   },
 
   onLimitExceeded(info) {
