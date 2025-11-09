@@ -7,12 +7,12 @@ import type { ServerWebSocket, Topics } from "./types.js";
 /**
  * Default topic validation pattern.
  *
- * Allows alphanumeric, colons, underscores, hyphens. Max 128 chars.
- * Per spec § 5 (Hooks): /^[a-z0-9:_-]{1,128}$/i
+ * Allows alphanumeric, colons, underscores, hyphens, dots, slashes. Max 128 chars.
+ * Per spec § 5 (Hooks): /^[a-z0-9:_\-/.]{1,128}$/i
  *
  * This is the default; apps can override via usePubSub() middleware.
  */
-const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_-]+$/i;
+const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_\-/.]{1,128}$/i;
 const MAX_TOPIC_LENGTH = 128;
 
 /**
@@ -21,8 +21,18 @@ const MAX_TOPIC_LENGTH = 128;
  * Provides per-connection topic subscription state and operations.
  * Wraps the platform adapter's WebSocket.subscribe/unsubscribe methods.
  *
- * **Idempotency**: subscribe/unsubscribe calls are safe to repeat.
- * **Batch atomicity**: subscribeMany/unsubscribeMany validate all before mutating.
+ * **Atomic batch operations**: subscribeMany/unsubscribeMany follow strict 3-phase pattern:
+ * 1. Validate all topics (no state mutation, no adapter calls)
+ * 2. Call adapter for all topics (no state mutation yet; if any fails, stop here)
+ * 3. Mutate internal state (only after all adapters succeed)
+ * This guarantees true all-or-nothing semantics per spec § 6.3 & § 12.
+ *
+ * **Normalization contract**: Topics are expected to be pre-normalized by the caller
+ * (e.g., via usePubSub() middleware). This class performs validation but not normalization.
+ * See pubsub.md § 6.1 for the full operation order.
+ *
+ * **Idempotency**: Single subscribe/unsubscribe calls are idempotent (safe to repeat).
+ *
  * **Error semantics**: Throws PubSubError on validation, authorization, or adapter failure.
  *
  * @template TData - Connection data type
@@ -57,23 +67,19 @@ export class TopicsImpl<
     this.subscriptions.forEach(callback, thisArg);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  entries(): any {
+  entries(): SetIterator<[string, string]> {
     return this.subscriptions.entries();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  keys(): any {
+  keys(): SetIterator<string> {
     return this.subscriptions.keys();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  values(): any {
+  values(): SetIterator<string> {
     return this.subscriptions.values();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [Symbol.iterator](): any {
+  [Symbol.iterator](): SetIterator<string> {
     return this.subscriptions[Symbol.iterator]();
   }
 
@@ -111,14 +117,14 @@ export class TopicsImpl<
   }
 
   async unsubscribe(topic: string): Promise<void> {
-    // Early membership check (idempotency → soft no-op)
-    // If not subscribed, return successfully without validation or hooks
+    // Normalize (none by default; apps use usePubSub() middleware)
+    // Validate - always validate, even if not subscribed (per spec § 6.2)
+    this.validateTopic(topic);
+
+    // Idempotency: not subscribed? → no-op (no error thrown)
     if (!this.subscriptions.has(topic)) {
       return;
     }
-
-    // If subscribed, validate topic format before mutating
-    this.validateTopic(topic);
 
     // Mutate state
     this.subscriptions.delete(topic);
@@ -137,128 +143,164 @@ export class TopicsImpl<
     }
   }
 
+  /**
+   * Subscribe to multiple topics atomically.
+   *
+   * **Atomicity guarantee**: All topics succeed or all fail. No partial state changes.
+   * If validation or any adapter call fails, the connection state is unchanged.
+   *
+   * **Deduplication**: Duplicate topics in input are coalesced into unique set.
+   * Input: ["room:1", "room:1", "room:2"] → internally processed as 2 unique topics.
+   *
+   * @param topics - Iterable of topic names to subscribe to
+   * @returns { added, total } where added = newly subscribed topics, total = all subscriptions
+   * @throws {PubSubError} if any topic fails validation or adapter call
+   */
   async subscribeMany(
     topics: Iterable<string>,
   ): Promise<{ added: number; total: number }> {
     const topicArray = Array.from(topics);
-    const newTopics = new Set<string>();
+    const newTopics = new Set<string>(topicArray); // Deduplicate input
 
-    // Step 1: Validate all topics BEFORE mutating any state (atomic)
-    for (const topic of topicArray) {
-      this.validateTopic(topic);
-      newTopics.add(topic); // Deduplicate
-    }
-
-    // Step 2: Subscribe each topic (idempotent per topic)
-    let added = 0;
-    const failed: string[] = [];
-
+    // PHASE 1: Validate all topics BEFORE any state mutation or adapter calls.
+    // Invariant: If validation fails here, nothing is changed (no adapter calls, no state mutation).
     for (const topic of newTopics) {
-      if (!this.subscriptions.has(topic)) {
-        try {
-          this.subscriptions.add(topic);
-          this.ws.subscribe(topic);
-          added++;
-        } catch {
-          failed.push(topic);
-        }
-      }
+      this.validateTopic(topic);
     }
 
-    // If any subscriptions failed, attempt rollback and throw
-    if (failed.length > 0) {
+    // PHASE 2: Call adapter for all non-subscribed topics.
+    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
+    // This is the key to atomicity: adapter calls happen before state mutation.
+    try {
       for (const topic of newTopics) {
-        if (this.subscriptions.has(topic)) {
-          this.subscriptions.delete(topic);
-          try {
-            this.ws.unsubscribe(topic);
-          } catch {
-            // Ignore rollback errors; state is already inconsistent
-          }
+        if (!this.subscriptions.has(topic)) {
+          this.ws.subscribe(topic); // May throw; internal state unchanged
         }
       }
+    } catch (err) {
+      // Adapter failure: state never mutated, so we can safely throw without cleanup.
       throw new PubSubError(
         "ADAPTER_ERROR",
-        `Failed to subscribe to ${failed.length} topic(s): ${failed.join(", ")}`,
-        { failed },
+        `Failed to subscribe to topic(s)`,
+        err,
       );
+    }
+
+    // PHASE 3: Mutate internal state only after all adapter calls succeed.
+    // Invariant: We only reach here if all validations and adapter calls succeeded.
+    // This guarantees atomicity: either all topics are subscribed or none are.
+    let added = 0;
+    for (const topic of newTopics) {
+      if (!this.subscriptions.has(topic)) {
+        this.subscriptions.add(topic);
+        added++;
+      }
     }
 
     return { added, total: this.subscriptions.size };
   }
 
+  /**
+   * Unsubscribe from multiple topics atomically.
+   *
+   * **Atomicity guarantee**: All subscribed topics succeed or all fail. No partial state changes.
+   * Only topics that are currently subscribed are processed; non-subscribed topics are ignored (soft no-op).
+   *
+   * **Soft no-op semantics**: Topics not in current subscription set are silently skipped:
+   * - No validation error for non-subscribed topics
+   * - No adapter calls for non-subscribed topics
+   * - Removed count reflects only actually-subscribed topics
+   *
+   * **Deduplication**: Duplicate topics in input are coalesced into unique set.
+   *
+   * @param topics - Iterable of topic names to unsubscribe from
+   * @returns { removed, total } where removed = actually-unsubscribed topics, total = remaining subscriptions
+   * @throws {PubSubError} if any subscribed topic fails validation or adapter call
+   */
   async unsubscribeMany(
     topics: Iterable<string>,
   ): Promise<{ removed: number; total: number }> {
     const topicArray = Array.from(topics);
     const uniqueTopics = new Set<string>(topicArray); // Deduplicate input
 
-    let removed = 0;
-    const failed: string[] = [];
-    const removedTopics = new Set<string>(); // Track topics we actually removed from state
-
-    // Unsubscribe each topic (soft no-op for non-subscribed, validate if subscribed)
+    // PHASE 1: Identify subscribed topics only (soft no-op for non-subscribed).
+    // Invariant: Topics not in current subscriptions are ignored (per spec § 6.2).
+    // This means: no validation errors for non-subscribed topics, no adapter calls for them.
+    const subscribedTopics = new Set<string>();
     for (const topic of uniqueTopics) {
       if (this.subscriptions.has(topic)) {
-        try {
-          // Validate topic before mutating (only when subscribed)
-          this.validateTopic(topic);
-          this.subscriptions.delete(topic);
-          removedTopics.add(topic); // Record removal before adapter call
-          this.ws.unsubscribe(topic);
-          removed++;
-        } catch {
-          failed.push(topic);
-        }
+        subscribedTopics.add(topic);
       }
     }
 
-    // If any unsubscriptions failed, attempt rollback and throw
-    if (failed.length > 0) {
-      // Only re-add topics we actually removed from state (never restore never-subscribed topics)
-      for (const topic of removedTopics) {
-        this.subscriptions.add(topic);
-        try {
-          this.ws.subscribe(topic);
-        } catch {
-          // Ignore rollback errors
-        }
+    // PHASE 2: Validate only subscribed topics.
+    // Invariant: Non-subscribed topics skip validation (soft no-op semantics).
+    // If validation fails here, nothing is changed (no adapter calls, no state mutation).
+    for (const topic of subscribedTopics) {
+      this.validateTopic(topic);
+    }
+
+    // PHASE 3: Call adapter for all subscribed topics.
+    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
+    // This is the key to atomicity: adapter calls happen before state mutation.
+    try {
+      for (const topic of subscribedTopics) {
+        this.ws.unsubscribe(topic); // May throw; internal state unchanged
       }
+    } catch (err) {
+      // Adapter failure: state never mutated, so we can safely throw without cleanup.
       throw new PubSubError(
         "ADAPTER_ERROR",
-        `Failed to unsubscribe from ${failed.length} topic(s): ${failed.join(", ")}`,
-        { failed },
+        `Failed to unsubscribe from topic(s)`,
+        err,
       );
+    }
+
+    // PHASE 4: Mutate internal state only after all adapter calls succeed.
+    // Invariant: We only reach here if all validations and adapter calls succeeded.
+    // This guarantees atomicity: either all subscribed topics are removed or none are.
+    let removed = 0;
+    for (const topic of subscribedTopics) {
+      this.subscriptions.delete(topic);
+      removed++;
     }
 
     return { removed, total: this.subscriptions.size };
   }
 
+  /**
+   * Remove all current subscriptions atomically.
+   *
+   * **Atomicity guarantee**: All subscriptions succeed in being removed or all fail.
+   * If any adapter call fails, the connection state is unchanged.
+   *
+   * @returns { removed } - Count of subscriptions that were removed
+   * @throws {PubSubError} if any adapter call fails
+   */
   async clear(): Promise<{ removed: number }> {
     const removed = this.subscriptions.size;
     const topicArray = Array.from(this.subscriptions);
 
+    // PHASE 1: Call adapter to unsubscribe from all topics.
+    // Invariant: If any adapter call fails here, state is unchanged (we haven't mutated yet).
+    // This is the key to atomicity: adapter calls happen before state mutation.
     try {
       for (const topic of topicArray) {
-        this.ws.unsubscribe(topic);
+        this.ws.unsubscribe(topic); // May throw; internal state unchanged
       }
-      this.subscriptions.clear();
     } catch (err) {
-      // Rollback: re-add all topics (best effort)
-      for (const topic of topicArray) {
-        this.subscriptions.add(topic);
-        try {
-          this.ws.subscribe(topic);
-        } catch {
-          // Ignore rollback errors
-        }
-      }
+      // Adapter failure: state never mutated, so we can safely throw without cleanup.
       throw new PubSubError(
         "ADAPTER_ERROR",
         `Failed to clear subscriptions`,
         err,
       );
     }
+
+    // PHASE 2: Mutate internal state only after all adapter calls succeed.
+    // Invariant: We only reach here if all adapter calls succeeded.
+    // This guarantees atomicity: either all subscriptions are cleared or none are.
+    this.subscriptions.clear();
 
     return { removed };
   }
@@ -295,7 +337,7 @@ export class TopicsImpl<
     if (!DEFAULT_TOPIC_PATTERN.test(topic)) {
       throw new PubSubError(
         "INVALID_TOPIC",
-        `Topic format invalid (allowed: a-z0-9:_-)`,
+        `Topic format invalid (allowed: a-z0-9:_-/.)`,
         { topic },
       );
     }

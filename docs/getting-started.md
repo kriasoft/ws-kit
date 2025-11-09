@@ -78,12 +78,12 @@ type AppData = {
 
 const router = createRouter<AppData>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to room and store in connection data
   ctx.assignData({ roomId });
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 });
 
 router.on(ChatMessage, async (ctx) => {

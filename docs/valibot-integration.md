@@ -148,7 +148,7 @@ const router = createRouter<AppData>();
 // Track users in rooms
 const rooms = new Map<string, Set<string>>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId, username } = ctx.payload;
 
   // Update connection data
@@ -159,7 +159,7 @@ router.on(JoinRoom, (ctx) => {
   }
 
   rooms.get(roomId)!.add(ctx.ws.data.clientId);
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 
   ctx.publish(roomId, UserJoined, {
     username,

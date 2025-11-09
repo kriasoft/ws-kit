@@ -318,8 +318,10 @@ type MessageContext<Schema, Data> = {
   send: SendFunction; // Type-safe send to current connection (1-to-1, fire-and-forget)
   error: ErrorFunction; // Type-safe error responses (see ADR-009)
   assignData: AssignDataFunction; // Merge partial data into ctx.ws.data
-  subscribe: SubscribeFunction; // Subscribe to a channel
-  unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
+  topics: {
+    subscribe: (topic: string) => Promise<void>; // Subscribe to a topic
+    unsubscribe: (topic: string) => Promise<void>; // Unsubscribe from a topic
+  };
 
   // RPC handlers only (when message has response schema)
   reply?: (schema: MessageSchema, data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
@@ -380,8 +382,10 @@ type IngressContext<Data = unknown> = {
   send: SendFunction;
   error: ErrorFunction;
   assignData: AssignDataFunction;
-  subscribe: SubscribeFunction;
-  unsubscribe: UnsubscribeFunction;
+  topics: {
+    subscribe: (topic: string) => Promise<void>;
+    unsubscribe: (topic: string) => Promise<void>;
+  };
 };
 ```
 
@@ -633,13 +637,13 @@ router.on(DeleteMessage, (ctx) => {
 ### Connection Lifecycle
 
 ```typescript
-router.onOpen((ctx) => {
-  // ctx: { ws, send, subscribe, unsubscribe }
+router.onOpen(async (ctx) => {
+  // ctx: { ws, send, topics: { subscribe, unsubscribe } }
   console.log("Client connected:", ctx.ws.data.clientId);
 });
 
-router.onClose((ctx) => {
-  // ctx: { ws, code, reason, send, subscribe, unsubscribe }
+router.onClose(async (ctx) => {
+  // ctx: { ws, code, reason, send, topics: { subscribe, unsubscribe } }
   console.log(
     "Client disconnected:",
     ctx.ws.data.clientId,
@@ -792,15 +796,15 @@ For comprehensive pub/sub API documentation, semantics, and patterns, see **[@pu
 
 **Quick API reference:**
 
-- `ctx.subscribe(topic)` — Subscribe connection to a topic
-- `ctx.unsubscribe(topic)` — Unsubscribe connection from a topic
+- `await ctx.topics.subscribe(topic)` — Subscribe connection to a topic
+- `await ctx.topics.unsubscribe(topic)` — Unsubscribe connection from a topic
 - `ctx.publish(topic, schema, payload)` — Type-safe publish from handler context
 - `router.publish(topic, schema, payload)` — Type-safe publish from outside handlers
 
 **Key principles:**
 
 - All publish operations are schema-validated at compile-time and validated at runtime
-- Cleanup on disconnect: always unsubscribe in `onClose()` or via `ctx.unsubscribe()` to prevent memory leaks
+- Cleanup on disconnect: always unsubscribe in `onClose()` or via `await ctx.topics.unsubscribe()` to prevent memory leaks
 - Message ordering is guaranteed within a topic at the time of publish
 - Use naming conventions like `room:123`, `user:456:notifications` for topic clarity
 

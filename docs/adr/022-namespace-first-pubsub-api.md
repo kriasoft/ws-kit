@@ -29,7 +29,7 @@ The initial draft spec (`docs/specs/pubsub.md` v1) had several problems:
 
 We evaluated 9+ architectural approaches (documented in detailed analysis), including:
 
-- Flat methods (`ctx.subscribe()`)
+- Flat methods (`ctx.subscribe()` - deprecated in favor of namespaced approach)
 - Fluent chains (`ctx.topics.subscribe().with().commit()`)
 - Heavy router registration (like `.on()` and `.rpc()`)
 - Boolean returns vs void
@@ -45,6 +45,18 @@ We evaluated 9+ architectural approaches (documented in detailed analysis), incl
 > **🎯 Rule of Thumb: Mutations throw; actions return.**
 >
 > State changes (subscribe/unsubscribe) signal errors via exceptions. Transient operations (publish) return results for pattern matching on remediation. Single rule, easy to remember.
+
+### Canonical References
+
+For the **authoritative API surface and implementation invariants**, see [`docs/specs/pubsub.md`](../specs/pubsub.md):
+
+- **§ 1-9**: API surface, semantics, and examples (normative)
+- **§ 12**: Implementation invariants for adapter authors (canonical)
+- **§ 13-16**: Adapter compliance, concurrency, future extensions
+
+This ADR provides the **design rationale** behind these decisions (why we chose this approach).
+
+---
 
 ### 1. Namespace: `ctx.topics` (State) + Flat `ctx.publish()` (Action)
 
@@ -317,12 +329,12 @@ if (result.ok) {
 ⚠️ **Breaking change from draft spec** — Apps using draft API must migrate
 ⚠️ **Adapters need transactional semantics** — Batch atomicity requires careful implementation
 ⚠️ **`ReadonlySet` immutability must be enforced** — Adapters must prevent direct mutation (via freeze, proxy, or wrapper)
-⚠️ **Hooks fire after mutation** — If hook throws, state is already changed (requires care)
+⚠️ **Hooks fire after mutation** — If hook throws, state is already changed (no automatic rollback). Exceptions propagate to caller; apps requiring rollback must implement try/catch at handler/middleware level.
 ⚠️ **No `subscriberCount()` API** — Unreliable across adapters; `publish()` result provides capability hint instead
 
 ## Alternatives Considered
 
-### 1. Flat Methods: `ctx.subscribe()`, `ctx.unsubscribe()`
+### 1. Flat Methods: `ctx.subscribe()`, `ctx.unsubscribe()` (DEPRECATED)
 
 No namespace, just add methods to context directly.
 
@@ -338,6 +350,8 @@ No namespace, just add methods to context directly.
 - Harder to discover all subscription operations (scattered in context)
 
 **Why rejected:** Context grows unbounded; namespace separation is better architecture.
+
+**Migration:** All flat methods have been deprecated in favor of the namespaced `ctx.topics.*` API.
 
 ---
 
@@ -580,10 +594,16 @@ See `docs/specs/pubsub.md§12` (Implementation Invariants) for detailed prescrip
 
 ## References
 
-- **Spec** (Canonical): [`docs/specs/pubsub.md`](../specs/pubsub.md)
-  - Sections 1-6: API surface, semantics, error handling
-  - Section 12: Implementation invariants for adapters
-  - Section 14-16: Adapter compliance, concurrency, edge cases
+- **Spec** (Normative & Canonical): [`docs/specs/pubsub.md`](../specs/pubsub.md)
+  - **§ 1-9**: API surface, terminology, semantics, and examples
+  - **§ 12**: Implementation invariants for adapter authors (authoritative)
+  - **§ 13-16**: Adapter compliance checklist, concurrency model, edge cases
+
+- **This ADR** (Design Rationale):
+  - **§ Decision**: Eight core decisions and their rationale
+  - **§ Consequences**: Benefits and trade-offs
+  - **§ Alternatives Considered**: Why we rejected other approaches
+  - **§ Implementation Invariants**: Design principles behind the spec
 
 - **Related ADRs** (API Design Philosophy):
   - ADR-020: Send vs Publish (unicast vs multicast naming rationale)

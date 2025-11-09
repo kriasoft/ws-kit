@@ -30,7 +30,7 @@ chatRouter.on(JoinRoom, async (c) => {
   console.log(`Client ${clientId} joined room: ${roomId}`);
 
   // Subscribe to room broadcasts
-  c.ws.subscribe(`room:${roomId}`);
+  await c.topics.subscribe(`room:${roomId}`);
 
   // Send confirmation back to the user who joined
   c.send(UserJoined, {

@@ -581,18 +581,20 @@ export interface PublishOptions {
   /**
    * Exclude the sender from receiving the published message (default: false).
    *
-   * **Status**: Future feature. Setting this to `true` returns `{ok: false, error: "UNSUPPORTED"}`.
+   * **Status**: Future feature. Currently unsupported; returns:
+   * `{ok: false, error: "UNSUPPORTED", details: { feature: "excludeSelf" }}`
    *
    * **Planned behavior**: When true, the sender will not receive their own published message.
    * When called from within a handler context, this will filter out that specific sender.
    * Server-initiated calls (no clientId context) will not use this option.
    *
-   * **Why not yet supported**: Requires pubsub adapter support for sender filtering.
-   * Different pubsub backends (MemoryPubSub, Redis, Kafka, etc.) have different
-   * capabilities for filtering subscribers at publish time.
+   * **Current workarounds**:
+   * - Dedicated per-connection topic (e.g., "room:123" vs "room:123:self") so sender doesn't subscribe
+   * - Check `meta.clientId` in subscriber handlers and skip self-originated messages
+   * - Use separate handler registration for broadcast vs. self-only messages
    *
-   * **Workarounds**: Use dedicated channels per connection or check message origin
-   * in subscriber handlers.
+   * **Why not yet supported**: Different pubsub backends (MemoryPubSub, Redis, Kafka, DO)
+   * have different capabilities for filtering at publish time.
    */
   excludeSelf?: boolean;
 

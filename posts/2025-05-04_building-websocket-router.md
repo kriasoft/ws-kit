@@ -640,9 +640,9 @@ router.on(ChatMessage, (ctx) => {
   ctx.send(ChatMessage, { room, text: "Echo: " + text });
 });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { room } = ctx.payload;
-  ctx.subscribe(room); // Subscribe to room using Bun's built-in PubSub
+  await ctx.topics.subscribe(room); // Subscribe to room using Bun's built-in PubSub
   console.log(`Client joined room: ${room}`);
 });
 
@@ -749,12 +749,12 @@ import { JoinRoom, SendMessage } from "./schemas";
 const router = createRouter();
 
 // Handle JOIN_ROOM messages
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload; // Fully typed and validated!
   console.log(`Client wants to join room: ${roomId}`);
 
   // Join the room using Bun's built-in PubSub
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 
   // Send confirmation
   ctx.send(JoinRoom, { roomId }); // Type-checked!
@@ -937,12 +937,12 @@ router.on(ChatMessage, (ctx) => {
   });
 });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data.userId;
 
   // Subscribe to the room
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
   ctx.ws.data.roomId = roomId;
 
   // Notify others
@@ -1346,7 +1346,7 @@ router.on(schema.Authenticate, (ctx) => {
 });
 
 // Handle joining a room
-router.on(schema.JoinRoom, (ctx) => {
+router.on(schema.JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data.userId;
   const username = ctx.ws.data.username;
@@ -1376,7 +1376,7 @@ router.on(schema.JoinRoom, (ctx) => {
     });
 
     // Unsubscribe from previous room
-    ctx.unsubscribe(ctx.ws.data.currentRoomId);
+    await ctx.topics.unsubscribe(ctx.ws.data.currentRoomId);
   }
 
   // Join the new room
@@ -1384,7 +1384,7 @@ router.on(schema.JoinRoom, (ctx) => {
   ctx.ws.data.currentRoomId = roomId;
 
   // Subscribe to the room's messages
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 
   // Confirm to the user they've joined
   ctx.send(schema.UserJoined, {
@@ -1404,7 +1404,7 @@ router.on(schema.JoinRoom, (ctx) => {
 });
 
 // Handle leaving a room
-router.on(schema.LeaveRoom, (ctx) => {
+router.on(schema.LeaveRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data.userId;
   const username = ctx.ws.data.username;
@@ -1425,7 +1425,7 @@ router.on(schema.LeaveRoom, (ctx) => {
   ctx.ws.data.currentRoomId = undefined;
 
   // Unsubscribe from room
-  ctx.unsubscribe(roomId);
+  await ctx.topics.unsubscribe(roomId);
 
   // Let others know user left
   ctx.publish(roomId, schema.UserLeft, {
@@ -2479,7 +2479,7 @@ router.use(
 
 ### Custom PubSub with Selective Message Delivery
 
-While **WS-Kit** provides built-in pub/sub through `ctx.publish()` and `ctx.subscribe()`, sometimes you need advanced filtering based on user properties. This section shows a custom implementation for scenarios requiring fine-grained control:
+While **WS-Kit** provides built-in pub/sub through `ctx.publish()` and `ctx.topics.subscribe()`, sometimes you need advanced filtering based on user properties. This section shows a custom implementation for scenarios requiring fine-grained control:
 
 **For most applications, WS-Kit's native pub/sub is sufficient:**
 
@@ -2498,18 +2498,18 @@ router.on(schema.ChatMessage, (ctx) => {
   });
 });
 
-router.on(schema.JoinRoom, (ctx) => {
+router.on(schema.JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  ctx.subscribe(roomId); // Join room
+  await ctx.topics.subscribe(roomId); // Join room
 });
 
-router.on(schema.LeaveRoom, (ctx) => {
+router.on(schema.LeaveRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  ctx.unsubscribe(roomId); // Leave room
+  await ctx.topics.unsubscribe(roomId); // Leave room
 });
 ```
 
-> **When to Use EnhancedPubSub:** WS-Kit's native `ctx.publish()` and `ctx.subscribe()` are sufficient for most applications, providing simple topic-based broadcasting with automatic message validation. Consider implementing a custom PubSub extension only when you need role-based filtering, metadata-based message delivery, or complex subscriber filtering logic that goes beyond basic topic subscriptions. For typical chat applications, room management, and notification systems, stick with the native approach shown above.
+> **When to Use EnhancedPubSub:** WS-Kit's native `ctx.publish()` and `ctx.topics.subscribe()` are sufficient for most applications, providing simple topic-based broadcasting with automatic message validation. Consider implementing a custom PubSub extension only when you need role-based filtering, metadata-based message delivery, or complex subscriber filtering logic that goes beyond basic topic subscriptions. For typical chat applications, room management, and notification systems, stick with the native approach shown above.
 
 \*\*For advanced filtering use cases, here's a custom PubSub extension:
 

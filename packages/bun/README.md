@@ -199,11 +199,11 @@ router.on(SomeSchema, (ctx) => {
 const JoinRoom = message("JOIN_ROOM", { room: z.string() });
 const RoomUpdate = message("ROOM_UPDATE", { text: z.string() });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { room } = ctx.payload;
 
   // Subscribe to room channel
-  ctx.subscribe(`room:${room}`);
+  await ctx.topics.subscribe(`room:${room}`);
 });
 
 // Broadcast to all subscribers on a channel
@@ -252,12 +252,12 @@ await router.publish("notifications", NotificationMessage, {
 Called when a WebSocket connection is established:
 
 ```typescript
-router.onOpen((ctx) => {
+router.onOpen(async (ctx) => {
   const { clientId } = ctx.ws.data;
   console.log(`[${clientId}] Connected`);
 
   // Subscribe to channels
-  ctx.subscribe("notifications");
+  await ctx.topics.subscribe("notifications");
 
   // Send welcome message
   ctx.send(WelcomeMessage, { greeting: "Welcome!" });
@@ -355,7 +355,7 @@ router.on(JoinRoomMessage, async (ctx) => {
   const { clientId } = ctx.ws.data;
 
   // Subscribe to room
-  ctx.subscribe(`room:${room}`);
+  await ctx.topics.subscribe(`room:${room}`);
 
   // Track membership
   if (!rooms.has(room)) rooms.set(room, new Set());

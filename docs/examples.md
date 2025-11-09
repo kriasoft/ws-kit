@@ -200,7 +200,7 @@ router.on(JoinRoom, async (ctx) => {
   rooms.get(roomId)!.add(ctx.ws.data.clientId);
 
   // Subscribe to room broadcasts
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 
   // Notify room members
   await router.publish(roomId, UserJoined, {
@@ -226,7 +226,7 @@ router.on(LeaveRoom, async (ctx) => {
   rooms.get(roomId)?.delete(ctx.ws.data.clientId);
 
   // Unsubscribe
-  ctx.unsubscribe(roomId);
+  await ctx.topics.unsubscribe(roomId);
 
   // Notify others
   await router.publish(roomId, UserLeft, {

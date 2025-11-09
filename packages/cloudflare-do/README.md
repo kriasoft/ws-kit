@@ -267,7 +267,7 @@ router.on(JoinRoom, async (ctx) => {
 
   members.add(clientId!);
   ctx.assignData({ room });
-  ctx.subscribe(`room:${room}`);
+  await ctx.topics.subscribe(`room:${room}`);
 
   // Broadcast updated member list using schema
   await router.publish(`room:${room}`, RoomList, {

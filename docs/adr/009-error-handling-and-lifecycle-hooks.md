@@ -325,7 +325,7 @@ serve(router, {
 
     // Subscribe to user's updates
     if (userId) {
-      ctx.subscribe(`user:${userId}`);
+      await ctx.topics.subscribe(`user:${userId}`);
     }
   },
 });

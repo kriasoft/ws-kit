@@ -147,7 +147,7 @@ For detailed working examples, see **[router.md](./router.md)** and **[getting s
 4. **Broadcasting & pub/sub**
    - Unicast: `ctx.send(schema, data)` to current connection
    - Multicast: `router.publish(topic, schema, data)` to subscribers
-   - Subscribe/unsubscribe with `ctx.subscribe()` / `ctx.unsubscribe()`
+   - Subscribe/unsubscribe with `await ctx.topics.subscribe()` / `await ctx.topics.unsubscribe()`
 
 5. **Error handling & lifecycle**
    - Type-safe errors: `ctx.error(code, message, details)`

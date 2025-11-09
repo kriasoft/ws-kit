@@ -69,11 +69,11 @@ All available methods at a glance:
 
 ```typescript
 // Fire-and-forget messaging
-router.on(Message, (ctx) => {
+router.on(Message, async (ctx) => {
   ctx.send(schema, data); // Send to current connection (1-to-1)
   ctx.publish(topic, schema, data); // Broadcast to topic subscribers (1-to-many)
-  ctx.subscribe(topic); // Join topic
-  ctx.unsubscribe(topic); // Leave topic
+  await ctx.topics.subscribe(topic); // Subscribe to topic (async)
+  await ctx.topics.unsubscribe(topic); // Unsubscribe from topic (async)
   ctx.getData(key); // Access typed connection data
   ctx.assignData(partial); // Update connection data
 });

@@ -64,7 +64,7 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 router.on(JoinRoom, async (ctx) => {
   const roomId = ctx.payload.roomId;
-  ctx.subscribe(`room:${roomId}`);
+  await ctx.topics.subscribe(`room:${roomId}`);
   // Broadcast to all room subscribers
   await router.publish(`room:${roomId}`, RoomUpdate, {
     roomId,

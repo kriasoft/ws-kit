@@ -8,18 +8,9 @@
 
 ---
 
-## 0. Prior Design Issues (Why This Redesign)
+## 0. Prior Design Issues
 
-An earlier draft of this spec (`v1`) had several limitations that motivated this redesign:
-
-1. **Namespace confusion** — `ctx.pubsub.subscribe()` with nested `ctx.pubsub.subscriptions.list()` felt awkward and incoherent
-2. **Boolean return semantics** — `Promise<boolean>` returns created ambiguity: does `false` mean "already subscribed", "error", or both?
-3. **No batch operations** — Required O(n) awaits for bulk subscriptions; partial failures left app in inconsistent state
-4. **Zero type safety** — Topics were opaque strings; no schema validation (unlike WS-Kit's typed message routing)
-5. **Unclear authorization timing** — When do hooks run relative to idempotency checks? Unclear in prior spec.
-6. **Heavy middleware pattern** — Proposed middleware felt over-engineered for common use cases
-
-This redesign addresses all six issues. See § 11 (Alternatives) for detailed trade-off analysis, or [ADR-022](../adr/022-namespace-first-pubsub-api.md) for full context.
+An earlier draft had namespace confusion, ambiguous return types, no batch operations, zero type safety, and unclear authorization semantics. See [ADR-022 § Context](../adr/022-namespace-first-pubsub-api.md#context) for the full analysis and design rationale.
 
 ---
 
@@ -235,9 +226,11 @@ export type PublishResult =
 
 ---
 
-## 4. Typed Topic Helper (Optional)
+## 4. Typed Topic Helper (Optional Convenience)
 
-For applications that want schema validation and auto-completion on topic construction, use the `topic()` helper:
+For applications that want schema validation and auto-completion on topic construction, the `topic()` helper is **recommended** but not required by the spec. Simple applications using string literals (e.g., `"room:123"`) are fully compliant.
+
+**Topic helper interface** (provided by validator adapters like `@ws-kit/zod`):
 
 ```typescript
 /**
@@ -246,7 +239,7 @@ For applications that want schema validation and auto-completion on topic constr
  */
 type Topic<T> = {
   readonly name: string; // e.g., "room"
-  make(args: T): string; // Construct topic string
+  make(args: T): string; // Construct topic string (validates args)
   parse?(topic: string): T; // Optional: extract args from string
 };
 
@@ -272,7 +265,7 @@ const RoomTopic = topic(
 
 // Usage in handlers
 router.on(JoinRoom, async (ctx, { roomId }) => {
-  const topicStr = RoomTopic.make({ roomId }); // Type-checked, validated
+  const topicStr = RoomTopic.make({ roomId }); // Type-checked, validates at call-time
   await ctx.topics.subscribe(topicStr);
 
   const joined = ctx.topics.has(topicStr);
@@ -285,9 +278,11 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
 **Why optional?**
 
 - Typed topics compile to strings; zero overhead if not used.
-- Simple apps stay simple: just use `"room:123"`.
-- Complex apps get validation and type inference.
-- Progressive enhancement—not mandatory.
+- Simple apps stay simple: just use `"room:123"` (compliant with spec).
+- Complex apps get validation, type inference, and compile-time safety.
+- Progressive enhancement—no mandatory ceremony.
+
+**Implementation note**: The `topic()` helper is provided by validator adapter packages (e.g., `@ws-kit/zod`, `@ws-kit/valibot`) as a convenience, not a core specification requirement.
 
 ---
 
@@ -417,6 +412,8 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 
 **Hook behavior:** `onSubscribe()` and `onUnsubscribe()` hooks are **not called** on idempotent no-ops. Only called on actual state changes.
 
+**Hook exception semantics:** If a hook throws, the exception propagates to the caller (middleware/handler), **but state remains changed**—there is no automatic rollback. Adapters may catch and log hook exceptions, but mutation is not reversed. Applications that require rollback on hook failure should implement custom try/catch logic at the handler level or in middleware before calling subscribe/unsubscribe.
+
 ### 6.3 Batch Atomicity
 
 `subscribeMany()` and `unsubscribeMany()` are **atomic**: all-or-nothing, no partial success.
@@ -470,6 +467,32 @@ This is the fundamental split between operations:
 | `"exact"`    | Exact subscriber count                       | Bun native, MemoryPubSub   | In-process testing, single-server deployments    |
 | `"estimate"` | Lower-bound estimate                         | Node/uWS polyfill          | Conservative estimate; actual may be higher      |
 | `"unknown"`  | Subscriber count not tracked (field omitted) | Redis multi-process, Kafka | Distributed systems where tracking is infeasible |
+
+**Best practice for capability-aware handling:**
+
+```typescript
+const result = await ctx.publish(topic, schema, payload);
+
+if (result.ok) {
+  // Publication succeeded
+  if (result.capability === "exact") {
+    // Reliable exact count (in-process or single-node)
+    console.log(`Delivered to exactly ${result.matched} subscribers`);
+  } else if (result.capability === "estimate") {
+    // Lower-bound estimate (polyfill or distributed)
+    console.log(`Delivered to ≥${result.matched} subscribers`);
+  } else {
+    // Unknown count (distributed, no tracking)
+    console.log(`Delivered (subscriber count unknown)`);
+  }
+} else if (result.retryable) {
+  // Transient failure, safe to retry with backoff
+  scheduleRetry(topic, payload);
+} else {
+  // Permanent failure, don't retry
+  logger.error(`Publish failed: ${result.error}`, result.details);
+}
+```
 
 **Error Remediation Guide:**
 
@@ -817,50 +840,6 @@ router.onClose((ctx) => {
 - Store room ID in `ctx.assignData()` for cleanup in `onClose()`
 - Unsubscribe **and** broadcast leave notification (both are important)
 - Publish may fail; wrap in try/catch or handle result
-
----
-
-## 10. Design Consequences: Benefits & Trade-offs
-
-This design balances multiple concerns. Here's what we optimized for:
-
-### Benefits
-
-✅ **Clear semantic separation** — State (topics) vs action (publish) are distinct concepts
-✅ **Idiomatic async/await** — `Promise<void>` + throw matches modern JavaScript
-✅ **Zero overhead** — `ReadonlySet<string>` is native; no wrapper serialization
-✅ **Prevents inconsistent state** — Atomic batches and strict operation order
-✅ **Progressive type safety** — Optional `topic()` helper, not mandatory
-✅ **Lightweight for common case** — Hooks over heavy middleware; simple apps stay simple
-✅ **Portable across adapters** — Identical semantics on Bun, Node/uWS, Cloudflare, etc.
-✅ **Idempotent by default** — Apps don't need defensive `if (!has(topic))` checks
-✅ **Extensible** — Room for patterns, presence, Redis adapters (future ADRs)
-
-### Trade-offs
-
-⚠️ **Breaking change from v1 draft** — Apps using draft spec must migrate
-⚠️ **Adapters need transactional semantics** — Batch atomicity requires careful implementation
-⚠️ **Immutability enforcement needed** — Adapters must prevent direct `Set` mutation
-⚠️ **Hooks fire after mutation** — If hook throws, state is already changed (requires care)
-⚠️ **No `subscriberCount()` API** — Unreliable across adapters; use `publish()` result instead
-
-**For detailed design rationale**: See [ADR-022 § Decision](../adr/022-namespace-first-pubsub-api.md) for the full analysis of each choice.
-
----
-
-## 11. Why This Design (vs Alternatives)
-
-| Decision                   | Rejected Alternative                        | Trade-off                                    | Implementation Impact                                                                                 |
-| -------------------------- | ------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **Namespace** `ctx.topics` | Flat `ctx.subscribe()`                      | Context grows; no separation of concerns     | Adapters must manage `topics` object on context; cleanly separated from messaging                     |
-| **`ReadonlySet<string>`**  | Custom `subscriptions: { list(), has() }`   | JS native API less obvious                   | Immutable contract enforced by type; no custom interface to learn; compatible with spread, for...of   |
-| **`Promise<void>`**        | `Promise<boolean>` (state changed?)         | Callers can't use return value for decisions | Idempotency is implicit contract; errors throw; no false ambiguity about what boolean means           |
-| **Batch ops**              | Loop + individual ops                       | O(n) round-trips; partial failure            | Single atomic operation; adapters must implement transactional semantics; prevents inconsistent state |
-| **Optional hooks**         | Required router registration (like `.on()`) | Topics aren't first-class in router          | Optional keeps common case simple; complex ACLs opt-in; avoids boilerplate for simple topics          |
-| **Flat `publish()`**       | `ctx.topics.publish()`                      | Asymmetry not obvious                        | Clear separation: state mutation (subscribe) vs transient action (publish); prevents conflation       |
-| **No `subscriberCount()`** | Include it (Bun exact, others estimate)     | Unreliable in portable code                  | `publish()` result already provides capability hint; avoids apps relying on undefined behavior        |
-
-**See also**: [ADR-022 § Alternatives Considered](../adr/022-namespace-first-pubsub-api.md#alternatives-considered) for detailed pros/cons of each alternative.
 
 ---
 

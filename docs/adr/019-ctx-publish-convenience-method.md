@@ -13,7 +13,7 @@ Router now supports type-safe, schema-validated publishing via `router.publish()
 **Two candidate approaches:**
 
 1. **Method on context**: `ctx.publish(channel, schema, payload, options?)`
-   - Pros: Ergonomic in handlers; discoverable via IDE autocomplete; consistent with `ctx.send()`, `ctx.subscribe()`
+   - Pros: Ergonomic in handlers; discoverable via IDE autocomplete; consistent with `ctx.send()`, `ctx.topics.subscribe()`
    - Cons: Adds to context surface area; blurs router-level vs connection-level boundaries
 
 2. **Standalone helper function**: `publish(router, channel, schema, payload, options?)`
@@ -49,7 +49,7 @@ await publish(router, `org:${ctx.payload.orgId}:users`, ...);
 ws-kit's API philosophy:
 
 - **Factories for setup**: `message()`, `rpc()`, `createRouter()`
-- **Methods for operations**: `ctx.send()`, `ctx.reply()`, `ctx.subscribe()`, `ctx.unsubscribe()`
+- **Methods for operations**: `ctx.send()`, `ctx.reply()`, `ctx.topics.subscribe()`, `ctx.topics.unsubscribe()`
 
 Adding `ctx.publish()` completes this natural set, rather than introducing a different convention (standalone function).
 
@@ -64,9 +64,9 @@ Adding `ctx.publish()` completes this natural set, rather than introducing a dif
 `ctx.publish()` sits naturally among context operations:
 
 - `ctx.send()` → unicast to single connection
-- `ctx.subscribe(topic)` → join broadcast group
+- `ctx.topics.subscribe(topic)` → join broadcast group
 - `ctx.publish(topic, ...)` → send to broadcast group
-- `ctx.unsubscribe(topic)` → leave broadcast group
+- `ctx.topics.unsubscribe(topic)` → leave broadcast group
 
 This forms a coherent, understandable API surface.
 

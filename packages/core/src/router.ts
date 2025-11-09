@@ -1639,7 +1639,7 @@ export class WebSocketRouter<
       //
       // This aligns with ws-kit's design philosophy:
       // - Factory functions (`message()`, `rpc()`, `createRouter()`) for setup
-      // - Context methods (`ctx.send()`, `ctx.subscribe()`, `ctx.publish()`) for operations
+      // - Context methods (`ctx.send()`, `ctx.topics.subscribe()`, `ctx.publish()`) for operations
       //
       // Ergonomic comparison:
       // - ✅ ctx.publish(channel, schema, payload) — discoverable, consistent

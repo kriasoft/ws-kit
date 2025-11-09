@@ -108,8 +108,8 @@ router.on(ChatMessage, async (ctx) => {
   await ctx.publish("chat", ChatMessage, ctx.payload);
 
   // For subscriptions:
-  ctx.subscribe("room:123");
-  ctx.unsubscribe("room:456");
+  await ctx.topics.subscribe("room:123");
+  await ctx.topics.unsubscribe("room:456");
 });
 ```
 
@@ -329,8 +329,10 @@ interface EventMessageContext<TPayload, TData = unknown> {
     options?: ErrorOptions,
   ): void; // Send typed error
   assignData(partial: Partial<TData>): void; // Merge partial data into ctx.ws.data
-  subscribe(channel: string): void; // Subscribe to a topic
-  unsubscribe(channel: string): void; // Unsubscribe from a topic
+  topics: {
+    subscribe(channel: string): Promise<void>; // Subscribe to a topic
+    unsubscribe(channel: string): Promise<void>; // Unsubscribe from a topic
+  };
   timeRemaining(): number; // ms until deadline (Infinity for events)
   isRpc: false; // Discriminant: false for event messages
 
@@ -362,7 +364,7 @@ type MessageContext<TPayload, TData = unknown> =
 - **Client identity**: Access via `ctx.ws.data.clientId` (auto-generated UUID v7, not `ctx.clientId`)
 - **Metadata injection**: `ctx.meta.clientId` and `ctx.meta.receivedAt` are server-injected after validation (security boundary—prevents client spoofing)
 - **Timestamps**: Use `ctx.receivedAt` for server logic (rate limiting, ordering, TTL, auditing); use `ctx.meta.timestamp` only for UI display (untrusted client clock)
-- **Subscriptions**: `ctx.subscribe(topic)` and `ctx.unsubscribe(topic)` for PubSub
+- **Subscriptions**: `await ctx.topics.subscribe(topic)` and `await ctx.topics.unsubscribe(topic)` for PubSub
 - **Publishing**: `await ctx.publish(topic, schema, payload)` broadcasts to subscribers (1-to-many), or use `await router.publish()` outside handlers
 - **Sending**: `ctx.send(schema, payload)` sends to current connection only (1-to-1)
 - **Custom data**: Access `ctx.ws.data` directly, or use `ctx.assignData()` to merge partial updates
@@ -469,7 +471,7 @@ router.on(JoinRoomMessage, async (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Subscribe to room topic
-  ctx.subscribe(`room:${roomId}`);
+  await ctx.topics.subscribe(`room:${roomId}`);
 
   // Broadcast to all subscribers with type-safe publish
   await ctx.publish(`room:${roomId}`, UserJoinedMessage, {
@@ -481,7 +483,7 @@ router.on(LeaveRoomMessage, async (ctx) => {
   const roomId = ctx.payload.roomId;
 
   // Unsubscribe when leaving
-  ctx.unsubscribe(`room:${roomId}`);
+  await ctx.topics.unsubscribe(`room:${roomId}`);
 
   // Notify others
   await ctx.publish(`room:${roomId}`, UserLeftMessage, {

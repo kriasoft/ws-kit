@@ -955,25 +955,25 @@ router.rpc(FetchData, async (ctx) => {
 });
 ```
 
-#### `ctx.subscribe(channel)` and `ctx.unsubscribe(channel)`
+#### `ctx.topics.subscribe(channel)` and `ctx.topics.unsubscribe(channel)`
 
 Subscribe/unsubscribe to pub/sub channels.
 
 ```typescript
-subscribe(channel: string): void;
-unsubscribe(channel: string): void;
+subscribe(channel: string): Promise<void>;
+unsubscribe(channel: string): Promise<void>;
 ```
 
 **Example:**
 
 ```typescript
-router.on(JoinRoom, (ctx) => {
-  ctx.subscribe(`room:${ctx.payload.roomId}`);
+router.on(JoinRoom, async (ctx) => {
+  await ctx.topics.subscribe(`room:${ctx.payload.roomId}`);
   ctx.ws.data.currentRoom = ctx.payload.roomId;
 });
 
-router.on(LeaveRoom, (ctx) => {
-  ctx.unsubscribe(`room:${ctx.ws.data.currentRoom}`);
+router.on(LeaveRoom, async (ctx) => {
+  await ctx.topics.unsubscribe(`room:${ctx.ws.data.currentRoom}`);
 });
 ```
 

@@ -437,13 +437,13 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 const router = createRouter<AppData>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId;
 
   // Store room ID and subscribe to topic
   ctx.assignData({ roomId });
-  ctx.subscribe(`room:${roomId}`);
+  await ctx.topics.subscribe(`room:${roomId}`);
 
   // Broadcast to room (type-safe!)
   ctx.publish(`room:${roomId}`, RoomUpdate, {

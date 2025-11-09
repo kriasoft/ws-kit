@@ -455,11 +455,11 @@ type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
 // Join: subscribe to room updates
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId ?? "anonymous";
 
-  ctx.subscribe(`room:${roomId}`);
+  await ctx.topics.subscribe(`room:${roomId}`);
   ctx.assignData({ userId });
 
   // Notify room members of join

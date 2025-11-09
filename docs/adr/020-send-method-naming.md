@@ -27,11 +27,11 @@ The pair `send()` + `publish()` signals intent to developers while maintaining f
 
 ```typescript
 // Server-side: handlers and lifecycle callbacks
-router.on(Message, (ctx) => {
+router.on(Message, async (ctx) => {
   ctx.send(ResponseSchema, { data }); // 1-to-1: send to this connection
   ctx.publish(topic, MessageSchema, {}); // 1-to-many: broadcast to subscribers
-  ctx.subscribe(topic); // Subscribe to topic
-  ctx.unsubscribe(topic); // Unsubscribe from topic
+  await ctx.topics.subscribe(topic); // Subscribe to topic
+  await ctx.topics.unsubscribe(topic); // Unsubscribe from topic
 });
 
 // RPC handlers
