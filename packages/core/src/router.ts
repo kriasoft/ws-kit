@@ -974,7 +974,7 @@ export class WebSocketRouter<
    *
    * **Return Value**: Returns `Promise<PublishResult>` with success status and subscriber match info.
    * - On success: `{ ok: true, capability, matched?: number }` indicates matched subscriber count
-   * - On failure: `{ ok: false, reason, error }` with details (validation, adapter, etc.)
+   * - On failure: `{ ok: false, error, retryable, ...details }` with error code and retryability hint
    * - Useful for testing (assert specific fan-out count)
    * - Useful for metrics/observability (track broadcast scope)
    *
@@ -989,7 +989,7 @@ export class WebSocketRouter<
    * - `partitionKey`: Future feature for sharding in distributed systems
    * - `meta`: Custom metadata to include alongside auto-injected timestamp
    *
-   * @param channel - Channel/topic name (e.g., "room:123", "user:456", "system:alerts")
+   * @param topic - Topic name (e.g., "room:123", "user:456", "system:alerts")
    * @param schema - Message schema (used for validation, identifies message type)
    * @param payload - Message payload (must match schema; validated)
    * @param options - Publish options (excludeSelf, partitionKey, meta)

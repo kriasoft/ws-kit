@@ -583,13 +583,13 @@ chatRouter.on(MessageMessage, handleMessage);
 const mainRouter = createRouter().merge(authRouter).merge(chatRouter);
 ```
 
-#### `publish(channel, schema, payload, options?)`
+#### `publish(topic, schema, payload, options?)`
 
-Publish a typed message to a channel (broadcasts to all subscribers).
+Publish a typed message to a topic (broadcasts to all subscribers).
 
 ```typescript
 publish(
-  channel: string,
+  topic: string,
   schema: MessageSchemaType,
   payload: unknown,
   options?: PublishOptions
@@ -598,7 +598,7 @@ publish(
 
 **Parameters:**
 
-- `channel` - Channel/topic name (e.g., `"room:123"`, `"user:456"`)
+- `topic` - Topic name (e.g., `"room:123"`, `"user:456"`)
 - `schema` - Message schema for validation
 - `payload` - Message payload (validated against schema)
 - `options` - Publish options (optional)
@@ -613,7 +613,7 @@ interface PublishOptions {
 }
 ```
 
-**Note on `excludeSelf`:** This option will raise an error if set to `true`. The feature is not yet implemented and requires pubsub adapter support. Use workarounds like dedicated channels per connection or checking message origin in subscriber handlers. See the `PublishOptions` type definition for details.
+**Note on `excludeSelf`:** This option will raise an error if set to `true`. The feature is not yet implemented and requires pubsub adapter support. Use workarounds like dedicated topics per connection or checking message origin in subscriber handlers. See the `PublishOptions` type definition for details.
 
 **Returns:** `Promise<PublishResult>` with subscriber match count and capability info
 
@@ -687,10 +687,10 @@ interface EventMessageContext<TSchema, TData> {
   assignData(partial: Partial<TData>): void;
 
   // Pub/sub
-  subscribe(channel: string): void;
-  unsubscribe(channel: string): void;
+  subscribe(topic: string): void;
+  unsubscribe(topic: string): void;
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
@@ -736,10 +736,10 @@ interface RpcMessageContext<TSchema, TData> {
   assignData(partial: Partial<TData>): void;
 
   // Pub/sub
-  subscribe(channel: string): void;
-  unsubscribe(channel: string): void;
+  subscribe(topic: string): void;
+  unsubscribe(topic: string): void;
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
@@ -955,13 +955,13 @@ router.rpc(FetchData, async (ctx) => {
 });
 ```
 
-#### `ctx.topics.subscribe(channel)` and `ctx.topics.unsubscribe(channel)`
+#### `ctx.topics.subscribe(topic)` and `ctx.topics.unsubscribe(topic)`
 
-Subscribe/unsubscribe to pub/sub channels.
+Subscribe/unsubscribe to pub/sub topics.
 
 ```typescript
-subscribe(channel: string): Promise<void>;
-unsubscribe(channel: string): Promise<void>;
+subscribe(topic: string): Promise<void>;
+unsubscribe(topic: string): Promise<void>;
 ```
 
 **Example:**
@@ -977,12 +977,12 @@ router.on(LeaveRoom, async (ctx) => {
 });
 ```
 
-#### `ctx.publish(channel, schema, payload, options?)`
+#### `ctx.publish(topic, schema, payload, options?)`
 
-Publish a message to a channel (convenience method, delegates to `router.publish()`).
+Publish a message to a topic (convenience method, delegates to `router.publish()`).
 
 ```typescript
-publish(channel: string, schema: MessageSchemaType, payload: unknown, options?: PublishOptions): Promise<PublishResult>;
+publish(topic: string, schema: MessageSchemaType, payload: unknown, options?: PublishOptions): Promise<PublishResult>;
 ```
 
 **Example:**

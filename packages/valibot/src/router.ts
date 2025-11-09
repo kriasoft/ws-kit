@@ -273,7 +273,7 @@ export interface TypedValibotRouter<
    * Scope depends on the platform adapter (Bun: process-wide, Cloudflare DO: instance-wide).
    *
    * @typeParam Schema - Message schema (inferred from parameter)
-   * @param channel - Channel name to publish to
+   * @param topic - Topic name to publish to
    * @param schema - Message schema defining type and payload structure
    * @param payload - Message payload to validate and broadcast
    * @param options - Optional metadata and publishing options

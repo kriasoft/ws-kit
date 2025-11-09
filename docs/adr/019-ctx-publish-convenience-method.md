@@ -134,8 +134,11 @@ type PublishResult =
     }
   | {
       ok: false;
-      reason: "validation" | "acl" | "adapter_error";
-      error?: unknown;
+      error: PublishError;
+      retryable: boolean;
+      adapter?: string;
+      details?: Record<string, unknown>;
+      cause?: Error;
     };
 ```
 
@@ -187,7 +190,10 @@ router.on(UserCreated, async (ctx) => {
       `Notified ${result.matched ?? "?"} subscribers (${result.capability})`,
     );
   } else {
-    ctx.log.error(`Failed to notify: ${result.reason}`, result.error);
+    ctx.log.error(`Failed to notify: ${result.error}`, {
+      details: result.details,
+      retryable: result.retryable,
+    });
   }
 });
 ```

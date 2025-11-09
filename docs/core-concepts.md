@@ -330,8 +330,8 @@ interface EventMessageContext<TPayload, TData = unknown> {
   ): void; // Send typed error
   assignData(partial: Partial<TData>): void; // Merge partial data into ctx.ws.data
   topics: {
-    subscribe(channel: string): Promise<void>; // Subscribe to a topic
-    unsubscribe(channel: string): Promise<void>; // Unsubscribe from a topic
+    subscribe(topic: string): Promise<void>; // Subscribe to a topic
+    unsubscribe(topic: string): Promise<void>; // Unsubscribe from a topic
   };
   timeRemaining(): number; // ms until deadline (Infinity for events)
   isRpc: false; // Discriminant: false for event messages

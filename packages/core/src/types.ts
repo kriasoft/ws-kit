@@ -211,19 +211,19 @@ export interface EventMessageContext<
   topics: Topics;
 
   /**
-   * Publish a typed message to a channel/topic (convenience method).
+   * Publish a typed message to a topic (convenience method).
    *
    * Validates the payload against the schema and broadcasts to all subscribers.
    * This is a bound passthrough to router.publish() optimized for use within handlers.
    *
-   * @param channel - Topic/channel name to publish to
+   * @param topic - Topic name to publish to
    * @param schema - Message schema (validated before broadcast)
    * @param payload - Message payload (must match schema)
    * @param options - Publish options (excludeSelf, partitionKey, meta)
    * @returns Promise resolving to PublishResult with delivery information and capability
    */
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
@@ -369,19 +369,19 @@ export interface RpcMessageContext<
   topics: Topics;
 
   /**
-   * Publish a typed message to a channel/topic (convenience method).
+   * Publish a typed message to a topic (convenience method).
    *
    * Validates the payload against the schema and broadcasts to all subscribers.
    * This is a bound passthrough to router.publish() optimized for use within handlers.
    *
-   * @param channel - Topic/channel name to publish to
+   * @param topic - Topic name to publish to
    * @param schema - Message schema (validated before broadcast)
    * @param payload - Message payload (must match schema)
    * @param options - Publish options (excludeSelf, partitionKey, meta)
    * @returns Promise resolving to PublishResult with delivery information and capability
    */
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
@@ -529,19 +529,19 @@ export interface MessageContextMethods<
   topics: Topics;
 
   /**
-   * Publish a typed message to a channel/topic (convenience method).
+   * Publish a typed message to a topic (convenience method).
    *
    * Validates the payload against the schema and broadcasts to all subscribers.
    * This is a bound passthrough to router.publish() optimized for use within handlers.
    *
-   * @param channel - Topic/channel name to publish to
+   * @param topic - Topic name to publish to
    * @param schema - Message schema (validated before broadcast)
    * @param payload - Message payload (must match schema)
    * @param options - Publish options (excludeSelf, partitionKey, meta)
    * @returns Promise resolving to PublishResult with delivery information and capability
    */
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,

@@ -433,7 +433,7 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 
 ### 6.4 Publishing Semantics
 
-**Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with a reason code, enabling predictable result-based error handling.
+**Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with an error code and a `retryable` hint, enabling predictable result-based error handling.
 
 **Error Semantics: Mutations Throw, Actions Return**
 
