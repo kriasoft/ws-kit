@@ -13,7 +13,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 - `docs/specs/schema.md` — Message structure, type definitions, canonical imports
 - `docs/specs/router.md` — Server router API, handlers, lifecycle hooks
 - `docs/specs/validation.md` — Validation flow, normalization, error handling
-- `docs/specs/broadcasting.md` — Broadcasting patterns, topic subscriptions, multicast messaging
+- `docs/specs/pubsub.md` — Pub/Sub API, topic subscriptions, publishing, patterns
 - `docs/specs/client.md` — Client SDK API, connection states, queueing
 - `docs/specs/adapters.md` — Platform adapter responsibilities, limits, pub/sub guarantees
 - `docs/specs/patterns.md` — Architectural patterns for production applications
@@ -106,7 +106,7 @@ For detailed pattern documentation, see the specs:
 - **Middleware** — [docs/specs/router.md#middleware](./docs/specs/router.md)
 - **Authentication** — [docs/specs/router.md#authentication](./docs/specs/router.md)
 - **Request-Response (RPC)** — [docs/specs/router.md#rpc](./docs/specs/router.md)
-- **Broadcasting & Pub/Sub** — [docs/specs/broadcasting.md](./docs/specs/broadcasting.md)
+- **Broadcasting & Pub/Sub** — [docs/specs/pubsub.md](./docs/specs/pubsub.md)
 - **Client-Side** — [docs/specs/client.md](./docs/specs/client.md)
 - **Error Handling** — [docs/specs/error-handling.md](./docs/specs/error-handling.md)
 - **Connection Data** — [docs/specs/router.md#connection-data](./docs/specs/router.md)

@@ -156,7 +156,7 @@ This is the **canonical table** for timestamp usage across all specs. All other 
 - Avoids wire bloat (no need to send UUID in every message)
 - Eliminates spoofing vectors (client cannot set connection identity)
 - Preserves client-side validation (clients can validate messages they send)
-- See @broadcasting.md#Origin-Option for application-level sender tracking
+- See @pubsub.md#9.6-Origin-Tracking for application-level sender tracking
 
 **Reserved Server-Only Meta Keys**: {#Reserved-Server-Only-Meta-Keys}
 

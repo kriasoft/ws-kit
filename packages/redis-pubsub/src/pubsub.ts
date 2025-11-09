@@ -753,13 +753,13 @@ export class RedisPubSub implements PubSub {
    * **Jitter**: Full jitter (random [0, delay]) is the default to prevent thundering herd.
    * Recommended for distributed systems.
    *
-   * **Returns**: On success, returns PublishResult with attempt count and duration.
+   * **Returns**: On success, returns PublishResult with attempt count and duration in details field.
    * **Throws**: On non-retryable errors or if all retries exhausted.
    *
    * @param channel The channel name
    * @param message The message payload
    * @param policy Optional retry policy (defaults: maxAttempts=3, initialDelayMs=100, maxDelayMs=10_000, jitter="full")
-   * @returns PublishResult with capability="unknown", attempts count, and durationMs
+   * @returns PublishResult with capability="unknown", attempts count, and durationMs in details field
    *
    * @throws {PublishError} if all retry attempts fail or non-retryable error encountered
    * @throws {DisconnectedError} if instance is destroyed
@@ -782,10 +782,19 @@ export class RedisPubSub implements PubSub {
       try {
         await this.publish(channel, message);
         // Success: return result with attempt count and duration
+        const durationMs = Date.now() - startTime;
         return {
+          ok: true,
           capability: "unknown", // Redis Pub/Sub cannot report delivery count
-          attempts: attempt,
-          durationMs: Date.now() - startTime,
+          details: {
+            attempts: attempt,
+            durationMs,
+          },
+          // Keep diag for backwards compatibility
+          diag: {
+            attempts: attempt,
+            durationMs,
+          },
         };
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));

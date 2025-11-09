@@ -51,6 +51,8 @@ export type {
   OpenHandlerContext,
   PlatformAdapter,
   Policy,
+  PublishCapability,
+  PublishError,
   PublishOptions,
   PublishResult,
   PubSub,
@@ -62,6 +64,7 @@ export type {
   RpcMessageContext,
   SendFunction,
   ServerWebSocket,
+  Topics,
   ValidatorAdapter,
   WebSocketData,
   WebSocketRouterOptions,
@@ -87,12 +90,36 @@ export type {
 } from "./error.js";
 export type { ErrorWire, RpcErrorWire } from "./types.js";
 
+/**
+ * Pub/Sub error handling.
+ *
+ * Provides error types for subscription and publication operations.
+ * Topic subscription mutations (subscribe, unsubscribe) throw PubSubError on failure.
+ * Message publication (publish) returns PublishResult with error code and retryability hint.
+ *
+ * See [docs/specs/pubsub.md § 7](../docs/specs/pubsub.md#7-errors) for error semantics.
+ */
+export { PubSubError } from "./pubsub-error.js";
+export type { PubSubErrorCode } from "./pubsub-error.js";
+
+/**
+ * Default Topics implementation.
+ *
+ * Provides per-connection topic subscriptions with idempotent operations
+ * and atomic batch semantics.
+ *
+ * @internal Used by router to implement ctx.topics. Applications should use
+ * the ctx.topics interface, not this class directly.
+ */
+export { TopicsImpl } from "./topics-impl.js";
+
 // ============================================================================
 // Constants & Defaults
 // ============================================================================
 
 export { DEFAULT_CONFIG, RESERVED_META_KEYS } from "./constants.js";
 export type { ReservedMetaKey } from "./constants.js";
+export { PUBLISH_ERROR_RETRYABLE } from "./types.js";
 
 // ============================================================================
 // PubSub Implementation

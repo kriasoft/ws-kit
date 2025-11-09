@@ -6,6 +6,7 @@ import { ERROR_CODE_META, ErrorCode, WsKitError } from "./error.js";
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
+import { TopicsImpl } from "./topics-impl.js";
 import type {
   AuthHandler,
   CloseHandler,
@@ -33,6 +34,7 @@ import type {
   RpcHandler,
   SendFunction,
   ServerWebSocket,
+  Topics,
   ValidatorAdapter,
   WebSocketData,
   WebSocketRouterOptions,
@@ -129,6 +131,9 @@ export class WebSocketRouter<
     onStaleConnection?: (clientId: string, ws: ServerWebSocket<TData>) => void;
   };
   private readonly heartbeatStates = new Map<string, HeartbeatState<TData>>();
+
+  // Pub/Sub topic subscriptions (per connection)
+  private readonly topicsInstances = new Map<string, TopicsImpl<TData>>();
 
   // Limits
   private readonly maxPayloadBytes: number;
@@ -963,7 +968,7 @@ export class WebSocketRouter<
    * **Authorization Model**: Use subscription routing rules and topic namespaces to
    * control who receives published messages. This method does not perform authorization
    * checks; that's delegated to subscription guards (who can subscribe to what topics).
-   * See docs/specs/broadcasting.md for auth patterns.
+   * See docs/specs/pubsub.md for patterns and ADR-022 for design details.
    *
    * **Return Value**: Returns `Promise<PublishResult>` with success status and subscriber match info.
    * - On success: `{ ok: true, capability, matched?: number }` indicates matched subscriber count
@@ -1026,9 +1031,11 @@ export class WebSocketRouter<
       if (!this.validator) {
         return {
           ok: false,
-          reason: "adapter_error",
-          error:
+          error: "STATE",
+          retryable: false,
+          cause: new Error(
             "No validator configured. Router must be created with a validator adapter.",
+          ),
         };
       }
 
@@ -1057,8 +1064,11 @@ export class WebSocketRouter<
       if (!validationResult.success) {
         return {
           ok: false,
-          reason: "validation",
-          error: `Validation error for message type "${messageType}"`,
+          error: "VALIDATION",
+          retryable: false,
+          cause: new Error(
+            `Validation error for message type "${messageType}"`,
+          ),
         };
       }
 
@@ -1068,15 +1078,21 @@ export class WebSocketRouter<
         pubsubOptions.partitionKey = options.partitionKey;
       }
 
-      // Reject excludeSelf unconditionally until pubsub layer can actually filter the sender.
+      // excludeSelf is not yet supported. Return unsupported instead of throwing.
       // This prevents devs from trusting a flag that currently does nothing, regardless of call site.
-      // (Rejecting only for ctx.publish would create a silent no-op if router.publish() is called directly.)
+      // Future: When pubsub adapter supports sender filtering, implement here.
       if (options?.excludeSelf) {
-        throw new Error(
-          "[ws] publish({ excludeSelf: true }) is not yet supported. " +
-            "Sender filtering requires pubsub adapter support. " +
-            "Workarounds: use dedicated channels per connection or check message origin in subscriber handlers.",
-        );
+        return {
+          ok: false,
+          error: "UNSUPPORTED",
+          retryable: false,
+          details: { feature: "excludeSelf" },
+          cause: new Error(
+            "publish({ excludeSelf: true }) is not yet supported. " +
+              "Sender filtering requires pubsub adapter support. " +
+              "Workarounds: use dedicated channels per connection or check message origin in subscriber handlers.",
+          ),
+        };
       }
 
       // Publish validated message to pubsub
@@ -1113,8 +1129,9 @@ export class WebSocketRouter<
       );
       return {
         ok: false,
-        reason: "adapter_error",
-        error,
+        error: "ADAPTER_ERROR",
+        retryable: true,
+        cause: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }
@@ -1213,6 +1230,11 @@ export class WebSocketRouter<
       });
     }
 
+    // Create Topics instance for per-connection subscriptions
+    if (!this.topicsInstances.has(clientId)) {
+      this.topicsInstances.set(clientId, new TopicsImpl(ws));
+    }
+
     const send = this.createSendFunction(ws);
 
     // Execute open handlers (after heartbeat initialized, before auth)
@@ -1265,6 +1287,9 @@ export class WebSocketRouter<
     // Cancel all in-flight RPCs for this connection (per-socket)
     // This triggers onCancel callbacks for cleanup
     this.#rpc.onDisconnect(clientId);
+
+    // Clean up Topics instance
+    this.topicsInstances.delete(clientId);
 
     const send = this.createSendFunction(ws);
 
@@ -1596,23 +1621,13 @@ export class WebSocketRouter<
         }
       };
 
-      // Create subscribe function as convenience method
-      const subscribe = (channel: string): void => {
-        try {
-          ws.subscribe(channel);
-        } catch (error) {
-          console.error("[ws] Error subscribing to channel:", error);
-        }
-      };
-
-      // Create unsubscribe function as convenience method
-      const unsubscribe = (channel: string): void => {
-        try {
-          ws.unsubscribe(channel);
-        } catch (error) {
-          console.error("[ws] Error unsubscribing from channel:", error);
-        }
-      };
+      // Get Topics instance for per-connection subscriptions
+      const topics = this.topicsInstances.get(clientId);
+      if (!topics) {
+        throw new Error(
+          `[ws] Topics instance not found for ${clientId}. Connection not properly initialized.`,
+        );
+      }
 
       // Create publish function as bound convenience method for context
       // **Design** (ADR-019): ctx.publish() is a thin passthrough to router.publish()
@@ -1879,8 +1894,7 @@ export class WebSocketRouter<
         error: errorSend,
         assignData,
         getData,
-        subscribe,
-        unsubscribe,
+        topics,
         publish,
         ...(isRpc && { onCancel }),
         ...(isRpc && { abortSignal }),

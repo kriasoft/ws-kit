@@ -784,11 +784,11 @@ router.on(QueryMessage, (ctx) => {
 
 **Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
 
-**For broadcasting to multiple clients**, see @broadcasting.md for multicast patterns using Bun's native pubsub.
+**For broadcasting to multiple clients**, see @pubsub.md for multicast patterns using Bun's native pubsub.
 
 ## Subscriptions & Publishing
 
-For comprehensive pub/sub patterns, examples, and detailed API documentation, see **[@broadcasting.md](./broadcasting.md)**.
+For comprehensive pub/sub API documentation, semantics, and patterns, see **[@pubsub.md](./pubsub.md)**.
 
 **Quick API reference:**
 
@@ -1113,5 +1113,5 @@ This is the **recommended approach** for all production deployments.
 5. **Connection data updates** — Use `ctx.assignData()` to merge partial updates (write-partial pattern)
 6. **Middleware execution** — Global runs first, then per-route, then handler (see ADR-008)
 7. **Validation flow** — Trust schema validation; never re-validate in handlers (see @rules.md#validation-flow)
-8. **Broadcasting** — For multicast messaging, see @broadcasting.md (not covered in this spec)
+8. **Broadcasting** — For multicast messaging, see @pubsub.md (not covered in this spec)
 9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare-do`)

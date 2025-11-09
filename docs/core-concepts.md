@@ -498,7 +498,7 @@ router.on(LeaveRoomMessage, async (ctx) => {
 
 Both `ctx.publish()` and `router.publish()` return `Promise<PublishResult>` with subscription capability and matched count.
 
-See [Broadcasting](./specs/broadcasting.md) and ADR-018/ADR-019 for complete documentation.
+See [Pub/Sub](./specs/pubsub.md) and ADR-022 for complete documentation.
 
 ## Timestamp Handling
 

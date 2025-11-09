@@ -83,9 +83,15 @@ describe("RedisPubSub Features", () => {
     test("publishWithRetry returns PublishResult with attempt tracking", async () => {
       await pubsub.subscribe("test", () => {});
       const result = await pubsub.publishWithRetry("test", "message");
-      expect(typeof result.attempts).toBe("number");
-      expect(typeof result.durationMs).toBe("number");
-      expect(result.capability).toBeDefined();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Check both new location (details) and backwards compat (diag)
+        expect(typeof result.details?.attempts).toBe("number");
+        expect(typeof result.details?.durationMs).toBe("number");
+        expect(typeof result.diag?.attempts).toBe("number");
+        expect(typeof result.diag?.durationMs).toBe("number");
+        expect(result.capability).toBeDefined();
+      }
     });
 
     test("publish to channel with no subscribers succeeds", async () => {

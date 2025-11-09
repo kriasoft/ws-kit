@@ -77,7 +77,7 @@ export interface MessageMeta {
  * Event handlers don't produce a guaranteed response, so they have access to:
  * - `ctx.send()` for one-off side-effect messages (fire-and-forget)
  * - `ctx.publish()` for pub/sub broadcasts
- * - `ctx.subscribe()` / `ctx.unsubscribe()` for topic management
+ * - `ctx.topics` for topic subscriptions and management
  *
  * RPC-specific methods (reply, progress, onCancel, deadline) are NOT available.
  * For request/response patterns, use router.rpc() instead.
@@ -186,22 +186,29 @@ export interface EventMessageContext<
   getData<K extends keyof TData>(key: K): TData[K];
 
   /**
-   * Subscribe this connection to a pubsub topic/channel.
+   * Topic subscriptions and operations.
    *
-   * The connection will receive messages published to this topic via router.publish().
+   * Provides access to current subscriptions (as ReadonlySet<string>) and
+   * methods to manage them (subscribe, unsubscribe, subscribeMany, etc.).
    *
-   * @param channel - Topic/channel name to subscribe to
+   * @example
+   * ```typescript
+   * // Check if subscribed
+   * if (ctx.topics.has("room:123")) { ... }
+   *
+   * // Iterate over subscriptions
+   * for (const topic of ctx.topics) { ... }
+   * for (const topics of [...ctx.topics]) { ... }
+   *
+   * // Subscribe/unsubscribe
+   * await ctx.topics.subscribe("room:123");
+   * await ctx.topics.unsubscribe("room:123");
+   *
+   * // Batch operations
+   * await ctx.topics.subscribeMany(["room:1", "room:2", "room:3"]);
+   * ```
    */
-  subscribe(channel: string): void;
-
-  /**
-   * Unsubscribe this connection from a pubsub topic/channel.
-   *
-   * The connection will no longer receive messages published to this topic.
-   *
-   * @param channel - Topic/channel name to unsubscribe from
-   */
-  unsubscribe(channel: string): void;
+  topics: Topics;
 
   /**
    * Publish a typed message to a channel/topic (convenience method).
@@ -354,22 +361,12 @@ export interface RpcMessageContext<
   getData<K extends keyof TData>(key: K): TData[K];
 
   /**
-   * Subscribe this connection to a pubsub topic/channel.
+   * Topic subscriptions and operations.
    *
-   * The connection will receive messages published to this topic via router.publish().
-   *
-   * @param channel - Topic/channel name to subscribe to
+   * Provides access to current subscriptions (as ReadonlySet<string>) and
+   * methods to manage them (subscribe, unsubscribe, subscribeMany, etc.).
    */
-  subscribe(channel: string): void;
-
-  /**
-   * Unsubscribe this connection from a pubsub topic/channel.
-   *
-   * The connection will no longer receive messages published to this topic.
-   *
-   * @param channel - Topic/channel name to unsubscribe from
-   */
-  unsubscribe(channel: string): void;
+  topics: Topics;
 
   /**
    * Publish a typed message to a channel/topic (convenience method).
@@ -524,22 +521,12 @@ export interface MessageContextMethods<
   assignData(partial: Partial<TData>): void;
 
   /**
-   * Subscribe this connection to a pubsub topic/channel.
+   * Topic subscriptions and operations.
    *
-   * The connection will receive messages published to this topic via router.publish().
-   *
-   * @param channel - Topic/channel name to subscribe to
+   * Provides access to current subscriptions (as ReadonlySet<string>) and
+   * methods to manage them (subscribe, unsubscribe, subscribeMany, etc.).
    */
-  subscribe(channel: string): void;
-
-  /**
-   * Unsubscribe this connection from a pubsub topic/channel.
-   *
-   * The connection will no longer receive messages published to this topic.
-   *
-   * @param channel - Topic/channel name to unsubscribe from
-   */
-  unsubscribe(channel: string): void;
+  topics: Topics;
 
   /**
    * Publish a typed message to a channel/topic (convenience method).
@@ -594,7 +581,7 @@ export interface PublishOptions {
   /**
    * Exclude the sender from receiving the published message (default: false).
    *
-   * **Status**: Not yet implemented. Setting this to `true` will raise an error.
+   * **Status**: Future feature. Setting this to `true` returns `{ok: false, error: "UNSUPPORTED"}`.
    *
    * **Planned behavior**: When true, the sender will not receive their own published message.
    * When called from within a handler context, this will filter out that specific sender.
@@ -606,13 +593,13 @@ export interface PublishOptions {
    *
    * **Workarounds**: Use dedicated channels per connection or check message origin
    * in subscriber handlers.
-   *
-   * @throws Error if set to `true` — feature is not yet available.
    */
   excludeSelf?: boolean;
 
   /**
-   * Partition key for future sharding/fanout routing (optional).
+   * Partition key for future sharding/fanout routing (optional, advisory).
+   *
+   * **Advisory**: Adapters may ignore this hint. It does not guarantee partitioning behavior.
    *
    * Allows steering message routing for distributed PubSub implementations.
    * In adapters that don't support partitioning, this is accepted but ignored.
@@ -638,37 +625,249 @@ export interface PublishOptions {
 }
 
 /**
+ * Capability hint for how well matched subscriber count is known.
+ *
+ * **Semantics:**
+ * - `"exact"` — Exact subscriber count (e.g., MemoryPubSub, Bun native)
+ * - `"estimate"` — Lower-bound estimate (e.g., Node/uWS polyfill)
+ * - `"unknown"` — Subscriber count not tracked (e.g., Redis multi-process)
+ */
+export type PublishCapability = "exact" | "estimate" | "unknown";
+
+/**
+ * Error codes for publish() failures.
+ *
+ * UPPERCASE canonical codes for pattern matching and exhaustive switches.
+ * Enables reliable error classification and retry logic across all adapters.
+ */
+export type PublishError =
+  | "VALIDATION" // Schema validation failed (local)
+  | "ACL" // authorizePublish hook denied
+  | "STATE" // Illegal in current router/connection state
+  | "BACKPRESSURE" // Adapter's send queue full
+  | "PAYLOAD_TOO_LARGE" // Exceeds adapter limit
+  | "UNSUPPORTED" // Option/feature not supported (e.g., excludeSelf)
+  | "ADAPTER_ERROR" // Unexpected adapter failure
+  | "CONNECTION_CLOSED"; // Connection/router disposed
+
+/**
+ * Retryability mapping for publish errors.
+ *
+ * Each error code has a canonical retryability flag. Applications can use this
+ * to decide retry strategy without manual mapping.
+ *
+ * @internal Reference for router implementation
+ */
+export const PUBLISH_ERROR_RETRYABLE: Record<PublishError, boolean> = {
+  VALIDATION: false, // Won't succeed on retry
+  ACL: false, // Authorization won't change
+  STATE: false, // Router/adapter not ready
+  BACKPRESSURE: true, // Queue might clear
+  PAYLOAD_TOO_LARGE: false, // Size won't change
+  UNSUPPORTED: false, // Feature won't appear
+  ADAPTER_ERROR: true, // Infrastructure might recover
+  CONNECTION_CLOSED: true, // Retryable after reconnection
+};
+
+/**
  * Result of publishing a message to a channel/topic.
  *
  * Provides honest semantics about what was delivered, since subscriber counts
  * can vary widely across implementations (exact for in-process, estimates for
  * distributed, unknown for some adapters).
  *
- * **Capabilities**:
- * - `ok: true; capability: "exact"` — Exact recipient count (e.g., MemoryPubSub)
- * - `ok: true; capability: "estimate"` — Best-effort estimate (e.g., Redis)
- * - `ok: true; capability: "unknown"` — Delivery not tracked (e.g., some adapters)
- * - `ok: false` — Delivery failed due to validation, ACL, or adapter error
+ * **publish() never throws for runtime conditions**. All expected failures return
+ * `{ok: false}` with an error code. This allows predictable, result-based error handling.
  *
- * **Backward Compatibility**: The legacy `Promise<number>` return type is still supported
- * via method overloading. New code should use the `PublishResult` return type for accurate
- * semantics and error handling.
+ * **Success semantics**:
+ * - `ok: true; capability: "exact"` — Exact recipient count (e.g., MemoryPubSub)
+ * - `ok: true; capability: "estimate"` — Lower-bound estimate (e.g., Node/uWS)
+ * - `ok: true; capability: "unknown"` — Subscriber count not tracked (matched omitted)
+ *
+ * **Failure semantics**:
+ * - `ok: false` — Delivery failed; use `error` code and `retryable` flag to decide next action
+ * - `retryable: true` — Safe to retry after backoff (e.g., BACKPRESSURE, ADAPTER_ERROR)
+ * - `retryable: false` — Retrying won't help (e.g., VALIDATION, ACL, STATE)
+ * - `details`: Structured context from the adapter (limits, features, diagnostics)
+ * - `cause`: Underlying exception for debugging and error chaining
  */
 export type PublishResult =
   | {
       ok: true;
-      /** "exact": MemoryPubSub or other adapters with precise subscription tracking */
-      capability: "exact" | "estimate" | "unknown";
-      /** Matched subscriber count (undefined if capability is "unknown") */
+      /** Indicates reliability of matched count: "exact" / "estimate" / "unknown" */
+      capability: PublishCapability;
+      /** Matched subscriber count. Semantics depend on capability. undefined if "unknown". */
       matched?: number;
     }
   | {
       ok: false;
-      /** Reason for failure: validation error, ACL denial, or adapter error */
-      reason: "validation" | "acl" | "adapter_error";
-      /** Optional error details for debugging */
-      error?: unknown;
+      /** Canonical error code (UPPERCASE) for pattern matching and switches */
+      error: PublishError;
+      /** Whether safe to retry after backoff (true for transient, false for permanent) */
+      retryable: boolean;
+      /** Name of the adapter that rejected (e.g., "redis", "inmemory") */
+      adapter?: string;
+      /** Structured context from adapter (limits, features, diagnostics) */
+      details?: Record<string, unknown>;
+      /** Underlying error cause, following Error.cause conventions */
+      cause?: unknown;
     };
+
+/**
+ * Topic subscription state and operations.
+ *
+ * Implements ReadonlySet<string> for .has(topic), .size, iteration (for...of, spread).
+ * Extends with async subscription management methods.
+ *
+ * **Idempotency**: calling subscribe/unsubscribe multiple times for the same topic is a no-op.
+ * Errors (validation, authorization, connection, limits) always throw, even on duplicate calls.
+ *
+ * **Batch atomicity**: `subscribeMany()` and `unsubscribeMany()` either succeed entirely or fail
+ * entirely—no partial state changes.
+ *
+ * **Error semantics**: All operations throw `PubSubError` on failure (see spec § 7).
+ *
+ * See [docs/specs/pubsub.md § 3 & § 6](../../docs/specs/pubsub.md#3-public-api-surface)
+ * for complete semantics and examples.
+ */
+export interface Topics extends ReadonlySet<string> {
+  /**
+   * Subscribe to a topic.
+   *
+   * Idempotent: subscribing twice to the same topic is a no-op (no error).
+   *
+   * **Throws** on validation, authorization, connection, or adapter failure.
+   *
+   * @param topic - Topic name to subscribe to
+   * @throws {PubSubError} with code: INVALID_TOPIC, UNAUTHORIZED_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
+   *                       CONNECTION_CLOSED, or ADAPTER_ERROR
+   *
+   * @example
+   * ```typescript
+   * try {
+   *   await ctx.topics.subscribe("room:123");
+   * } catch (err) {
+   *   if (err instanceof PubSubError) {
+   *     switch (err.code) {
+   *       case "UNAUTHORIZED_SUBSCRIBE":
+   *         ctx.error("PERMISSION_DENIED", "You cannot access this room");
+   *         break;
+   *       // ... handle other codes
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  subscribe(topic: string): Promise<void>;
+
+  /**
+   * Remove the current connection from a topic's membership.
+   *
+   * **Best-effort semantics** (soft no-op for benign cases):
+   * - Early membership check: if not subscribed, returns successfully (no-op, no hooks).
+   * - If subscribed, validates topic format, then mutates, then calls adapter.
+   *
+   * **Throws on:**
+   * - Validation error (topic format invalid, when subscribed)
+   * - Adapter failure
+   *
+   * **Does NOT throw on:**
+   * - Not subscribed (soft no-op)
+   * - Connection closed (membership irrelevant)
+   * - Invalid topic when not subscribed
+   *
+   * **Idempotent**: calling unsubscribe twice for the same topic is a no-op (no error).
+   * Hooks do not fire on no-ops.
+   *
+   * @param topic - Topic name to unsubscribe from
+   * @throws {PubSubError} with code: INVALID_TOPIC (if subscribed and format invalid) or ADAPTER_ERROR
+   *
+   * @example
+   * ```typescript
+   * // Safe cleanup (no error even if not subscribed)
+   * await ctx.topics.unsubscribe("room:123");
+   *
+   * // Safe in error paths
+   * try {
+   *   // ... handler code
+   * } finally {
+   *   await ctx.topics.unsubscribe("room:123"); // Won't throw
+   * }
+   * ```
+   */
+  unsubscribe(topic: string): Promise<void>;
+
+  /**
+   * Subscribe to multiple topics in one atomic operation.
+   *
+   * **Deduplication**: Input topics are deduplicated (treating duplicates as a single topic).
+   * - Input: `["room:1", "room:1", "room:2"]` → internally processed as `{"room:1", "room:2"}`
+   * - Counts reflect unique topics only
+   *
+   * **Atomicity**: All succeed or all fail; no partial state changes.
+   * - If any topic fails validation, authorization, or quota, entire operation fails and rolls back
+   *
+   * **Throws** if any topic fails validation, authorization, or hits quota.
+   *
+   * @param topics - Iterable of topic names to subscribe to (duplicates are coalesced)
+   * @returns Promise with counts:
+   *   - `added`: number of newly subscribed unique topics (not already subscribed)
+   *   - `total`: total unique subscriptions after operation
+   *
+   * @example
+   * ```typescript
+   * // Subscribe to 2 unique topics (input has duplicate "room:1")
+   * const result = await ctx.topics.subscribeMany(["room:1", "room:1", "room:2"]);
+   * // If neither subscribed before: { added: 2, total: 2 }
+   * ```
+   *
+   * @throws {PubSubError} if any topic fails (same codes as subscribe)
+   */
+  subscribeMany(
+    topics: Iterable<string>,
+  ): Promise<{ added: number; total: number }>;
+
+  /**
+   * Unsubscribe from multiple topics atomically.
+   *
+   * **Deduplication**: Input topics are deduplicated (treating duplicates as a single topic).
+   * - Input: `["room:1", "room:1", "room:2"]` → internally processed as `{"room:1", "room:2"}`
+   * - Counts reflect unique topics only
+   *
+   * **Atomicity**: All succeed or all fail; no partial state changes.
+   * - If any subscribed topic fails validation or adapter error, entire operation fails and rolls back
+   *
+   * **Best-effort semantics** (same as `unsubscribe()`):
+   * - Topics not subscribed are skipped (soft no-op, no validation)
+   * - For subscribed topics, validates, then mutates, then calls adapter
+   * - Non-subscribed topics don't affect counts or raise errors
+   *
+   * @param topics - Iterable of topic names to unsubscribe from (duplicates are coalesced)
+   * @returns Promise with counts:
+   *   - `removed`: number of unique topics that were subscribed and now removed
+   *   - `total`: remaining subscriptions after operation
+   *
+   * @example
+   * ```typescript
+   * // Unsubscribe from 2 unique topics (input has duplicate "room:1")
+   * const result = await ctx.topics.unsubscribeMany(["room:1", "room:1", "room:2", "room:3"]);
+   * // If room:1 and room:2 subscribed, room:3 not: { removed: 2, total: remaining }
+   * // room:1 duplicate doesn't cause double-count
+   * ```
+   *
+   * @throws {PubSubError} if any subscribed topic fails validation or adapter error occurs
+   */
+  unsubscribeMany(
+    topics: Iterable<string>,
+  ): Promise<{ removed: number; total: number }>;
+
+  /**
+   * Remove all current subscriptions.
+   *
+   * @returns Promise with count of removed subscriptions
+   */
+  clear(): Promise<{ removed: number }>;
+}
 
 /**
  * Type-safe send function for sending validated messages to the client.

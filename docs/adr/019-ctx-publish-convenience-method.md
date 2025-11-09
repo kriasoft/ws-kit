@@ -2,7 +2,7 @@
 
 **Status**: Implemented
 **Date**: 2025-10-30
-**Related**: ADR-018 (Broadcast Method Naming), docs/specs/broadcasting.md
+**Related**: ADR-018 (Broadcast Method Naming), docs/specs/pubsub.md
 
 ## Context
 
@@ -167,7 +167,7 @@ type PublishResult =
 
 - **ADR-018**: `publish()` method naming (vs `broadcast()`)
 - **ADR-007**: Export-with-helpers pattern (factory functions)
-- **docs/specs/broadcasting.md**: Usage patterns and best practices
+- **docs/specs/pubsub.md**: Pub/Sub API specification and patterns
 
 ## Examples
 

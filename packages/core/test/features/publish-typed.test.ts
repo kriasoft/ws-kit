@@ -165,7 +165,8 @@ describe("Type-Safe Publishing", () => {
       );
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toBe("validation");
+      expect(result.ok === false && result.error).toBe("VALIDATION");
+      expect(result.ok === false && result.retryable).toBe(false);
     });
   });
 

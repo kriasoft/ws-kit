@@ -162,18 +162,54 @@ export type EventHandler = (...args: unknown[]) => void;
 export type Unsubscribe = () => void;
 
 /**
- * Result of a successful publishWithRetry() operation
- *
- * - `capability`: "unknown" (Redis Pub/Sub cannot report delivery count)
- * - `attempts`: Number of attempts performed (1 if no retry was needed)
- * - `durationMs`: Total time spent publishing (including retries and delays)
+ * Diagnostic information for publish operations (when using publishWithRetry).
  */
-export interface PublishResult {
-  capability: "unknown" | "estimate" | "exact";
-  matched?: number; // Only when capability !== "unknown"
+export interface PublishDiagnostics {
+  /** Number of attempts performed (1 if no retry was needed) */
   attempts: number;
+  /** Total time spent publishing (including retries and delays) */
   durationMs: number;
 }
+
+/**
+ * Result of a publish operation. Aligned with core PublishResult, with optional diagnostics.
+ *
+ * **For publishWithRetry()**:
+ * - `ok: true` with `details: { attempts, durationMs }` (or `diag` for backwards compat)
+ * - `ok: false` with error code and optional `details`
+ *
+ * **For publish()**:
+ * - Standard core PublishResult (ok: true | false)
+ *
+ * **Capability**:
+ * - `"unknown"` (Redis Pub/Sub cannot report delivery count; matched field omitted)
+ * - `"estimate"` or `"exact"` (only if adapter provides)
+ */
+export type PublishResult =
+  | {
+      ok: true;
+      capability: "unknown" | "estimate" | "exact";
+      matched?: number;
+      details?: Record<string, unknown>; // e.g., { attempts, durationMs } from publishWithRetry
+      diag?: PublishDiagnostics; // Deprecated: use details instead
+    }
+  | {
+      ok: false;
+      error:
+        | "VALIDATION"
+        | "ACL"
+        | "STATE"
+        | "BACKPRESSURE"
+        | "PAYLOAD_TOO_LARGE"
+        | "UNSUPPORTED"
+        | "ADAPTER_ERROR"
+        | "CONNECTION_CLOSED";
+      retryable: boolean;
+      adapter?: string;
+      details?: Record<string, unknown>;
+      cause?: unknown;
+      diag?: PublishDiagnostics; // Deprecated: use details instead
+    };
 
 /**
  * Status snapshot of RedisPubSub instance

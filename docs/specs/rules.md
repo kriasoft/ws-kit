@@ -123,9 +123,9 @@ export default {
 ### Messaging
 
 - **ALWAYS** use `ctx.send()` for unicast → @router.md#Type-Safe-Sending
-- **ALWAYS** use `router.publish()` for multicast (validates before broadcast) → @broadcasting.md
+- **ALWAYS** use `router.publish()` for multicast (validates before broadcast) → @pubsub.md
 - **ALWAYS** use `ctx.error()` for sending error messages to clients → @error-handling.md
-- **NEVER** inject `clientId` into meta (use `origin` option for sender tracking) → @broadcasting.md#Origin-Option
+- **NEVER** inject `clientId` into meta (include sender in payload/meta instead) → @pubsub.md#9.6-Origin-Tracking
 - **ALWAYS** auto-inject `timestamp` in outbound messages → @router.md#Type-Safe-Sending
 - **NEVER** send `ERROR` from clients unless implementing custom protocol (server-to-client by default) → @error-handling.md#Error-Message-Direction
 
@@ -137,8 +137,8 @@ export default {
   - `onClose(ctx)` — After disconnect (cleanup)
   - `onError(error, ctx)` — Centralized error handling
   - `onBroadcast(message, scope)` — Track broadcast events
-- **ALWAYS** unsubscribe in `onClose()` → @broadcasting.md
-- **ALWAYS** store topic IDs in `ctx.ws.data` → @broadcasting.md
+- **ALWAYS** unsubscribe in `onClose()` → @pubsub.md#9.7-Room-Management
+- **ALWAYS** store topic IDs in `ctx.ws.data` → @pubsub.md#9.7-Room-Management
 - **NEVER** throw in lifecycle hooks; errors are caught and logged → ADR-009
 
 ---
@@ -276,4 +276,4 @@ See @client.md#Multiple-Handlers for client multi-handler semantics.
 - **Validate before sending** with strict mode (schemas work client-side) → @validation.md
 - **Use `request()`** for RPC-style request/response with automatic correlationId and timeout → @client.md#Public-API
 - **Use `send()`** for fire-and-forget (returns boolean, never throws) → @client.md#fire-and-forget-return
-- **Track broadcasts** via `publish(..., { origin?: string; key?: string })` → @broadcasting.md#Origin-Option
+- **Track broadcasts** — Include sender identity in payload or meta for audit → @pubsub.md#9.6-Origin-Tracking

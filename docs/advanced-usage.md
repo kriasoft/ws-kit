@@ -869,4 +869,4 @@ router.use((ctx, next) => {
 - [Core Concepts](./core-concepts) — Message routing, lifecycle hooks
 - [Middleware](./adr/008-middleware-support) — Detailed middleware design
 - [Error Handling](./specs/error-handling.md) — Complete error code taxonomy
-- [Broadcasting](./specs/broadcasting.md) — Pub/sub patterns and throttling
+- [Pub/Sub](./specs/pubsub.md) — Publishing, subscriptions, and patterns (see [Patterns](./specs/patterns.md) for throttling)

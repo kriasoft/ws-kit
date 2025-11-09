@@ -2,7 +2,7 @@
 
 **Status**: Implemented
 **Date**: 2025-10-30
-**References**: ADR-007, ADR-010, docs/specs/broadcasting.md
+**References**: ADR-007, ADR-010, docs/specs/pubsub.md
 
 ## Context
 
@@ -57,5 +57,5 @@ ws.publish(
 ## References
 
 - Implementation: `packages/core/src/router.ts` (publish method)
-- Spec: `docs/specs/broadcasting.md`
+- Spec: `docs/specs/pubsub.md`
 - Related: ADR-010 (Throttled Broadcast Pattern)

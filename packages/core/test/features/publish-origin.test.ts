@@ -10,8 +10,8 @@
  *
  * Tests the public API of router.publish() and ctx.publish()
  *
- * Spec: @docs/specs/broadcasting.md#Origin-Option
- * Related: ADR-019 (ctx.publish), ADR-018 (publish terminology)
+ * Spec: @docs/specs/pubsub.md#9.6-Origin-Tracking
+ * Related: ADR-022 (pub/sub API design), ADR-019 (ctx.publish), ADR-018 (publish terminology)
  */
 
 import { describe, expect, it } from "bun:test";
@@ -211,7 +211,8 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toBe("validation");
+      expect(result.ok === false && result.error).toBe("VALIDATION");
+      expect(result.ok === false && result.retryable).toBe(false);
     });
 
     it("should handle missing validator gracefully", async () => {
@@ -226,7 +227,9 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toBe("adapter_error");
+      expect(result.ok === false && result.error).toBe("STATE");
+      expect(result.ok === false && result.retryable).toBe(false);
+      expect(result.ok === false && result.cause).toBeInstanceOf(Error);
     });
   });
 

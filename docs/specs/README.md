@@ -49,19 +49,19 @@ When specs reference the same concept, the canonical source takes precedence:
 - **Connection Identity**: `ctx.ws.data.clientId` (UUID v7, set during upgrade); transport-layer state, not message state (@schema.md#Why-clientId-is-not-in-meta)
 - **Producer Time**: `meta.timestamp` (client clock, optional, may be skewed); for UI display only (@schema.md#Which-timestamp-to-use)
 - **Authoritative Time**: `ctx.receivedAt` (server clock, captured at ingress); use for all server logic (@schema.md#Which-timestamp-to-use)
-- **Origin Tracking**: `publish(..., { origin: "userId" })` injects sender identity from `ws.data` into `meta.senderId` (@broadcasting.md#Origin-Option)
+- **Origin Tracking**: Include sender identity in payload or meta for audit and access control (@pubsub.md#9.6-Origin-Tracking)
 
 **Messaging Patterns:**
 
 - **Unicast**: Single-client messaging via `ctx.send()` (@router.md#Type-Safe-Sending)
-- **Multicast**: Topic-based broadcasting via `publish()` to multiple subscribers (@broadcasting.md)
+- **Multicast**: Topic-based broadcasting via `publish()` to multiple subscribers (@pubsub.md)
 
 ## Core Specifications
 
 - **[schema.md](./schema.md)** - Message structure, wire format, type definitions (see ADR-001, ADR-007)
 - **[router.md](./router.md)** - Server router API, handlers, lifecycle hooks (see ADR-005, ADR-008, ADR-009)
 - **[validation.md](./validation.md)** - Validation flow, normalization, error handling (strict mode per ADR-001)
-- **[broadcasting.md](./broadcasting.md)** - Broadcasting patterns, topic subscriptions, multicast messaging (see ADR-009, ADR-010 for throttling)
+- **[pubsub.md](./pubsub.md)** - Pub/Sub API, topic subscriptions, publishing, patterns (see ADR-022 for design rationale)
 - **[client.md](./client.md)** - Client SDK API, connection states, queueing (see ADR-002, ADR-006)
 - **[adapters.md](./adapters.md)** - Platform adapter responsibilities, limits, and pub/sub guarantees (see ADR-006)
 - **[rules.md](./rules.md)** - Development rules (MUST/NEVER) with links to details (cross-index to ADRs)
