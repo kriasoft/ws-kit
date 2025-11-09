@@ -732,6 +732,29 @@ export type PublishResult =
  * See docs/specs/pubsub.md#public-api-surface and docs/specs/pubsub.md#semantics
  * for complete semantics and examples.
  */
+
+/**
+ * Options for topic mutation operations.
+ *
+ * **Cancellation support**: All topic mutation methods accept `{ signal?: AbortSignal }`.
+ *
+ * **Pre-commit cancellation semantics**:
+ * - If `signal` is aborted **before commit begins**, the method rejects with a DOM-compatible `AbortError`
+ *   and **no state is mutated** and **no hooks are fired**.
+ * - If `signal` is aborted **after commit begins**, the method finishes the commit atomically and
+ *   resolves normally (late aborts are ignored).
+ * - Hooks are **post-commit only**; they **never fire** for aborted operations.
+ */
+export interface TopicMutateOptions {
+  /**
+   * AbortSignal for cancellation.
+   *
+   * If aborted before the commit phase, the operation rejects with AbortError
+   * and no state changes occur. Late aborts (after commit begins) are ignored.
+   */
+  signal?: AbortSignal;
+}
+
 export interface Topics extends ReadonlySet<string> {
   /**
    * Subscribe to a topic.
@@ -741,8 +764,10 @@ export interface Topics extends ReadonlySet<string> {
    * **Throws** on validation, authorization, connection, or adapter failure.
    *
    * @param topic - Topic name to subscribe to
+   * @param options - Optional: `signal` for cancellation support
    * @throws {PubSubError} with code: INVALID_TOPIC, ACL_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
    *                       CONNECTION_CLOSED, or ADAPTER_ERROR
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    *
    * @example
    * ```typescript
@@ -760,7 +785,7 @@ export interface Topics extends ReadonlySet<string> {
    * }
    * ```
    */
-  subscribe(topic: string): Promise<void>;
+  subscribe(topic: string, options?: TopicMutateOptions): Promise<void>;
 
   /**
    * Remove the current connection from a topic's membership.
@@ -783,7 +808,9 @@ export interface Topics extends ReadonlySet<string> {
    * Hooks do not fire on no-ops.
    *
    * @param topic - Topic name to unsubscribe from
+   * @param options - Optional: `signal` for cancellation support
    * @throws {PubSubError} with code: INVALID_TOPIC (only if subscribed and format invalid) or ADAPTER_ERROR
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    *
    * @example
    * ```typescript
@@ -798,7 +825,7 @@ export interface Topics extends ReadonlySet<string> {
    * }
    * ```
    */
-  unsubscribe(topic: string): Promise<void>;
+  unsubscribe(topic: string, options?: TopicMutateOptions): Promise<void>;
 
   /**
    * Subscribe to multiple topics in one atomic operation.
@@ -813,6 +840,7 @@ export interface Topics extends ReadonlySet<string> {
    * **Throws** if any topic fails validation, authorization, or hits quota.
    *
    * @param topics - Iterable of topic names to subscribe to (duplicates are coalesced)
+   * @param options - Optional: `signal` for cancellation support
    * @returns Promise with counts:
    *   - `added`: number of newly subscribed unique topics (not already subscribed)
    *   - `total`: total unique subscriptions after operation
@@ -825,9 +853,11 @@ export interface Topics extends ReadonlySet<string> {
    * ```
    *
    * @throws {PubSubError} if any topic fails (same codes as subscribe)
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   subscribeMany(
     topics: Iterable<string>,
+    options?: TopicMutateOptions,
   ): Promise<{ added: number; total: number }>;
 
   /**
@@ -846,6 +876,7 @@ export interface Topics extends ReadonlySet<string> {
    * - Non-subscribed topics don't affect counts or raise errors
    *
    * @param topics - Iterable of topic names to unsubscribe from (duplicates are coalesced)
+   * @param options - Optional: `signal` for cancellation support
    * @returns Promise with counts:
    *   - `removed`: number of unique topics that were subscribed and now removed
    *   - `total`: remaining subscriptions after operation
@@ -859,17 +890,21 @@ export interface Topics extends ReadonlySet<string> {
    * ```
    *
    * @throws {PubSubError} if any subscribed topic fails validation or adapter error occurs
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   unsubscribeMany(
     topics: Iterable<string>,
+    options?: TopicMutateOptions,
   ): Promise<{ removed: number; total: number }>;
 
   /**
    * Remove all current subscriptions.
    *
+   * @param options - Optional: `signal` for cancellation support
    * @returns Promise with count of removed subscriptions
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
-  clear(): Promise<{ removed: number }>;
+  clear(options?: TopicMutateOptions): Promise<{ removed: number }>;
 
   /**
    * Atomically replace current subscriptions with a desired set.
@@ -894,7 +929,7 @@ export interface Topics extends ReadonlySet<string> {
    * **Throws** on validation error, authorization failure, limit exceeded, or connection closed.
    *
    * @param topics - Iterable of desired topic names (duplicates are coalesced)
-   * @param options - Optional: `signal` for future AbortSignal support
+   * @param options - Optional: `signal` for cancellation support
    * @returns Promise with counts:
    *   - `added`: number of newly subscribed topics (not already subscribed)
    *   - `removed`: number of previously subscribed topics now unsubscribed
@@ -911,10 +946,11 @@ export interface Topics extends ReadonlySet<string> {
    *
    * @throws {PubSubError} with code: INVALID_TOPIC, ACL_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
    *                       CONNECTION_CLOSED, or ADAPTER_ERROR
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   replace(
     topics: Iterable<string>,
-    options?: { signal?: AbortSignal },
+    options?: TopicMutateOptions,
   ): Promise<{ added: number; removed: number; total: number }>;
 }
 

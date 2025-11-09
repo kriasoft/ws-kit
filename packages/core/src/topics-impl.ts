@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { PubSubError } from "./pubsub-error.js";
+import { AbortError, PubSubError } from "./pubsub-error.js";
 import type { ServerWebSocket, Topics } from "./types.js";
 
 /**
@@ -162,10 +162,18 @@ export class TopicsImpl<
   // Topic Subscription Operations
   // ============================================================================
 
-  async subscribe(topic: string): Promise<void> {
+  async subscribe(
+    topic: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<void> {
     // Step 1: Validate (use input topic directly; normalization is a middleware concern)
     this.validateTopic(topic);
     const normalizedTopic = topic;
+
+    // Pre-commit cancellation: Check if signal is already aborted (after validation)
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
 
     // Sequential serialization: wait for any in-flight operation on this topic FIRST.
     // This prevents race conditions where subscribe and unsubscribe interleave.
@@ -227,7 +235,7 @@ export class TopicsImpl<
         );
       }
 
-      // Step 4: MUTATE LOCAL STATE - only after adapter succeeds
+      // Step 4: MUTATE LOCAL STATE - only after adapter succeeds (post-commit, late aborts ignored)
       this.subscriptions.add(normalizedTopic);
 
       // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
@@ -244,7 +252,10 @@ export class TopicsImpl<
     }
   }
 
-  async unsubscribe(topic: string): Promise<void> {
+  async unsubscribe(
+    topic: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<void> {
     // Soft no-op semantics (docs/specs/pubsub.md#idempotency): not subscribed? → return without validation.
     // This matches unsubscribeMany() behavior (phase 1: filter to subscribed, phase 2: validate).
     // Enables safe cleanup in finally blocks without pre-checks.
@@ -255,6 +266,11 @@ export class TopicsImpl<
 
     // Step 1: Validate (only if currently subscribed; soft no-op if not)
     this.validateTopic(normalizedTopic);
+
+    // Pre-commit cancellation: Check if signal is already aborted (after validation)
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
 
     // In-flight coalescing: wait for any in-flight subscribe/unsubscribe on this topic.
     // This ensures linearization and prevents duplicate adapter calls.
@@ -290,7 +306,7 @@ export class TopicsImpl<
         );
       }
 
-      // Step 3: MUTATE LOCAL STATE - only after adapter succeeds
+      // Step 3: MUTATE LOCAL STATE - only after adapter succeeds (post-commit, late aborts ignored)
       this.subscriptions.delete(normalizedTopic);
 
       // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
@@ -315,12 +331,20 @@ export class TopicsImpl<
    * Input: ["room:1", "room:1", "room:2"] → internally processed as 2 unique topics.
    *
    * @param topics - Iterable of topic names to subscribe to
+   * @param options - Optional: `signal` for cancellation support
    * @returns { added, total } where added = newly subscribed topics, total = all subscriptions
    * @throws {PubSubError} if any topic fails validation or adapter call
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   async subscribeMany(
     topics: Iterable<string>,
+    options?: { signal?: AbortSignal },
   ): Promise<{ added: number; total: number }> {
+    // Pre-commit cancellation: Check if signal is already aborted
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
+
     const topicArray = Array.from(topics);
     // Normalization is a middleware concern; use input topics directly
     const newTopics = new Set<string>(topicArray); // Deduplicate input
@@ -350,6 +374,11 @@ export class TopicsImpl<
           requested: newCount,
         },
       );
+    }
+
+    // Pre-commit cancellation: Check again before commit starts
+    if (options?.signal?.aborted) {
+      throw new AbortError();
     }
 
     // Step 3: Call adapter for all non-subscribed topics.
@@ -387,7 +416,7 @@ export class TopicsImpl<
       );
     }
 
-    // Step 4: Mutate internal state only after all adapter calls succeed.
+    // Step 4: Mutate internal state only after all adapter calls succeed (post-commit, late aborts ignored).
     // Invariant: We only reach here if all validations and adapter calls succeeded.
     // This guarantees atomicity: either all topics are subscribed or none are.
     let added = 0;
@@ -417,12 +446,20 @@ export class TopicsImpl<
    * **Deduplication**: Duplicate topics in input are coalesced into unique set.
    *
    * @param topics - Iterable of topic names to unsubscribe from
+   * @param options - Optional: `signal` for cancellation support
    * @returns { removed, total } where removed = actually-unsubscribed topics, total = remaining subscriptions
    * @throws {PubSubError} if any subscribed topic fails validation or adapter call
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   async unsubscribeMany(
     topics: Iterable<string>,
+    options?: { signal?: AbortSignal },
   ): Promise<{ removed: number; total: number }> {
+    // Pre-commit cancellation: Check if signal is already aborted
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
+
     const topicArray = Array.from(topics);
     // Normalization is a middleware concern; use input topics directly
     const uniqueTopics = new Set<string>(topicArray); // Deduplicate input
@@ -442,6 +479,11 @@ export class TopicsImpl<
     // If validation fails here, nothing is changed (no adapter calls, no state mutation).
     for (const topic of subscribedTopics) {
       this.validateTopic(topic);
+    }
+
+    // Pre-commit cancellation: Check again before commit starts
+    if (options?.signal?.aborted) {
+      throw new AbortError();
     }
 
     // Step 3: Call adapter for all subscribed topics.
@@ -477,7 +519,7 @@ export class TopicsImpl<
       );
     }
 
-    // Step 4: Mutate internal state only after all adapter calls succeed.
+    // Step 4: Mutate internal state only after all adapter calls succeed (post-commit, late aborts ignored).
     // Invariant: We only reach here if all validations and adapter calls succeeded.
     // This guarantees atomicity: either all subscribed topics are removed or none are.
     let removed = 0;
@@ -497,12 +539,26 @@ export class TopicsImpl<
    * **Atomicity guarantee**: All subscriptions succeed in being removed or all fail.
    * If any adapter call fails, the connection state is unchanged.
    *
+   * @param options - Optional: `signal` for cancellation support
    * @returns { removed } - Count of subscriptions that were removed
    * @throws {PubSubError} if any adapter call fails
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
-  async clear(): Promise<{ removed: number }> {
+  async clear(options?: {
+    signal?: AbortSignal;
+  }): Promise<{ removed: number }> {
+    // Pre-commit cancellation: Check if signal is already aborted
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
+
     const removed = this.subscriptions.size;
     const topicArray = Array.from(this.subscriptions);
+
+    // Pre-commit cancellation: Check again before commit starts
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
 
     // Step 1: Call adapter to unsubscribe from all topics.
     // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
@@ -533,7 +589,7 @@ export class TopicsImpl<
       });
     }
 
-    // Step 2: Mutate internal state only after all adapter calls succeed.
+    // Step 2: Mutate internal state only after all adapter calls succeed (post-commit, late aborts ignored).
     // Invariant: We only reach here if all adapter calls succeeded.
     // This guarantees atomicity: either all subscriptions are cleared or none are.
     this.subscriptions.clear();
@@ -564,16 +620,21 @@ export class TopicsImpl<
    * 8. Return counts
    *
    * @param topics - Iterable of desired topic names
-   * @param options - Optional: signal for future AbortSignal support
+   * @param options - Optional: `signal` for cancellation support
    * @returns { added, removed, total }
    * @throws PubSubError with code TOPIC_LIMIT_EXCEEDED if resulting size exceeds maxTopicsPerConnection,
    *                       or other codes if validation, authorization, or adapter fails
+   * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   async replace(
     topics: Iterable<string>,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: { signal?: AbortSignal },
   ): Promise<{ added: number; removed: number; total: number }> {
+    // Pre-commit cancellation: Check if signal is already aborted
+    if (options?.signal?.aborted) {
+      throw new AbortError();
+    }
+
     // Step 1: Normalize and validate (normalization is middleware concern; use input directly)
     const topicsArray = Array.from(topics);
     const desiredTopics = new Set<string>(topicsArray); // Deduplicate input
@@ -624,6 +685,11 @@ export class TopicsImpl<
           resulting: resultingSize,
         },
       );
+    }
+
+    // Pre-commit cancellation: Check again before commit starts
+    if (options?.signal?.aborted) {
+      throw new AbortError();
     }
 
     // Step 6: Call adapter for all changes atomically
@@ -685,7 +751,7 @@ export class TopicsImpl<
       );
     }
 
-    // Step 7: Mutate internal state only after all adapter calls succeed
+    // Step 7: Mutate internal state only after all adapter calls succeed (post-commit, late aborts ignored)
     // Invariant: We only reach here if all validations and adapter calls succeeded.
     // This guarantees atomicity: either all topics are added/removed or none are.
     for (const topic of toAdd) {

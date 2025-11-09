@@ -72,6 +72,19 @@ This spec defines a **minimal, portable, and hard-to-misuse topic-based pub/sub 
 
 ```typescript
 /**
+ * Options for topic mutation operations.
+ * Supports cancellation via AbortSignal.
+ */
+interface TopicMutateOptions {
+  /**
+   * AbortSignal for cancellation.
+   * If aborted before commit phase, operation rejects with AbortError and no state changes occur.
+   * If aborted after commit begins, operation completes normally (late aborts ignored).
+   */
+  signal?: AbortSignal;
+}
+
+/**
  * Subscription state and operations.
  * Implements ReadonlySet<string> for .has(topic), .size, iteration.
  */
@@ -80,38 +93,45 @@ interface Topics extends ReadonlySet<string> {
    * Subscribe to a topic.
    * Idempotent: subscribing twice to the same topic is a no-op (no error).
    * Throws on validation, authorization, or connection failure.
+   * @param options - Optional cancellation signal
    */
-  subscribe(topic: string): Promise<void>;
+  subscribe(topic: string, options?: TopicMutateOptions): Promise<void>;
 
   /**
    * Unsubscribe from a topic.
    * Idempotent: unsubscribing twice or from non-existent topic is a no-op.
    * Throws only on authorization or adapter failure (rare).
+   * @param options - Optional cancellation signal
    */
-  unsubscribe(topic: string): Promise<void>;
+  unsubscribe(topic: string, options?: TopicMutateOptions): Promise<void>;
 
   /**
    * Subscribe to multiple topics in one atomic operation.
    * All succeed or all fail; no partial state changes.
    * Returns count of newly added subscriptions and total subscriptions.
+   * @param options - Optional cancellation signal
    */
   subscribeMany(
     topics: Iterable<string>,
+    options?: TopicMutateOptions,
   ): Promise<{ added: number; total: number }>;
 
   /**
    * Unsubscribe from multiple topics atomically.
    * Returns count of removed and remaining subscriptions.
+   * @param options - Optional cancellation signal
    */
   unsubscribeMany(
     topics: Iterable<string>,
+    options?: TopicMutateOptions,
   ): Promise<{ removed: number; total: number }>;
 
   /**
    * Remove all current subscriptions.
    * Returns count of removed subscriptions.
+   * @param options - Optional cancellation signal
    */
-  clear(): Promise<{ removed: number }>;
+  clear(options?: TopicMutateOptions): Promise<{ removed: number }>;
 
   /**
    * Atomically replace current subscriptions with a desired set.
@@ -119,10 +139,11 @@ interface Topics extends ReadonlySet<string> {
    * Idempotent: if input set equals current set, returns early (no adapter calls).
    * Soft unsubscribe semantics: topics not currently subscribed are skipped.
    * Returns counts of topics added, removed, and total subscriptions after operation.
+   * @param options - Optional cancellation signal
    */
   replace(
     topics: Iterable<string>,
-    options?: { signal?: AbortSignal },
+    options?: TopicMutateOptions,
   ): Promise<{ added: number; removed: number; total: number }>;
 }
 
@@ -761,7 +782,34 @@ const result = await ctx.topics.replace(["room:123", "system:announcements"]);
 // { added: number, removed: number, total: number }
 ```
 
-### 6.5 Publishing Semantics
+### 6.5 Cancellation Semantics (Optional AbortSignal)
+
+All topic mutation methods accept `{ signal?: AbortSignal }` for pre-commit cancellation.
+
+**Behavior:**
+
+- **Pre-commit abort** (before adapter call): Operation rejects with `AbortError`; no state change, no hooks.
+- **Post-commit abort** (after adapter call starts): Operation completes atomically; late aborts ignored.
+- **Batch atomicity preserved**: Atomic operations remain all-or-nothing even with cancellation.
+
+**Example:**
+
+```typescript
+const controller = new AbortController();
+controller.abort();
+
+try {
+  await ctx.topics.subscribe("room:1", { signal: controller.signal });
+} catch (err) {
+  if (err instanceof AbortError) {
+    // No state change; ctx.topics.has("room:1") === false
+  }
+}
+```
+
+---
+
+### 6.6 Publishing Semantics
 
 **Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with an error code and a `retryable` hint, enabling predictable result-based error handling.
 
@@ -883,7 +931,7 @@ const r7 = await ctx.publish("topic", Schema, data);
 // {ok: false, error: "ADAPTER_ERROR", retryable: true, adapter: "redis", cause: Error(...), details: { transient: true }}
 ```
 
-### 6.5 Connection Lifecycle & Cleanup
+### 6.7 Connection Lifecycle & Cleanup
 
 - On connection close, all subscriptions are **automatically removed** by the adapter.
 - No subscriptions leak or persist.

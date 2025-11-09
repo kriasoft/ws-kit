@@ -49,7 +49,7 @@ export function usePubSub<TData extends WebSocketData = WebSocketData>(
 ): Middleware<TData> {
   // Extract options with defaults
   const {
-    normalize = (topic) => topic,
+    normalize = (topic: string) => topic,
     authorizeSubscribe,
     // authorizePublish, // Future: use for publish() hook when implemented
     onSubscribe,

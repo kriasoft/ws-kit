@@ -65,6 +65,7 @@ export type {
   SendFunction,
   ServerWebSocket,
   Topics,
+  TopicMutateOptions,
   UsePubSubOptions,
   ValidatorAdapter,
   WebSocketData,
@@ -98,9 +99,12 @@ export type { ErrorWire, RpcErrorWire } from "./types.js";
  * Topic subscription mutations (subscribe, unsubscribe) throw PubSubError on failure.
  * Message publication (publish) returns PublishResult with error code and retryability hint.
  *
+ * AbortError is thrown when an operation is cancelled via AbortSignal before the commit phase.
+ * This follows DOM AbortError semantics for consistent cancellation patterns.
+ *
  * See docs/specs/pubsub.md#error-models for error semantics.
  */
-export { PubSubError } from "./pubsub-error.js";
+export { AbortError, PubSubError } from "./pubsub-error.js";
 export type { PubSubAclDetails, PubSubErrorCode } from "./pubsub-error.js";
 
 /**

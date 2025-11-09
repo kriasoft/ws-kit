@@ -22,7 +22,7 @@ export type PubSubErrorCode =
  * Provides details about subscription/publication authorization denials
  * without expanding the core error code taxonomy.
  */
-export type PubSubAclDetails = {
+export interface PubSubAclDetails {
   /** Operation that was denied (mirrors error code) */
   op: "subscribe" | "publish";
   /** HTTP-like semantics: "unauthorized" (401) vs "forbidden" (403) */
@@ -33,7 +33,7 @@ export type PubSubAclDetails = {
   policy?: string;
   /** Offending topic if relevant */
   topic?: string;
-};
+}
 
 /**
  * Error thrown by pub/sub operations when validation, authorization, or connection errors occur.
@@ -108,6 +108,39 @@ export class PubSubError extends Error {
     // Maintain proper stack trace for where our error was thrown (in V8)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, PubSubError);
+    }
+  }
+}
+
+/**
+ * DOM-compatible AbortError for cancellation support.
+ *
+ * Thrown when an operation is aborted via AbortSignal before commit phase.
+ * Follows DOM AbortError semantics: name = "AbortError", code = 20.
+ *
+ * @example
+ * ```typescript
+ * const controller = new AbortController();
+ * controller.abort();
+ * try {
+ *   await ctx.topics.subscribe("room:1", { signal: controller.signal });
+ * } catch (err) {
+ *   if (err instanceof AbortError) {
+ *     console.log("Operation was cancelled");
+ *   }
+ * }
+ * ```
+ */
+export class AbortError extends Error {
+  readonly code = 20; // DOM AbortError code
+
+  constructor(message = "The operation was aborted") {
+    super(message);
+    this.name = "AbortError";
+
+    // Maintain proper stack trace for where our error was thrown (in V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, AbortError);
     }
   }
 }
