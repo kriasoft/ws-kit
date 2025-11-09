@@ -139,6 +139,7 @@ export class WebSocketRouter<
 
   // Limits
   private readonly maxPayloadBytes: number;
+  private readonly maxTopicsPerConnection: number;
   private readonly limitsConfig?: {
     onExceeded?: "send" | "close" | "custom";
     closeCode?: number;
@@ -190,6 +191,9 @@ export class WebSocketRouter<
 
     this.maxPayloadBytes =
       options.limits?.maxPayloadBytes ?? DEFAULT_CONFIG.MAX_PAYLOAD_BYTES;
+
+    this.maxTopicsPerConnection =
+      options.limits?.maxTopicsPerConnection ?? Infinity;
 
     // Store limits behavior configuration
     if (options.limits) {
@@ -1234,11 +1238,9 @@ export class WebSocketRouter<
 
     // Create Topics instance for per-connection subscriptions
     if (!this.topicsInstances.has(clientId)) {
-      const maxTopicsPerConnection =
-        this.options.limits?.maxTopicsPerConnection ?? Infinity;
       this.topicsInstances.set(
         clientId,
-        new TopicsImpl(ws, maxTopicsPerConnection),
+        new TopicsImpl(ws, this.maxTopicsPerConnection),
       );
     }
 

@@ -8,7 +8,7 @@ import type { ServerWebSocket, Topics } from "./types.js";
  * Default topic validation pattern.
  *
  * Allows alphanumeric, colons, underscores, hyphens, dots, slashes. Max 128 chars.
- * Per spec § 5 (Hooks): /^[a-z0-9:_\-/.]{1,128}$/i
+ * Per docs/specs/pubsub.md#router-hooks-optional-configuration: /^[a-z0-9:_\-/.]{1,128}$/i
  *
  * This is the default; apps can override via usePubSub() middleware.
  */
@@ -25,11 +25,12 @@ const MAX_TOPIC_LENGTH = 128;
  * 1. Validate all topics (no state mutation, no adapter calls)
  * 2. Call adapter for all topics (no state mutation yet; if any fails, stop here)
  * 3. Mutate internal state (only after all adapters succeed)
- * This guarantees true all-or-nothing semantics per spec § 6.3 & § 12.
+ * This guarantees true all-or-nothing semantics per docs/specs/pubsub.md#batch-atomicity
+ * and docs/specs/pubsub.md#adapter-compliance.
  *
  * **Normalization contract**: Topics are expected to be pre-normalized by the caller
  * (e.g., via usePubSub() middleware). This class performs validation but not normalization.
- * See pubsub.md § 6.1 for the full operation order.
+ * See docs/specs/pubsub.md#order-of-checks-normative for the full operation order.
  *
  * **Idempotency**: Single subscribe/unsubscribe calls are idempotent (safe to repeat).
  *
@@ -45,14 +46,11 @@ export class TopicsImpl<
   private readonly ws: ServerWebSocket<TData>;
   private readonly maxTopicsPerConnection: number;
 
-  constructor(
-    ws: ServerWebSocket<TData>,
-    maxTopicsPerConnection: number = Infinity,
-  ) {
+  constructor(ws: ServerWebSocket<TData>, maxTopicsPerConnection = Infinity) {
     this.ws = ws;
     this.maxTopicsPerConnection = maxTopicsPerConnection;
 
-    // Ensure Topics instance is immutable at runtime (spec § 9. Topics Invariants).
+    // Ensure Topics instance is immutable at runtime (docs/specs/pubsub.md#topics-invariants).
     // Callers MUST NOT attempt to mutate this object or its properties.
     Object.freeze(this);
   }
@@ -73,7 +71,7 @@ export class TopicsImpl<
     callback: (value: string, key: string, set: ReadonlySet<string>) => void,
     thisArg?: unknown,
   ): void {
-    // Must not leak mutable internal Set (spec § 9 Immutability).
+    // Must not leak mutable internal Set (docs/specs/pubsub.md#immutability).
     // Pass safe readonly reference to prevent bypassing validation/authorization.
     for (const value of this.subscriptions) {
       callback.call(
@@ -117,7 +115,7 @@ export class TopicsImpl<
       return;
     }
 
-    // Check topic limit (spec § 6.1, 6.3)
+    // Check topic limit (docs/specs/pubsub.md#order-of-checks-normative, docs/specs/pubsub.md#batch-atomicity)
     if (this.subscriptions.size >= this.maxTopicsPerConnection) {
       throw new PubSubError(
         "TOPIC_LIMIT_EXCEEDED",
@@ -147,14 +145,16 @@ export class TopicsImpl<
   }
 
   async unsubscribe(topic: string): Promise<void> {
-    // Normalize (none by default; apps use usePubSub() middleware)
-    // Validate - always validate, even if not subscribed (per spec § 6.2)
-    this.validateTopic(topic);
-
-    // Idempotency: not subscribed? → no-op (no error thrown)
+    // Soft no-op semantics (docs/specs/pubsub.md#idempotency): not subscribed? → return without validation.
+    // This matches unsubscribeMany() behavior (phase 1: filter to subscribed, phase 2: validate).
+    // Enables safe cleanup in finally blocks without pre-checks.
     if (!this.subscriptions.has(topic)) {
       return;
     }
+
+    // Normalize (none by default; apps use usePubSub() middleware)
+    // Validate
+    this.validateTopic(topic);
 
     // Mutate state
     this.subscriptions.delete(topic);
@@ -198,7 +198,7 @@ export class TopicsImpl<
       this.validateTopic(topic);
     }
 
-    // PHASE 1.5: Check topic limit before any adapter calls (spec § 6.3).
+    // PHASE 1.5: Check topic limit before any adapter calls (docs/specs/pubsub.md#batch-atomicity).
     // Count topics that would be newly added (not currently subscribed).
     let newCount = 0;
     for (const topic of newTopics) {
@@ -274,7 +274,7 @@ export class TopicsImpl<
     const uniqueTopics = new Set<string>(topicArray); // Deduplicate input
 
     // PHASE 1: Identify subscribed topics only (soft no-op for non-subscribed).
-    // Invariant: Topics not in current subscriptions are ignored (per spec § 6.2).
+    // Invariant: Topics not in current subscriptions are ignored (per docs/specs/pubsub.md#idempotency).
     // This means: no validation errors for non-subscribed topics, no adapter calls for them.
     const subscribedTopics = new Set<string>();
     for (const topic of uniqueTopics) {
@@ -370,7 +370,7 @@ export class TopicsImpl<
    * 2. Authorize all desired topics for subscription
    * 3. Compute delta: toAdd and toRemove
    * 4. Idempotency check: if both empty, return early
-   * 5. Check topic limit: currentSize - removed + added <= maxTopicsPerConnection (spec § 6.4)
+   * 5. Check topic limit: currentSize - removed + added <= maxTopicsPerConnection (docs/specs/pubsub.md#replace-semantics)
    * 6. Adapter phase: call adapter for all changes (before mutation)
    * 7. Mutate state only after all adapter calls succeed
    * 8. Return counts
@@ -383,6 +383,7 @@ export class TopicsImpl<
    */
   async replace(
     topics: Iterable<string>,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: { signal?: AbortSignal },
   ): Promise<{ added: number; removed: number; total: number }> {
     // PHASE 1: Normalize & validate all desired topics
@@ -434,7 +435,7 @@ export class TopicsImpl<
       return { added: 0, removed: 0, total: this.subscriptions.size };
     }
 
-    // PHASE 4.5: Check topic limit before any adapter calls (spec § 6.4).
+    // PHASE 4.5: Check topic limit before any adapter calls (docs/specs/pubsub.md#replace-semantics).
     // Verify: currentSize - removed + added <= maxTopicsPerConnection
     const resultingSize = this.subscriptions.size - toRemove.size + toAdd.size;
     if (resultingSize > this.maxTopicsPerConnection) {
