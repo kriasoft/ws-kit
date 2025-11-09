@@ -731,6 +731,8 @@ The `Topics` instance is immutable at runtime. Callers MUST NOT mutate the objec
 
 **Enforcement:** Adapters MUST call `Object.freeze(this)` in the constructor. TypeScript's `ReadonlySet<string>` provides compile-time safety.
 
+**Note on iteration:** The `forEach()` method and other iteration methods (`keys()`, `values()`, `entries()`) MUST NOT expose the mutable internal `Set` via the callback's third argument. Implementations must pass a safe `ReadonlySet` reference (e.g., the TopicsImpl facade itself) to prevent bypassing validation and authorization.
+
 See § 11 (Implementation Invariants) for adapter compliance details.
 
 ---

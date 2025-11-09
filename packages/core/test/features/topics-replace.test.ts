@@ -529,3 +529,40 @@ describe("TopicsImpl - replace()", () => {
     });
   });
 });
+
+describe("forEach security", () => {
+  it("should pass readonly facade via forEach callback (not mutable internal Set)", async () => {
+    const mockWs = {
+      data: { clientId: "test-123" },
+      subscribe: () => {},
+      unsubscribe: () => {},
+    };
+
+    const topics = new TopicsImpl(mockWs);
+
+    // Subscribe to some topics
+    await topics.subscribeMany(["room:1", "room:2"]);
+    expect(topics.size).toBe(2);
+
+    // Verify that forEach calls callback with correct arguments
+    const calls: any[] = [];
+    topics.forEach((value, key, set) => {
+      calls.push({ value, key, set, isSameAsTopics: set === topics });
+    });
+
+    // Should have been called twice (once per topic)
+    expect(calls.length).toBe(2);
+
+    // Each call should pass the TopicsImpl instance as the facade
+    // (typed as ReadonlySet at the API boundary)
+    for (const call of calls) {
+      expect(call.value).toMatch(/^room:/);
+      expect(call.key).toBe(call.value);
+      expect(call.set).toBe(topics);
+      expect(call.isSameAsTopics).toBe(true);
+    }
+
+    // Internal state should still be correct
+    expect(topics.size).toBe(2);
+  });
+});
