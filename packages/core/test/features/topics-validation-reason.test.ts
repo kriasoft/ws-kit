@@ -138,7 +138,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
 
       const customMaxLength = 64;
       const validator = createTopicValidator(
-        /^[a-z0-9:_\-/.]+$/i,
+        /^[a-z0-9:_./-]{1,128}$/i,
         customMaxLength,
       );
       const topics = new TopicsImpl(mockWs, Infinity, validator);

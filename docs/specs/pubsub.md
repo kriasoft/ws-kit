@@ -436,7 +436,7 @@ export function usePubSub(options?: UsePubSubOptions): Middleware;
 const router = new WebSocketRouter({
   limits: {
     // All format/length/quota validation goes here
-    topicPattern: /^[a-z0-9:_\-]{1,128}$/i,
+    topicPattern: /^[a-z0-9:_./-]{1,128}$/i, // Default from @ws-kit/core
     maxTopicLength: 128,
     maxTopicsPerConnection: 1000,
   },
@@ -464,7 +464,7 @@ Configure validation via `WebSocketRouterOptions.limits`:
 ```typescript
 const router = new WebSocketRouter({
   limits: {
-    topicPattern: /^[a-z0-9:_\-/.]+$/i, // RegExp (default: alphanumeric, :_-/.)
+    topicPattern: /^[a-z0-9:_./-]{1,128}$/i, // RegExp (default: alphanumeric, :_-/.)
     maxTopicLength: 128, // number (default: 128)
     maxTopicsPerConnection: 1000, // number (default: Infinity)
   },
@@ -502,7 +502,7 @@ This enables:
 ```typescript
 const router = new WebSocketRouter({
   limits: {
-    topicPattern: /^[a-z0-9:_\-]{1,128}$/i, // Alphanumeric, colon, underscore, hyphen
+    topicPattern: /^[a-z0-9:_./-]{1,128}$/i, // Alphanumeric, colon, underscore, hyphen, dot, slash
     maxTopicLength: 128,
     maxTopicsPerConnection: 500,
   },

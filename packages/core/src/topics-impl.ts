@@ -3,17 +3,7 @@
 
 import { AbortError, PubSubError } from "./pubsub-error.js";
 import type { ServerWebSocket, Topics } from "./types.js";
-
-/**
- * Default topic validation pattern.
- *
- * Allows alphanumeric, colons, underscores, hyphens, dots, slashes. Max 128 chars.
- * Per docs/specs/pubsub.md#router-hooks-optional-configuration: /^[a-z0-9:_\-/.]{1,128}$/i
- *
- * This is the default; apps can override via usePubSub() middleware.
- */
-const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_\-/.]{1,128}$/i;
-const MAX_TOPIC_LENGTH = 128;
+import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./limits.js";
 
 /**
  * Validator function for topic validation.

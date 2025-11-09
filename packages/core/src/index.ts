@@ -125,6 +125,7 @@ export type { TopicValidator } from "./topics-impl.js";
 
 export { DEFAULT_CONFIG, RESERVED_META_KEYS } from "./constants.js";
 export type { ReservedMetaKey } from "./constants.js";
+export { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./limits.js";
 export { PUBLISH_ERROR_RETRYABLE } from "./types.js";
 
 // ============================================================================

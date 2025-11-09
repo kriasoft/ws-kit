@@ -200,7 +200,7 @@ There is **exactly one place** where applications configure pub/sub authorizatio
 // ❌ CONFUSION: Split responsibility
 // "Do I put authorization in router constructor or middleware?"
 const router = new WebSocketRouter({
-  limits: { topicPattern: /^[a-z0-9:_-]{1,128}$/ },
+  limits: { topicPattern: /^[a-z0-9:_./-]{1,128}$/ },
   pubsubHooks: {
     // Where to put auth?
     authorizeSubscribe: (ctx, topic) => {
@@ -219,7 +219,7 @@ router.use(
 // ✅ CLARITY: Single canonical point
 // "Where do I put authorization?" Answer: "Always in usePubSub() middleware."
 const router = new WebSocketRouter({
-  limits: { topicPattern: /^[a-z0-9:_-]{1,128}$/ }, // Structural only; no hooks here
+  limits: { topicPattern: /^[a-z0-9:_./-]{1,128}$/ }, // Structural only; no hooks here
 });
 router.use(
   usePubSub({

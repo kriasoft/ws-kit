@@ -50,7 +50,7 @@ describe("TopicsImpl - Router Integration (Topic Policy)", () => {
       const customMaxLength = 32;
       const router = new WebSocketRouter({
         limits: {
-          topicPattern: /^[a-z0-9:_\-/.]+$/i,
+          topicPattern: /^[a-z0-9:_./-]{1,128}$/i,
           maxTopicLength: customMaxLength,
         },
       });
