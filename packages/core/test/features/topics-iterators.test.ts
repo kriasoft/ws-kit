@@ -288,8 +288,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
       await topics.subscribe("room:1");
       await topics.subscribe("room:2");
 
-      const callData: Array<{ value: string; key: string; hasValue: boolean }> =
-        [];
+      const callData: { value: string; key: string; hasValue: boolean }[] = [];
 
       topics.forEach((value, key, set) => {
         callData.push({
