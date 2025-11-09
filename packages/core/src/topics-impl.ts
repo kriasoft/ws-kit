@@ -43,9 +43,14 @@ export class TopicsImpl<
 {
   private readonly subscriptions = new Set<string>();
   private readonly ws: ServerWebSocket<TData>;
+  private readonly maxTopicsPerConnection: number;
 
-  constructor(ws: ServerWebSocket<TData>) {
+  constructor(
+    ws: ServerWebSocket<TData>,
+    maxTopicsPerConnection: number = Infinity,
+  ) {
     this.ws = ws;
+    this.maxTopicsPerConnection = maxTopicsPerConnection;
 
     // Ensure Topics instance is immutable at runtime (spec § 9. Topics Invariants).
     // Callers MUST NOT attempt to mutate this object or its properties.
@@ -65,10 +70,19 @@ export class TopicsImpl<
   }
 
   forEach(
-    callback: (value: string, key: string, set: Set<string>) => void,
+    callback: (value: string, key: string, set: ReadonlySet<string>) => void,
     thisArg?: unknown,
   ): void {
-    this.subscriptions.forEach(callback, thisArg);
+    // Must not leak mutable internal Set (spec § 9 Immutability).
+    // Pass safe readonly reference to prevent bypassing validation/authorization.
+    for (const value of this.subscriptions) {
+      callback.call(
+        thisArg,
+        value,
+        value,
+        this as unknown as ReadonlySet<string>,
+      );
+    }
   }
 
   entries(): SetIterator<[string, string]> {
@@ -101,6 +115,18 @@ export class TopicsImpl<
     // Idempotency: already subscribed? → no-op
     if (this.subscriptions.has(topic)) {
       return;
+    }
+
+    // Check topic limit (spec § 6.1, 6.3)
+    if (this.subscriptions.size >= this.maxTopicsPerConnection) {
+      throw new PubSubError(
+        "TOPIC_LIMIT_EXCEEDED",
+        `Cannot subscribe to more than ${this.maxTopicsPerConnection} topics per connection`,
+        {
+          limit: this.maxTopicsPerConnection,
+          current: this.subscriptions.size,
+        },
+      );
     }
 
     // Mutate state
@@ -170,6 +196,26 @@ export class TopicsImpl<
     // Invariant: If validation fails here, nothing is changed (no adapter calls, no state mutation).
     for (const topic of newTopics) {
       this.validateTopic(topic);
+    }
+
+    // PHASE 1.5: Check topic limit before any adapter calls (spec § 6.3).
+    // Count topics that would be newly added (not currently subscribed).
+    let newCount = 0;
+    for (const topic of newTopics) {
+      if (!this.subscriptions.has(topic)) {
+        newCount++;
+      }
+    }
+    if (this.subscriptions.size + newCount > this.maxTopicsPerConnection) {
+      throw new PubSubError(
+        "TOPIC_LIMIT_EXCEEDED",
+        `Cannot subscribe: would exceed ${this.maxTopicsPerConnection} topics per connection`,
+        {
+          limit: this.maxTopicsPerConnection,
+          current: this.subscriptions.size,
+          requested: newCount,
+        },
+      );
     }
 
     // PHASE 2: Call adapter for all non-subscribed topics.
@@ -324,14 +370,16 @@ export class TopicsImpl<
    * 2. Authorize all desired topics for subscription
    * 3. Compute delta: toAdd and toRemove
    * 4. Idempotency check: if both empty, return early
-   * 5. Adapter phase: call adapter for all changes (before mutation)
-   * 6. Mutate state only after all adapter calls succeed
-   * 7. Return counts
+   * 5. Check topic limit: currentSize - removed + added <= maxTopicsPerConnection (spec § 6.4)
+   * 6. Adapter phase: call adapter for all changes (before mutation)
+   * 7. Mutate state only after all adapter calls succeed
+   * 8. Return counts
    *
    * @param topics - Iterable of desired topic names
    * @param options - Optional: signal for future AbortSignal support
    * @returns { added, removed, total }
-   * @throws PubSubError if validation, authorization, or adapter fails
+   * @throws PubSubError with code TOPIC_LIMIT_EXCEEDED if resulting size exceeds maxTopicsPerConnection,
+   *                       or other codes if validation, authorization, or adapter fails
    */
   async replace(
     topics: Iterable<string>,
@@ -384,6 +432,23 @@ export class TopicsImpl<
     // If both delta sets are empty, return early (no-op, no adapter calls)
     if (toAdd.size === 0 && toRemove.size === 0) {
       return { added: 0, removed: 0, total: this.subscriptions.size };
+    }
+
+    // PHASE 4.5: Check topic limit before any adapter calls (spec § 6.4).
+    // Verify: currentSize - removed + added <= maxTopicsPerConnection
+    const resultingSize = this.subscriptions.size - toRemove.size + toAdd.size;
+    if (resultingSize > this.maxTopicsPerConnection) {
+      throw new PubSubError(
+        "TOPIC_LIMIT_EXCEEDED",
+        `Cannot replace: would exceed ${this.maxTopicsPerConnection} topics per connection`,
+        {
+          limit: this.maxTopicsPerConnection,
+          current: this.subscriptions.size,
+          toAdd: toAdd.size,
+          toRemove: toRemove.size,
+          resulting: resultingSize,
+        },
+      );
     }
 
     // PHASE 5: Call adapter for all changes atomically

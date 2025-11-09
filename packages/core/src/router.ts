@@ -1234,7 +1234,12 @@ export class WebSocketRouter<
 
     // Create Topics instance for per-connection subscriptions
     if (!this.topicsInstances.has(clientId)) {
-      this.topicsInstances.set(clientId, new TopicsImpl(ws));
+      const maxTopicsPerConnection =
+        this.options.limits?.maxTopicsPerConnection ?? Infinity;
+      this.topicsInstances.set(
+        clientId,
+        new TopicsImpl(ws, maxTopicsPerConnection),
+      );
     }
 
     const send = this.createSendFunction(ws);

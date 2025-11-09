@@ -1349,6 +1349,17 @@ export interface LimitsConfig {
   maxPayloadBytes?: number;
 
   /**
+   * Maximum number of topics a single connection can subscribe to (default: Infinity).
+   *
+   * Enforced in subscribe(), subscribeMany(), and replace() before adapter calls.
+   * Helps prevent resource exhaustion from unlimited topic subscriptions.
+   * Set to Infinity to disable the limit.
+   *
+   * Spec: § 6.1, 6.3, 6.4
+   */
+  maxTopicsPerConnection?: number;
+
+  /**
    * How to respond when a limit is exceeded (default: "send").
    *
    * - "send": Send RESOURCE_EXHAUSTED error frame, keep connection open
