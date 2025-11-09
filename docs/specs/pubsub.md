@@ -298,23 +298,35 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
 
 ---
 
-## 5. Router Hooks (Optional Configuration)
+## 5. Configuration & Middleware
 
-For applications that need centralized authorization, validation, or lifecycle tracking, use lightweight hooks:
+### 5.0 Configuration vs. Middleware (Clarification)
+
+Topic validation is configured at **two levels**:
+
+1. **Router limits (PRIMARY)** — `WebSocketRouterOptions.limits` sets format, max length, per-connection quota
+2. **Middleware hooks (OPTIONAL)** — `usePubSub()` adds custom authorization, normalization, lifecycle tracking
+
+**Precedence**: Router limits always run first; middleware runs second and cannot override built-in constraints.
+
+---
+
+For applications that need custom authorization or lifecycle tracking, use lightweight middleware hooks:
 
 ```typescript
 interface UsePubSubOptions {
   /**
    * Normalize a topic string (e.g., lowercasing, trimming, namespace checks).
-   * Applied BEFORE validation and authorization.
+   * Runs BEFORE router.limits validation. Apps should normalize consistently with
+   * their topicPattern config.
    * Default: identity (no change).
    */
   normalize?: (topic: string) => string;
 
   /**
-   * Validate topic format after normalization.
-   * Should throw or return an error code if invalid.
-   * Default: /^[a-z0-9:_\-/.]{1,128}$/i
+   * Custom validation for business logic (runs AFTER router.limits format/length checks).
+   * Example: enforce "room names must be 3+ chars". Should throw or return error code.
+   * @deprecated Use router.limits.topicPattern for format validation instead.
    */
   validate?: (topic: string) => true | PubSubErrorCode;
 
@@ -358,6 +370,99 @@ interface UsePubSubOptions {
 
 export function usePubSub(options?: UsePubSubOptions): Middleware;
 ```
+
+**Example: Custom Authorization & Validation**
+
+```typescript
+const router = new WebSocketRouter({
+  limits: {
+    topicPattern: /^[a-z0-9:_\-/.]+$/i,
+    maxTopicLength: 128,
+  },
+});
+
+router.use(
+  usePubSub({
+    authorizeSubscribe: (ctx, topic) => ctx.user?.canAccessTopic(topic),
+    validate: (topic) => {
+      if (topic.startsWith("room:") && topic.length < 8) {
+        return "INVALID_TOPIC";
+      }
+      return true;
+    },
+    onSubscribe: (ctx, topic) => {
+      logger.info(`User ${ctx.user?.id} subscribed to ${topic}`);
+    },
+  }),
+);
+```
+
+### 5.1 Topic Policy (Normative)
+
+Configure validation via `WebSocketRouterOptions.limits`:
+
+```typescript
+const router = new WebSocketRouter({
+  limits: {
+    topicPattern: /^[a-z0-9:_\-/.]+$/i, // RegExp (default: alphanumeric, :_-/.)
+    maxTopicLength: 128, // number (default: 128)
+    maxTopicsPerConnection: 1000, // number (default: Infinity)
+  },
+});
+```
+
+**Validation Order (Normative):**
+
+1. **Normalize** — Apply `normalize(topic)` if provided (e.g., trim, lowercase).
+2. **Validate** — Check normalized topic:
+   - Length check: Throw `PubSubError("INVALID_TOPIC", …, { reason: "length", length, max })`
+   - Pattern check: Throw `PubSubError("INVALID_TOPIC", …, { reason: "pattern", topic })`
+3. **Authorize** — Call `authorizeSubscribe(ctx, topic)` hook.
+4. **Limit check** — Verify `subscriptions.size < maxTopicsPerConnection`.
+5. **Mutate** — Add/remove topic from set.
+6. **Lifecycle** — Call `onSubscribe()` / `onUnsubscribe()` hook.
+
+**Error Details Contract:**
+
+Validation errors MUST include `details.reason` for machine-readable error classification:
+
+- `reason: "length"` — Topic exceeds `maxTopicLength`. Includes `{ length, max }`.
+- `reason: "pattern"` — Topic doesn't match pattern. Includes `{ topic }`.
+
+This enables:
+
+- **Metrics/logging**: Bucket failures by `reason` for observability
+- **Conditional handling**: Check reason field to determine app response (example below)
+
+**Example:**
+
+```typescript
+const router = new WebSocketRouter({
+  limits: {
+    topicPattern: /^[a-z0-9:_\-]{1,128}$/i, // Alphanumeric, colon, underscore, hyphen
+    maxTopicLength: 128,
+    maxTopicsPerConnection: 500,
+  },
+});
+
+// In a handler
+try {
+  await ctx.topics.subscribe("user:notifications:" + userId);
+} catch (err) {
+  if (err instanceof PubSubError) {
+    const details = err.details as any;
+    if (details.reason === "length") {
+      ctx.error("E_TOPIC_TOO_LONG", `Max length is ${details.max}`);
+    } else if (details.reason === "pattern") {
+      ctx.error("E_INVALID_TOPIC", "Topic contains invalid characters");
+    }
+  }
+}
+```
+
+### 5.2 Authorization Hooks
+
+For centralized authorization and lifecycle tracking:
 
 **Example:**
 
@@ -460,7 +565,6 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 
 - **Atomic**: All changes apply or none apply. No partial state.
 - **Idempotent**: No adapter calls when desired set equals current set.
-- **Soft unsubscribe**: Only subscribed topics are validated/removed; unsubscribed topics in input are silently skipped.
 - **Validation first**: All topics validated before any adapter calls. Invalid or unauthorized topics cause entire operation to fail.
 
 **Limit enforcement:**
@@ -735,6 +839,21 @@ The `Topics` instance is immutable at runtime. Callers MUST NOT mutate the objec
 **Note on iteration:** The `forEach()` method and other iteration methods (`keys()`, `values()`, `entries()`) MUST NOT expose the mutable internal `Set` via the callback's third argument. Implementations must pass a safe `ReadonlySet` reference (e.g., the TopicsImpl facade itself) to prevent bypassing validation and authorization.
 
 See § 11: Implementation Invariants for adapter compliance details.
+
+### 9.2 Reading Subscriptions
+
+`ctx.topics` is a `ReadonlySet<string>`. Iteration (via `for..of`, spread, `.values()`, `.keys()`, `.entries()`, `.forEach()`) is **snapshot-based**: each iteration takes a snapshot of subscriptions at that moment. Concurrent mutations from other handlers don't affect an in-progress loop.
+
+```typescript
+const it = ctx.topics.values();
+const first = it.next(); // "room:a"
+
+await ctx.topics.subscribe("room:z"); // happens elsewhere
+
+const second = it.next(); // "room:b" (not "room:z")
+```
+
+This prevents data races in concurrent handlers. Trade-off: O(n) per iteration call, acceptable at typical counts (< 1000 topics per connection).
 
 ---
 

@@ -6,7 +6,7 @@ import { ERROR_CODE_META, ErrorCode, WsKitError } from "./error.js";
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
-import { TopicsImpl } from "./topics-impl.js";
+import { TopicsImpl, createTopicValidator } from "./topics-impl.js";
 import type {
   AuthHandler,
   CloseHandler,
@@ -140,6 +140,7 @@ export class WebSocketRouter<
   // Limits
   private readonly maxPayloadBytes: number;
   private readonly maxTopicsPerConnection: number;
+  private readonly topicValidator: ((topic: string) => void) | undefined;
   private readonly limitsConfig?: {
     onExceeded?: "send" | "close" | "custom";
     closeCode?: number;
@@ -194,6 +195,12 @@ export class WebSocketRouter<
 
     this.maxTopicsPerConnection =
       options.limits?.maxTopicsPerConnection ?? Infinity;
+
+    // Create topic validator from pattern and maxTopicLength options
+    this.topicValidator = createTopicValidator(
+      options.limits?.topicPattern,
+      options.limits?.maxTopicLength,
+    );
 
     // Store limits behavior configuration
     if (options.limits) {
@@ -1240,7 +1247,7 @@ export class WebSocketRouter<
     if (!this.topicsInstances.has(clientId)) {
       this.topicsInstances.set(
         clientId,
-        new TopicsImpl(ws, this.maxTopicsPerConnection),
+        new TopicsImpl(ws, this.maxTopicsPerConnection, this.topicValidator),
       );
     }
 
@@ -1631,11 +1638,15 @@ export class WebSocketRouter<
       };
 
       // Get Topics instance for per-connection subscriptions
-      const topics = this.topicsInstances.get(clientId);
+      // Create lazily if not yet initialized (e.g., if message arrives before open handler completes)
+      let topics = this.topicsInstances.get(clientId);
       if (!topics) {
-        throw new Error(
-          `[ws] Topics instance not found for ${clientId}. Connection not properly initialized.`,
+        topics = new TopicsImpl(
+          ws,
+          this.maxTopicsPerConnection,
+          this.topicValidator,
         );
+        this.topicsInstances.set(clientId, topics);
       }
 
       // Create publish function as bound convenience method for context
@@ -2431,11 +2442,15 @@ export class WebSocketRouter<
     };
 
     // Get Topics instance for per-connection subscriptions
-    const topics = this.topicsInstances.get(clientId);
+    // Create lazily if not yet initialized (e.g., if message arrives before open handler completes)
+    let topics = this.topicsInstances.get(clientId);
     if (!topics) {
-      throw new Error(
-        `[ws] Topics instance not found for ${clientId}. Connection not properly initialized.`,
+      topics = new TopicsImpl(
+        ws,
+        this.maxTopicsPerConnection,
+        this.topicValidator,
       );
+      this.topicsInstances.set(clientId, topics);
     }
 
     // Publish to channel

@@ -1350,6 +1350,28 @@ export interface LimitsConfig {
   maxPayloadBytes?: number;
 
   /**
+   * Topic name validation pattern (default: /^[a-z0-9:_\-/.]{1,128}$/i).
+   *
+   * Applied after normalization, before authorization checks.
+   * If set, overrides the built-in default pattern.
+   * Example: /^[a-z0-9:_\-/.]{1,256}$/i allows custom max length inline.
+   *
+   * See docs/specs/pubsub.md#topic-policy-normative
+   */
+  topicPattern?: RegExp;
+
+  /**
+   * Maximum topic name length in characters (default: 128).
+   *
+   * Checked before pattern validation. If topic exceeds this length,
+   * validation fails with details.reason = "length".
+   * Ignored if topicPattern includes explicit length constraints.
+   *
+   * See docs/specs/pubsub.md#topic-policy-normative
+   */
+  maxTopicLength?: number;
+
+  /**
    * Maximum number of topics a single connection can subscribe to (default: Infinity).
    *
    * Enforced in subscribe(), subscribeMany(), and replace() before adapter calls.

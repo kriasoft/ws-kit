@@ -111,7 +111,8 @@ export type { PubSubErrorCode } from "./pubsub-error.js";
  * @internal Used by router to implement ctx.topics. Applications should use
  * the ctx.topics interface, not this class directly.
  */
-export { TopicsImpl } from "./topics-impl.js";
+export { TopicsImpl, createTopicValidator } from "./topics-impl.js";
+export type { TopicValidator } from "./topics-impl.js";
 
 // ============================================================================
 // Constants & Defaults

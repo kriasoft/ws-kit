@@ -50,6 +50,12 @@ describe("merge", () => {
       readyState: 1,
     };
 
+    // Open connection first (required to initialize Topics instance)
+    await wsHandler.open?.(mockWs as any);
+
+    // Test that merged lifecycle handlers work
+    expect(openHandlerCalled).toBe(true);
+
     // Test that router1 still handles its original messages
     await wsHandler.message?.(
       mockWs as any,
@@ -63,10 +69,6 @@ describe("merge", () => {
       JSON.stringify({ type: "PONG", meta: {}, payload: { reply: "world" } }),
     );
     expect(pongHandlerCalled).toBe(true);
-
-    // Test that merged lifecycle handlers work
-    await wsHandler.open?.(mockWs as any);
-    expect(openHandlerCalled).toBe(true);
 
     await wsHandler.close?.(mockWs as any, 1000, "test");
     expect(closeHandlerCalled).toBe(true);
@@ -109,6 +111,9 @@ describe("merge", () => {
       unsubscribe: () => {},
       readyState: 1,
     };
+
+    // Open connection first (required to initialize Topics instance)
+    await wsHandler.open?.(mockWs as any);
 
     // Test all handlers work
     await wsHandler.message(

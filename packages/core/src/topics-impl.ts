@@ -16,6 +16,29 @@ const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_\-/.]{1,128}$/i;
 const MAX_TOPIC_LENGTH = 128;
 
 /**
+ * Validator function for topic validation.
+ *
+ * Should throw PubSubError with code "INVALID_TOPIC" if the topic is invalid.
+ * The error's details object should include a `reason` field indicating the failure category:
+ * - "pattern": Topic format doesn't match allowed pattern
+ * - "length": Topic exceeds maximum length
+ * - Other reason codes are allowed for custom validators
+ *
+ * @example
+ * ```typescript
+ * const validator = (topic: string) => {
+ *   if (topic.length > 128) {
+ *     throw new PubSubError("INVALID_TOPIC", "Too long", { reason: "length", length: topic.length, max: 128 });
+ *   }
+ *   if (!/^[a-z0-9:_\-/.]{1,128}$/i.test(topic)) {
+ *     throw new PubSubError("INVALID_TOPIC", "Invalid pattern", { reason: "pattern" });
+ *   }
+ * };
+ * ```
+ */
+export type TopicValidator = (topic: string) => void;
+
+/**
  * Default implementation of the Topics interface.
  *
  * Provides per-connection topic subscription state and operations.
@@ -29,7 +52,7 @@ const MAX_TOPIC_LENGTH = 128;
  * and docs/specs/pubsub.md#adapter-compliance.
  *
  * **Normalization contract**: Topics are expected to be pre-normalized by the caller
- * (e.g., via usePubSub() middleware). This class performs validation but not normalization.
+ * (e.g., via router configuration). This class performs validation but not normalization.
  * See docs/specs/pubsub.md#order-of-checks-normative for the full operation order.
  *
  * **Idempotency**: Single subscribe/unsubscribe calls are idempotent (safe to repeat).
@@ -45,10 +68,25 @@ export class TopicsImpl<
   private readonly subscriptions = new Set<string>();
   private readonly ws: ServerWebSocket<TData>;
   private readonly maxTopicsPerConnection: number;
+  private readonly customValidator: TopicValidator | undefined;
 
-  constructor(ws: ServerWebSocket<TData>, maxTopicsPerConnection = Infinity) {
+  /**
+   * Create a Topics instance for managing a connection's subscriptions.
+   *
+   * @param ws - Platform adapter WebSocket instance for this connection
+   * @param maxTopicsPerConnection - Maximum number of topics allowed per connection (default: Infinity)
+   * @param customValidator - Optional custom validator function for topic validation.
+   *                          If provided, overrides default topic validation.
+   *                          See {@link TopicValidator} for signature and error requirements.
+   */
+  constructor(
+    ws: ServerWebSocket<TData>,
+    maxTopicsPerConnection = Infinity,
+    customValidator?: TopicValidator,
+  ) {
     this.ws = ws;
     this.maxTopicsPerConnection = maxTopicsPerConnection;
+    this.customValidator = customValidator;
 
     // Ensure Topics instance is immutable at runtime (docs/specs/pubsub.md#topics-invariants).
     // Callers MUST NOT attempt to mutate this object or its properties.
@@ -71,9 +109,11 @@ export class TopicsImpl<
     callback: (value: string, key: string, set: ReadonlySet<string>) => void,
     thisArg?: unknown,
   ): void {
+    // Iterate over a snapshot to avoid surprises if subscriptions mutate during forEach.
     // Must not leak mutable internal Set (docs/specs/pubsub.md#immutability).
     // Pass safe readonly reference to prevent bypassing validation/authorization.
-    for (const value of this.subscriptions) {
+    const snapshot = [...this.subscriptions];
+    for (const value of snapshot) {
       callback.call(
         thisArg,
         value,
@@ -84,19 +124,25 @@ export class TopicsImpl<
   }
 
   entries(): SetIterator<[string, string]> {
-    return this.subscriptions.entries();
+    // Snapshot prevents surprises if subscriptions mutate during iteration
+    const snapshot = new Set(this.subscriptions);
+    return snapshot.entries();
   }
 
   keys(): SetIterator<string> {
-    return this.subscriptions.keys();
+    // Snapshot prevents surprises if subscriptions mutate during iteration
+    const snapshot = new Set(this.subscriptions);
+    return snapshot.keys();
   }
 
   values(): SetIterator<string> {
-    return this.subscriptions.values();
+    // Snapshot prevents surprises if subscriptions mutate during iteration
+    const snapshot = new Set(this.subscriptions);
+    return snapshot.values();
   }
 
   [Symbol.iterator](): SetIterator<string> {
-    return this.subscriptions[Symbol.iterator]();
+    return this.values();
   }
 
   [Symbol.toStringTag] = "Topics";
@@ -495,17 +541,34 @@ export class TopicsImpl<
   /**
    * Validate topic format.
    *
-   * Default validation: alphanumeric, colons, underscores, hyphens. Max 128 chars.
-   * This can be customized via usePubSub() middleware (future).
+   * If a custom validator is provided, uses it. Otherwise, uses default validation:
+   * - Alphanumeric, colons, underscores, hyphens, dots, slashes
+   * - Max 128 characters
+   *
+   * Custom validators are configured via router options (limits.topicPattern, limits.maxTopicLength)
+   * and injected at TopicsImpl construction time.
+   *
+   * Validation errors MUST include `details.reason` field to classify the failure:
+   * - "pattern": Topic format invalid (doesn't match pattern)
+   * - "length": Topic exceeds max length
+   * - Other reasons allowed for custom validators
    *
    * @param topic - Topic name to validate
-   * @throws PubSubError if validation fails
+   * @throws PubSubError with code "INVALID_TOPIC" and details.reason if validation fails
    */
   private validateTopic(topic: string): void {
+    // If custom validator is provided, use it (it's responsible for error details.reason)
+    if (this.customValidator) {
+      this.customValidator(topic);
+      return;
+    }
+
+    // Default validation with reason fields
     if (!topic || typeof topic !== "string") {
       throw new PubSubError(
         "INVALID_TOPIC",
         "Topic must be a non-empty string",
+        { reason: "pattern" },
       );
     }
 
@@ -513,7 +576,7 @@ export class TopicsImpl<
       throw new PubSubError(
         "INVALID_TOPIC",
         `Topic exceeds ${MAX_TOPIC_LENGTH} characters`,
-        { length: topic.length, max: MAX_TOPIC_LENGTH },
+        { reason: "length", length: topic.length, max: MAX_TOPIC_LENGTH },
       );
     }
 
@@ -521,8 +584,62 @@ export class TopicsImpl<
       throw new PubSubError(
         "INVALID_TOPIC",
         `Topic format invalid (allowed: a-z0-9:_-/.)`,
-        { topic },
+        { reason: "pattern", topic },
       );
     }
   }
+}
+
+/**
+ * Create a topic validator from pattern and maxTopicLength options.
+ *
+ * Used by the router to inject custom validation into TopicsImpl instances.
+ * The validator checks length first, then pattern, to ensure consistent error reporting.
+ *
+ * @param pattern - Regular expression to validate topic format
+ * @param maxTopicLength - Maximum allowed topic length in characters
+ * @returns Validator function that throws PubSubError on invalid topics
+ *
+ * @internal Used by router to create injected validators for TopicsImpl
+ */
+export function createTopicValidator(
+  pattern?: RegExp,
+  maxTopicLength?: number,
+): TopicValidator | undefined {
+  // If neither pattern nor maxTopicLength are customized, return undefined to use defaults
+  if (!pattern && maxTopicLength === undefined) {
+    return undefined;
+  }
+
+  // Use provided values or defaults
+  const finalPattern = pattern ?? DEFAULT_TOPIC_PATTERN;
+  const finalMaxLength = maxTopicLength ?? MAX_TOPIC_LENGTH;
+
+  return (topic: string) => {
+    // Basic type check (always enforced)
+    if (!topic || typeof topic !== "string") {
+      throw new PubSubError(
+        "INVALID_TOPIC",
+        "Topic must be a non-empty string",
+        { reason: "pattern" },
+      );
+    }
+
+    // Check length first (before pattern, for clear error reporting)
+    if (topic.length > finalMaxLength) {
+      throw new PubSubError(
+        "INVALID_TOPIC",
+        `Topic exceeds ${finalMaxLength} characters`,
+        { reason: "length", length: topic.length, max: finalMaxLength },
+      );
+    }
+
+    // Check pattern
+    if (!finalPattern.test(topic)) {
+      throw new PubSubError("INVALID_TOPIC", `Topic format invalid`, {
+        reason: "pattern",
+        topic,
+      });
+    }
+  };
 }
