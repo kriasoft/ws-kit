@@ -50,9 +50,9 @@ We evaluated 9+ architectural approaches (documented in detailed analysis), incl
 
 For the **authoritative API surface and implementation invariants**, see [`docs/specs/pubsub.md`](../specs/pubsub.md):
 
-- **§ 1-9**: API surface, semantics, and examples (normative)
-- **§ 12**: Implementation invariants for adapter authors (canonical)
-- **§ 13-16**: Adapter compliance, concurrency, future extensions
+- **§ 1-10**: API surface, semantics, examples, invariants (normative)
+- **§ 11**: Implementation invariants for adapter authors (canonical)
+- **§ 12-15**: Adapter compliance, concurrency, future extensions
 
 This ADR provides the **design rationale** behind these decisions (why we chose this approach).
 
@@ -590,14 +590,14 @@ These must hold for all adapters:
 6. **Error codes** — Use `PubSubError` with correct code; never other error types
 7. **Hook timing** — `onSubscribe` after subscribe, `onUnsubscribe` after unsubscribe; not called on idempotent no-ops
 
-See `docs/specs/pubsub.md§12` (Implementation Invariants) for detailed prescriptions.
+See `docs/specs/pubsub.md§11` (Implementation Invariants) for detailed prescriptions.
 
 ## References
 
 - **Spec** (Normative & Canonical): [`docs/specs/pubsub.md`](../specs/pubsub.md)
-  - **§ 1-9**: API surface, terminology, semantics, and examples
-  - **§ 12**: Implementation invariants for adapter authors (authoritative)
-  - **§ 13-16**: Adapter compliance checklist, concurrency model, edge cases
+  - **§ 1-10**: API surface, terminology, semantics, examples, invariants
+  - **§ 11**: Implementation invariants for adapter authors (authoritative)
+  - **§ 12-15**: Adapter compliance checklist, concurrency model, edge cases
 
 - **This ADR** (Design Rationale):
   - **§ Decision**: Eight core decisions and their rationale

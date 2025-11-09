@@ -650,9 +650,23 @@ try {
 
 ---
 
-## 9. Examples
+## 9. Topics Invariants
 
-### 9.1 Simple String Topics
+### 9.1 Immutability
+
+The `Topics` instance is immutable at runtime. Callers MUST NOT mutate the object or its internal state via type casts or reflection.
+
+**Consequence:** Mutations bypass validation, authorization hooks, and adapter coordination—leading to inconsistent state and silent failures.
+
+**Enforcement:** Adapters MUST call `Object.freeze(this)` in the constructor. TypeScript's `ReadonlySet<string>` provides compile-time safety.
+
+See § 11 (Implementation Invariants) for adapter compliance details.
+
+---
+
+## 10. Examples
+
+### 10.1 Simple String Topics
 
 ```typescript
 router.on(JoinRoom, async (ctx, { roomId }) => {
@@ -678,7 +692,7 @@ router.on(LeaveRoom, async (ctx, { roomId }) => {
 });
 ```
 
-### 9.2 Batch Operations
+### 10.2 Batch Operations
 
 ```typescript
 router.on(JoinMultipleRooms, async (ctx, { roomIds }) => {
@@ -695,7 +709,7 @@ router.on(LeaveAllRooms, async (ctx) => {
 });
 ```
 
-### 9.3 Typed Topics
+### 10.3 Typed Topics
 
 ```typescript
 const RoomTopic = topic(
@@ -718,7 +732,7 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
 });
 ```
 
-### 9.4 With Authorization Hooks
+### 10.4 With Authorization Hooks
 
 ```typescript
 router.use(
@@ -738,7 +752,7 @@ router.use(
 );
 ```
 
-### 9.5 Publishing from Router (Background Tasks)
+### 10.5 Publishing from Router (Background Tasks)
 
 ```typescript
 // Background job: broadcast system heartbeat every 10s
@@ -750,7 +764,7 @@ setInterval(async () => {
 }, 10_000);
 ```
 
-### 9.6 Origin Tracking: Include Sender Identity
+### 10.6 Origin Tracking: Include Sender Identity
 
 Track the sender of broadcast messages for chat, audit logs, or access control:
 
@@ -778,7 +792,7 @@ router.on(SendChat, (ctx) => {
 - **Never broadcast `clientId`** — It's transport-layer identity, not application identity
 - **Audit logs** — Store sender identity for compliance and debugging
 
-### 9.7 Room Management: Subscribe, Broadcast, Cleanup
+### 10.7 Room Management: Subscribe, Broadcast, Cleanup
 
 Typical flow for multi-user spaces (rooms, channels, collaborative documents):
 
@@ -843,7 +857,7 @@ router.onClose((ctx) => {
 
 ---
 
-## 12. Implementation Invariants for Adapter Authors
+## 11. Implementation Invariants for Adapter Authors
 
 These invariants must hold for all adapters. See [ADR-022 § Implementation Invariants](../adr/022-namespace-first-pubsub-api.md#implementation-invariants-for-adapters) for the design rationale behind each invariant.
 
@@ -905,7 +919,7 @@ These invariants must hold for all adapters. See [ADR-022 § Implementation Inva
 
 ---
 
-## 13. Adapter Compliance
+## 12. Adapter Compliance
 
 ### Bun (≥1.3.2)
 
@@ -931,9 +945,9 @@ Follow the same pattern: maintain per-connection topic set, iterate on publish.
 
 ---
 
-## 14. Future Extensions
+## 13. Future Extensions
 
-### 14.1 Pattern Subscriptions (Separate Spec)
+### 13.1 Pattern Subscriptions (Separate Spec)
 
 ```typescript
 // Future: wildcard / regex subscriptions
@@ -943,7 +957,7 @@ await ctx.topics.subscribePattern(/^user:\d+/); // Regex
 
 Planned as `specs/pubsub-patterns.md`.
 
-### 14.2 Typed Topic Middleware (Separate Spec)
+### 13.2 Typed Topic Middleware (Separate Spec)
 
 ```typescript
 // Future: per-topic lifecycle hooks at router level
@@ -957,7 +971,7 @@ router.topic(RoomTopic, {
 
 Planned as enhancement to hooks.
 
-### 14.3 Presence & TTL (Separate Spec)
+### 13.3 Presence & TTL (Separate Spec)
 
 ```typescript
 // Future: ephemeral subscriptions with heartbeat/expiry
@@ -966,7 +980,7 @@ await ctx.topics.subscribe(topic, { ttl: 30_000, heartbeat: 10_000 });
 
 Planned as `specs/presence.md`.
 
-### 14.4 Multi-Process Fan-Out (Separate Spec)
+### 13.4 Multi-Process Fan-Out (Separate Spec)
 
 ```typescript
 // Future: Redis Adapter for cross-process pub/sub
@@ -977,7 +991,7 @@ Planned as `specs/pubsub-redis.md`.
 
 ---
 
-## 15. Concurrency & Edge Cases for Implementers
+## 14. Concurrency & Edge Cases for Implementers
 
 **Per-connection operations are sequential** (single event loop per connection in JS):
 
@@ -1009,7 +1023,7 @@ Planned as `specs/pubsub-redis.md`.
 
 ---
 
-## 16. Compliance Checklist (for Adapter Implementers)
+## 15. Compliance Checklist (for Adapter Implementers)
 
 - [ ] `subscribe()` and `unsubscribe()` are idempotent (no error on duplicate).
 - [ ] All ops follow order: normalize → validate → authorize → mutate → lifecycle hooks.

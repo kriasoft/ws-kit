@@ -46,6 +46,10 @@ export class TopicsImpl<
 
   constructor(ws: ServerWebSocket<TData>) {
     this.ws = ws;
+
+    // Ensure Topics instance is immutable at runtime (spec § 9. Topics Invariants).
+    // Callers MUST NOT attempt to mutate this object or its properties.
+    Object.freeze(this);
   }
 
   // ============================================================================
