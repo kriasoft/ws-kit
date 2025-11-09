@@ -10,7 +10,16 @@
 
 ## 0. Prior Design Issues
 
-An earlier draft had namespace confusion, ambiguous return types, no batch operations, zero type safety, and unclear authorization semantics. See [ADR-022 Context](../adr/022-namespace-first-pubsub-api.md#context) for the full analysis and design rationale.
+The initial draft specification had several problems addressed by the current design:
+
+- **Namespace confusion** — `ctx.pubsub.subscriptions.list()` nested awkwardly; unclear API hierarchy
+- **Boolean return types** — `Promise<boolean>` on idempotent ops created ambiguity; what does `false` mean?
+- **No batch operations** — Required O(n) awaits; enabled partial failures and inconsistent state
+- **Zero type safety** — Topics were opaque strings; no schema validation or compile-time checks
+- **Unclear authorization timing** — Ambiguous when hooks run relative to idempotency checks
+- **Subscribe/unsubscribe asymmetry** — State mutation and transient action conflated in same namespace
+
+For full analysis and design rationale, see [ADR-022 Context](../adr/022-namespace-first-pubsub-api.md#context).
 
 ---
 
@@ -171,7 +180,7 @@ declare module "@ws-kit/core" {
 
 ### 3.3 Publish Options & Result
 
-```typescript
+````typescript
 interface PublishOptions {
   /**
    * Optional sharding or routing hint (advisory; adapters may ignore).
@@ -186,8 +195,33 @@ interface PublishOptions {
   meta?: Record<string, unknown>;
 
   /**
-   * Future feature: exclude the sender from receiving the published message.
-   * Currently returns {ok: false, error: "UNSUPPORTED"}.
+   * **Status**: Not yet implemented (all adapters return {ok: false, error: "UNSUPPORTED"}).
+   *
+   * **Purpose**: Exclude the sender from receiving the published message.
+   *
+   * **Portable Pattern (until supported):**
+   *
+   * Include sender identity in payload and filter on subscriber side:
+   * ```typescript
+   * // Publisher
+   * await ctx.publish(topic, Msg, {
+   *   ...payload,
+   *   _senderId: ctx.ws.data.clientId
+   * });
+   *
+   * // Subscriber
+   * router.on(Msg, (ctx) => {
+   *   if (ctx.payload._senderId === ctx.ws.data.clientId) return; // Skip self
+   * });
+   * ```
+   *
+   * **Alternative Pattern:**
+   *
+   * Use separate per-connection topic (e.g., "room:123:others") that only subscribers (not sender) subscribe to:
+   * ```typescript
+   * // When joining room, sender subscribes to "room:123:others"
+   * // When publishing, send to both "room:123" (all) and sender can filter
+   * ```
    */
   excludeSelf?: boolean;
 }
@@ -196,7 +230,7 @@ export type PublishCapability = "exact" | "estimate" | "unknown";
 
 export type PublishError =
   | "VALIDATION" // schema validation failed (local)
-  | "ACL" // authorizePublish hook denied
+  | "ACL_PUBLISH" // authorizePublish hook denied
   | "STATE" // cannot publish in current state
   | "BACKPRESSURE" // adapter send queue full
   | "PAYLOAD_TOO_LARGE" // payload exceeds adapter limit
@@ -218,7 +252,7 @@ export type PublishResult =
       error: PublishError;
       /**
        * Indicates whether the operation is safe to retry.
-       * False: VALIDATION, ACL, PAYLOAD_TOO_LARGE, UNSUPPORTED, STATE (don't retry).
+       * False: VALIDATION, ACL_PUBLISH, PAYLOAD_TOO_LARGE, UNSUPPORTED, STATE (don't retry).
        * True: BACKPRESSURE, CONNECTION_CLOSED, ADAPTER_ERROR (may be transient; retry with backoff).
        */
       retryable: boolean;
@@ -232,9 +266,11 @@ export type PublishResult =
       /** Underlying error cause, following Error.cause conventions. */
       cause?: unknown;
     };
-```
+````
 
-**Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with an error code and a `retryable` hint. This enables predictable, result-based error handling and actionable remediation logic.
+**Error Codes & Remediation**: See [§ 7 Unified Error Codes & Remediation](./pubsub.md#unified-error-codes--remediation) for complete error reference, causes, retryability, and remediation guidance.
+
+**Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with an error code and a `retryable` hint. This enables predictable, result-based error handling without exception handling boilerplate. Only programmer errors (wrong schema wiring at startup) throw synchronously.
 
 ---
 
@@ -300,14 +336,20 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
 
 ## 5. Configuration & Middleware
 
-### 5.0 Configuration vs. Middleware (Clarification)
+### 5.0 Configuration Authority: Single Extension Point
 
-Topic validation is configured at **two levels**:
+**🎯 Core Policy (Normative):**
 
-1. **Router limits (PRIMARY)** — `WebSocketRouterOptions.limits` sets format, max length, per-connection quota
-2. **Middleware hooks (OPTIONAL)** — `usePubSub()` adds custom authorization, normalization, lifecycle tracking
+Apps configure pub/sub in **exactly one place**: `usePubSub()` middleware. Router constructor is **structural shape only**.
 
-**Precedence**: Router limits always run first; middleware runs second and cannot override built-in constraints.
+| Responsibility           | Where                    | Examples                                                                              |
+| ------------------------ | ------------------------ | ------------------------------------------------------------------------------------- |
+| **Structural shape**     | `router.limits`          | `topicPattern` (regex), `maxTopicLength`, `maxTopicsPerConnection`                    |
+| **Context-aware policy** | `usePubSub()` middleware | `authorizeSubscribe`, `authorizePublish`, `normalize`, `onSubscribe`, `onUnsubscribe` |
+
+**Rule**: All pub/sub authorization, normalization, and lifecycle hooks go in `usePubSub()` middleware. Constructor is for structural validation only. No ACL, no hooks in `new WebSocketRouter({...})`.
+
+**Why**: Eliminates confusion about "where do I put authorization?" Answer is always `usePubSub()` middleware. Separates deploy-time shape from runtime policy; makes testing easier.
 
 ---
 
@@ -317,22 +359,16 @@ For applications that need custom authorization or lifecycle tracking, use light
 interface UsePubSubOptions {
   /**
    * Normalize a topic string (e.g., lowercasing, trimming, namespace checks).
-   * Runs BEFORE router.limits validation. Apps should normalize consistently with
-   * their topicPattern config.
+   * Runs before validation. Apps should normalize consistently with their
+   * router.limits.topicPattern config.
    * Default: identity (no change).
    */
   normalize?: (topic: string) => string;
 
   /**
-   * Custom validation for business logic (runs AFTER router.limits format/length checks).
-   * Example: enforce "room names must be 3+ chars". Should throw or return error code.
-   * @deprecated Use router.limits.topicPattern for format validation instead.
-   */
-  validate?: (topic: string) => true | PubSubErrorCode;
-
-  /**
    * Authorize subscription to a topic.
-   * Called per subscribe() call; denies by returning false or throwing.
+   * Called when a state change would occur (after idempotency check).
+   * Denies by returning false or throwing.
    * Default: allow all.
    */
   authorizeSubscribe?: (
@@ -351,13 +387,15 @@ interface UsePubSubOptions {
   ) => boolean | Promise<boolean>;
 
   /**
-   * Lifecycle hook: called after successful subscription.
-   * Useful for logging, analytics, or per-topic state.
+   * Lifecycle hook: called after successful subscription (actual state change).
+   * Useful for logging, analytics, per-topic state initialization.
+   * Not called on idempotent no-ops.
    */
   onSubscribe?: (ctx: Context, topic: string) => void | Promise<void>;
 
   /**
-   * Lifecycle hook: called after unsubscription.
+   * Lifecycle hook: called after successful unsubscription (actual state change).
+   * Not called on idempotent no-ops.
    */
   onUnsubscribe?: (ctx: Context, topic: string) => void | Promise<void>;
 
@@ -371,24 +409,25 @@ interface UsePubSubOptions {
 export function usePubSub(options?: UsePubSubOptions): Middleware;
 ```
 
-**Example: Custom Authorization & Validation**
+**Example: Custom Authorization & Lifecycle**
 
 ```typescript
 const router = new WebSocketRouter({
   limits: {
-    topicPattern: /^[a-z0-9:_\-/.]+$/i,
+    // All format/length/quota validation goes here
+    topicPattern: /^[a-z0-9:_\-]{1,128}$/i,
     maxTopicLength: 128,
+    maxTopicsPerConnection: 1000,
   },
 });
 
 router.use(
   usePubSub({
-    authorizeSubscribe: (ctx, topic) => ctx.user?.canAccessTopic(topic),
-    validate: (topic) => {
-      if (topic.startsWith("room:") && topic.length < 8) {
-        return "INVALID_TOPIC";
-      }
-      return true;
+    // Context-aware authorization and lifecycle hooks only
+    normalize: (t) => t.toLowerCase(),
+    authorizeSubscribe: (ctx, topic) => {
+      // Access control based on user/role
+      return ctx.user?.canAccessTopic(topic) ?? false;
     },
     onSubscribe: (ctx, topic) => {
       logger.info(`User ${ctx.user?.id} subscribed to ${topic}`);
@@ -411,16 +450,19 @@ const router = new WebSocketRouter({
 });
 ```
 
-**Validation Order (Normative):**
+**Validation & Authorization Order (Normative):**
 
-1. **Normalize** — Apply `normalize(topic)` if provided (e.g., trim, lowercase).
-2. **Validate** — Check normalized topic:
+Per §6.1, after idempotency check, operations proceed in this order (before adapter calls):
+
+1. **Normalize** — Apply `normalize(topic)` if provided via `usePubSub()` (e.g., trim, lowercase).
+2. **Format & length validation** — Check normalized topic against `router.limits.topicPattern` and `router.limits.maxTopicLength`:
    - Length check: Throw `PubSubError("INVALID_TOPIC", …, { reason: "length", length, max })`
    - Pattern check: Throw `PubSubError("INVALID_TOPIC", …, { reason: "pattern", topic })`
-3. **Authorize** — Call `authorizeSubscribe(ctx, topic)` hook.
+3. **Authorization** — Call `authorizeSubscribe(ctx, normalized)` hook via `usePubSub()`.
 4. **Limit check** — Verify `subscriptions.size < maxTopicsPerConnection`.
-5. **Mutate** — Add/remove topic from set.
-6. **Lifecycle** — Call `onSubscribe()` / `onUnsubscribe()` hook.
+5. **Adapter call** — Delegate to platform.
+6. **Mutate** — Add/remove topic from set.
+7. **Lifecycle** — Call `onSubscribe()` / `onUnsubscribe()` hook.
 
 **Error Details Contract:**
 
@@ -460,17 +502,26 @@ try {
 }
 ```
 
-### 5.2 Authorization Hooks
+### 5.2 Authorization & Lifecycle Tracking
 
-For centralized authorization and lifecycle tracking:
+For centralized access control and event tracking, use `usePubSub()` middleware.
 
 **Example:**
 
 ```typescript
+const router = new WebSocketRouter({
+  limits: {
+    topicPattern: /^[a-z0-9:_/-]{1,128}$/i, // Format validation in router limits
+    maxTopicsPerConnection: 100,
+  },
+});
+
 router.use(
   usePubSub({
+    // Optional: normalize before any checks
     normalize: (t) => t.toLowerCase(),
-    validate: (t) => /^[a-z0-9:_/-]{1,128}$/.test(t) || "INVALID_TOPIC",
+
+    // Access control (called only when state would change)
     authorizeSubscribe: (ctx, topic) => {
       // Users can only subscribe to their own notifications
       if (topic.startsWith("user:notifications:")) {
@@ -480,6 +531,8 @@ router.use(
       // Public rooms anyone can join
       return topic.startsWith("room:");
     },
+
+    // Lifecycle tracking (called after state changes)
     onSubscribe: (ctx, topic) => {
       console.log(`User ${ctx.user?.id} joined ${topic}`);
     },
@@ -491,103 +544,159 @@ router.use(
 
 ## 6. Semantics
 
-### 6.1 Order of Checks (Normative)
+### 6.1 Canonical Operation Order (Normative)
 
-Every subscription operation (single and batch) follows this strict invariant—adapter-first ordering:
+Every subscription operation (single, batch, and replace) follows this **strict invariant: idempotency-first, adapter-before-mutation**.
 
-1. **Normalize** — Apply `normalize(topic)` if provided. Result is normalized topic.
-2. **Validate** — Check normalized topic against `validate()` or default pattern. Throws if invalid.
-3. **Authorize** — Call `authorizeSubscribe(ctx, normalized)` hook (if provided). Throws if denied.
-4. **Idempotency check** — Inspect current state before any side-effects. If already subscribed/unsubscribed, return early (no hooks, no mutation, no adapter call).
-5. **Adapter call** — Delegate to platform adapter (`ws.subscribe()` / `ws.unsubscribe()`). If adapter throws, local state remains unchanged.
-6. **Mutate** — Add/remove topic from connection's topic set (only after adapter succeeds).
-7. **Lifecycle** — Call `onSubscribe(ctx, normalized)` or `onUnsubscribe(ctx, normalized)` hook (best-effort; hook failure does not rollback state).
+**Canonical Flow:**
 
-**Key invariants:**
+```
+Input: subscribe(topic) or unsubscribe(topic)
+  ↓
+[1] Normalize topic
+  ↓
+[2] Await in-flight operations on same topic
+  ↓
+[3] 🔴 IDEMPOTENCY CHECK ← CRITICAL
+    Already in target state?
+    ├─ YES → Return void (ZERO side effects)
+    │        No validation, auth, adapter, hooks, mutation
+    │
+    └─ NO (state change needed)
+       ↓
+       [4] Validate (format, length)
+           ├─ FAIL → Throw PubSubError
+           └─ PASS
+              ↓
+              [5] Authorize (check hook)
+                  ├─ DENY → Throw PubSubError
+                  └─ ALLOW
+                     ↓
+                     [6] Limit check (size < max)
+                         ├─ FAIL → Throw PubSubError
+                         └─ PASS
+                            ↓
+                            [7] Adapter call (ws.subscribe/unsubscribe)
+                                ├─ FAIL → Throw (state unchanged)
+                                └─ PASS
+                                   ↓
+                                   [8] Mutate local state (add/remove topic)
+                                   ↓
+                                   [9] Lifecycle hook (onSubscribe/onUnsubscribe)
+                                       ├─ FAIL → Throw (state already changed)
+                                       └─ PASS
+                                          ↓
+                                          Return void
+```
 
-- Authorization always operates on the **normalized topic**, not the input. Prevents TOCTOU bugs.
-- Hooks receive the **normalized topic**, not the raw input.
-- If idempotency returns early (step 4), no side-effects occur (no adapter call, no mutation, no hooks).
-- **Adapter-first**: Side-effects (adapter calls) happen before local state mutation. Eliminates ghost state and rollback complexity.
-- On adapter failure, local state remains unchanged; no rollback is needed.
-- If a hook throws (step 7), state is already mutated (no automatic rollback). Apps requiring transactional semantics should implement try/catch at the handler level.
+**🔴 CRITICAL INVARIANT: Idempotency-First (Step 3)**
 
-**For batch operations:** Apply this order per topic in the batch. If any topic fails at any step (validation, authorization, adapter), the entire batch fails atomically—no topics are mutated and no adapter calls for any topic succeed.
+Duplicate calls return immediately with **ZERO side effects**:
+
+- No validation
+- No authorization
+- No adapter calls
+- No hooks
+- No mutation
+
+Guaranteed clean no-ops. **This is the single most important invariant for DX and concurrency safety.**
+
+**Key Principles:**
+
+- **Adapter-before-mutation** (steps 7→8): Side-effects happen before mutation. If adapter throws, local state unchanged; no rollback needed.
+- **Normalized authorization** (step 5): Always checks normalized topic, never raw. Prevents TOCTOU bugs.
+- **Normalized hooks** (step 9): Hooks receive normalized topic, not raw input.
+- **Hook failures don't rollback** (step 9): If hook throws, state is already mutated. Apps requiring transactional semantics implement try/catch at handler level.
 
 ### 6.2 Idempotency
 
 Subscription ops are **idempotent**: calling twice is safe, returns success both times.
 
-**Behavior:**
+**Behavior (per §6.1 Canonical Order, step 3) — CRITICAL**:
 
-- `subscribe(topic)` when already subscribed → Returns `void` without error. No state change, no hook calls.
-- `unsubscribe(topic)` when not subscribed → Returns `void` **without validation** (soft no-op). No state change, no hooks, no errors—even if topic format is invalid. Enables safe cleanup in error paths.
-- Errors (invalid format, unauthorized) **still throw** on every call, **except** `unsubscribe()` skips validation if not subscribed. Only successful state mutations skip repeated effects.
+- `subscribe(topic)` when already subscribed → Returns `void` **without any side effects**. **No validation check, no authorization check, no adapter call, no mutation, no hooks.** Completely transparent no-op.
+- `unsubscribe(topic)` when not subscribed → Returns `void` **without any side effects**. **No validation check, no authorization check, no adapter call, no state change, no hooks.** Completely transparent no-op—even if topic format is invalid. Enables safe cleanup in error paths and concurrent scenarios.
+- **Errors only on state changes**: Invalid format, authorization denial, connection errors **only throw when a state change would occur**. Idempotent no-ops (already subscribed, not subscribed) **never error, never validate, never authorize, never call adapter**.
 
-**Rationale:** Idempotency means apps don't need defensive checks. Safe to call `subscribe()` or `unsubscribe()` unconditionally. This matters for:
+**Why This Matters:**
 
-- Reconnection logic: re-subscribe to desired topics without checking current state.
-- Race conditions: multiple handlers subscribing to same topic don't conflict.
-- Defensive cleanup: `unsubscribe()` in error paths or finally blocks works without pre-checks, even with unvalidated topic strings (soft no-op if not subscribed).
-- No defensive guards: no need to check `if (!has(topic))` before unsubscribing.
+Idempotency-first means apps don't need defensive checks or race condition guards:
 
-**Hook behavior:** `onSubscribe()` and `onUnsubscribe()` hooks are **not called** on idempotent no-ops. Only called on actual state changes.
+- **Reconnection**: Re-subscribe to desired topics without checking current state. Already-subscribed topics are free no-ops.
+- **Concurrent handlers**: Multiple handlers calling `subscribe()` on same topic don't conflict or cause spurious validation failures.
+- **Error cleanup**: `unsubscribe()` in error paths or finally blocks works unconditionally, even with unvalidated topic strings (soft no-op if not subscribed). No pre-checks needed.
+- **No defensive code**: No need for `if (!has(topic))` before unsubscribing or `if (!has(topic) && isValidTopic(topic))` before subscribing.
 
-**Hook exception semantics:** If a hook throws, the exception propagates to the caller (middleware/handler), **but state remains changed**—there is no automatic rollback. Adapters may catch and log hook exceptions, but mutation is not reversed. Applications that require rollback on hook failure should implement custom try/catch logic at the handler level or in middleware before calling subscribe/unsubscribe.
+**Hook behavior**: `onSubscribe()` and `onUnsubscribe()` hooks are **not called** on idempotent no-ops (already subscribed/unsubscribed). Only called on actual state changes.
+
+**Hook exception semantics**: If a hook throws, the exception propagates to the caller (middleware/handler), **but state remains changed**—there is no automatic rollback. Adapters may catch and log hook exceptions, but mutation is not reversed. Applications that require rollback on hook failure should implement custom try/catch logic at the handler level or in middleware before calling subscribe/unsubscribe.
 
 ### 6.3 Batch Atomicity
 
 `subscribeMany()` and `unsubscribeMany()` are **atomic**: all-or-nothing, no partial success.
 
-**Behavior:**
+**Guarantee**: Either all topics are added/removed or all fail atomically. No partial state on error.
 
-- `subscribeMany`: If validation fails on topic N, all N topics fail; none are subscribed. If authorization fails, same: all fail.
-- `unsubscribeMany`: Soft no-op semantics—topics **not currently subscribed are skipped** (no validation, no error). Only subscribed topics are validated, mutated, and sent to adapter. If validation fails on any subscribed topic, entire operation fails and rolls back.
-- Exception: duplicate topics in the same call are coalesced before atomicity check (not an error).
+**Key Behaviors:**
 
-**Return values:**
+- **Idempotency per-topic**: Already-subscribed topics are skipped (no validation, no auth, no adapter call, no hook). Batch processes only topics requiring state change.
+- **Validation first**: All topics requiring state change validated before ANY adapter calls. If any fails, entire batch fails (no mutations, no adapter calls).
+- **Sequential adapter calls**: Topics called sequentially; tracked for rollback.
+- **Atomic mutation**: Local state changed only after ALL adapter calls succeed.
+- **Soft unsubscribe**: `unsubscribeMany` skips non-subscribed topics (no error).
+- **Duplicate coalescing**: Duplicate topics in same call coalesced before processing (not an error).
 
-- `subscribeMany`: `{ added: number, total: number }` — `added` = count of newly subscribed (not already subscribed), `total` = current total subscriptions after operation.
-- `unsubscribeMany`: `{ removed: number, total: number }` — `removed` = count of topics that were subscribed and now removed, `total` = remaining subscriptions.
+**Return Values:**
 
-**Rationale:** Atomic prevents inconsistent state when batching operations. Apps can rely on: "after this call, either all topics are subscribed or none are, and state is consistent."
+- `subscribeMany`: `{ added: number, total: number }`
+- `unsubscribeMany`: `{ removed: number, total: number }`
 
-**Atomicity via rollback:**
+**Atomicity Flow (On Adapter Failure):**
 
-To achieve atomicity for batch operations:
+```
+Input: subscribeMany([room:1, room:2, room:3])
+  ↓
+[Per-topic idempotency] Skip already-subscribed topics
+  Remaining = [room:1, room:2, room:3]
+  ↓
+[Validation phase] All topics validated, authorized, limit-checked
+  Any fail? → Entire batch fails (return early, zero adapter calls)
+  ↓
+[Adapter phase] Sequential calls with tracking:
+  ├─ ws.subscribe("room:1") ✓ SUCCESS
+  ├─ ws.subscribe("room:2") ✓ SUCCESS
+  ├─ ws.subscribe("room:3") ✗ FAILURE → ROLLBACK
+  │
+  ROLLBACK (reverse order):
+  ├─ ws.unsubscribe("room:2") → Unwind room:2
+  └─ ws.unsubscribe("room:1") → Unwind room:1
+  ↓
+  Local state unchanged → Throw PubSubError(ADAPTER_ERROR)
+```
 
-1. **Validation phase** happens first (before any adapter calls). If any topic fails validation, the entire batch fails immediately—no adapter calls are made.
-2. **Adapter phase** processes all topics sequentially, tracking successful calls.
-3. **On adapter failure**: If any adapter call fails (e.g., `ws.subscribe("room:2")` throws after `ws.subscribe("room:1")` succeeded):
-   - All successfully-subscribed topics are immediately unsubscribed (rollback)
-   - Local state remains unchanged
-   - The operation throws `PubSubError<"ADAPTER_ERROR">`
-4. **On full success**: All adapter calls complete, then local state is mutated atomically.
+**Rollback Failure (Rare):**
 
-This ensures the invariant: either all topics are added/removed or none are. No partial state on error.
+If rollback itself fails (e.g., `ws.unsubscribe("room:1")` fails during rollback), adapter state becomes inconsistent (some topics may remain subscribed in adapter but not in local state).
 
-**Rollback failure handling:**
+Thrown `PubSubError` includes diagnostics in `error.details`:
 
-If rollback itself fails (e.g., `ws.unsubscribe("room:1")` fails during rollback), the primary error is still thrown, but the adapter is in an inconsistent state (some topics may remain subscribed in the adapter but not in local state).
+```typescript
+{
+  rollbackFailed: boolean,           // True if rollback partially failed
+  failedRollbackTopics: string[],    // Topics whose rollback failed
+  cause: unknown                     // Original adapter error
+}
+```
 
-**Telemetry for divergent state:**
-
-When rollback fails, the thrown `PubSubError` includes metadata in `error.details`:
-
-- `rollbackFailed: boolean` — True if any rollback attempt failed
-- `failedRollbackTopics: string[]` — Topics whose rollback failed (exact topics depend on operation)
-- `cause: unknown` — The original adapter error that triggered the rollback
-
-Apps should monitor for `rollbackFailed: true` to detect inconsistent adapter/local state and trigger remediation (e.g., reconnect, reset state).
+**Monitoring Example:**
 
 ```typescript
 try {
   await ctx.topics.subscribeMany([...]);
 } catch (err) {
   if (err instanceof PubSubError && (err.details as any)?.rollbackFailed) {
-    // Adapter and local state are divergent!
-    // Trigger monitoring alert and request user reconnection
-    logger.error("Rollback failed; adapter state may be inconsistent", err.details);
+    // Adapter/local state diverged; request reconnection
+    logger.error("Adapter state inconsistent; reconnect required", err.details);
   }
 }
 ```
@@ -600,19 +709,20 @@ try {
 
 1. **Normalize & validate** all desired topics
 2. **Authorize** desired topics (those being added)
-3. **Compute delta** and **idempotency check**: If no changes, return early (no adapter calls)
-4. **Limit check**: Verify `currentSize - removed + added <= maxTopicsPerConnection`
-5. **Adapter phase** (critical ordering):
+3. **Per-topic in-flight**: Before computing delta, await any in-flight operation for all desired topics (best-effort try/catch, then re-check state). Ensures linearization with concurrent single-topic ops.
+4. **Compute delta** and **🔴 IDEMPOTENCY CHECK (CRITICAL)**: If desired set equals current set, return early with `{added: 0, removed: 0, total: ...}` (no validation, no authorization, no adapter calls, no hooks). Completely transparent no-op.
+5. **Limit check**: Verify `currentSize - removed + added <= maxTopicsPerConnection`
+6. **Adapter phase** (critical ordering):
    - **Unsubscribe first** from topics being removed (frees space at adapter)
    - **Subscribe second** to new topics (uses freed space)
    - **On failure, rollback in reverse order**: Unsubscribe newly-added topics first (free space), then re-subscribe removed topics. This mirrors forward ordering and respects `maxTopicsPerConnection` during rollback.
-6. **Mutate state** and return `{ added, removed, total }`
+7. **Mutate state** and return `{ added, removed, total }`
 
 **Key invariants:**
 
+- **🔴 Idempotency-first (step 4)**: If desired set equals current set, no adapter calls, no validation, no authorization, no hooks. Transparent no-op.
 - **Atomic**: All changes apply or none apply. No partial state.
-- **Idempotent**: No adapter calls when desired set equals current set.
-- **Validation first**: All topics validated before any adapter calls. Invalid or unauthorized topics cause entire operation to fail.
+- **Validation first**: All topics requiring state change validated before any adapter calls. Invalid or unauthorized topics cause entire operation to fail.
 - **Adapter limit respect**: Unsubscribe before subscribe ensures adapter never sees a transient count above `maxTopicsPerConnection`. This enables users to "swap" topics when at the limit (e.g., leave one room to join another with the same quota).
 
 **Why unsubscribe first?**
@@ -672,7 +782,7 @@ This is the fundamental split between operations:
 **Validation & Authorization:**
 
 - **Payload validation:** Validated against schema; validation error returns `{ok: false, error: "VALIDATION", retryable: false}`.
-- **Authorization:** `authorizePublish()` checked; denial returns `{ok: false, error: "ACL", retryable: false}`.
+- **Authorization:** `authorizePublish()` checked; denial returns `{ok: false, error: "ACL_PUBLISH", retryable: false}`.
 
 **Delivery & Ordering:**
 
@@ -750,7 +860,7 @@ const r1 = await ctx.publish("topic", Schema, invalidData);
 
 // authorization (acl) failure
 const r2 = await ctx.publish("admin:topic", Schema, data);
-// {ok: false, error: "ACL", retryable: false, adapter: "inmemory"}
+// {ok: false, error: "ACL_PUBLISH", retryable: false, adapter: "inmemory"}
 
 // state failure (connection closed)
 const r3 = await closedCtx.publish("topic", Schema, data);
@@ -782,35 +892,111 @@ const r7 = await ctx.publish("topic", Schema, data);
 
 ---
 
-## 7. Errors
+## 7. Error Models
 
-Two error models for two different operation types:
+**Rule**: Mutations throw, actions return.
 
-- **Subscription Operations (throw):** `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()` throw `PubSubError` on failure (validation, authorization, connection errors).
-- **Publish Operations (return):** `publish()` returns `PublishResult` with `error: PublishError` and `retryable: boolean` hint. Never throws for runtime conditions.
+- **Subscriptions (mutations):** `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()` **throw `PubSubError`** on failure
+- **Publish (action):** `publish()` **returns `PublishResult`** with `ok`, `error`, and `retryable` fields. Never throws for runtime conditions.
 
-### Subscription Error Codes (`PubSubError`)
+**Unified Error Codes**: ACL failures use namespaced codes (`ACL_SUBSCRIBE`, `ACL_PUBLISH`) to enable consistent pattern-matching across adapters. Optional `PubSubAclDetails` struct provides 401/403 nuance and policy context without expanding the core error taxonomy.
+
+### Error Decision Tree
+
+**For subscriptions** (throw on error):
 
 ```typescript
-type PubSubErrorCode =
-  | "UNAUTHORIZED_SUBSCRIBE" // Denied by authorizeSubscribe() hook
-  | "UNAUTHORIZED_PUBLISH" // Denied by authorizePublish() hook
-  | "INVALID_TOPIC" // Failed validation or pattern check
-  | "TOPIC_LIMIT_EXCEEDED" // Connection hit maxTopicsPerConnection quota
-  | "CONNECTION_CLOSED" // Connection closed; cannot subscribe/publish
-  | "BACKPRESSURE" // (publish only) Adapter send queue full
-  | "PAYLOAD_TOO_LARGE" // (publish only) Payload exceeds adapter limit
-  | "ADAPTER_ERROR"; // Catch-all for adapter-specific errors
+try {
+  await ctx.topics.subscribe(topic);
+} catch (err) {
+  if (err instanceof PubSubError) {
+    // Handle based on code; see table below
+  }
+}
+```
 
+**For publish** (check result):
+
+```typescript
+const result = await ctx.publish(topic, schema, payload);
+if (result.ok) {
+  // Success
+} else if (result.retryable) {
+  // Transient failure; schedule retry
+} else {
+  // Permanent failure; don't retry
+}
+```
+
+### Unified Error Codes & Remediation
+
+| Error Code             | Operation                     | Cause                                   | Retryable | Remediation                                   |
+| ---------------------- | ----------------------------- | --------------------------------------- | --------- | --------------------------------------------- |
+| `INVALID_TOPIC`        | subscribe/unsubscribe         | Format/length validation failed         | ✗         | Fix topic string format                       |
+| `ACL_SUBSCRIBE`        | subscribe                     | Authorization hook denied               | ✗         | User lacks permission                         |
+| `ACL_PUBLISH`          | publish                       | Authorization hook denied               | ✗         | User lacks permission                         |
+| `TOPIC_LIMIT_EXCEEDED` | subscribe                     | Hit maxTopicsPerConnection quota        | ✗         | Unsubscribe from other topics                 |
+| `CONNECTION_CLOSED`    | subscribe/unsubscribe/publish | Connection closed or router disposed    | ✓         | Retry after reconnection                      |
+| `VALIDATION`           | publish                       | Payload doesn't match schema            | ✗         | Fix payload; inspect `cause` field            |
+| `STATE`                | publish                       | Router/adapter not ready                | ✗         | Await router ready; check state               |
+| `BACKPRESSURE`         | publish                       | Adapter send queue full                 | ✓         | Retry with exponential backoff + jitter       |
+| `PAYLOAD_TOO_LARGE`    | publish                       | Payload exceeds adapter limit           | ✗         | Reduce payload size; split messages           |
+| `UNSUPPORTED`          | publish                       | Feature unavailable (e.g., excludeSelf) | ✗         | Use fallback strategy; check `adapter` field  |
+| `ADAPTER_ERROR`        | any                           | Unexpected adapter failure              | ✓         | Retry with backoff; check `details.transient` |
+
+### Error Type Definitions
+
+**PubSubError** (thrown by subscription operations):
+
+```typescript
 class PubSubError extends Error {
   readonly code: PubSubErrorCode;
-  readonly details?: unknown; // Adapter-specific context (e.g., adapter error wrapped)
-
+  readonly details?: unknown; // Adapter-specific context
   constructor(code: PubSubErrorCode, message?: string, details?: unknown);
 }
 ```
 
-**Error handling example:**
+**PublishResult** (returned by publish, never thrown):
+
+```typescript
+type PublishResult =
+  | { ok: true; capability: "exact" | "estimate" | "unknown"; matched?: number }
+  | {
+      ok: false;
+      error: PublishError;
+      retryable: boolean;
+      adapter?: string;
+      details?: Record<string, unknown>;
+      cause?: unknown;
+    };
+```
+
+**Subscription Error Codes** (thrown by `subscribe()`, `unsubscribe()`, etc.):
+
+```typescript
+export type PubSubErrorCode =
+  | "INVALID_TOPIC"
+  | "ACL_SUBSCRIBE"
+  | "TOPIC_LIMIT_EXCEEDED"
+  | "CONNECTION_CLOSED"
+  | "ADAPTER_ERROR";
+```
+
+**ACL Details** (optional structured context for ACL failures):
+
+```typescript
+export type PubSubAclDetails = {
+  op: "subscribe" | "publish"; // mirrors error code
+  kind?: "unauthorized" | "forbidden"; // 401 vs 403 nuance
+  reason?: string; // machine-readable hint
+  policy?: string; // policy id/name
+  topic?: string; // offending topic
+};
+```
+
+### Error Handling Examples
+
+**Subscribe error:**
 
 ```typescript
 try {
@@ -818,7 +1004,7 @@ try {
 } catch (err) {
   if (err instanceof PubSubError) {
     switch (err.code) {
-      case "UNAUTHORIZED_SUBSCRIBE":
+      case "ACL_SUBSCRIBE":
         ctx.error("E_ACL", "You cannot access this room");
         break;
       case "INVALID_TOPIC":
@@ -831,66 +1017,98 @@ try {
 }
 ```
 
+**Publish error:**
+
+```typescript
+const result = await ctx.publish(topic, Schema, payload);
+
+if (result.ok) {
+  logger.info(`Published to ${result.matched ?? "?"} subscribers`);
+} else if (result.retryable) {
+  scheduleRetry(topic, payload, { backoff: exponentialBackoff() });
+} else {
+  logger.error(`Publish failed: ${result.error}`, result.details);
+}
+```
+
 ---
 
-## 8. Edge Cases (Normative)
+## 8. Edge Cases & Guarantees
 
-1. **Duplicate subscribe** → Returns `void` (idempotent, not an error).
-2. **Duplicate unsubscribe** → Returns `void` (idempotent, not an error).
-3. **Unsubscribe from non-existent topic** → Returns `void` (idempotent).
-4. **Subscribe, immediately unsubscribe** → Both succeed atomically in order; final state is unsubscribed.
-5. **Authorization changes mid-session** → Future operations re-checked with new permissions. Server MAY proactively call `onUnsubscribe()` hook and remove connections from unauthorized topics.
-6. **Publish to topic with zero subscribers** → Allowed; `publish()` returns `ok: true` with matched=0.
-7. **Publish while disconnected** → Returns `{ok: false, error: "CONNECTION_CLOSED", retryable: true}`. No throw; graceful failure.
-8. **Subscribe after connection close** → Throws `PubSubError<"CONNECTION_CLOSED">`. State mutation on dead connection is an error signal.
-9. **Large payloads** → App SHOULD validate before publish; adapter may reject with `{ok: false, error: "PAYLOAD_TOO_LARGE", retryable: false}`.
-10. **Concurrent subscribe/unsubscribe** → Order is sequential per connection (single event loop); race-free in JS/Bun.
-11. **Reconnection & State Persistence** — Subscriptions **do not persist** across connection close/reconnect. Clients MUST explicitly re-subscribe after reconnection.
+**Idempotent Operations:**
 
-    **Rationale**: Subscriptions are per-connection state. On disconnect, all subscriptions are cleared by the adapter (automatic cleanup). On reconnect, the client has a fresh connection with no subscriptions.
+- Duplicate subscribe → Returns void (no error, no side effects)
+- Duplicate unsubscribe → Returns void (no error, no side effects)
+- Unsubscribe from non-subscribed topic → Returns void (no error)
 
-    This is intentional: clients should maintain their own "desired topics" list and re-subscribe explicitly. This is explicit and controllable by the app, vs automatic but fragile.
+**Atomic Ordering:**
 
-    **Pattern (using `replace()` for clean resync)**:
+- Subscribe then immediately unsubscribe → Both complete in order; final state is unsubscribed
 
-    ```typescript
-    const desiredTopics = ["room:123", "system:announcements"];
+**Publication Behavior:**
 
-    client.on("open", async () => {
-      // Atomic resync to desired set (no manual diffing)
-      await ctx.topics.replace(desiredTopics);
-    });
+- Publish to topic with zero subscribers → `ok: true` with matched=0 (allowed)
+- Publish while disconnected → `{ok: false, error: "CONNECTION_CLOSED", retryable: true}` (graceful failure)
+- Large payloads → Adapter may reject with `PAYLOAD_TOO_LARGE` (app should validate first)
 
-    client.on("join-room", ({ roomId }) => {
-      desiredTopics.push(`room:${roomId}`);
-      // Update subscriptions atomically
-      await ctx.topics.replace(desiredTopics);
-    });
+**Connection & Concurrency:**
 
-    client.on("leave-room", ({ roomId }) => {
-      desiredTopics = desiredTopics.filter((t) => t !== `room:${roomId}`);
-      // Atomic resync (adds/removes as needed)
-      await ctx.topics.replace(desiredTopics);
-    });
-    ```
+- Subscribe after connection close → Throws `PubSubError("CONNECTION_CLOSED")`
+- Concurrent subscribe/unsubscribe → Sequential per connection (race-free in JS/Bun)
+- Authorization changes mid-session → Future ops re-checked; server MAY proactively remove unauthorized subscriptions
 
-    **Pattern (manual control, if needed)**:
+---
 
-    ```typescript
-    const desiredTopics = ["room:123"];
+## 9. Reconnection & State Persistence (IMPORTANT PATTERN)
 
-    // Subscribe to individual topics (for fine-grained control)
-    client.on("open", async () => {
-      for (const topic of desiredTopics) {
-        await ctx.topics.subscribe(topic);
-      }
-    });
+Subscriptions **do NOT persist** across connection close/reconnect. Clients MUST explicitly re-subscribe.
 
-    // Unsubscribe explicitly
-    client.on("leave-room", ({ roomId }) => {
-      await ctx.topics.unsubscribe(`room:${roomId}`);
-    });
-    ```
+**Rationale**: Subscriptions are per-connection state. On disconnect, adapter clears them automatically. On reconnect, connection is fresh (no subscriptions). This is intentional: apps maintain control via explicit re-subscription.
+
+**Recommended Pattern: Atomic Resync using `replace()`**
+
+```typescript
+const desiredTopics = ["room:123", "system:announcements"];
+
+router.onOpen((ctx) => {
+  // Atomically resync to desired set (no manual diffing)
+  await ctx.topics.replace(desiredTopics);
+});
+
+router.on(JoinRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  desiredTopics.push(`room:${roomId}`);
+  // Update subscriptions atomically
+  await ctx.topics.replace(desiredTopics);
+});
+
+router.on(LeaveRoom, (ctx) => {
+  const { roomId } = ctx.payload;
+  desiredTopics = desiredTopics.filter((t) => t !== `room:${roomId}`);
+  // Atomic resync (adds/removes as needed)
+  await ctx.topics.replace(desiredTopics);
+});
+```
+
+**Alternative: Manual Control using `subscribe()`/`unsubscribe()`**
+
+For fine-grained control, manage subscriptions individually:
+
+```typescript
+const desiredTopics = ["room:123"];
+
+router.onOpen((ctx) => {
+  // Subscribe individually
+  for (const topic of desiredTopics) {
+    await ctx.topics.subscribe(topic);
+  }
+});
+
+router.on(LeaveRoom, (ctx) => {
+  // Unsubscribe explicitly
+  await ctx.topics.unsubscribe(`room:${ctx.payload.roomId}`);
+});
+```
 
 ---
 
@@ -902,9 +1120,14 @@ The `Topics` instance is immutable at runtime. Callers MUST NOT mutate the objec
 
 **Consequence:** Mutations bypass validation, authorization hooks, and adapter coordination—leading to inconsistent state and silent failures.
 
-**Enforcement:** Adapters MUST call `Object.freeze(this)` in the constructor. TypeScript's `ReadonlySet<string>` provides compile-time safety.
+**Enforcement:** Implementations MUST prevent direct mutation via:
 
-**Note on iteration:** The `forEach()` method and other iteration methods (`keys()`, `values()`, `entries()`) MUST NOT expose the mutable internal `Set` via the callback's third argument. Implementations must pass a safe `ReadonlySet` reference (e.g., the TopicsImpl facade itself) to prevent bypassing validation and authorization.
+- `Object.freeze(this)` in the constructor, AND/OR
+- A Proxy that throws on `.add()`, `.delete()`, `.clear()` attempts
+
+TypeScript's `ReadonlySet<string>` provides compile-time safety.
+
+**Iteration contract:** The `forEach()` method and other iteration methods (`keys()`, `values()`, `entries()`, `[Symbol.iterator]()`) MUST return snapshots or pass a safe `ReadonlySet` facade (never the mutable internal Set). This prevents callers from bypassing validation and authorization via the callback's third argument.
 
 See § 11: Implementation Invariants for adapter compliance details.
 
@@ -927,7 +1150,13 @@ This prevents data races in concurrent handlers. Trade-off: O(n) per iteration c
 
 ## 10. Examples
 
-### 10.1 Simple String Topics
+Examples are organized by use case. Start with **Quick Start** for common scenarios, then explore **Advanced Patterns** and **Design Patterns** as needed.
+
+---
+
+### Quick Start (Essential Use Cases)
+
+#### 10.1 Simple String Topics
 
 ```typescript
 router.on(JoinRoom, async (ctx, { roomId }) => {
@@ -953,7 +1182,7 @@ router.on(LeaveRoom, async (ctx, { roomId }) => {
 });
 ```
 
-### 10.2 Batch Operations
+#### 10.2 Batch Operations
 
 ```typescript
 router.on(JoinMultipleRooms, async (ctx, { roomIds }) => {
@@ -970,7 +1199,7 @@ router.on(LeaveAllRooms, async (ctx) => {
 });
 ```
 
-### 10.3 Typed Topics
+#### 10.3 Typed Topics
 
 ```typescript
 const RoomTopic = topic(
@@ -993,7 +1222,11 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
 });
 ```
 
-### 10.4 With Authorization Hooks
+---
+
+### Advanced Patterns (Common Real-World Scenarios)
+
+#### 10.4 With Authorization Hooks
 
 ```typescript
 router.use(
@@ -1013,7 +1246,7 @@ router.use(
 );
 ```
 
-### 10.5 Publishing from Router (Background Tasks)
+#### 10.5 Publishing from Router (Background Tasks)
 
 ```typescript
 // Background job: broadcast system heartbeat every 10s
@@ -1025,7 +1258,7 @@ setInterval(async () => {
 }, 10_000);
 ```
 
-### 10.6 Origin Tracking: Include Sender Identity
+#### 10.6 Origin Tracking: Include Sender Identity
 
 Track the sender of broadcast messages for chat, audit logs, or access control:
 
@@ -1053,7 +1286,7 @@ router.on(SendChat, (ctx) => {
 - **Never broadcast `clientId`** — It's transport-layer identity, not application identity
 - **Audit logs** — Store sender identity for compliance and debugging
 
-### 10.7 Room Management: Subscribe, Broadcast, Cleanup
+#### 10.7 Room Management: Subscribe, Broadcast, Cleanup
 
 Typical flow for multi-user spaces (rooms, topics, collaborative documents):
 
@@ -1118,6 +1351,191 @@ router.onClose((ctx) => {
 
 ---
 
+### Common Recipes (Copy-Paste Solutions)
+
+#### 10.8 Batch Analytics: Diff Once Per Operation
+
+**Goal:** Log/analyze subscription changes atomically, without per-topic hook overhead.
+
+```typescript
+router.on(UpdateSubscriptions, async (ctx, { desired }) => {
+  // Capture before state
+  const before = new Set(ctx.topics);
+
+  // Execute atomic operation
+  const result = await ctx.topics.replace(desired);
+
+  // Compute diff once
+  const added = [...ctx.topics].filter((t) => !before.has(t));
+  const removed = [...before].filter((t) => !ctx.topics.has(t));
+
+  // Single analytics event
+  analytics.track("subscriptions_changed", {
+    userId: ctx.ws.data.userId,
+    added,
+    removed,
+    total: result.total,
+    timestamp: Date.now(),
+  });
+});
+```
+
+**Why this pattern:**
+
+- Avoids N individual `onSubscribe` / `onUnsubscribe` hook calls
+- Single atomic event for audit/analytics
+- Useful when you care about the complete delta, not individual topic changes
+
+**Performance note**: For very large batches (100+ topics), this diff-once approach is better than per-topic hooks. If you only need counts, use `result.added` and `result.removed` directly.
+
+---
+
+#### 10.9 Post-Commit Atomic Side-Effects
+
+**Goal:** Run a side-effect after the entire subscription operation succeeds (no rollback if side-effect fails).
+
+```typescript
+router.on(JoinMultipleRooms, async (ctx, { roomIds }) => {
+  const topics = roomIds.map((id) => `room:${id}`);
+
+  // Atomic subscription
+  const result = await ctx.topics.subscribeMany(topics);
+
+  // Post-commit audit log (fire-and-forget; doesn't rollback subscription)
+  audit
+    .logOnce(ctx, {
+      op: "subscribeMany",
+      topics,
+      count: result.added,
+      userId: ctx.ws.data.userId,
+      timestamp: Date.now(),
+    })
+    .catch((err) => {
+      logger.error("Audit log failed (subscription already committed)", err);
+    });
+
+  ctx.reply(JoinAck, { added: result.added, total: result.total });
+});
+```
+
+**Why this pattern:**
+
+- Side-effects run **after** subscription succeeds (topic state is committed)
+- If side-effect fails, subscription is NOT rolled back (side-effects are best-effort)
+- Separates concerns: subscription is atomic; side-effects are optional
+- Perfect for audit trails, notifications, cache invalidation
+
+---
+
+#### 10.10 Per-Tenant / Per-Connection Policy (Lazy-Loaded & Cached)
+
+**Goal:** Load authorization policy from database once per connection, cache it, and reuse across all subscription operations.
+
+```typescript
+interface TenantPubSubPolicy {
+  normalize?: (topic: string) => string;
+  authorizeSubscribe?: (
+    ctx: Context,
+    topic: string,
+  ) => boolean | Promise<boolean>;
+  authorizePublish?: (
+    ctx: Context,
+    topic: string,
+  ) => boolean | Promise<boolean>;
+  onSubscribe?: (ctx: Context, topic: string) => void | Promise<void>;
+  onUnsubscribe?: (ctx: Context, topic: string) => void | Promise<void>;
+}
+
+router.use(async (ctx, next) => {
+  // Load policy once per connection (lazy on first use)
+  if (!ctx.ws.data.tenantPolicy) {
+    const tenantId = ctx.ws.data.tenantId;
+    ctx.assignData({
+      tenantPolicy: await db.policies.findByTenant(tenantId),
+    });
+  }
+
+  // Apply loaded policy
+  return usePubSub({
+    normalize: (topic) => ctx.ws.data.tenantPolicy?.normalize?.(topic) ?? topic,
+
+    authorizeSubscribe: (ctx, topic) =>
+      ctx.ws.data.tenantPolicy?.authorizeSubscribe?.(ctx, topic) ?? true,
+
+    authorizePublish: (ctx, topic) =>
+      ctx.ws.data.tenantPolicy?.authorizePublish?.(ctx, topic) ?? true,
+
+    onSubscribe: (ctx, topic) =>
+      ctx.ws.data.tenantPolicy?.onSubscribe?.(ctx, topic),
+
+    onUnsubscribe: (ctx, topic) =>
+      ctx.ws.data.tenantPolicy?.onUnsubscribe?.(ctx, topic),
+  })(ctx, next);
+});
+```
+
+**Why this pattern:**
+
+- **Lazy-loaded**: Policy fetched on first connection use, not at auth time
+- **Cached per-connection**: No repeated database lookups
+- **Composable**: Different tenants can have different rules without code duplication
+- **Flexible**: Policies can include custom normalization, validation, or hooks
+- **Automatic cleanup**: Policy discarded when connection closes (no WeakMap ceremony)
+
+**Alternative**: If policies are dynamic and change mid-session, listen for `invalidateAuth` to refetch:
+
+```typescript
+if (policyChanged) {
+  ctx.invalidatePubSubAuth?.();
+  // Re-load on next operation
+  ctx.ws.data.tenantPolicy = undefined;
+}
+```
+
+---
+
+### Design Patterns & Optional Helpers
+
+#### 10.11 Optional DX Sugar: Helper Patterns
+
+These helpers are not part of the core API but demonstrate ergonomic patterns built from the standard primitives. Apps can implement them as needed:
+
+```typescript
+// Ensure subscription exists; return true if newly added
+async function ensure(topics: Topics, topic: string): Promise<boolean> {
+  if (topics.has(topic)) return false;
+  await topics.subscribe(topic);
+  return true;
+}
+
+// Alias for intent clarity (sync desired topics)
+const sync = (
+  topics: Topics,
+  desired: Iterable<string>,
+  options?: { signal?: AbortSignal },
+) => topics.replace(desired, options);
+
+// Batch unsubscribe with automatic filtering (soft no-op on non-subscribed)
+async function dropMany(topics: Topics, toUnsubscribe: Iterable<string>) {
+  return topics.unsubscribeMany(toUnsubscribe); // Automatically skips non-subscribed
+}
+
+// Conditional subscribe (useful in reconnection)
+async function subscribeIf(
+  topics: Topics,
+  topic: string,
+  condition: () => boolean,
+) {
+  if (condition()) {
+    await topics.subscribe(topic);
+  }
+}
+```
+
+**Note:** These are convenience functions only. The core API is complete and these demonstrate composition without expanding the surface.
+
+---
+
 ## 11. Implementation Invariants for Adapter Authors
 
 These invariants must hold for all adapters. See [ADR-022 Implementation Invariants](../adr/022-namespace-first-pubsub-api.md#implementation-invariants-for-adapters) for the design rationale behind each invariant.
@@ -1129,15 +1547,21 @@ These invariants must hold for all adapters. See [ADR-022 Implementation Invaria
 - App receives normalized topic in hooks: `onSubscribe(ctx, normalized)`.
 - This prevents TOCTOU bugs where app authorizes one string and adapter stores another.
 
-**Idempotency contract:**
+**🔴 Idempotency contract (CRITICAL):**
 
-- `subscribe(topic)` when already subscribed: return `void`, **do not call hooks**, **do not throw**.
-- `unsubscribe(topic)` when not subscribed: return `void` **without validation**, **do not call hooks**, **do not throw** (even if topic format is invalid).
-- Errors (validation, authorization) **always throw** on `subscribe()`, even on duplicate calls. For `unsubscribe()`, validation errors only throw if the topic **is** subscribed (soft no-op if not).
+- **`subscribe(topic)` when already subscribed**: Return `void` with **ZERO side effects**. Do **NOT** validate, **NOT** authorize, **NOT** call adapter, **NOT** mutate state, **NOT** call hooks. Completely transparent no-op. This is guaranteed by checking idempotency before any other step.
 
-**Adapter-first ordering (critical for all operations):**
+- **`unsubscribe(topic)` when not subscribed**: Return `void` with **ZERO side effects**. Do **NOT** validate, **NOT** authorize, **NOT** call adapter, **NOT** mutate state, **NOT** call hooks. Soft no-op—even if topic format is invalid. Guaranteed transparent no-op.
 
-- All operations (single and batch) follow: normalize → validate → authorize → **adapter call** → mutate → hooks
+- **Errors only on state changes**: Validation, authorization, connection errors **only throw** when a state change would occur. Idempotent no-ops (already in target state) **never throw**.
+
+- **Per-batch**: Within `subscribeMany()`, `unsubscribeMany()`, `replace()`, each topic gets idempotency-checked individually. Already-subscribed/unsubscribed topics are skipped (no validation, no authorization, no adapter call) before the batch processes remaining topics.
+
+**Adapter-before-mutation (critical for all operations):**
+
+Per §6.1, all operations (single and batch) follow: normalize → **await in-flight** → **idempotency check** → validate → authorize → **adapter call** → mutate → hooks
+
+- Idempotency check happens early (after normalize, after await in-flight) so duplicate calls never error and never hit validation/auth.
 - **Adapter calls happen before state mutation**, never after.
 - If adapter call fails, local state must remain unchanged (no mutation occurs).
 - This ordering eliminates ghost state, prevents rollback complexity, and ensures reads always reflect committed reality.
@@ -1152,16 +1576,28 @@ These invariants must hold for all adapters. See [ADR-022 Implementation Invaria
 
 **Batch atomicity:**
 
-- Validate all topics in the batch **before** any adapter calls or state mutations.
-- Call adapter for all topics **before** mutating any state.
-- If any adapter call fails, stop immediately; no state is mutated and no further adapter calls are made.
-- If any topic fails (invalid format, unauthorized, adapter error), entire batch fails atomically—no topics are added/removed.
-- Exception: duplicate topics in same call are coalesced before atomicity check (not an error).
-- On success, all topics are subscribed atomically; final state is consistent.
+- **Idempotency check first (per-topic)**: Before validating any topic in the batch, check each topic's current state. Already-subscribed/unsubscribed topics are skipped entirely (no validation, no authorization, no adapter call). Only topics requiring state change proceed.
+
+- **Validate all remaining topics**: Topics requiring state change are validated **before** any adapter calls or state mutations.
+
+- **Call adapter for all remaining topics**: Adapter calls made for all topics requiring state change **before** mutating any state.
+
+- **Atomicity guarantee**: If any topic (of those requiring state change) fails validation, authorization, or adapter call, entire batch fails atomically—no topics are mutated and no adapter calls for any topic succeed.
+
+- **Exception**: Duplicate topics in same call are coalesced before atomicity check (not an error).
+
+- **On success**: All topics requiring state change are subscribed atomically; final state is consistent. Already-subscribed topics remain unchanged (transparent no-op).
 
 **Replace atomicity:**
 
-`replace()` follows the same atomic pattern: validate all desired topics → authorize all new topics → call adapter for all changes → mutate state. Return early if delta is empty (idempotent no-op).
+`replace()` follows the same atomic pattern:
+
+1. Check desired set against current set (idempotency check)
+2. Return early if no delta (transparent no-op, no validation, no authorization, no adapter calls)
+3. Validate all desired topics
+4. Authorize all new topics
+5. Call adapter for all changes
+6. Mutate state atomically
 
 **ReadonlySet semantics:**
 
@@ -1172,15 +1608,15 @@ These invariants must hold for all adapters. See [ADR-022 Implementation Invaria
 
 **Authorization timing:**
 
-- `authorizeSubscribe` checked on every `subscribe()` call, even if already subscribed (before idempotency check).
+- `authorizeSubscribe` is checked **only when a state change would occur** (after idempotency check). Duplicate `subscribe()` calls skip authorization entirely—no ACL hit on true no-ops.
 - `authorizePublish` checked on every `publish()` call.
-- **Not cached** by default (each call re-checks). Apps can cache via `invalidateAuth` hook callback.
+- **Not cached** by default (each call re-checks). Apps can cache via `invalidateAuth` hook callback for explicit cache invalidation on permission changes.
 
 **Publish error semantics and retryability:**
 
 - `publish()` returns `PublishResult` with `error: PublishError`, `retryable: boolean`, and optional `details` object.
 - Retryability defaults:
-  - **Non-retryable (`false`)**: `VALIDATION`, `ACL`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED`, `STATE` (if permanent)
+  - **Non-retryable (`false`)**: `VALIDATION`, `ACL_PUBLISH`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED`, `STATE` (if permanent)
   - **Retryable (`true`)**: `BACKPRESSURE`, `CONNECTION_CLOSED`, `ADAPTER_ERROR` (if transient)
 - For `ADAPTER_ERROR`, include `details.transient?: boolean` to guide app retry logic.
 - `details` object is unstructured; examples: `{ feature: "excludeSelf", limit: 1048576, transient: true }`.
@@ -1324,7 +1760,7 @@ Planned as `specs/pubsub-redis.md`.
 ## 15. Compliance Checklist (for Adapter Implementers)
 
 - [ ] `subscribe()` and `unsubscribe()` are idempotent (no error on duplicate).
-- [ ] All ops follow order: normalize → validate → authorize → **adapter call** → mutate → lifecycle hooks (adapter-first).
+- [ ] All ops follow order: normalize → validate → authorize → **adapter call** → mutate → lifecycle hooks (adapter-before-mutation).
 - [ ] If adapter call fails, local state must remain unchanged (no mutation).
 - [ ] `subscribeMany()` and `unsubscribeMany()` are atomic (all-or-nothing, per batch).
 - [ ] `publish()` respects schema validation and authorization.

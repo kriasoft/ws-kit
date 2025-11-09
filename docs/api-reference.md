@@ -1401,7 +1401,7 @@ interface ServeOptions<TData> {
     req: Request,
   ) => TData | Promise<TData> | undefined | Promise<undefined>;
   onError?: (error: Error, ctx: MessageContext) => void;
-  onBroadcast?: (channel: string, message: unknown) => void;
+  onBroadcast?: (message: unknown, topic: string) => void;
   onUpgrade?: (req: Request, ws: ServerWebSocket<TData>) => void;
   onOpen?: (ws: ServerWebSocket<TData>) => void;
   onClose?: (ws: ServerWebSocket<TData>, code: number, reason: string) => void;

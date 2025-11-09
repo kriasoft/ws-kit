@@ -86,6 +86,9 @@ export class TopicsImpl<
    * @param customValidator - Optional custom validator function for topic validation.
    *                          If provided, overrides default topic validation.
    *                          See {@link TopicValidator} for signature and error requirements.
+   *
+   * **Hook injection**: Hooks are NOT injected here. Use router.use(usePubSub(...)) middleware
+   * for context-aware authorization, normalization, and lifecycle tracking.
    */
   constructor(
     ws: ServerWebSocket<TData>,
@@ -160,16 +163,16 @@ export class TopicsImpl<
   // ============================================================================
 
   async subscribe(topic: string): Promise<void> {
-    // Normalize (none by default; apps use usePubSub() middleware)
-    // Validate
+    // Step 1: Validate (use input topic directly; normalization is a middleware concern)
     this.validateTopic(topic);
+    const normalizedTopic = topic;
 
     // Sequential serialization: wait for any in-flight operation on this topic FIRST.
     // This prevents race conditions where subscribe and unsubscribe interleave.
     // CRITICAL: This must happen BEFORE the idempotency check (docs/specs/pubsub.md#order-of-checks-normative)
     // IMPORTANT: Catch rejections to decouple error semantics—this operation's outcome depends on
     // its own work, not failures from previous operations (docs/specs/pubsub.md#concurrency-edge-cases-for-implementers)
-    const existing = this.inflight.get(topic);
+    const existing = this.inflight.get(normalizedTopic);
     if (existing) {
       try {
         await existing;
@@ -180,11 +183,12 @@ export class TopicsImpl<
     }
 
     // Idempotency: already subscribed? → no-op (checked AFTER waiting for in-flight)
-    if (this.subscriptions.has(topic)) {
+    if (this.subscriptions.has(normalizedTopic)) {
       return;
     }
 
-    // Check topic limit (docs/specs/pubsub.md#order-of-checks-normative)
+    // Step 2: Check topic limit (authorization is a middleware concern, not core state machine)
+    // (docs/specs/pubsub.md#order-of-checks-normative)
     if (this.subscriptions.size >= this.maxTopicsPerConnection) {
       throw new PubSubError(
         "TOPIC_LIMIT_EXCEEDED",
@@ -200,29 +204,43 @@ export class TopicsImpl<
     // This ensures atomicity and linearization: no ghost state, no rollback needed.
     // (docs/specs/pubsub.md#adapter-first-ordering)
     const operation = (async () => {
-      // ADAPTER FIRST: call platform adapter before mutating local state
+      // Step 3: ADAPTER FIRST - call platform adapter before mutating local state
       try {
-        this.ws.subscribe(topic); // May throw; local state remains unchanged
+        // Check connection state before adapter call (CONNECTION_CLOSED error, spec section 8.8)
+        // readyState is a property on native WebSocket objects (1 = OPEN)
+        // Only check if readyState exists (mocks in tests may not have it)
+        const ws = this.ws as unknown as { readyState?: number };
+        if (ws.readyState !== undefined && ws.readyState !== 1) {
+          // WebSocket.OPEN = 1
+          throw new PubSubError("CONNECTION_CLOSED", "Connection is not open");
+        }
+        this.ws.subscribe(normalizedTopic); // May throw; local state remains unchanged
       } catch (err) {
+        // Re-throw CONNECTION_CLOSED as-is, wrap others as ADAPTER_ERROR
+        if (err instanceof PubSubError && err.code === "CONNECTION_CLOSED") {
+          throw err;
+        }
         throw new PubSubError(
           "ADAPTER_ERROR",
-          `Failed to subscribe to topic "${topic}"`,
+          `Failed to subscribe to topic "${normalizedTopic}"`,
           err,
         );
       }
 
-      // MUTATE LOCAL STATE: only after adapter succeeds
-      this.subscriptions.add(topic);
+      // Step 4: MUTATE LOCAL STATE - only after adapter succeeds
+      this.subscriptions.add(normalizedTopic);
+
+      // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
     })();
 
     // CRITICAL: Track in-flight operation BEFORE awaiting it.
     // This prevents concurrent calls from both slipping through the inflight check.
     // If another operation checks inflight while this one is running, it will see this promise.
-    this.inflight.set(topic, operation);
+    this.inflight.set(normalizedTopic, operation);
     try {
       await operation;
     } finally {
-      this.inflight.delete(topic);
+      this.inflight.delete(normalizedTopic);
     }
   }
 
@@ -230,20 +248,20 @@ export class TopicsImpl<
     // Soft no-op semantics (docs/specs/pubsub.md#idempotency): not subscribed? → return without validation.
     // This matches unsubscribeMany() behavior (phase 1: filter to subscribed, phase 2: validate).
     // Enables safe cleanup in finally blocks without pre-checks.
-    if (!this.subscriptions.has(topic)) {
+    const normalizedTopic = topic;
+    if (!this.subscriptions.has(normalizedTopic)) {
       return;
     }
 
-    // Normalize (none by default; apps use usePubSub() middleware)
-    // Validate (only if currently subscribed; soft no-op if not)
-    this.validateTopic(topic);
+    // Step 1: Validate (only if currently subscribed; soft no-op if not)
+    this.validateTopic(normalizedTopic);
 
     // In-flight coalescing: wait for any in-flight subscribe/unsubscribe on this topic.
     // This ensures linearization and prevents duplicate adapter calls.
     // IMPORTANT: Catch rejections to decouple error semantics. If a prior subscribe() failed,
     // this unsubscribe() must still honor soft no-op semantics (docs/specs/pubsub.md#idempotency).
     // (docs/specs/pubsub.md#concurrency-edge-cases-for-implementers)
-    const existing = this.inflight.get(topic);
+    const existing = this.inflight.get(normalizedTopic);
     if (existing) {
       try {
         await existing;
@@ -252,7 +270,7 @@ export class TopicsImpl<
         // This operation's error semantics are independent of prior failures.
       }
       // Re-check if still subscribed after waiting (another operation may have removed it)
-      if (!this.subscriptions.has(topic)) {
+      if (!this.subscriptions.has(normalizedTopic)) {
         return;
       }
     }
@@ -261,27 +279,29 @@ export class TopicsImpl<
     // This ensures atomicity and linearization: no ghost state, no rollback needed.
     // (docs/specs/pubsub.md#adapter-first-ordering)
     const operation = (async () => {
-      // ADAPTER FIRST: call platform adapter before mutating local state
+      // Step 2: ADAPTER FIRST - call platform adapter before mutating local state
       try {
-        this.ws.unsubscribe(topic); // May throw; local state remains unchanged
+        this.ws.unsubscribe(normalizedTopic); // May throw; local state remains unchanged
       } catch (err) {
         throw new PubSubError(
           "ADAPTER_ERROR",
-          `Failed to unsubscribe from topic "${topic}"`,
+          `Failed to unsubscribe from topic "${normalizedTopic}"`,
           err,
         );
       }
 
-      // MUTATE LOCAL STATE: only after adapter succeeds
-      this.subscriptions.delete(topic);
+      // Step 3: MUTATE LOCAL STATE - only after adapter succeeds
+      this.subscriptions.delete(normalizedTopic);
+
+      // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
     })();
 
     // Track in-flight operation
-    this.inflight.set(topic, operation);
+    this.inflight.set(normalizedTopic, operation);
     try {
       await operation;
     } finally {
-      this.inflight.delete(topic);
+      this.inflight.delete(normalizedTopic);
     }
   }
 
@@ -302,15 +322,17 @@ export class TopicsImpl<
     topics: Iterable<string>,
   ): Promise<{ added: number; total: number }> {
     const topicArray = Array.from(topics);
+    // Normalization is a middleware concern; use input topics directly
     const newTopics = new Set<string>(topicArray); // Deduplicate input
 
-    // PHASE 1: Validate all topics BEFORE any state mutation or adapter calls.
+    // Step 1: Validate all topics BEFORE any state mutation or adapter calls.
     // Invariant: If validation fails here, nothing is changed (no adapter calls, no state mutation).
     for (const topic of newTopics) {
       this.validateTopic(topic);
     }
 
-    // PHASE 1.5: Check topic limit before any adapter calls (docs/specs/pubsub.md#batch-atomicity).
+    // Step 2: Check topic limit before any adapter calls (docs/specs/pubsub.md#batch-atomicity).
+    // Authorization is a middleware concern; skip here
     // Count topics that would be newly added (not currently subscribed).
     let newCount = 0;
     for (const topic of newTopics) {
@@ -330,7 +352,7 @@ export class TopicsImpl<
       );
     }
 
-    // PHASE 2: Call adapter for all non-subscribed topics.
+    // Step 3: Call adapter for all non-subscribed topics.
     // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
     // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
     const successfulTopics = new Set<string>();
@@ -365,7 +387,7 @@ export class TopicsImpl<
       );
     }
 
-    // PHASE 3: Mutate internal state only after all adapter calls succeed.
+    // Step 4: Mutate internal state only after all adapter calls succeed.
     // Invariant: We only reach here if all validations and adapter calls succeeded.
     // This guarantees atomicity: either all topics are subscribed or none are.
     let added = 0;
@@ -375,6 +397,8 @@ export class TopicsImpl<
         added++;
       }
     }
+
+    // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
 
     return { added, total: this.subscriptions.size };
   }
@@ -400,9 +424,10 @@ export class TopicsImpl<
     topics: Iterable<string>,
   ): Promise<{ removed: number; total: number }> {
     const topicArray = Array.from(topics);
+    // Normalization is a middleware concern; use input topics directly
     const uniqueTopics = new Set<string>(topicArray); // Deduplicate input
 
-    // PHASE 1: Identify subscribed topics only (soft no-op for non-subscribed).
+    // Step 1: Identify subscribed topics only (soft no-op for non-subscribed).
     // Invariant: Topics not in current subscriptions are ignored (per docs/specs/pubsub.md#idempotency).
     // This means: no validation errors for non-subscribed topics, no adapter calls for them.
     const subscribedTopics = new Set<string>();
@@ -412,14 +437,14 @@ export class TopicsImpl<
       }
     }
 
-    // PHASE 2: Validate only subscribed topics.
+    // Step 2: Validate only subscribed topics.
     // Invariant: Non-subscribed topics skip validation (soft no-op semantics).
     // If validation fails here, nothing is changed (no adapter calls, no state mutation).
     for (const topic of subscribedTopics) {
       this.validateTopic(topic);
     }
 
-    // PHASE 3: Call adapter for all subscribed topics.
+    // Step 3: Call adapter for all subscribed topics.
     // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
     // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
     const successfulTopics = new Set<string>();
@@ -452,7 +477,7 @@ export class TopicsImpl<
       );
     }
 
-    // PHASE 4: Mutate internal state only after all adapter calls succeed.
+    // Step 4: Mutate internal state only after all adapter calls succeed.
     // Invariant: We only reach here if all validations and adapter calls succeeded.
     // This guarantees atomicity: either all subscribed topics are removed or none are.
     let removed = 0;
@@ -460,6 +485,8 @@ export class TopicsImpl<
       this.subscriptions.delete(topic);
       removed++;
     }
+
+    // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
 
     return { removed, total: this.subscriptions.size };
   }
@@ -477,7 +504,7 @@ export class TopicsImpl<
     const removed = this.subscriptions.size;
     const topicArray = Array.from(this.subscriptions);
 
-    // PHASE 1: Call adapter to unsubscribe from all topics.
+    // Step 1: Call adapter to unsubscribe from all topics.
     // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
     // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
     const successfulTopics = new Set<string>();
@@ -506,10 +533,12 @@ export class TopicsImpl<
       });
     }
 
-    // PHASE 2: Mutate internal state only after all adapter calls succeed.
+    // Step 2: Mutate internal state only after all adapter calls succeed.
     // Invariant: We only reach here if all adapter calls succeeded.
     // This guarantees atomicity: either all subscriptions are cleared or none are.
     this.subscriptions.clear();
+
+    // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
 
     return { removed };
   }
@@ -545,56 +574,42 @@ export class TopicsImpl<
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: { signal?: AbortSignal },
   ): Promise<{ added: number; removed: number; total: number }> {
-    // PHASE 1: Normalize & validate all desired topics
-    // Invariant: If validation fails here, nothing is changed.
-    const desiredTopics = new Set<string>(topics); // Deduplicate input
-    const validatedDesired = new Set<string>();
+    // Step 1: Normalize and validate (normalization is middleware concern; use input directly)
+    const topicsArray = Array.from(topics);
+    const desiredTopics = new Set<string>(topicsArray); // Deduplicate input
 
+    // Step 2: Validate all desired topics
+    // Invariant: If validation fails here, nothing is changed.
+    // Authorization is a middleware concern; skip here
     for (const topic of desiredTopics) {
       this.validateTopic(topic);
-      validatedDesired.add(topic);
     }
 
-    // PHASE 2: Authorize all desired topics (those being subscribed)
-    // Invariant: If authorization fails here, nothing is changed (no adapter calls yet).
-    // Note: We only authorize topics we'll be subscribing to (toAdd), not topics being removed.
-    // This matches the behavior of subscribe() - we authorize what we're adding.
-    const topicsToAuthorize = new Set<string>();
-    for (const topic of validatedDesired) {
-      if (!this.subscriptions.has(topic)) {
-        topicsToAuthorize.add(topic);
-      }
-    }
-
-    // (Authorization happens in phase 2 for all topics we'll add)
-    // Placeholder for future: authorization would happen here via middleware
-    // For now, no built-in authorization in TopicsImpl; that's handled by usePubSub()
-
-    // PHASE 3: Compute delta
+    // Step 3: Compute delta
     // toAdd = topics not currently subscribed
     // toRemove = current topics not in desired set
     const toAdd = new Set<string>();
     const toRemove = new Set<string>();
 
-    for (const topic of validatedDesired) {
+    for (const topic of desiredTopics) {
       if (!this.subscriptions.has(topic)) {
         toAdd.add(topic);
       }
     }
 
     for (const topic of this.subscriptions) {
-      if (!validatedDesired.has(topic)) {
+      if (!desiredTopics.has(topic)) {
         toRemove.add(topic);
       }
     }
 
-    // PHASE 4: Idempotency check
+    // Step 4: Idempotency check
     // If both delta sets are empty, return early (no-op, no adapter calls)
     if (toAdd.size === 0 && toRemove.size === 0) {
       return { added: 0, removed: 0, total: this.subscriptions.size };
     }
 
-    // PHASE 4.5: Check topic limit before any adapter calls (docs/specs/pubsub.md#replace-semantics).
+    // Step 5: Check topic limit before any adapter calls (docs/specs/pubsub.md#replace-semantics).
     // Verify: currentSize - removed + added <= maxTopicsPerConnection
     const resultingSize = this.subscriptions.size - toRemove.size + toAdd.size;
     if (resultingSize > this.maxTopicsPerConnection) {
@@ -611,7 +626,7 @@ export class TopicsImpl<
       );
     }
 
-    // PHASE 5: Call adapter for all changes atomically
+    // Step 6: Call adapter for all changes atomically
     // Track successes for rollback if any topic fails (docs/specs/pubsub.md#replace-semantics).
     // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
     // CRITICAL: Unsubscribe FIRST (freeing space) before subscribing. This ensures adapter never
@@ -670,7 +685,7 @@ export class TopicsImpl<
       );
     }
 
-    // PHASE 6: Mutate internal state only after all adapter calls succeed
+    // Step 7: Mutate internal state only after all adapter calls succeed
     // Invariant: We only reach here if all validations and adapter calls succeeded.
     // This guarantees atomicity: either all topics are added/removed or none are.
     for (const topic of toAdd) {
@@ -681,7 +696,8 @@ export class TopicsImpl<
       this.subscriptions.delete(topic);
     }
 
-    // PHASE 7: Return counts
+    // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
+
     return {
       added: toAdd.size,
       removed: toRemove.size,

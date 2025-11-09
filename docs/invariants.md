@@ -2,6 +2,50 @@
 
 Canonical rules and names for the shipped application patterns: state channels, flow control, and delta sync.
 
+## Pub/Sub Rules (Canonical for All Adapters)
+
+**Single Extension Point Policy**
+
+Apps configure pub/sub in **exactly one place**: `usePubSub()` middleware.
+
+| Responsibility               | Where                                                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Structural shape**         | `router.limits`: `topicPattern`, `maxTopicLength`, `maxTopicsPerConnection`                                     |
+| **All context-aware policy** | `usePubSub()` middleware: `authorizeSubscribe`, `authorizePublish`, `normalize`, `onSubscribe`, `onUnsubscribe` |
+
+**Rule**: Constructor is for structural limits only. ALL authorization, normalization, and lifecycle hooks go in `usePubSub()` middleware.
+
+See [ADR-022 § 6](../adr/022-namespace-first-pubsub-api.md#6-single-extension-point-usepubsub-as-canonical-authority) for design rationale.
+
+**Canonical Operation Order**
+
+Every subscription operation (single or batch) follows this strict order:
+
+```
+Normalize → Await in-flight → IDEMPOTENCY CHECK → Validate → Authorize → Limit check → Adapter call → Mutate → Hooks
+```
+
+**🔴 CRITICAL: Idempotency-First (Step 3)**
+
+Duplicate calls return immediately with **ZERO side effects**:
+
+- No validation
+- No authorization
+- No adapter calls
+- No hooks
+- No mutation
+
+Already-subscribed topics in batches are skipped identically. Errors only occur when state change is needed.
+
+**Key Principles:**
+
+- Adapter calls happen BEFORE local state mutation (if adapter fails, state unchanged)
+- Authorization always checks normalized topic (prevents TOCTOU bugs)
+- Hooks receive normalized topic, not raw input
+- Hook failures don't rollback state
+
+See [docs/specs/pubsub.md#6.1](./specs/pubsub.md#61-canonical-operation-order-normative) for complete specification and rationale.
+
 ## Canonical Field Names
 
 - **`seq`** — immutable sequence number (event ID, not revision)

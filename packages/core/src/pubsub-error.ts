@@ -5,30 +5,35 @@
  * Pub/Sub error codes.
  *
  * Canonical error codes for topic subscription and publication operations.
- * Used for exhaustive error handling and adaptation-specific logic.
+ * Unified taxonomy for consistent pattern-matching across subscribe/publish paths.
  *
- * **Subscription errors** (subscribe, unsubscribe, subscribeMany, unsubscribeMany):
- * - UNAUTHORIZED_SUBSCRIBE: Denied by authorizeSubscribe hook
- * - INVALID_TOPIC: Topic format validation failed
- * - TOPIC_LIMIT_EXCEEDED: Connection hit subscription quota
- * - CONNECTION_CLOSED: Connection is closed/disposed
- * - ADAPTER_ERROR: Unexpected adapter failure
- *
- * **Publication-specific errors** (publish):
- * - BACKPRESSURE: Adapter send queue full
- * - PAYLOAD_TOO_LARGE: Payload exceeds adapter limit
- *
- * See docs/specs/pubsub.md#errors for details.
+ * See docs/specs/pubsub.md#error-models for details.
  */
 export type PubSubErrorCode =
-  | "UNAUTHORIZED_SUBSCRIBE" // Denied by authorizeSubscribe() hook
-  | "UNAUTHORIZED_PUBLISH" // Denied by authorizePublish() hook
+  | "ACL_SUBSCRIBE" // Denied by authorizeSubscribe() hook
   | "INVALID_TOPIC" // Failed validation or pattern check
   | "TOPIC_LIMIT_EXCEEDED" // Connection hit maxTopicsPerConnection quota
   | "CONNECTION_CLOSED" // Connection closed; cannot subscribe/publish
-  | "BACKPRESSURE" // (publish only) Adapter send queue full
-  | "PAYLOAD_TOO_LARGE" // (publish only) Payload exceeds adapter limit
   | "ADAPTER_ERROR"; // Catch-all for adapter-specific errors
+
+/**
+ * Structured context for ACL failures.
+ *
+ * Provides details about subscription/publication authorization denials
+ * without expanding the core error code taxonomy.
+ */
+export type PubSubAclDetails = {
+  /** Operation that was denied (mirrors error code) */
+  op: "subscribe" | "publish";
+  /** HTTP-like semantics: "unauthorized" (401) vs "forbidden" (403) */
+  kind?: "unauthorized" | "forbidden";
+  /** Machine-readable hint for why authorization failed */
+  reason?: string;
+  /** Policy ID or name that was applied */
+  policy?: string;
+  /** Offending topic if relevant */
+  topic?: string;
+};
 
 /**
  * Error thrown by pub/sub operations when validation, authorization, or connection errors occur.
@@ -47,7 +52,7 @@ export type PubSubErrorCode =
  * } catch (err) {
  *   if (err instanceof PubSubError) {
  *     switch (err.code) {
- *       case "UNAUTHORIZED_SUBSCRIBE":
+ *       case "ACL_SUBSCRIBE":
  *         ctx.error("PERMISSION_DENIED", "You cannot subscribe to this topic");
  *         break;
  *       case "INVALID_TOPIC":

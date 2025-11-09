@@ -16,25 +16,25 @@ This specification documents the expected behavior and guarantees of each adapte
 | **Reconnection Handling**             | Client-initiated      | Client-initiated      | Client-initiated      | See [Reconnection](#reconnection)       |
 | **Message Ordering**                  | FIFO per connection   | FIFO per connection   | FIFO per connection   | Within single connection guaranteed     |
 | **Error Propagation**                 | Via onError hook      | Via onError hook      | Via onError hook      | Unhandled errors logged                 |
-| **Cleanup on Disconnect**             | Automatic unsubscribe | Automatic unsubscribe | Automatic unsubscribe | Removes from all scopes                 |
+| **Cleanup on Disconnect**             | Automatic unsubscribe | Automatic unsubscribe | Automatic unsubscribe | Removes from all topics                 |
 
 ## Pub/Sub Model
 
 ### Bun Adapter
 
 ```typescript
-// In-memory scope management
+// In-memory topic management
 const subscriptions = new Map<string, Set<WebSocket>>();
 
-function subscribe(scope: string, ws: WebSocket) {
-  if (!subscriptions.has(scope)) {
-    subscriptions.set(scope, new Set());
+function subscribe(topic: string, ws: WebSocket) {
+  if (!subscriptions.has(topic)) {
+    subscriptions.set(topic, new Set());
   }
-  subscriptions.get(scope)!.add(ws);
+  subscriptions.get(topic)!.add(ws);
 }
 
-function publish(scope: string, message: any) {
-  const subscribers = subscriptions.get(scope);
+function publish(topic: string, message: any) {
+  const subscribers = subscriptions.get(topic);
   if (!subscribers) return;
 
   for (const ws of subscribers) {
@@ -42,8 +42,8 @@ function publish(scope: string, message: any) {
   }
 }
 
-function unsubscribe(scope: string, ws: WebSocket) {
-  subscriptions.get(scope)?.delete(ws);
+function unsubscribe(topic: string, ws: WebSocket) {
+  subscriptions.get(topic)?.delete(ws);
 }
 ```
 
@@ -66,15 +66,15 @@ export class WebSocketServer extends DurableObject {
     // ...subscribe/publish logic
   }
 
-  subscribe(scope: string, ws: WebSocket) {
-    if (!this.subscriptions.has(scope)) {
-      this.subscriptions.set(scope, new Set());
+  subscribe(topic: string, ws: WebSocket) {
+    if (!this.subscriptions.has(topic)) {
+      this.subscriptions.set(topic, new Set());
     }
-    this.subscriptions.get(scope)!.add(ws);
+    this.subscriptions.get(topic)!.add(ws);
   }
 
-  publish(scope: string, message: any) {
-    const subscribers = this.subscriptions.get(scope);
+  publish(topic: string, message: any) {
+    const subscribers = this.subscriptions.get(topic);
     if (!subscribers) return;
 
     for (const ws of subscribers) {
@@ -94,18 +94,18 @@ export class WebSocketServer extends DurableObject {
 ### Deno Adapter
 
 ```typescript
-// In-memory scope management (similar to Bun)
+// In-memory topic management (similar to Bun)
 const subscriptions = new Map<string, Set<WebSocket>>();
 
-function subscribe(scope: string, ws: WebSocket) {
-  if (!subscriptions.has(scope)) {
-    subscriptions.set(scope, new Set());
+function subscribe(topic: string, ws: WebSocket) {
+  if (!subscriptions.has(topic)) {
+    subscriptions.set(topic, new Set());
   }
-  subscriptions.get(scope)!.add(ws);
+  subscriptions.get(topic)!.add(ws);
 }
 
-function publish(scope: string, message: any) {
-  const subscribers = subscriptions.get(scope);
+function publish(topic: string, message: any) {
+  const subscribers = subscriptions.get(topic);
   if (!subscribers) return;
 
   for (const ws of subscribers) {
@@ -175,14 +175,14 @@ All adapters use **synchronous fan-out**:
 
 ```typescript
 // Pseudocode for all adapters
-function publish(scope: string, message: any) {
-  const subscribers = getSubscribers(scope); // Platform-specific lookup
+function publish(topic: string, message: any) {
+  const subscribers = getSubscribers(topic); // Platform-specific lookup
 
   for (const subscriber of subscribers) {
     try {
       subscriber.send(JSON.stringify(message));
     } catch (err) {
-      console.error(`Failed to broadcast to ${scope}:`, err);
+      console.error(`Failed to broadcast to ${topic}:`, err);
       // Subscriber is cleaned up elsewhere (e.g., onClose)
     }
   }
@@ -191,10 +191,10 @@ function publish(scope: string, message: any) {
 
 **Guarantees:**
 
-- ✅ All connected subscribers in scope receive message
+- ✅ All connected subscribers in topic receive message
 - ✅ Broadcast completes before `publish()` returns
 - ⚠️ **Send failures are logged, not rethrown** — One failed send doesn't block others
-- ⚠️ **No ordering guarantee across scopes** — Different scopes are independent
+- ⚠️ **No ordering guarantee across topics** — Different topics are independent
 
 ## Platform Limits
 
@@ -242,7 +242,7 @@ export class WebSocketServer extends DurableObject {
 - **Concurrent connections**: 100 per Durable Object instance
 - **Message size**: 1MB
 - **Stored state**: 10MB per Durable Object
-- **Mitigation**: Shard across multiple DO instances by scope
+- **Mitigation**: Shard across multiple DO instances by topic
 
 ### Deno
 
@@ -276,7 +276,7 @@ All adapters treat reconnection as a **new connection**:
 // 1. Old connection closed (onClose called, subscriptions cleaned up)
 // 2. authenticate() called again
 // 3. New connection opened (onOpen called)
-// 4. Client must re-subscribe to scopes
+// 4. Client must re-subscribe to topics
 
 // ⚠️ IMPORTANT: No automatic subscription recovery
 serve(router, {
@@ -299,9 +299,9 @@ serve(router, {
 ```typescript
 // Client code (type-safe WebSocket client)
 client.on("connected", () => {
-  // Reconnected: re-subscribe to all scopes
-  client.send(SubscribeMessage, { scope: "user:123" });
-  client.send(SubscribeMessage, { scope: "room:456" });
+  // Reconnected: re-subscribe to all topics
+  client.send(SubscribeMessage, { topic: "user:123" });
+  client.send(SubscribeMessage, { topic: "room:456" });
 });
 ```
 
@@ -412,7 +412,7 @@ All adapters follow **identical error semantics**. See `docs/specs/error-handlin
 
 ### Cloudflare DO Sharding for Pub/Sub
 
-When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Shard subscriptions across multiple DO instances by mapping scope names to stable shard IDs.
+When using Cloudflare Durable Objects with pub/sub, each DO instance is limited to 100 concurrent connections. Shard subscriptions across multiple DO instances by mapping topic names to stable shard IDs.
 
 **Worker entrypoint** (routes incoming requests to sharded DO instances):
 
@@ -517,18 +517,18 @@ class_name = "WebSocketRouter"
 **Optional: Inline hash without helper** (for reference or custom distribution logic):
 
 ```typescript
-// Pure function for scope → shard name mapping
-function scopeToDoName(scope: string, shards: number): string {
+// Pure function for topic → shard name mapping
+function topicToDoName(topic: string, shards: number): string {
   let hash = 0;
-  for (let i = 0; i < scope.length; i++) {
-    hash = (hash << 5) - hash + scope.charCodeAt(i);
+  for (let i = 0; i < topic.length; i++) {
+    hash = (hash << 5) - hash + topic.charCodeAt(i);
     hash = hash | 0; // 32-bit signed integer
   }
   return `ws-router-${(hash >>> 0) % shards}`;
 }
 
 // Usage: compute shard, then get stub
-const shardName = scopeToDoName(`room:${roomId}`, 10);
+const shardName = topicToDoName(`room:${roomId}`, 10);
 const doId = env.ROUTER.idFromName(shardName);
 const stub = env.ROUTER.get(doId);
 ```
@@ -536,11 +536,11 @@ const stub = env.ROUTER.get(doId);
 **Benefits:**
 
 - ✅ **Linear scaling**: Add more DO instances to handle more concurrent connections
-- ✅ **Stable routing**: Same scope always maps to same DO (deterministic hash)
-- ✅ **No cross-shard overhead**: Each scope's subscribers live on one DO; broadcasts are free (BroadcastChannel)
+- ✅ **Stable routing**: Same topic always maps to same DO (deterministic hash)
+- ✅ **No cross-shard overhead**: Each topic's subscribers live on one DO; broadcasts are free (BroadcastChannel)
 - ✅ **Simple distribution**: No external router needed; client directly reaches correct shard
 
-**Important**: Changing shard count (`10` → `20`) remaps existing scopes. Plan a migration period if using persistent storage or want to preserve session state across deployments.
+**Important**: Changing shard count (`10` → `20`) remaps existing topics. Plan a migration period if using persistent storage or want to preserve session state across deployments.
 
 ## Rate Limiter Adapters
 

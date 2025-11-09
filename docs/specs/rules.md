@@ -136,10 +136,43 @@ export default {
   - `onOpen(ctx)` — After authentication (safe to send messages)
   - `onClose(ctx)` — After disconnect (cleanup)
   - `onError(error, ctx)` — Centralized error handling
-  - `onBroadcast(message, scope)` — Track broadcast events
+  - `onBroadcast(message, topic)` — Track broadcast events
 - **ALWAYS** unsubscribe in `onClose()` → docs/specs/pubsub.md#9.7-Room-Management
 - **ALWAYS** store topic IDs in `ctx.ws.data` → docs/specs/pubsub.md#9.7-Room-Management
 - **NEVER** throw in lifecycle hooks; errors are caught and logged → ADR-009
+
+### Pub/Sub Operations
+
+#### Configuration: One Extension Point Only
+
+- **NEVER** configure pub/sub authorization, normalization, or lifecycle hooks in the router constructor → docs/specs/pubsub.md#5.0-configuration--middleware--policy-split
+  - Router constructor is **structural shape only**: `limits.topicPattern`, `limits.maxTopicLength`, `limits.maxTopicsPerConnection`
+  - All context-aware policy goes in **`usePubSub()` middleware ONLY**
+
+- **ALWAYS** use `usePubSub()` middleware for ALL context-aware pub/sub logic → docs/specs/pubsub.md#5.0-configuration--middleware--policy-split
+  - Authorization (`authorizeSubscribe`, `authorizePublish`)
+  - Normalization (`normalize`)
+  - Lifecycle telemetry (`onSubscribe`, `onUnsubscribe`)
+  - Cache invalidation (`invalidateAuth`)
+
+- **ALWAYS** put structural validation in `router.limits`, NEVER in middleware → docs/specs/pubsub.md#5.0-configuration--middleware--policy-split
+  - Format pattern: `topicPattern` (regex)
+  - Length limits: `maxTopicLength` (number)
+  - Per-connection quotas: `maxTopicsPerConnection` (number)
+
+#### Operation Semantics: Canonical Order & Idempotency
+
+- **ALWAYS** follow the Canonical Operation Order for all subscription operations → docs/specs/pubsub.md#6.1-canonical-operation-order-normative
+  - Apply in strict sequence: normalize → await in-flight → idempotency check → validate → authorize → limit check → adapter call → mutate → lifecycle hooks
+  - Applies uniformly to `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()`, and `replace()`
+
+- **🔴 NEVER** validate/authorize/call-adapter on idempotent calls → docs/specs/pubsub.md#6.1-canonical-operation-order-normative
+  - Duplicate calls return immediately with ZERO side effects (zero validation, zero auth, zero adapter, zero hooks)
+  - Within batches: already-in-target-state topics are skipped entirely
+
+- **ALWAYS** authorize on normalized topic, never raw input → docs/specs/pubsub.md#6.1-canonical-operation-order-normative, step 5
+
+- **ALWAYS** call adapter before mutating local state → docs/specs/pubsub.md#6.1-canonical-operation-order-normative, step 7
 
 ---
 

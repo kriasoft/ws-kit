@@ -471,7 +471,7 @@ Ensure your fetch handler returns the result of `fetch(req, server)` from `creat
 
 Check that:
 
-1. Sender is subscribed: `ctx.ws.subscribe("channel")`
+1. Sender is subscribed: `await ctx.topics.subscribe("channel")`
 2. Receiver is subscribed to the same channel
 3. For multi-instance: use `@ws-kit/redis-pubsub`
 

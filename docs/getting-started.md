@@ -186,7 +186,7 @@ Notice how both server and client have complete TypeScript inference from the sh
 The `serve()` function supports additional lifecycle hooks beyond `onOpen`, `onClose`, and `onError`:
 
 - `onUpgrade(req)` — Customize HTTP upgrade response before WebSocket handshake
-- `onBroadcast(ctx, topic, data)` — Observe or intercept broadcast events
+- `onBroadcast(message, topic)` — Observe broadcast events
 
 See the [API Reference](./api-reference) for details.
 :::

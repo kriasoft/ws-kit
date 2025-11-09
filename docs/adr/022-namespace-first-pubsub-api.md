@@ -156,40 +156,20 @@ try {
 
 ### 4. Batch Operations: Atomic (All-or-Nothing)
 
-```typescript
-// Either all succeed, or all fail; no partial state
-const result = await ctx.topics.subscribeMany(["room:a", "room:b", "room:c"]);
-// Returns { added: 3, total: 7 } OR throws if any topic fails
-
-// Same for unsubscribe
-const result = await ctx.topics.unsubscribeMany([...]);
-// Returns { removed: 2, total: 5 } OR throws
-```
+**Guarantee**: `subscribeMany()` and `unsubscribeMany()` are atomic. Either all succeed or all fail; no partial state.
 
 **Why atomic:**
 
-- **Prevents inconsistent state**: Partial failure (rooms 1-2 subscribed, 3 failed) leaves app in undefined state
+- **Prevents inconsistent state**: Partial failure (some subscribed, others failed) leaves app in undefined state
 - **Single round-trip**: One await for many operations (vs O(n) awaits in loop)
 - **Consistent with database transactions**: Apps expect atomic or nothing
 - **Simplifies error handling**: One error means entire batch failed; no need to track partial success
 
-**Cost**: Adapters must implement transactional semantics (validate all before mutating any). Worth it for correctness.
+**Complete specification**: See [docs/specs/pubsub.md § 6.3](../specs/pubsub.md#63-batch-atomicity) for rollback semantics, atomicity flow, and monitoring patterns.
 
 ### 5. Optional Typed Topics via `topic()` Helper
 
-```typescript
-// Simple case: just strings, no validation
-await ctx.topics.subscribe(`room:${roomId}`);
-
-// Complex case: optional type-safe schema
-const RoomTopic = topic(
-  "room",
-  z.object({ roomId: z.string().uuid() }),
-  ({ roomId }) => `room:${roomId}`,
-);
-
-await ctx.topics.subscribe(RoomTopic.make({ roomId })); // Validated at call-time
-```
+**Design**: Type-safe topic definitions are optional, not mandatory. Apps can use plain strings or use the `topic()` helper for validation and type inference.
 
 **Why optional:**
 
@@ -198,82 +178,87 @@ await ctx.topics.subscribe(RoomTopic.make({ roomId })); // Validated at call-tim
 - **No false ceremony**: Not forcing schema for every topic when `"room:123"` is self-explanatory
 - **Aligns with WS-Kit philosophy**: Type safety when you need it, not mandatory
 
-**Why not mandatory typed topics:**
+**Examples**: See [docs/specs/pubsub.md § 4](../specs/pubsub.md#4-typed-topic-helper-optional-convenience) for detailed examples, patterns, and use cases.
+
+### 6. Single Extension Point: `usePubSub()` as Canonical Authority
+
+**🎯 Core Policy: Eliminate "Where Do I Put This?" Confusion**
+
+There is **exactly one place** where applications configure pub/sub authorization, normalization, and lifecycle hooks: **`usePubSub()` middleware**. The router constructor is **never** used for pub/sub policy.
+
+**Architecture (Clean Split):**
+
+| Layer                        | Responsibility                  | Code                                                                                                         |
+| ---------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Router constructor**       | Structural shape only           | `new WebSocketRouter({ limits: { topicPattern, maxTopicLength, maxTopicsPerConnection } })`                  |
+| **`usePubSub()` middleware** | All context-aware policy        | `usePubSub({ normalize, authorizeSubscribe, authorizePublish, onSubscribe, onUnsubscribe, invalidateAuth })` |
+| **Internal implementation**  | Testing hooks only (not public) | (Hidden from users; developers never configure this)                                                         |
+
+**Why Single Extension Point Eliminates Confusion:**
 
 ```typescript
-// ❌ Rejected: Heavy schema requirement
-const every = topic("heartbeat", z.void(), () => "system:heartbeat");
-// Boilerplate for simple, dynamic topics
-
-// ✅ Selected: Optional
-await ctx.topics.subscribe("system:heartbeat"); // Fine
-```
-
-### 6. Lightweight Hooks, Not Heavy Middleware
-
-```typescript
-router.use(
-  usePubSub({
-    normalize: (t) => t.toLowerCase(),
-    validate: (t) => /^[a-z0-9:_-]{1,128}$/.test(t) || "INVALID_TOPIC",
-    authorizeSubscribe: (ctx, topic) => canAccess(ctx.user, topic),
-    onSubscribe: (ctx, topic) => logger.info(`Subscribed: ${topic}`),
-  }),
-);
-```
-
-**Why hooks, not router registration:**
-
-```typescript
-// ❌ Rejected: Heavy (like router.on() / router.rpc())
-router.topic(RoomTopic, {
-  authorize: (ctx, { roomId }) => canAccess(ctx.user, roomId),
-  onSubscribe: (ctx, { roomId }) => {
-    /* ... */
-  },
-  onPublish: (ctx, { roomId }, msg) => {
-    /* ... */
+// ❌ CONFUSION: Split responsibility
+// "Do I put authorization in router constructor or middleware?"
+const router = new WebSocketRouter({
+  limits: { topicPattern: /^[a-z0-9:_-]{1,128}$/ },
+  pubsubHooks: {
+    // Where to put auth?
+    authorizeSubscribe: (ctx, topic) => {
+      /* ... */
+    },
   },
 });
-// Boilerplate for simple authorization
-
-// ✅ Selected: Lightweight hooks
 router.use(
   usePubSub({
-    authorizeSubscribe: (ctx, topic) => canAccess(ctx.user, topic),
+    authorizeSubscribe: (ctx, topic) => {
+      /* ... */
+    }, // Or here?
   }),
 );
-// Minimal ceremony for common case; still extensible via separate ADR if needed
+
+// ✅ CLARITY: Single canonical point
+// "Where do I put authorization?" Answer: "Always in usePubSub() middleware."
+const router = new WebSocketRouter({
+  limits: { topicPattern: /^[a-z0-9:_-]{1,128}$/ }, // Structural only; no hooks here
+});
+router.use(
+  usePubSub({
+    // All policy goes here:
+    normalize: (t) => t.toLowerCase(),
+    authorizeSubscribe: (ctx, topic) => canAccess(ctx.user, topic),
+    authorizePublish: (ctx, topic) => canPublish(ctx.user, topic),
+    onSubscribe: (ctx, topic) => logger.info(`Subscribed: ${topic}`),
+    onUnsubscribe: (ctx, topic) => cleanup(ctx, topic),
+  }),
+);
+// One place, clear intent
 ```
 
 **Rationale:**
 
-- Most apps don't need per-topic lifecycle hooks
-- Hooks installed once, apply uniformly to all topics
-- Keep common case simple; heavy patterns are future extension (ADR-023+)
+- **Eliminates confusion**: One canonical answer to "Where do I put this?"
+- **Clear separation of concerns**: Router limits = shape, middleware = policy
+- **Prevents accidental split**: Can't scatter auth logic across two config points
+- **Scalability**: Apps add multiple hooks in one middleware; no hunting for multiple config places
+- **Testability**: Tests override middleware; constructor is fixed at deploy time
+- **No dual responsibility**: Implementation never has public constructor hooks; only `usePubSub()` is the public extension point
 
-### 7. Semantics: Strict Order of Operations
+### 7. Semantics: Idempotency-First Order (Critical for DX & Correctness)
 
-**Normative specification: See [docs/specs/pubsub.md section 6.1](../specs/pubsub.md#61-order-of-checks-normative)**
+**🔴 CRITICAL**: Idempotency-first is non-negotiable. Every operation must return early on idempotent calls with **ZERO side effects**.
 
-Every subscription operation follows this invariant (canonical order in spec; repeated here for clarity):
+**Normative specification: See [docs/specs/pubsub.md § 6.1](../specs/pubsub.md#61-canonical-operation-order-normative)**
 
-```typescript
-// Every operation follows invariant:
-// 1. Normalize(topic)
-// 2. Validate(normalized)
-// 3. Authorize(normalized)
-// 4. Idempotency check (return early if already subscribed, no hooks)
-// 5. Mutate state
-// 6. Call hooks (if state changed)
-```
+This section explains the design rationale. For the complete specification with flowchart and implementation details, see the reference above.
 
-**Why this order:**
+**Why idempotency-first (not validation-first):**
 
-- **TOCTOU prevention**: Authorization checks normalized topic, not raw input
-- **Idempotency clarity**: Hooks only fire on state changes (not on duplicate subscribe)
-- **Predictable side effects**: Hooks run after mutation succeeds (state is consistent)
-- **No drift**: Spec is normative; this ADR enforces the same order in all adapters
+- **Duplicate calls are guaranteed clean no-ops**: Calling `subscribe()` twice on same topic never errors, never validates, never hits ACL. This eliminates spurious failures on transient duplicates and race conditions. **This is a promise to app developers.**
+- **Simplifies error semantics**: Errors only occur when attempting a state change. "Idempotent" truly means "safe to repeat unconditionally—no side effects, no validation, no errors."
+- **Matches `unsubscribe()` semantics**: `unsubscribe()` on non-subscribed topic is soft no-op (no validation, no error). Idempotency-first makes both consistent and predictable.
+- **Better for concurrency**: Concurrent duplicate calls linearize safely without spurious failures.
+- **DX improvement**: Apps don't need defensive `if (!has(topic))` checks before unsubscribing or worry about spurious ACL failures on duplicates.
+- **Cost is pure win**: Validation/authorization happen early, but only on actual state changes. Skip unnecessary validation on no-ops = no downside.
 
 ### 8. Error Model: Subscribe Throws, Publish Returns (with Retryability Hint)
 
@@ -312,25 +297,46 @@ if (result.ok) {
 
 ### Benefits
 
+✅ **🔴 Idempotency-first guarantee** — Duplicate calls return immediately with zero side effects (no validation, no auth, no adapter calls, no hooks). Eliminates spurious failures on transient duplicates. **This is the most important DX win.**
+
+✅ **Single extension point eliminates confusion** — Developers ask "where do I put authorization?" Answer: always `usePubSub()` middleware. Router constructor is structural shape only. No more hunting through documentation or asking "should this go in the router or in middleware?"
+
 ✅ **Clear semantic separation** — State (topics) vs action (publish) are distinct concepts
+
 ✅ **Predictable error handling** — Subscribe throws; publish returns; "mutations throw, actions return"
+
 ✅ **Idiomatic async/await** — `Promise<void>` + throw matches modern JS
+
 ✅ **Zero overhead** — `ReadonlySet<string>` is native; no wrapper
-✅ **Prevents inconsistent state** — Atomic batches, strict operation order
-✅ **Actionable remediation** — `retryable: boolean` eliminates boilerplate; no switch statements needed in every publish call
+
+✅ **Prevents inconsistent state** — Atomic batches, strict operation order, per-topic idempotency checks within batches
+
+✅ **Actionable remediation** — `retryable: boolean` eliminates boilerplate; no switch statements needed
+
 ✅ **Progressive type safety** — Optional `topic()` helper, not mandatory
-✅ **Lightweight for common case** — Hooks vs heavy middleware
+
+✅ **Safe concurrent calls** — Idempotency-first + per-topic in-flight serialization prevents race conditions
+
+✅ **No defensive code needed** — Apps don't need `if (!has(topic))` checks; can call subscribe/unsubscribe unconditionally
+
+✅ **Clean separation of concerns** — Deployment-time config (limits) vs runtime policy (middleware) never conflict
+
 ✅ **Extensible** — Room for patterns, presence, Redis adapters (separate ADRs)
+
 ✅ **Portable** — Identical semantics across Bun, Node/uWS, Cloudflare DO
-✅ **Idempotent by default** — Apps don't need defensive `if (!has())` checks
 
 ### Trade-offs
 
 ⚠️ **Breaking change from draft spec** — Apps using draft API must migrate
-⚠️ **Adapters need transactional semantics** — Batch atomicity requires careful implementation
+⚠️ **Adapters need transactional semantics** — Batch atomicity requires careful implementation (but pays off with correctness)
 ⚠️ **`ReadonlySet` immutability must be enforced** — Adapters must prevent direct mutation (via freeze, proxy, or wrapper)
 ⚠️ **Hooks fire after mutation** — If hook throws, state is already changed (no automatic rollback). Exceptions propagate to caller; apps requiring rollback must implement try/catch at handler/middleware level.
 ⚠️ **No `subscriberCount()` API** — Unreliable across adapters; `publish()` result provides capability hint instead
+⚠️ **Single extension point means no per-topic hooks** — All auth/lifecycle is global via `usePubSub()`. Per-topic hooks are future extension (ADR-023+)
+
+**Not a trade-off (non-negotiable invariant):**
+
+- ✓ **Idempotency-first is guaranteed, not optional** — Duplicate calls ALWAYS return with zero side effects (no validation, no auth, no adapter, no hooks). This is a promise to developers, not a performance optimization that can be relaxed.
 
 ## Alternatives Considered
 
@@ -663,22 +669,11 @@ await ctx.topics.subscribe(topic, { authorize: (ctx) => canAccess(ctx) });
 - WebSocket connections are stateless from protocol perspective
 - Subscriptions should explicitly be re-requested on reconnection
 - Apps that want to restore state should maintain their own "desired topics" list and re-subscribe
+- This is explicit and controllable by the app, vs automatic but fragile
 
-**Pattern:**
+**Recommended Patterns:**
 
-```typescript
-const desiredTopics = ["room:123", "system:announcements"];
+See [docs/specs/pubsub.md § 9](../specs/pubsub.md#9-reconnection--state-persistence-important-pattern) for two patterns:
 
-client.on("open", async () => {
-  for (const topic of desiredTopics) {
-    await client.subscribe(topic);
-  }
-});
-
-client.on("join-room", ({ roomId }) => {
-  desiredTopics.push(`room:${roomId}`);
-  client.subscribe(`room:${roomId}`);
-});
-```
-
-This is explicit and controllable by the app.
+1. **Atomic resync using `replace()`** (recommended) — Synchronize all subscriptions atomically without manual diffing
+2. **Manual control using `subscribe()`/`unsubscribe()`** — For fine-grained control over individual subscriptions

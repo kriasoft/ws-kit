@@ -741,7 +741,7 @@ export interface Topics extends ReadonlySet<string> {
    * **Throws** on validation, authorization, connection, or adapter failure.
    *
    * @param topic - Topic name to subscribe to
-   * @throws {PubSubError} with code: INVALID_TOPIC, UNAUTHORIZED_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
+   * @throws {PubSubError} with code: INVALID_TOPIC, ACL_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
    *                       CONNECTION_CLOSED, or ADAPTER_ERROR
    *
    * @example
@@ -751,7 +751,7 @@ export interface Topics extends ReadonlySet<string> {
    * } catch (err) {
    *   if (err instanceof PubSubError) {
    *     switch (err.code) {
-   *       case "UNAUTHORIZED_SUBSCRIBE":
+   *       case "ACL_SUBSCRIBE":
    *         ctx.error("PERMISSION_DENIED", "You cannot access this room");
    *         break;
    *       // ... handle other codes
@@ -909,13 +909,117 @@ export interface Topics extends ReadonlySet<string> {
    * // { added: 1, removed: 1, total: 2 }
    * ```
    *
-   * @throws {PubSubError} with code: INVALID_TOPIC, UNAUTHORIZED_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
+   * @throws {PubSubError} with code: INVALID_TOPIC, ACL_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
    *                       CONNECTION_CLOSED, or ADAPTER_ERROR
    */
   replace(
     topics: Iterable<string>,
     options?: { signal?: AbortSignal },
   ): Promise<{ added: number; removed: number; total: number }>;
+}
+
+/**
+ * Pub/Sub middleware options for configuring topic subscriptions and publishing.
+ *
+ * Provides hooks for authorization, normalization, and lifecycle events
+ * around subscription and publication operations.
+ *
+ * Per spec docs/specs/pubsub.md#configuration--middleware
+ */
+export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
+  /**
+   * Normalize topic string before validation and authorization.
+   *
+   * Called as first step (spec section 6.1, step 1) before any side-effects.
+   * Enables lowercase conversion, trimming, or other standardization.
+   *
+   * Result is used for all downstream checks (validation, authorization, storage).
+   * Prevents TOCTOU bugs where authorization checks one string but a different topic is stored.
+   *
+   * @param topic - Raw input topic string
+   * @returns Normalized topic string
+   * @throws Should not throw; return normalized string for all inputs
+   */
+  normalize?: (topic: string) => string;
+
+  /**
+   * Authorize subscription to a topic.
+   *
+   * Called after validation (spec section 6.1, step 3) before adapter calls.
+   * Receives normalized topic for authorization decision.
+   *
+   * @param ctx - Message context with user/role information
+   * @param topic - Normalized topic string
+   * @returns true to allow, false or rejected promise to deny
+   * @throws On authorization check failure
+   */
+  authorizeSubscribe?: (
+    ctx: MessageContext<MessageSchemaType, TData>,
+    topic: string,
+  ) => boolean | Promise<boolean>;
+
+  /**
+   * Authorize publishing to a topic.
+   *
+   * Called when publish() is invoked, after validation but before sending.
+   * Receives normalized topic for authorization decision.
+   *
+   * @param ctx - Message context with user/role information
+   * @param topic - Normalized topic string
+   * @returns true to allow, false or rejected promise to deny
+   * @throws On authorization check failure
+   */
+  authorizePublish?: (
+    ctx: MessageContext<MessageSchemaType, TData>,
+    topic: string,
+  ) => boolean | Promise<boolean>;
+
+  /**
+   * Lifecycle hook: called after successful subscription.
+   *
+   * Called after state mutation completes (spec section 6.1, step 7).
+   * Useful for logging, analytics, per-topic state initialization.
+   *
+   * Errors in this hook do NOT rollback the subscription (best-effort).
+   * Hook is NOT called on idempotent no-ops (already subscribed).
+   *
+   * @param ctx - Message context
+   * @param topic - Normalized topic that was subscribed to
+   */
+  onSubscribe?: (
+    ctx: MessageContext<MessageSchemaType, TData>,
+    topic: string,
+  ) => void | Promise<void>;
+
+  /**
+   * Lifecycle hook: called after successful unsubscription.
+   *
+   * Called after state mutation completes.
+   * Useful for logging, cleanup, analytics.
+   *
+   * Errors in this hook do NOT rollback (best-effort).
+   * Hook is NOT called on idempotent no-ops (not subscribed).
+   *
+   * @param ctx - Message context
+   * @param topic - Normalized topic that was unsubscribed from
+   */
+  onUnsubscribe?: (
+    ctx: MessageContext<MessageSchemaType, TData>,
+    topic: string,
+  ) => void | Promise<void>;
+
+  /**
+   * Optional: invalidate cached authorization decisions.
+   *
+   * Called by applications when user permissions change mid-session
+   * (e.g., role granted, revoked). Signals that authorization cache
+   * should be cleared for this connection.
+   *
+   * Hook is optional; most apps won't need this (re-check on each call).
+   *
+   * @param ctx - Message context
+   */
+  invalidateAuth?: (ctx: MessageContext<MessageSchemaType, TData>) => void;
 }
 
 /**

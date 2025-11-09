@@ -388,9 +388,9 @@ const router = createRouter({
     // Log to observability system, send alerting, etc.
   },
 
-  onBroadcast(topic, schema, payload, result) {
+  onBroadcast(message, topic) {
     // Called after each broadcast (publish) operation
-    console.log(`Broadcast to ${topic}:`, result.capability);
+    console.log(`Broadcast to ${topic}:`, message);
     // Track broadcast metrics, detect failures
   },
 

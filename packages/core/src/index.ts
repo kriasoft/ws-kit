@@ -65,6 +65,7 @@ export type {
   SendFunction,
   ServerWebSocket,
   Topics,
+  UsePubSubOptions,
   ValidatorAdapter,
   WebSocketData,
   WebSocketRouterOptions,
@@ -97,10 +98,10 @@ export type { ErrorWire, RpcErrorWire } from "./types.js";
  * Topic subscription mutations (subscribe, unsubscribe) throw PubSubError on failure.
  * Message publication (publish) returns PublishResult with error code and retryability hint.
  *
- * See docs/specs/pubsub.md#errors for error semantics.
+ * See docs/specs/pubsub.md#error-models for error semantics.
  */
 export { PubSubError } from "./pubsub-error.js";
-export type { PubSubErrorCode } from "./pubsub-error.js";
+export type { PubSubAclDetails, PubSubErrorCode } from "./pubsub-error.js";
 
 /**
  * Default Topics implementation.
@@ -141,6 +142,29 @@ export { PUBLISH_ERROR_RETRYABLE } from "./types.js";
  * Use platform-specific adapters for production deployments.
  */
 export { MemoryPubSub } from "./pubsub.js";
+
+/**
+ * Pub/Sub middleware for topic authorization, normalization, and lifecycle hooks.
+ *
+ * Provides hooks for:
+ * - Topic normalization (lowercase, trim, etc.)
+ * - Per-topic authorization (who can subscribe/publish)
+ * - Lifecycle tracking (logging, analytics, cleanup)
+ *
+ * See docs/specs/pubsub.md#configuration--middleware for detailed specification.
+ *
+ * @example
+ * ```typescript
+ * router.use(
+ *   usePubSub({
+ *     normalize: (topic) => topic.toLowerCase(),
+ *     authorizeSubscribe: (ctx, topic) => ctx.user.canAccess(topic),
+ *     onSubscribe: (ctx, topic) => logger.info(`User subscribed to ${topic}`),
+ *   }),
+ * );
+ * ```
+ */
+export { usePubSub } from "./use-pubsub.js";
 
 // ============================================================================
 // Message Normalization & Validation

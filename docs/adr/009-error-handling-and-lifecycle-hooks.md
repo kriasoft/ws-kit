@@ -77,7 +77,7 @@ interface ServeOptions<TData> {
   onError?: (error: Error, ctx?: { type: string; userId?: string }) => void;
 
   /**
-   * Called when router.publish() is invoked (before actual send).
+   * Called after a publish() operation succeeds (after send to subscribers).
    * Hook should not throw; errors are logged and swallowed.
    */
   onBroadcast?: (message: any, topic: string) => void;
@@ -240,8 +240,8 @@ interface ServeOptions<TData> {
   onError?(error: Error, ctx?: { type: string; userId?: string }): void;
 
   /**
-   * Called when router.publish() is invoked (before send).
-   * Use for broadcast analytics, message filtering, metrics.
+   * Called after a publish() operation succeeds (after send to subscribers).
+   * Use for broadcast analytics, observability, metrics.
    * Should not throw; errors are logged and swallowed.
    */
   onBroadcast?(message: any, topic: string): void;
