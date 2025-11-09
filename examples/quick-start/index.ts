@@ -9,9 +9,13 @@ import { chatRouter } from "./chat";
 const router = createRouter<{ roomId?: string; clientId: string }>();
 router.merge(chatRouter);
 
+// Get port from environment (default 3000)
+// Tip: Set PORT=0 to let the OS choose any available port if 3000 is busy
+const port = parseInt(process.env.PORT || "3000");
+
 // Serve with Bun using the unified serve() helper
 serve(router, {
-  port: parseInt(process.env.PORT || "3000"),
+  port,
   authenticate() {
     // Generate unique client ID for this connection
     return { clientId: crypto.randomUUID() };
