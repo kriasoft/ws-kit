@@ -15,7 +15,7 @@ Apps configure pub/sub in **exactly one place**: `usePubSub()` middleware.
 
 **Rule**: Constructor is for structural limits only. ALL authorization, normalization, and lifecycle hooks go in `usePubSub()` middleware.
 
-See [ADR-022 § 6](../adr/022-namespace-first-pubsub-api.md#6-single-extension-point-usepubsub-as-canonical-authority) for design rationale.
+See [ADR-022 § 6](./adr/022-namespace-first-pubsub-api.md#6-single-extension-point-usepubsub-as-canonical-authority) for design rationale.
 
 **Canonical Operation Order**
 
