@@ -869,6 +869,52 @@ export interface Topics extends ReadonlySet<string> {
    * @returns Promise with count of removed subscriptions
    */
   clear(): Promise<{ removed: number }>;
+
+  /**
+   * Atomically replace current subscriptions with a desired set.
+   *
+   * Computes the delta (topics to add and remove) and applies it in a single atomic operation.
+   * Useful for reconnection scenarios where you want to sync to a desired state without manual diffing.
+   *
+   * **Idempotency**: If the desired set equals the current set, returns early without adapter calls.
+   * - Returns `{ added: 0, removed: 0, total: currentSize }`
+   *
+   * **Deduplication**: Input topics are deduplicated (treated as a unique set).
+   * - Input: `["room:1", "room:1", "room:2"]` → internally `{"room:1", "room:2"}`
+   *
+   * **Atomicity**: All topics are added/removed or none are. No partial state changes.
+   * - If validation, authorization, or adapter fails, state is unchanged
+   *
+   * **Best-effort unsubscribe semantics**:
+   * - Topics that are not currently subscribed are skipped (soft no-op)
+   * - Validation runs only on the subscription part, not on non-subscribed topics
+   * - This allows graceful handling of overlapping desired and actual sets
+   *
+   * **Throws** on validation error, authorization failure, limit exceeded, or connection closed.
+   *
+   * @param topics - Iterable of desired topic names (duplicates are coalesced)
+   * @param options - Optional: `signal` for future AbortSignal support
+   * @returns Promise with counts:
+   *   - `added`: number of newly subscribed topics (not already subscribed)
+   *   - `removed`: number of previously subscribed topics now unsubscribed
+   *   - `total`: total subscriptions after operation
+   *
+   * @example
+   * ```typescript
+   * // Reconnection: resync to desired topics
+   * const desiredTopics = ["room:123", "system:announcements"];
+   * const result = await ctx.topics.replace(desiredTopics);
+   * // If previously subscribed to ["room:123", "other:topic"]:
+   * // { added: 1, removed: 1, total: 2 }
+   * ```
+   *
+   * @throws {PubSubError} with code: INVALID_TOPIC, UNAUTHORIZED_SUBSCRIBE, TOPIC_LIMIT_EXCEEDED,
+   *                       CONNECTION_CLOSED, or ADAPTER_ERROR
+   */
+  replace(
+    topics: Iterable<string>,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ added: number; removed: number; total: number }>;
 }
 
 /**

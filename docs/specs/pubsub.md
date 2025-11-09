@@ -103,6 +103,18 @@ interface Topics extends ReadonlySet<string> {
    * Returns count of removed subscriptions.
    */
   clear(): Promise<{ removed: number }>;
+
+  /**
+   * Atomically replace current subscriptions with a desired set.
+   *
+   * Idempotent: if input set equals current set, returns early (no adapter calls).
+   * Soft unsubscribe semantics: topics not currently subscribed are skipped.
+   * Returns counts of topics added, removed, and total subscriptions after operation.
+   */
+  replace(
+    topics: Iterable<string>,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ added: number; removed: number; total: number }>;
 }
 
 // Augmentation
@@ -431,7 +443,42 @@ Subscription ops are **idempotent**: calling twice is safe, returns success both
 
 **Rationale:** Atomic prevents inconsistent state when batching operations. Apps can rely on: "after this call, either all topics are subscribed or none are, and state is consistent."
 
-### 6.4 Publishing Semantics
+### 6.4 Replace Semantics
+
+`replace(topics)` atomically replaces current subscriptions with a desired set. Useful for reconnection: avoids manual diffing and ensures single atomic operation.
+
+**Order of checks (normative):**
+
+1. **Normalize & validate** all desired topics
+2. **Authorize** desired topics (those being added)
+3. **Compute delta** and **idempotency check**: If no changes, return early (no adapter calls)
+4. **Adapter phase**: Subscribe to new topics and unsubscribe from removed topics atomically. On failure, state unchanged.
+5. **Mutate state** and return `{ added, removed, total }`
+
+**Key invariants:**
+
+- **Atomic**: All changes apply or none apply. No partial state.
+- **Idempotent**: No adapter calls when desired set equals current set.
+- **Soft unsubscribe**: Only subscribed topics are validated/removed; unsubscribed topics in input are silently skipped.
+- **Validation first**: All topics validated before any adapter calls. Invalid or unauthorized topics cause entire operation to fail.
+
+**Limit enforcement:**
+
+Verify `currentSize - removed + added <= maxTopicsPerConnection` before adapter calls. Throws `PubSubError<"TOPIC_LIMIT_EXCEEDED">` if exceeded.
+
+**Error semantics:**
+
+Throws `PubSubError` with same codes as `subscribe()`/`unsubscribe()`. State unchanged on error.
+
+**Example:**
+
+```typescript
+// Reconnection: atomically sync to desired state
+const result = await ctx.topics.replace(["room:123", "system:announcements"]);
+// { added: number, removed: number, total: number }
+```
+
+### 6.5 Publishing Semantics
 
 **Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with an error code and a `retryable` hint, enabling predictable result-based error handling.
 
@@ -631,20 +678,44 @@ try {
 
     This is intentional: clients should maintain their own "desired topics" list and re-subscribe explicitly. This is explicit and controllable by the app, vs automatic but fragile.
 
-    **Pattern**:
+    **Pattern (using `replace()` for clean resync)**:
 
     ```typescript
     const desiredTopics = ["room:123", "system:announcements"];
 
     client.on("open", async () => {
-      for (const topic of desiredTopics) {
-        await client.subscribe(topic);
-      }
+      // Atomic resync to desired set (no manual diffing)
+      await ctx.topics.replace(desiredTopics);
     });
 
     client.on("join-room", ({ roomId }) => {
       desiredTopics.push(`room:${roomId}`);
-      client.subscribe(`room:${roomId}`);
+      // Update subscriptions atomically
+      await ctx.topics.replace(desiredTopics);
+    });
+
+    client.on("leave-room", ({ roomId }) => {
+      desiredTopics = desiredTopics.filter((t) => t !== `room:${roomId}`);
+      // Atomic resync (adds/removes as needed)
+      await ctx.topics.replace(desiredTopics);
+    });
+    ```
+
+    **Pattern (manual control, if needed)**:
+
+    ```typescript
+    const desiredTopics = ["room:123"];
+
+    // Subscribe to individual topics (for fine-grained control)
+    client.on("open", async () => {
+      for (const topic of desiredTopics) {
+        await ctx.topics.subscribe(topic);
+      }
+    });
+
+    // Unsubscribe explicitly
+    client.on("leave-room", ({ roomId }) => {
+      await ctx.topics.unsubscribe(`room:${roomId}`);
     });
     ```
 
@@ -888,12 +959,16 @@ These invariants must hold for all adapters. See [ADR-022 § Implementation Inva
 - Exception: duplicate topics in same call are coalesced before atomicity check (not an error).
 - On success, all topics are subscribed atomically; final state is consistent.
 
+**Replace atomicity:**
+
+`replace()` follows the same atomic pattern as `subscribeMany()`/`unsubscribeMany()`: normalize & validate → adapter calls → state mutation. Return early if delta is empty (no-op).
+
 **ReadonlySet semantics:**
 
 - `ctx.topics` is immutable from caller perspective (ReadonlySet contract).
 - Callers **cannot mutate** via `.add()`, `.delete()`, or direct access.
 - Adapters must prevent mutation: use `Object.freeze()`, proxy, or wrapper.
-- State changes only via `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()`, `clear()`.
+- State changes only via `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()`, `clear()`, and `replace()`.
 
 **Authorization timing:**
 
