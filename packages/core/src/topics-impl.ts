@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 import { PubSubError } from "./pubsub-error.js";
-import type { ServerWebSocket, Topics, WebSocketData } from "./types.js";
+import type { ServerWebSocket, Topics } from "./types.js";
 
 /**
  * Default topic validation pattern.
  *
  * Allows alphanumeric, colons, underscores, hyphens. Max 128 chars.
- * Per spec § 5 (Hooks): /^[a-z0-9:_\-]{1,128}$/i
+ * Per spec § 5 (Hooks): /^[a-z0-9:_-]{1,128}$/i
  *
  * This is the default; apps can override via usePubSub() middleware.
  */
-const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_\-]+$/i;
+const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_-]+$/i;
 const MAX_TOPIC_LENGTH = 128;
 
 /**
@@ -57,7 +57,23 @@ export class TopicsImpl<
     this.subscriptions.forEach(callback, thisArg);
   }
 
-  [Symbol.iterator](): IterableIterator<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  entries(): any {
+    return this.subscriptions.entries();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  keys(): any {
+    return this.subscriptions.keys();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  values(): any {
+    return this.subscriptions.values();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [Symbol.iterator](): any {
     return this.subscriptions[Symbol.iterator]();
   }
 
@@ -143,7 +159,7 @@ export class TopicsImpl<
           this.subscriptions.add(topic);
           this.ws.subscribe(topic);
           added++;
-        } catch (err) {
+        } catch {
           failed.push(topic);
         }
       }
@@ -179,6 +195,7 @@ export class TopicsImpl<
 
     let removed = 0;
     const failed: string[] = [];
+    const removedTopics = new Set<string>(); // Track topics we actually removed from state
 
     // Unsubscribe each topic (soft no-op for non-subscribed, validate if subscribed)
     for (const topic of uniqueTopics) {
@@ -187,9 +204,10 @@ export class TopicsImpl<
           // Validate topic before mutating (only when subscribed)
           this.validateTopic(topic);
           this.subscriptions.delete(topic);
+          removedTopics.add(topic); // Record removal before adapter call
           this.ws.unsubscribe(topic);
           removed++;
-        } catch (err) {
+        } catch {
           failed.push(topic);
         }
       }
@@ -197,14 +215,13 @@ export class TopicsImpl<
 
     // If any unsubscriptions failed, attempt rollback and throw
     if (failed.length > 0) {
-      for (const topic of uniqueTopics) {
-        if (!this.subscriptions.has(topic)) {
-          this.subscriptions.add(topic);
-          try {
-            this.ws.subscribe(topic);
-          } catch {
-            // Ignore rollback errors
-          }
+      // Only re-add topics we actually removed from state (never restore never-subscribed topics)
+      for (const topic of removedTopics) {
+        this.subscriptions.add(topic);
+        try {
+          this.ws.subscribe(topic);
+        } catch {
+          // Ignore rollback errors
         }
       }
       throw new PubSubError(

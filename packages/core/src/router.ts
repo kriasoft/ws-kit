@@ -34,6 +34,8 @@ import type {
   RpcHandler,
   SendFunction,
   ServerWebSocket,
+  // Topics is used indirectly in MessageContext type constraints
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Topics,
   ValidatorAdapter,
   WebSocketData,
@@ -2421,23 +2423,13 @@ export class WebSocketRouter<
       }
     };
 
-    // Subscribe to channel
-    const subscribe = (channel: string): void => {
-      try {
-        ws.subscribe(channel);
-      } catch (error) {
-        console.error("[ws] Error subscribing to channel:", error);
-      }
-    };
-
-    // Unsubscribe from channel
-    const unsubscribe = (channel: string): void => {
-      try {
-        ws.unsubscribe(channel);
-      } catch (error) {
-        console.error("[ws] Error unsubscribing from channel:", error);
-      }
-    };
+    // Get Topics instance for per-connection subscriptions
+    const topics = this.topicsInstances.get(clientId);
+    if (!topics) {
+      throw new Error(
+        `[ws] Topics instance not found for ${clientId}. Connection not properly initialized.`,
+      );
+    }
 
     // Publish to channel
     const publish = async (
@@ -2456,11 +2448,9 @@ export class WebSocketRouter<
       receivedAt,
       send,
       error: errorSend,
-      reply: send as SendFunction, // Semantic alias (may not be RPC in all contexts)
       assignData,
       getData,
-      subscribe,
-      unsubscribe,
+      topics,
       publish,
       timeRemaining: () => Infinity, // No deadline in non-RPC contexts
       isRpc: false, // Not an RPC by default in this context factory

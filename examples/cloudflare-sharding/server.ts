@@ -36,12 +36,12 @@ interface AppData {
 const router = createRouter<AppData>();
 
 // Join room: subscribe to scoped channel
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId || "anonymous";
 
   // Subscribe to room-scoped updates (broadcasts only within this DO instance)
-  ctx.subscribe(`room:${roomId}`);
+  await ctx.topics.subscribe(`room:${roomId}`);
   ctx.assignData({ roomId });
 
   // Notify room members of join
@@ -70,10 +70,10 @@ router.on(RoomMessage, (ctx) => {
 });
 
 // Leave room: cleanup subscription
-router.on(LeaveRoom, (ctx) => {
+router.on(LeaveRoom, async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
-    ctx.unsubscribe(`room:${roomId}`);
+    await ctx.topics.unsubscribe(`room:${roomId}`);
   }
 });
 

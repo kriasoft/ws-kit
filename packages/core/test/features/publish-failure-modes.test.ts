@@ -106,9 +106,10 @@ describe("publish() failure modes", () => {
           case "ADAPTER_ERROR":
           case "CONNECTION_CLOSED":
             break;
-          default:
+          default: {
             const _: never = result.error;
             throw new Error(`Unhandled error: ${_}`);
+          }
         }
       }
     });
