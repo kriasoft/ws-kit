@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "ws-kit",
@@ -35,7 +34,7 @@
     },
     "examples/bun-zod-chat": {
       "name": "bun-zod-chat-example",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "dependencies": {
         "@ws-kit/bun": "workspace:*",
         "@ws-kit/core": "workspace:*",
@@ -48,14 +47,14 @@
     },
     "packages/adapters": {
       "name": "@ws-kit/adapters",
-      "version": "4.0.0",
+      "version": "5.0.0",
       "peerDependencies": {
         "@ws-kit/core": "workspace:^",
       },
     },
     "packages/bun": {
       "name": "@ws-kit/bun",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "dependencies": {
         "@ws-kit/core": "workspace:^",
         "uuid": "^13.0.0",
@@ -66,7 +65,7 @@
     },
     "packages/client": {
       "name": "@ws-kit/client",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "dependencies": {
         "@ws-kit/valibot": "workspace:^",
         "@ws-kit/zod": "workspace:^",
@@ -74,7 +73,7 @@
     },
     "packages/cloudflare-do": {
       "name": "@ws-kit/cloudflare-do",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "dependencies": {
         "@ws-kit/core": "workspace:^",
         "uuid": "^13.0.0",
@@ -85,11 +84,11 @@
     },
     "packages/core": {
       "name": "@ws-kit/core",
-      "version": "0.6.0",
+      "version": "0.7.0",
     },
     "packages/middleware": {
       "name": "@ws-kit/middleware",
-      "version": "4.0.0",
+      "version": "5.0.0",
       "devDependencies": {
         "@ws-kit/adapters": "workspace:^",
       },
@@ -99,7 +98,7 @@
     },
     "packages/redis-pubsub": {
       "name": "@ws-kit/redis-pubsub",
-      "version": "0.1.7",
+      "version": "1.0.0",
       "dependencies": {
         "@ws-kit/core": "workspace:^",
       },
@@ -112,7 +111,7 @@
     },
     "packages/valibot": {
       "name": "@ws-kit/valibot",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "dependencies": {
         "@ws-kit/core": "workspace:^",
       },
@@ -125,7 +124,7 @@
     },
     "packages/zod": {
       "name": "@ws-kit/zod",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "dependencies": {
         "@ws-kit/core": "workspace:^",
       },
@@ -199,7 +198,7 @@
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
-    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20251107.0", "", {}, "sha512-4y3U2kDxzAMKthjx6iIlxY2oA3l5FVP1WR2Zkz1j0Cx0RI5P1DZknSV5WP86i2anE5eal+pmtzvCO4oZWgcgtA=="],
+    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20251109.0", "", {}, "sha512-/wMfoS6NmoY0GgKVoRUp4x0yiZM0eNXwXTTzM7gFJKcm+0NtZmzUzgXj6xpShkfWSrmug0mX7BbyaFMAMHFlPA=="],
 
     "@docsearch/css": ["@docsearch/css@4.3.1", "", {}, "sha512-Jnct7LKOi/+Oxbmq215YPYASkMdZqtyyDCkma8Cj4sCcbBuybL6fvyBaX7uJoM6kVF7aIpBA38RhHAyN5ByCHg=="],
 
