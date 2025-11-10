@@ -11,19 +11,31 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
 export type ErrorHandler<TConn> = (
   err: unknown,
   ctx: MinimalContext<TConn> | null,
-) => void;
+) => void | Promise<void>;
+
+export type CloseHandler<TConn> = (
+  ws: ServerWebSocket,
+  code?: number,
+  reason?: string,
+) => void | Promise<void>;
 
 /**
- * Managed error sink with activity tracking.
+ * Managed lifecycle sink with error handling and close notifications.
  * - Tracks error handlers for the onError hook
+ * - Tracks close handlers for per-connection cleanup
  * - Tracks last activity timestamp per connection for heartbeat monitoring
  */
 export class LifecycleManager<TConn> {
   private errorHandlers: ErrorHandler<TConn>[] = [];
+  private closeHandlers: CloseHandler<TConn>[] = [];
   private activityMap = new WeakMap<ServerWebSocket, number>();
 
   onError(handler: ErrorHandler<TConn>): void {
     this.errorHandlers.push(handler);
+  }
+
+  onClose(handler: CloseHandler<TConn>): void {
+    this.closeHandlers.push(handler);
   }
 
   async handleError(
@@ -32,10 +44,29 @@ export class LifecycleManager<TConn> {
   ): Promise<void> {
     for (const handler of this.errorHandlers) {
       try {
-        handler(err, ctx);
+        await Promise.resolve(handler(err, ctx));
       } catch (e) {
         // Prevent one handler from preventing others
         console.error("Error in onError handler:", e);
+      }
+    }
+  }
+
+  async handleClose(
+    ws: ServerWebSocket,
+    code?: number,
+    reason?: string,
+  ): Promise<void> {
+    // Clean up activity map for consistency
+    this.activityMap.delete(ws);
+
+    // Notify all close handlers, ensuring error isolation
+    for (const handler of this.closeHandlers) {
+      try {
+        await Promise.resolve(handler(ws, code, reason));
+      } catch (e) {
+        // Prevent one handler from preventing others
+        console.error("Error in onClose handler:", e);
       }
     }
   }

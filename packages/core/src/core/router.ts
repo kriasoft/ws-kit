@@ -29,6 +29,7 @@ import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
 import { PluginHost } from "../plugin/manager";
 import { dispatchMessage } from "../engine/dispatch";
+import { INTERNAL_ROUTES } from "./symbols";
 
 export interface BaseRouter<TConn> {
   use(mw: Middleware<TConn>): this;
@@ -195,16 +196,36 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   }
 
   /**
+   * Expose internal route table via symbol.
+   * Enables cross-bundle duck-typing without instanceof brittleness.
+   * @internal
+   */
+  [INTERNAL_ROUTES](): RouteTable<TConn> {
+    return this.routes;
+  }
+
+  /**
+   * Extract route table from another router via symbol accessor.
+   * Works across multiple bundle copies (monorepo, playgrounds, etc.).
+   * @internal
+   */
+  private extractRouteTable(other: Router<any>): RouteTable<TConn> {
+    const extractor = (other as any)[INTERNAL_ROUTES];
+    if (typeof extractor === "function") {
+      return extractor.call(other);
+    }
+    throw new Error(
+      "Cannot merge router: target is not a CoreRouter instance or does not expose internal route table",
+    );
+  }
+
+  /**
    * Get route table from another router (for merge/mount operations).
-   * Extracts the internal route table by duck-typing.
+   * Delegates to extractRouteTable() for symbol-based access.
    * @internal
    */
   private getRouteTable(other: Router<any>): RouteTable<TConn> {
-    if (other instanceof CoreRouter && other.routes instanceof RouteTable) {
-      return (other as CoreRouter<TConn>).routes;
-    }
-    // Fallback for external implementations
-    throw new Error("Cannot merge router: target is not a CoreRouter instance");
+    return this.extractRouteTable(other);
   }
 
   /**
@@ -324,7 +345,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
 
   /**
    * Handle connection close.
-   * Cleans up per-connection data and other resources.
+   * Cleans up per-connection data, notifies lifecycle handlers, and triggers plugin cleanup.
    * Called by adapters on WebSocket close/error.
    * Idempotent; safe to call multiple times.
    *
@@ -337,9 +358,14 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     code?: number,
     reason?: string,
   ): Promise<void> {
-    // Clean up per-connection data from WeakMap (allows GC).
-    // Note: WeakMap entries are automatically cleaned when ws is GC'd,
-    // but explicit cleanup ensures timely resource release in adapter implementations.
-    // Plugins (pub/sub, etc.) handle their own cleanup via onError/lifecycle hooks.
+    // Explicitly clean up per-connection data from WeakMap.
+    // While WeakMap entries auto-clean when ws is GC'd, explicit deletion ensures
+    // timely resource release and allows plugins to react via lifecycle hooks.
+    this.connData.delete(ws);
+
+    // Notify lifecycle handlers (plugins, heartbeat monitor, etc.)
+    // for per-connection cleanup. This allows plugins to perform cleanup
+    // (pub/sub subscriptions, timers, etc.) on connection departure.
+    await this.lifecycle.handleClose(ws, code, reason);
   }
 }
