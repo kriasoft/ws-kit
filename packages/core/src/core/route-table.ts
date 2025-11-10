@@ -3,10 +3,10 @@
  * Implements conflict resolution for merge() and mount().
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { RouteEntry } from "./types";
 
-export interface RegistryOptions {
+export interface RouteTableOptions {
   onConflict?: "error" | "skip" | "replace";
 }
 
@@ -25,12 +25,18 @@ export class RouteTable<TConn> {
    * Register a handler for a message type.
    * Throws if type already registered (use merge() for conflict handling).
    */
-  register(schema: MessageDescriptor, entry: RouteEntry<TConn>): void {
-    const type = schema.type;
+  register(schema: MessageDescriptor, entry: RouteEntry<TConn>): this {
+    const type = schema?.type;
+    if (typeof type !== "string" || type.length === 0) {
+      throw new Error(`Invalid schema.type: ${String(type)}`);
+    }
     if (this.handlers.has(type)) {
-      throw new Error(`Handler already registered for type: ${type}`);
+      throw new Error(
+        `Handler already registered for type "${type}". Use merge() with onConflict if needed.`,
+      );
     }
     this.handlers.set(type, entry);
+    return this;
   }
 
   /**
@@ -38,6 +44,20 @@ export class RouteTable<TConn> {
    */
   get(type: string): RouteEntry<TConn> | undefined {
     return this.handlers.get(type);
+  }
+
+  /**
+   * Check if a handler is registered for a message type.
+   */
+  has(type: string): boolean {
+    return this.handlers.has(type);
+  }
+
+  /**
+   * Get the number of registered handlers.
+   */
+  size(): number {
+    return this.handlers.size;
   }
 
   /**
@@ -56,10 +76,7 @@ export class RouteTable<TConn> {
    *   - "skip": keep existing, ignore incoming
    *   - "replace": replace existing with incoming
    */
-  merge(
-    other: RouteTable<TConn>,
-    opts: RegistryOptions = {},
-  ): void {
+  merge(other: RouteTable<TConn>, opts: RouteTableOptions = {}): this {
     const { onConflict = "error" } = opts;
 
     for (const [type, entry] of other.list()) {
@@ -67,7 +84,7 @@ export class RouteTable<TConn> {
         switch (onConflict) {
           case "error":
             throw new Error(
-              `Handler conflict during merge: type "${type}" already exists`,
+              `merge() conflict: handler for type "${type}" already exists (policy: "error").`,
             );
           case "skip":
             // Keep existing, ignore incoming
@@ -81,6 +98,7 @@ export class RouteTable<TConn> {
         this.handlers.set(type, entry);
       }
     }
+    return this;
   }
 
   /**
@@ -94,42 +112,38 @@ export class RouteTable<TConn> {
   mount(
     prefix: string,
     other: RouteTable<TConn>,
-    opts: RegistryOptions = {},
-  ): void {
+    opts: RouteTableOptions = {},
+  ): this {
     const { onConflict = "error" } = opts;
 
     for (const [type, entry] of other.list()) {
       const prefixedType = prefix + type;
+      const nextEntry: RouteEntry<TConn> = {
+        ...entry,
+        schema: {
+          ...entry.schema,
+          type: prefixedType,
+        },
+      };
 
       if (this.handlers.has(prefixedType)) {
         switch (onConflict) {
           case "error":
             throw new Error(
-              `Handler conflict during mount: type "${prefixedType}" already exists`,
+              `mount("${prefix}") conflict: handler for type "${prefixedType}" already exists (policy: "error").`,
             );
           case "skip":
             // Keep existing, ignore incoming
             continue;
           case "replace":
             // Replace with incoming
-            this.handlers.set(prefixedType, {
-              ...entry,
-              schema: {
-                ...entry.schema,
-                type: prefixedType,
-              },
-            });
+            this.handlers.set(prefixedType, nextEntry);
             break;
         }
       } else {
-        this.handlers.set(prefixedType, {
-          ...entry,
-          schema: {
-            ...entry.schema,
-            type: prefixedType,
-          },
-        });
+        this.handlers.set(prefixedType, nextEntry);
       }
     }
+    return this;
   }
 }

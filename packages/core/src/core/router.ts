@@ -16,10 +16,15 @@
 
 import type { MessageDescriptor } from "../../protocol/message-descriptor";
 import type { MinimalContext, BaseContextData } from "../context/base-context";
-import type { Middleware, EventHandler, RouteEntry, CreateRouterOptions } from "./types";
+import type {
+  Middleware,
+  EventHandler,
+  RouteEntry,
+  CreateRouterOptions,
+} from "./types";
 import type { Plugin } from "../plugin/types";
 import type { ServerWebSocket } from "../ws/platform-adapter";
-import { RouteTable } from "../engine/registry";
+import { RouteTable } from "./route-table";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
 import { PluginHost } from "../plugin/manager";
@@ -39,9 +44,7 @@ export interface BaseRouter<TConn> {
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
   plugin<P extends Plugin<TConn>>(plugin: P): ReturnType<P>;
-  onError(
-    fn: (err: unknown, ctx: MinimalContext<TConn> | null) => void,
-  ): this;
+  onError(fn: (err: unknown, ctx: MinimalContext<TConn> | null) => void): this;
 }
 
 /**
@@ -132,9 +135,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
     // Initialize plugin host with self reference (cast to bypass recursive type)
-    this.pluginHost = new PluginHost<TConn>(
-      this as any as Router<TConn>
-    );
+    this.pluginHost = new PluginHost<TConn>(this as any as Router<TConn>);
   }
 
   use(mw: Middleware<TConn>): this {
@@ -187,9 +188,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     return this.pluginHost.apply(plugin);
   }
 
-  onError(
-    fn: (err: unknown, ctx: MinimalContext<TConn> | null) => void,
-  ): this {
+  onError(fn: (err: unknown, ctx: MinimalContext<TConn> | null) => void): this {
     this.lifecycle.onError(fn);
     return this;
   }
@@ -200,16 +199,11 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * @internal
    */
   private getRouteTable(other: Router<any>): RouteTable<TConn> {
-    if (
-      other instanceof CoreRouter &&
-      other.routes instanceof RouteTable
-    ) {
+    if (other instanceof CoreRouter && other.routes instanceof RouteTable) {
       return (other as CoreRouter<TConn>).routes;
     }
     // Fallback for external implementations
-    throw new Error(
-      "Cannot merge router: target is not a CoreRouter instance",
-    );
+    throw new Error("Cannot merge router: target is not a CoreRouter instance");
   }
 
   /**
