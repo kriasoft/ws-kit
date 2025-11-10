@@ -1,0 +1,33 @@
+/**
+ * RPC handler context (after validation plugin adds payload + response inference).
+ *
+ * Extends MinimalContext with:
+ * - payload: inferred from schema.request
+ * - reply(payload): terminal response
+ * - progress(payload): non-terminal update
+ */
+
+import type { MinimalContext } from "./base-context";
+
+export interface RpcContext<
+  TConn = unknown,
+  TPayload = unknown,
+  TResponse = unknown,
+> extends MinimalContext<TConn> {
+  /**
+   * Parsed + validated RPC request payload.
+   */
+  readonly payload: TPayload;
+
+  /**
+   * Terminal response (one-shot).
+   * Closes the RPC exchange.
+   */
+  reply(payload: TResponse): Promise<void>;
+
+  /**
+   * Non-terminal progress update (streaming).
+   * Can call multiple times before reply().
+   */
+  progress(payload: TResponse): Promise<void>;
+}

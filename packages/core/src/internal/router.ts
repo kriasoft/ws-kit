@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { DEFAULT_CONFIG, RESERVED_CONTROL_PREFIX } from "./constants.js";
-import { ERROR_CODE_META, ErrorCode, WsKitError } from "./error.js";
-import { normalizeInboundMessage } from "./normalize.js";
-import { MemoryPubSub } from "./pubsub.js";
-import { RpcManager } from "./rpc-manager.js";
-import { createTopicValidator, TopicsImpl } from "./topics-impl.js";
+import { DEFAULT_CONFIG, RESERVED_CONTROL_PREFIX } from "../constants.js";
+import { ERROR_CODE_META, ErrorCode, WsKitError } from "../error.js";
+import { normalizeInboundMessage } from "../normalize.js";
+import { MemoryPubSub } from "../pubsub.js";
+import { RpcManager } from "../rpc-manager.js";
+import { createTopicValidator, TopicsImpl } from "../topics-impl.js";
 import type {
   AuthHandler,
   CloseHandler,
@@ -37,7 +37,7 @@ import type {
   ValidatorAdapter,
   WebSocketData,
   WebSocketRouterOptions,
-} from "./types.js";
+} from "../types.js";
 
 /**
  * Internal symbol for marking publish calls that originate from within a message handler.
@@ -48,11 +48,11 @@ const HANDLER_CONTEXT_MARKER = Symbol.for("ws-kit.handler-context");
 /**
  * Heartbeat state tracking per connection.
  */
-interface HeartbeatState<TData extends WebSocketData = WebSocketData> {
+interface HeartbeatState<TConn extends WebSocketData = WebSocketData> {
   pingTimer: ReturnType<typeof setInterval> | null;
   pongTimer: ReturnType<typeof setTimeout> | null;
   lastPongTime: number;
-  ws: ServerWebSocket<TData>;
+  ws: ServerWebSocket<TConn>;
   authenticated: boolean; // Track if connection has been authenticated
 }
 
@@ -60,20 +60,20 @@ interface HeartbeatState<TData extends WebSocketData = WebSocketData> {
  * Testing utilities for inspecting router internal state.
  * Used only in test mode for introspection and assertions.
  */
-interface TestingUtils<TData extends WebSocketData = WebSocketData> {
+interface TestingUtils<TConn extends WebSocketData = WebSocketData> {
   /** Access to message handlers map for inspection */
-  handlers: Map<string, MessageHandlerEntry<TData>>;
+  handlers: Map<string, MessageHandlerEntry<TConn>>;
   /** Access to global middleware array for inspection */
-  middleware: Middleware<TData>[];
+  middleware: Middleware<TConn>[];
   /** Access to per-route middleware map for inspection */
-  routeMiddleware: Map<string, Middleware<TData>[]>;
+  routeMiddleware: Map<string, Middleware<TConn>[]>;
   /** Access to heartbeat states for inspection */
-  heartbeatStates: Map<string, HeartbeatState<TData>>;
+  heartbeatStates: Map<string, HeartbeatState<TConn>>;
   /** Access to lifecycle handlers for inspection */
-  openHandlers: OpenHandler<TData>[];
-  closeHandlers: CloseHandler<TData>[];
-  authHandlers: AuthHandler<TData>[];
-  errorHandlers: ErrorHandler<TData>[];
+  openHandlers: OpenHandler<TConn>[];
+  closeHandlers: CloseHandler<TConn>[];
+  authHandlers: AuthHandler<TConn>[];
+  errorHandlers: ErrorHandler<TConn>[];
 }
 
 /**
@@ -97,12 +97,12 @@ interface TestingUtils<TData extends WebSocketData = WebSocketData> {
  * type assertions in handlers.
  *
  * @template V - Validator adapter type (Zod, Valibot, etc.)
- * @template TData - Application-specific data stored with each connection
+ * @template TConn - Application-specific data stored with each connection
  */
 export class WebSocketRouter<
   V extends ValidatorAdapter = ValidatorAdapter,
-  TData extends WebSocketData = WebSocketData,
-> implements IWebSocketRouter<TData>
+  TConn extends WebSocketData = WebSocketData,
+> implements IWebSocketRouter<TConn>
 {
   private readonly validator: V | undefined;
   private readonly validatorId: unknown | undefined; // Store validator identity for compatibility checks
@@ -113,26 +113,26 @@ export class WebSocketRouter<
   // Handler registries
   private readonly messageHandlers = new Map<
     string,
-    MessageHandlerEntry<TData>
+    MessageHandlerEntry<TConn>
   >();
-  private readonly openHandlers: OpenHandler<TData>[] = [];
-  private readonly closeHandlers: CloseHandler<TData>[] = [];
-  private readonly authHandlers: AuthHandler<TData>[] = [];
-  private readonly errorHandlers: ErrorHandler<TData>[] = [];
-  private readonly limitExceededHandlers: LimitExceededHandler<TData>[] = [];
-  private readonly middlewares: Middleware<TData>[] = [];
-  private readonly routeMiddleware = new Map<string, Middleware<TData>[]>(); // Per-route middleware by message type
+  private readonly openHandlers: OpenHandler<TConn>[] = [];
+  private readonly closeHandlers: CloseHandler<TConn>[] = [];
+  private readonly authHandlers: AuthHandler<TConn>[] = [];
+  private readonly errorHandlers: ErrorHandler<TConn>[] = [];
+  private readonly limitExceededHandlers: LimitExceededHandler<TConn>[] = [];
+  private readonly middlewares: Middleware<TConn>[] = [];
+  private readonly routeMiddleware = new Map<string, Middleware<TConn>[]>(); // Per-route middleware by message type
 
   // Heartbeat state
   private readonly heartbeatConfig?: {
     intervalMs: number;
     timeoutMs: number;
-    onStaleConnection?: (clientId: string, ws: ServerWebSocket<TData>) => void;
+    onStaleConnection?: (clientId: string, ws: ServerWebSocket<TConn>) => void;
   };
-  private readonly heartbeatStates = new Map<string, HeartbeatState<TData>>();
+  private readonly heartbeatStates = new Map<string, HeartbeatState<TConn>>();
 
   // Pub/Sub topic subscriptions (per connection)
-  private readonly topicsInstances = new Map<string, TopicsImpl<TData>>();
+  private readonly topicsInstances = new Map<string, TopicsImpl<TConn>>();
 
   // Limits
   private readonly maxPayloadBytes: number;
@@ -161,9 +161,9 @@ export class WebSocketRouter<
   readonly #rpc: RpcManager;
 
   // Testing utilities (only available when testing mode is enabled)
-  _testing?: TestingUtils<TData>;
+  _testing?: TestingUtils<TConn>;
 
-  constructor(options: WebSocketRouterOptions<V, TData> = {}) {
+  constructor(options: WebSocketRouterOptions<V, TConn> = {}) {
     this.validator = options.validator;
     // Capture validator identity for runtime compatibility checks
     // Uses the constructor function as identity marker (works for both Zod and Valibot adapters)
@@ -339,7 +339,7 @@ export class WebSocketRouter<
    */
   on<Schema extends MessageSchemaType>(
     schema: Schema,
-    handler: EventHandler<Schema, TData>,
+    handler: EventHandler<Schema, TConn>,
   ): this {
     if (!this.validator) {
       throw new Error(
@@ -380,7 +380,7 @@ export class WebSocketRouter<
 
     this.messageHandlers.set(messageType, {
       schema,
-      handler: handler as MessageHandler<MessageSchemaType, TData>,
+      handler: handler as MessageHandler<MessageSchemaType, TConn>,
     });
 
     return this;
@@ -486,7 +486,7 @@ export class WebSocketRouter<
    */
   rpc<Schema extends MessageSchemaType>(
     schema: Schema,
-    handler: RpcHandler<Schema, TData>,
+    handler: RpcHandler<Schema, TConn>,
   ): this {
     // Enforce that schema has a response field (RPC semantics)
     if (!schema || typeof schema !== "object" || !("response" in schema)) {
@@ -501,7 +501,7 @@ export class WebSocketRouter<
     // The RpcManager will handle one-shot reply guarantee, correlation tracking, and deadlines
     // Type assertion is safe here: the runtime handler dispatcher in _dispatch()
     // already handles both EventHandler and RpcHandler based on schema.response presence
-    return this.on(schema, handler as unknown as EventHandler<Schema, TData>);
+    return this.on(schema, handler as unknown as EventHandler<Schema, TConn>);
   }
 
   /**
@@ -531,12 +531,12 @@ export class WebSocketRouter<
    */
   topic<Schema extends MessageSchemaType>(
     schema: Schema,
-    options?: { onPublish?: MessageHandler<Schema, TData> },
+    options?: { onPublish?: MessageHandler<Schema, TConn> },
   ): this {
     // Register handler if provided
     if (options?.onPublish) {
       // Type assertion is safe: both EventHandler and RpcHandler are supported at runtime
-      return this.on(schema, options.onPublish as EventHandler<Schema, TData>);
+      return this.on(schema, options.onPublish as EventHandler<Schema, TConn>);
     }
 
     // No-op if no handler provided (schema is just registered as a type)
@@ -555,7 +555,7 @@ export class WebSocketRouter<
    * @param handler - Handler function
    * @returns This router for method chaining
    */
-  onOpen(handler: OpenHandler<TData>): this {
+  onOpen(handler: OpenHandler<TConn>): this {
     this.openHandlers.push(handler);
     return this;
   }
@@ -569,7 +569,7 @@ export class WebSocketRouter<
    * @param handler - Handler function
    * @returns This router for method chaining
    */
-  onClose(handler: CloseHandler<TData>): this {
+  onClose(handler: CloseHandler<TConn>): this {
     this.closeHandlers.push(handler);
     return this;
   }
@@ -583,7 +583,7 @@ export class WebSocketRouter<
    * @param handler - Handler that returns true to allow connection
    * @returns This router for method chaining
    */
-  onAuth(handler: AuthHandler<TData>): this {
+  onAuth(handler: AuthHandler<TConn>): this {
     this.authHandlers.push(handler);
     return this;
   }
@@ -597,7 +597,7 @@ export class WebSocketRouter<
    * @param handler - Handler function
    * @returns This router for method chaining
    */
-  onError(handler: ErrorHandler<TData>): this {
+  onError(handler: ErrorHandler<TConn>): this {
     this.errorHandlers.push(handler);
     return this;
   }
@@ -632,7 +632,7 @@ export class WebSocketRouter<
    * });
    * ```
    */
-  use(middleware: Middleware<TData>): this;
+  use(middleware: Middleware<TConn>): this;
 
   /**
    * Register per-route middleware for a specific message type.
@@ -672,16 +672,16 @@ export class WebSocketRouter<
    */
   use<Schema extends MessageSchemaType>(
     schema: Schema,
-    middleware: Middleware<TData>,
+    middleware: Middleware<TConn>,
   ): this;
 
   use<Schema extends MessageSchemaType>(
-    schemaOrMiddleware: Schema | Middleware<TData>,
-    middleware?: Middleware<TData>,
+    schemaOrMiddleware: Schema | Middleware<TConn>,
+    middleware?: Middleware<TConn>,
   ): this {
     // If only one argument, it's global middleware
     if (middleware === undefined) {
-      this.middlewares.push(schemaOrMiddleware as Middleware<TData>);
+      this.middlewares.push(schemaOrMiddleware as Middleware<TConn>);
       return this;
     }
 
@@ -793,13 +793,13 @@ export class WebSocketRouter<
    */
   routes(): readonly {
     messageType: string;
-    handler: MessageHandlerEntry<TData>;
-    middleware: readonly Middleware<TData>[];
+    handler: MessageHandlerEntry<TConn>;
+    middleware: readonly Middleware<TConn>[];
   }[] {
     const result: {
       messageType: string;
-      handler: MessageHandlerEntry<TData>;
-      middleware: Middleware<TData>[];
+      handler: MessageHandlerEntry<TConn>;
+      middleware: Middleware<TConn>[];
     }[] = [];
 
     for (const [messageType, handler] of this.messageHandlers) {
@@ -841,7 +841,7 @@ export class WebSocketRouter<
    *   .merge(chatRouter);
    * ```
    */
-  merge(router: IWebSocketRouter<TData>): this {
+  merge(router: IWebSocketRouter<TConn>): this {
     // **Design**: Route composition via merge enables modular router setup.
     // Routers can be initialized independently (each with its own handlers),
     // then merged into a primary router for unified serving. This supports
@@ -858,13 +858,13 @@ export class WebSocketRouter<
 
     // Access private members through type assertion for composability
     interface AccessibleRouter {
-      messageHandlers: Map<string, MessageHandlerEntry<TData>>;
-      openHandlers: OpenHandler<TData>[];
-      closeHandlers: CloseHandler<TData>[];
-      authHandlers: AuthHandler<TData>[];
-      errorHandlers: ErrorHandler<TData>[];
-      middlewares: Middleware<TData>[];
-      routeMiddleware: Map<string, Middleware<TData>[]>;
+      messageHandlers: Map<string, MessageHandlerEntry<TConn>>;
+      openHandlers: OpenHandler<TConn>[];
+      closeHandlers: CloseHandler<TConn>[];
+      authHandlers: AuthHandler<TConn>[];
+      errorHandlers: ErrorHandler<TConn>[];
+      middlewares: Middleware<TConn>[];
+      routeMiddleware: Map<string, Middleware<TConn>[]>;
     }
 
     // Unwrap router facade if needed (e.g., TypedZodRouter, TypedValibotRouter)
@@ -1157,7 +1157,7 @@ export class WebSocketRouter<
    */
   get websocket() {
     return {
-      message: async (ws: ServerWebSocket<TData>, message: string | Buffer) => {
+      message: async (ws: ServerWebSocket<TConn>, message: string | Buffer) => {
         try {
           await this.handleMessage(ws, message);
         } catch (error) {
@@ -1173,7 +1173,7 @@ export class WebSocketRouter<
           );
         }
       },
-      open: async (ws: ServerWebSocket<TData>) => {
+      open: async (ws: ServerWebSocket<TConn>) => {
         try {
           await this.handleOpen(ws);
         } catch (error) {
@@ -1190,7 +1190,7 @@ export class WebSocketRouter<
         }
       },
       close: async (
-        ws: ServerWebSocket<TData>,
+        ws: ServerWebSocket<TConn>,
         code: number,
         reason?: string,
       ) => {
@@ -1224,7 +1224,7 @@ export class WebSocketRouter<
    *
    * @param ws - ServerWebSocket instance from platform
    */
-  async handleOpen(ws: ServerWebSocket<TData>): Promise<void> {
+  async handleOpen(ws: ServerWebSocket<TConn>): Promise<void> {
     const clientId = ws.data.clientId;
     console.log(`[ws] Connection opened: ${clientId}`);
 
@@ -1256,7 +1256,7 @@ export class WebSocketRouter<
     // to authenticate synchronously. Auth is enforced per-message via middleware.
     for (const handler of this.openHandlers) {
       try {
-        const context: OpenHandlerContext<TData> = { ws, send };
+        const context: OpenHandlerContext<TConn> = { ws, send };
         const result = handler(context);
         if (result instanceof Promise) {
           await result;
@@ -1285,7 +1285,7 @@ export class WebSocketRouter<
    * @param reason - Optional close reason
    */
   async handleClose(
-    ws: ServerWebSocket<TData>,
+    ws: ServerWebSocket<TConn>,
     code: number,
     reason?: string,
   ): Promise<void> {
@@ -1309,7 +1309,7 @@ export class WebSocketRouter<
     // Execute close handlers
     for (const handler of this.closeHandlers) {
       try {
-        const context: CloseHandlerContext<TData> = { ws, code, send };
+        const context: CloseHandlerContext<TConn> = { ws, code, send };
         if (reason) {
           context.reason = reason;
         }
@@ -1339,7 +1339,7 @@ export class WebSocketRouter<
    * @param message - Raw message data (string or Buffer)
    */
   async handleMessage(
-    ws: ServerWebSocket<TData>,
+    ws: ServerWebSocket<TConn>,
     message: string | Buffer,
   ): Promise<void> {
     const clientId = ws.data.clientId;
@@ -1614,7 +1614,7 @@ export class WebSocketRouter<
       };
 
       // Create assignData function for clean connection data updates
-      const assignData = (partial: Partial<TData>): void => {
+      const assignData = (partial: Partial<TConn>): void => {
         try {
           if (ws.data && typeof ws.data === "object") {
             Object.assign(ws.data, partial);
@@ -1625,12 +1625,12 @@ export class WebSocketRouter<
       };
 
       // Create getData function for type-safe connection data access
-      const getData = <K extends keyof TData>(key: K): TData[K] => {
+      const getData = <K extends keyof TConn>(key: K): TConn[K] => {
         try {
           return ws.data?.[key];
         } catch (error) {
           console.error("[ws] Error getting data from connection:", error);
-          return undefined as TData[K];
+          return undefined as TConn[K];
         }
       };
 
@@ -1902,7 +1902,7 @@ export class WebSocketRouter<
         }
       };
 
-      const context: MessageContext<MessageSchemaType, TData> = {
+      const context: MessageContext<MessageSchemaType, TConn> = {
         ws,
         type: messageType,
         meta: validatedData.meta,
@@ -1928,7 +1928,7 @@ export class WebSocketRouter<
       // Execute middleware pipeline followed by handler
       const executeHandlerWithMiddleware = async (): Promise<void> => {
         // Build combined middleware list: global + per-route
-        const allMiddleware: Middleware<TData>[] = [
+        const allMiddleware: Middleware<TConn>[] = [
           ...this.middlewares,
           ...(this.routeMiddleware.get(messageType) || []),
         ];
@@ -2008,7 +2008,7 @@ export class WebSocketRouter<
 
       if (limitInfo) {
         // Handle limit exceeded case
-        const limitExceededInfo: LimitExceededInfo<TData> = {
+        const limitExceededInfo: LimitExceededInfo<TConn> = {
           type: limitInfo.type as LimitType,
           observed: limitInfo.observed,
           limit: limitInfo.limit,
@@ -2237,7 +2237,7 @@ export class WebSocketRouter<
    * @returns Object with `ok` (boolean) and optional `reason` ("UNAUTHENTICATED" or "PERMISSION_DENIED")
    */
   private async authenticateConnection(
-    ws: ServerWebSocket<TData>,
+    ws: ServerWebSocket<TConn>,
     send: SendFunction,
     receivedAt: number,
   ): Promise<{
@@ -2298,7 +2298,7 @@ export class WebSocketRouter<
    *
    * Fire-and-forget execution: exceptions are logged but don't interrupt other handlers.
    */
-  private callLimitExceededHandlers(info: LimitExceededInfo<TData>): void {
+  private callLimitExceededHandlers(info: LimitExceededInfo<TConn>): void {
     if (this.limitExceededHandlers.length === 0) {
       return;
     }
@@ -2334,7 +2334,7 @@ export class WebSocketRouter<
    */
   private callErrorHandlers(
     error: Error,
-    context: MessageContext<MessageSchemaType, TData>,
+    context: MessageContext<MessageSchemaType, TConn>,
   ): boolean {
     // Wrap error as WsKitError if it isn't already
     const wsKitError = WsKitError.wrap(
@@ -2384,13 +2384,13 @@ export class WebSocketRouter<
   private createMessageContext<
     TMsg extends MessageSchemaType = MessageSchemaType,
   >(
-    ws: ServerWebSocket<TData>,
+    ws: ServerWebSocket<TConn>,
     type: string,
     clientId: string,
     receivedAt: number,
     send: SendFunction,
     meta?: MessageMeta,
-  ): MessageContext<TMsg, TData> {
+  ): MessageContext<TMsg, TConn> {
     const contextMeta = meta || { clientId, receivedAt };
 
     // Error sending function for type-safe error responses
@@ -2418,7 +2418,7 @@ export class WebSocketRouter<
     };
 
     // Helper to update connection data
-    const assignData = (partial: Partial<TData>): void => {
+    const assignData = (partial: Partial<TConn>): void => {
       try {
         if (ws.data && typeof ws.data === "object") {
           Object.assign(ws.data, partial);
@@ -2429,12 +2429,12 @@ export class WebSocketRouter<
     };
 
     // Helper to access connection data with type safety
-    const getData = <K extends keyof TData>(key: K): TData[K] => {
+    const getData = <K extends keyof TConn>(key: K): TConn[K] => {
       try {
         return ws.data?.[key];
       } catch (error) {
         console.error("[ws] Error getting data from connection:", error);
-        return undefined as TData[K];
+        return undefined as TConn[K];
       }
     };
 
@@ -2481,7 +2481,7 @@ export class WebSocketRouter<
    *
    * The send function validates messages before sending (unless validate: false).
    */
-  private createSendFunction(ws: ServerWebSocket<TData>): SendFunction {
+  private createSendFunction(ws: ServerWebSocket<TConn>): SendFunction {
     return (
       schema: MessageSchemaType,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2547,7 +2547,7 @@ export class WebSocketRouter<
    * Sends ping frames at regular intervals. If pong is not received
    * within the timeout, closes the connection.
    */
-  private startHeartbeat(clientId: string, ws: ServerWebSocket<TData>): void {
+  private startHeartbeat(clientId: string, ws: ServerWebSocket<TConn>): void {
     if (!this.heartbeatConfig) return;
 
     const heartbeat = this.heartbeatStates.get(clientId);
@@ -2630,7 +2630,7 @@ export class WebSocketRouter<
    * Get buffered bytes for backpressure check.
    * Uses platform adapter if available, otherwise ws.bufferedAmount.
    */
-  private getBufferedBytes(ws: ServerWebSocket<TData>): number {
+  private getBufferedBytes(ws: ServerWebSocket<TConn>): number {
     if (this.platform?.getBufferedBytes) {
       // Platform adapter type may differ from ServerWebSocket interface
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2644,7 +2644,7 @@ export class WebSocketRouter<
   /**
    * Check if we should backpressure (buffer is full).
    */
-  private shouldBackpressure(ws: ServerWebSocket<TData>): boolean {
+  private shouldBackpressure(ws: ServerWebSocket<TConn>): boolean {
     if (this.socketBufferLimitBytes === Infinity) {
       return false; // Backpressure disabled
     }
@@ -2720,7 +2720,7 @@ export class WebSocketRouter<
   }
 
   private sendErrorEnvelope(
-    ws: ServerWebSocket<TData>,
+    ws: ServerWebSocket<TConn>,
     code: string,
     message?: string,
     details?: Record<string, unknown>,

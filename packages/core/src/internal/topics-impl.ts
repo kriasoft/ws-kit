@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { AbortError, PubSubError } from "./pubsub-error.js";
-import type { ServerWebSocket, Topics } from "./types.js";
-import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./limits.js";
+import { AbortError, PubSubError } from "../pubsub-error.js";
+import type { ServerWebSocket, Topics } from "../types.js";
+import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "../limits.js";
 
 /**
  * Validator function for topic validation.
@@ -56,14 +56,14 @@ export type TopicValidator = (topic: string) => void;
  * **Error semantics**: Throws PubSubError on validation, authorization, or adapter failure.
  * No rollback: if adapter call fails, local state remains unchanged.
  *
- * @template TData - Connection data type
+ * @template TConn - Connection data type
  */
 export class TopicsImpl<
-  TData extends { clientId: string } = { clientId: string },
+  TConn extends { clientId: string } = { clientId: string },
 > implements Topics
 {
   private readonly subscriptions = new Set<string>();
-  private readonly ws: ServerWebSocket<TData>;
+  private readonly ws: ServerWebSocket<TConn>;
   private readonly maxTopicsPerConnection: number;
   private readonly customValidator: TopicValidator | undefined;
   private readonly inflight = new Map<string, Promise<void>>();
@@ -81,7 +81,7 @@ export class TopicsImpl<
    * for context-aware authorization, normalization, and lifecycle tracking.
    */
   constructor(
-    ws: ServerWebSocket<TData>,
+    ws: ServerWebSocket<TConn>,
     maxTopicsPerConnection = Infinity,
     customValidator?: TopicValidator,
   ) {

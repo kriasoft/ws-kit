@@ -1,59 +1,34 @@
 {
   "name": "@ws-kit/core",
-  "version": "0.7.0",
-  "description": "WS-Kit — Type-safe WebSocket router for Bun and Cloudflare with pluggable validators and zero vendor lock-in",
+  "version": "0.0.1",
   "type": "module",
-  "sideEffects": false,
-  "license": "MIT",
-  "author": "Konstantin Tarkus",
-  "homepage": "https://kriasoft.com/ws-kit/",
-  "bugs": "https://github.com/kriasoft/ws-kit/issues",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kriasoft/ws-kit.git",
-    "directory": "packages/core"
+  "description": "Tiny, type-safe WebSocket router",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./test": {
+      "types": "./dist/test/index.d.ts",
+      "import": "./dist/test/index.js"
+    }
   },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/koistya"
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
   },
   "keywords": [
     "websocket",
     "router",
     "type-safe",
-    "adapter",
-    "validation",
-    "typescript",
-    "real-time",
-    "server",
-    "messaging",
-    "framework",
-    "event-driven",
-    "infrastructure",
-    "websocket-server",
     "rpc",
-    "pluggable",
     "pub-sub"
   ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "bun": "./src/index.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "devDependencies": {
-    "@types/bun": "^1.3.2"
-  },
-  "engines": {
-    "node": ">=22"
-  },
-  "publishConfig": {
-    "directory": "dist"
-  }
+  "license": "MIT"
 }

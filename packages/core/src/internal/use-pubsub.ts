@@ -7,8 +7,8 @@ import type {
   Middleware,
   UsePubSubOptions,
   WebSocketData,
-} from "./types.js";
-import { PubSubError, type PubSubAclDetails } from "./pubsub-error.js";
+} from "../types.js";
+import { PubSubError, type PubSubAclDetails } from "../pubsub-error.js";
 
 /**
  * Pub/Sub middleware factory for topic authorization, normalization, and lifecycle hooks.
@@ -44,9 +44,9 @@ import { PubSubError, type PubSubAclDetails } from "./pubsub-error.js";
  * );
  * ```
  */
-export function usePubSub<TData extends WebSocketData = WebSocketData>(
-  options?: UsePubSubOptions<TData>,
-): Middleware<TData> {
+export function usePubSub<TConn extends WebSocketData = WebSocketData>(
+  options?: UsePubSubOptions<TConn>,
+): Middleware<TConn> {
   // Extract options with defaults
   const {
     normalize = (topic: string) => topic,
@@ -57,7 +57,7 @@ export function usePubSub<TData extends WebSocketData = WebSocketData>(
     invalidateAuth,
   } = options || {};
 
-  return async (ctx: MessageContext<MessageSchemaType, TData>, next) => {
+  return async (ctx: MessageContext<MessageSchemaType, TConn>, next) => {
     // Wrap ctx.topics methods with hooks
     const topics = ctx.topics;
 

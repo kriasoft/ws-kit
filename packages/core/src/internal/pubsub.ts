@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSub, PubSubPublishOptions } from "./types.js";
+import type { PubSub, PubSubPublishOptions } from "../types.js";
 
 /**
  * In-memory Pub/Sub implementation suitable for testing and single-server deployments.

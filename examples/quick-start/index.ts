@@ -16,7 +16,10 @@ import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 import { createChatRouter } from "./chat";
 
-type AppData = { roomId?: string; clientId: string };
+interface AppData {
+  roomId?: string;
+  clientId: string;
+}
 
 // Create the main app router by composing feature sub-routers
 const appRouter = createRouter<AppData>()

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { RESERVED_META_KEYS } from "./constants.js";
+import { RESERVED_META_KEYS } from "../constants.js";
 
 /**
  * Validates that extended meta schema does not define reserved keys.

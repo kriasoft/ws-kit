@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { ErrorCode, WsKitError } from "./error.js";
+import type { ErrorCode, WsKitError } from "../error.js";
 
 /**
  * Platform-agnostic WebSocket abstraction.
@@ -10,9 +10,9 @@ import type { ErrorCode, WsKitError } from "./error.js";
  * implementation that conforms to this interface. Allows core router logic to
  * remain platform-independent while supporting platform-specific features.
  */
-export interface ServerWebSocket<TData = unknown> {
+export interface ServerWebSocket<TConn = unknown> {
   /** Custom application data attached to this connection */
-  data: TData;
+  data: TConn;
 
   /** Send a text message to the client */
   send(message: string | Uint8Array): void;
@@ -161,10 +161,10 @@ export type InferSchemaProgress<S> = S extends {
  */
 export interface EventMessageContext<
   TSchema extends SchemaMetadata & any = SchemaMetadata & any,
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /** WebSocket connection with custom application data */
-  ws: ServerWebSocket<TData>;
+  ws: ServerWebSocket<TConn>;
 
   /** Message type (inferred from schema, or string if not branded) */
   type: InferSchemaType<TSchema> extends never
@@ -239,7 +239,7 @@ export interface EventMessageContext<
    *
    * @param partial - Partial object to merge into ctx.ws.data
    */
-  assignData(partial: Partial<TData>): void;
+  assignData(partial: Partial<TConn>): void;
 
   /**
    * Type-safe accessor for connection data fields.
@@ -261,7 +261,7 @@ export interface EventMessageContext<
    * });
    * ```
    */
-  getData<K extends keyof TData>(key: K): TData[K];
+  getData<K extends keyof TConn>(key: K): TConn[K];
 
   /**
    * Topic subscriptions and operations.
@@ -337,10 +337,10 @@ export interface EventMessageContext<
  */
 export interface RpcMessageContext<
   TSchema extends SchemaMetadata & any = SchemaMetadata & any,
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /** WebSocket connection with custom application data */
-  ws: ServerWebSocket<TData>;
+  ws: ServerWebSocket<TConn>;
 
   /** Message type (inferred from schema, or string if not branded) */
   type: InferSchemaType<TSchema> extends never
@@ -415,7 +415,7 @@ export interface RpcMessageContext<
    *
    * @param partial - Partial object to merge into ctx.ws.data
    */
-  assignData(partial: Partial<TData>): void;
+  assignData(partial: Partial<TConn>): void;
 
   /**
    * Type-safe accessor for connection data fields.
@@ -437,7 +437,7 @@ export interface RpcMessageContext<
    * });
    * ```
    */
-  getData<K extends keyof TData>(key: K): TData[K];
+  getData<K extends keyof TConn>(key: K): TConn[K];
 
   /**
    * Topic subscriptions and operations.
@@ -562,7 +562,7 @@ export interface RpcMessageContext<
  * @internal Used by validator adapters; applications use EventMessageContext or RpcMessageContext
  */
 export interface MessageContextMethods<
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /**
    * Type-safe accessor for connection data fields.
@@ -584,7 +584,7 @@ export interface MessageContextMethods<
    * });
    * ```
    */
-  getData<K extends keyof TData>(key: K): TData[K];
+  getData<K extends keyof TConn>(key: K): TConn[K];
 
   /**
    * Merge partial data into the connection's custom data object.
@@ -594,7 +594,7 @@ export interface MessageContextMethods<
    *
    * @param partial - Partial object to merge into ctx.ws.data
    */
-  assignData(partial: Partial<TData>): void;
+  assignData(partial: Partial<TConn>): void;
 
   /**
    * Topic subscriptions and operations.
@@ -631,8 +631,8 @@ export interface MessageContextMethods<
  */
 export type MessageContext<
   TSchema extends MessageSchemaType = MessageSchemaType,
-  TData extends WebSocketData = WebSocketData,
-> = EventMessageContext<TSchema, TData> | RpcMessageContext<TSchema, TData>;
+  TConn extends WebSocketData = WebSocketData,
+> = EventMessageContext<TSchema, TConn> | RpcMessageContext<TSchema, TConn>;
 
 /**
  * Options for sending a message.
@@ -1038,7 +1038,7 @@ export interface Topics extends ReadonlySet<string> {
  *
  * Per spec docs/specs/pubsub.md#configuration--middleware
  */
-export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
+export interface UsePubSubOptions<TConn extends WebSocketData = WebSocketData> {
   /**
    * Normalize topic string before validation and authorization.
    *
@@ -1066,7 +1066,7 @@ export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
    * @throws On authorization check failure
    */
   authorizeSubscribe?: (
-    ctx: MessageContext<MessageSchemaType, TData>,
+    ctx: MessageContext<MessageSchemaType, TConn>,
     topic: string,
   ) => boolean | Promise<boolean>;
 
@@ -1082,7 +1082,7 @@ export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
    * @throws On authorization check failure
    */
   authorizePublish?: (
-    ctx: MessageContext<MessageSchemaType, TData>,
+    ctx: MessageContext<MessageSchemaType, TConn>,
     topic: string,
   ) => boolean | Promise<boolean>;
 
@@ -1099,7 +1099,7 @@ export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
    * @param topic - Normalized topic that was subscribed to
    */
   onSubscribe?: (
-    ctx: MessageContext<MessageSchemaType, TData>,
+    ctx: MessageContext<MessageSchemaType, TConn>,
     topic: string,
   ) => void | Promise<void>;
 
@@ -1116,7 +1116,7 @@ export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
    * @param topic - Normalized topic that was unsubscribed from
    */
   onUnsubscribe?: (
-    ctx: MessageContext<MessageSchemaType, TData>,
+    ctx: MessageContext<MessageSchemaType, TConn>,
     topic: string,
   ) => void | Promise<void>;
 
@@ -1131,7 +1131,7 @@ export interface UsePubSubOptions<TData extends WebSocketData = WebSocketData> {
    *
    * @param ctx - Message context
    */
-  invalidateAuth?: (ctx: MessageContext<MessageSchemaType, TData>) => void;
+  invalidateAuth?: (ctx: MessageContext<MessageSchemaType, TConn>) => void;
 }
 
 /**
@@ -1155,17 +1155,17 @@ export type SendFunction = (schema: any, data: any, options?: any) => void;
  * and are executed sequentially. Async handlers are supported.
  */
 export interface OpenHandlerContext<
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /** WebSocket connection with custom data */
-  ws: ServerWebSocket<TData>;
+  ws: ServerWebSocket<TConn>;
 
   /** Type-safe send function for validated messages */
   send: SendFunction;
 }
 
-export type OpenHandler<TData extends WebSocketData = WebSocketData> = (
-  context: OpenHandlerContext<TData>,
+export type OpenHandler<TConn extends WebSocketData = WebSocketData> = (
+  context: OpenHandlerContext<TConn>,
 ) => void | Promise<void>;
 
 /**
@@ -1176,10 +1176,10 @@ export type OpenHandler<TData extends WebSocketData = WebSocketData> = (
  * to perform cleanup (release locks, remove from rooms, etc.).
  */
 export interface CloseHandlerContext<
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /** WebSocket connection with custom data */
-  ws: ServerWebSocket<TData>;
+  ws: ServerWebSocket<TConn>;
 
   /** WebSocket close code (1000 = normal, 1006 = abnormal, etc.) */
   code: number;
@@ -1191,8 +1191,8 @@ export interface CloseHandlerContext<
   send: SendFunction;
 }
 
-export type CloseHandler<TData extends WebSocketData = WebSocketData> = (
-  context: CloseHandlerContext<TData>,
+export type CloseHandler<TConn extends WebSocketData = WebSocketData> = (
+  context: CloseHandlerContext<TConn>,
 ) => void | Promise<void>;
 
 /**
@@ -1208,8 +1208,8 @@ export type CloseHandler<TData extends WebSocketData = WebSocketData> = (
  */
 export type EventHandler<
   TSchema extends SchemaMetadata & any = SchemaMetadata & any,
-  TData extends WebSocketData = WebSocketData,
-> = (context: EventMessageContext<TSchema, TData>) => void | Promise<void>;
+  TConn extends WebSocketData = WebSocketData,
+> = (context: EventMessageContext<TSchema, TConn>) => void | Promise<void>;
 
 /**
  * Handler for request/response RPC messages (registered via router.rpc()).
@@ -1224,8 +1224,8 @@ export type EventHandler<
  */
 export type RpcHandler<
   TSchema extends SchemaMetadata & any = SchemaMetadata & any,
-  TData extends WebSocketData = WebSocketData,
-> = (context: RpcMessageContext<TSchema, TData>) => void | Promise<void>;
+  TConn extends WebSocketData = WebSocketData,
+> = (context: RpcMessageContext<TSchema, TConn>) => void | Promise<void>;
 
 /**
  * Generic handler type (union of event and RPC handlers).
@@ -1235,8 +1235,8 @@ export type RpcHandler<
  */
 export type MessageHandler<
   TSchema extends SchemaMetadata & any = SchemaMetadata & any,
-  TData extends WebSocketData = WebSocketData,
-> = EventHandler<TSchema, TData> | RpcHandler<TSchema, TData>;
+  TConn extends WebSocketData = WebSocketData,
+> = EventHandler<TSchema, TConn> | RpcHandler<TSchema, TConn>;
 
 /**
  * Handler for authentication events.
@@ -1252,9 +1252,9 @@ export type MessageHandler<
  *   - `"PERMISSION_DENIED"` — authentication failed, close with "PERMISSION_DENIED" reason
  *   - Promise variant of any of the above
  */
-export type AuthHandler<TData extends WebSocketData = WebSocketData> = (
+export type AuthHandler<TConn extends WebSocketData = WebSocketData> = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context: MessageContext<any, TData>,
+  context: MessageContext<any, TConn>,
 ) =>
   | boolean
   | "UNAUTHENTICATED"
@@ -1279,12 +1279,12 @@ export type AuthHandler<TData extends WebSocketData = WebSocketData> = (
  *          handler returns false, the router will not send an INTERNAL response
  *          to the client (assuming autoSendErrorOnThrow is enabled).
  */
-export type ErrorHandler<TData extends WebSocketData = WebSocketData> =
+export type ErrorHandler<TConn extends WebSocketData = WebSocketData> =
   | ((error: WsKitError) => boolean | undefined)
   | ((
       error: WsKitError,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      context: MessageContext<any, TData>,
+      context: MessageContext<any, TConn>,
     ) => boolean | undefined);
 
 /**
@@ -1329,9 +1329,9 @@ export type ErrorHandler<TData extends WebSocketData = WebSocketData> =
  * router.use(logTiming);
  * ```
  */
-export type Middleware<TData extends WebSocketData = WebSocketData> = (
+export type Middleware<TConn extends WebSocketData = WebSocketData> = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context: MessageContext<any, TData>,
+  context: MessageContext<any, TConn>,
   next: () => void | Promise<void>,
 ) => void | Promise<void>;
 
@@ -1351,29 +1351,29 @@ export type Middleware<TData extends WebSocketData = WebSocketData> = (
  * @param info - Structured limit exceeded information
  * @returns void or Promise<void>
  */
-export type LimitExceededHandler<TData extends WebSocketData = WebSocketData> =
-  (info: LimitExceededInfo<TData>) => void | Promise<void>;
+export type LimitExceededHandler<TConn extends WebSocketData = WebSocketData> =
+  (info: LimitExceededInfo<TConn>) => void | Promise<void>;
 
 /**
  * Router lifecycle hooks.
  *
  * Each hook can be registered multiple times. Hooks are executed in registration order.
  */
-export interface RouterHooks<TData extends WebSocketData = WebSocketData> {
+export interface RouterHooks<TConn extends WebSocketData = WebSocketData> {
   /** Called when a client connects */
-  onOpen?: OpenHandler<TData>;
+  onOpen?: OpenHandler<TConn>;
 
   /** Called when a client disconnects */
-  onClose?: CloseHandler<TData>;
+  onClose?: CloseHandler<TConn>;
 
   /** Called before dispatching first message (authentication check) */
-  onAuth?: AuthHandler<TData>;
+  onAuth?: AuthHandler<TConn>;
 
   /** Called when an error occurs during message processing */
-  onError?: ErrorHandler<TData>;
+  onError?: ErrorHandler<TConn>;
 
   /** Called when a connection exceeds a configured limit (payload size, rate, etc.) */
-  onLimitExceeded?: LimitExceededHandler<TData>;
+  onLimitExceeded?: LimitExceededHandler<TConn>;
 }
 
 /**
@@ -1511,10 +1511,10 @@ export interface RateLimiter {
  * Prevents accidental dependencies on unvalidated payload, ensuring middleware stays
  * correct even as schema changes.
  *
- * Generic parameter TData must extend WebSocketData to preserve augmented connection data
+ * Generic parameter TConn must extend WebSocketData to preserve augmented connection data
  * and maintain type safety with connection state set during authentication (userId, roles, etc.).
  */
-export interface IngressContext<TData extends WebSocketData = WebSocketData> {
+export interface IngressContext<TConn extends WebSocketData = WebSocketData> {
   /** Message type (extracted from frame) */
   type: string;
 
@@ -1525,7 +1525,7 @@ export interface IngressContext<TData extends WebSocketData = WebSocketData> {
   ip: string;
 
   /** WebSocket connection with app-specific data (from authenticate) */
-  ws: { data: TData };
+  ws: { data: TConn };
 
   /** Server-controlled metadata (timestamp, etc.) */
   meta: { receivedAt: number };
@@ -1537,7 +1537,7 @@ export interface IngressContext<TData extends WebSocketData = WebSocketData> {
  * Passed to the onLimitExceeded hook to enable monitoring, metrics, and custom handling.
  */
 export interface LimitExceededInfo<
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /** Type of limit exceeded (payload, rate, connections, etc.) */
   type: LimitType;
@@ -1549,7 +1549,7 @@ export interface LimitExceededInfo<
   limit: number;
 
   /** WebSocket connection */
-  ws: ServerWebSocket<TData>;
+  ws: ServerWebSocket<TConn>;
 
   /** Unique client identifier */
   clientId: string;
@@ -1622,7 +1622,7 @@ export interface LimitsConfig {
  * Default connection data type for ambient module declaration.
  *
  * Applications can declare their default connection data type once using
- * TypeScript's declaration merging, then omit the TData generic everywhere:
+ * TypeScript's declaration merging, then omit the TConn generic everywhere:
  *
  * @example
  * ```typescript
@@ -1644,7 +1644,7 @@ export interface LimitsConfig {
  * });
  * ```
  *
- * This avoids repeating the TData generic at every router instantiation.
+ * This avoids repeating the TConn generic at every router instantiation.
  * Keep this interface empty in the library; users extend it in their own code.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -1695,7 +1695,7 @@ export interface AuthFailurePolicy {
  */
 export interface WebSocketRouterOptions<
   V extends ValidatorAdapter = ValidatorAdapter,
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   /** Validator adapter for schema validation (e.g., Zod, Valibot) */
   validator?: V;
@@ -1707,7 +1707,7 @@ export interface WebSocketRouterOptions<
   pubsub?: PubSub;
 
   /** Lifecycle hooks (open, close, auth, error) */
-  hooks?: RouterHooks<TData>;
+  hooks?: RouterHooks<TConn>;
 
   /** Connection heartbeat configuration */
   heartbeat?: HeartbeatConfig;
@@ -1885,10 +1885,10 @@ export type MessageSchemaType = any;
  * Stores the schema and handler for a specific message type.
  */
 export interface MessageHandlerEntry<
-  TData extends WebSocketData = WebSocketData,
+  TConn extends WebSocketData = WebSocketData,
 > {
   schema: MessageSchemaType;
-  handler: MessageHandler<MessageSchemaType, TData>;
+  handler: MessageHandler<MessageSchemaType, TConn>;
 }
 
 /**
@@ -1897,10 +1897,10 @@ export interface MessageHandlerEntry<
  * Represents a single message route with its handlers and middleware.
  * Used by the routes() accessor to provide clean router composition without private access.
  */
-export interface RouteEntry<TData extends WebSocketData = WebSocketData> {
+export interface RouteEntry<TConn extends WebSocketData = WebSocketData> {
   messageType: string;
-  handler: MessageHandlerEntry<TData>;
-  middleware: Middleware<TData>[];
+  handler: MessageHandlerEntry<TConn>;
+  middleware: Middleware<TConn>[];
 }
 
 /**
@@ -2124,13 +2124,13 @@ export interface RpcErrorWire {
  * Uses `this` return type for fluent chaining (works for both class and factory-based routers).
  * Adapters depend on this interface, not on concrete implementations.
  *
- * @typeParam TData - Application-specific connection data
+ * @typeParam TConn - Application-specific connection data
  */
-export interface IWebSocketRouter<TData extends WebSocketData = WebSocketData> {
+export interface IWebSocketRouter<TConn extends WebSocketData = WebSocketData> {
   /** Register handler for fire-and-forget messages */
   on<TSchema extends SchemaMetadata & any>(
     schema: TSchema,
-    handler: EventHandler<TSchema, TData>,
+    handler: EventHandler<TSchema, TConn>,
   ): this;
 
   /** Unregister handler for a message type */
@@ -2139,32 +2139,32 @@ export interface IWebSocketRouter<TData extends WebSocketData = WebSocketData> {
   /** Register handler for RPC request-response messages */
   rpc<TSchema extends SchemaMetadata & any>(
     schema: TSchema,
-    handler: RpcHandler<TSchema, TData>,
+    handler: RpcHandler<TSchema, TConn>,
   ): this;
 
   /** Register topic subscription handler */
   topic<TSchema extends SchemaMetadata & any>(
     schema: TSchema,
-    options?: { onPublish?: EventHandler<TSchema, TData> },
+    options?: { onPublish?: EventHandler<TSchema, TConn> },
   ): this;
 
   /** Register connection open lifecycle hook */
-  onOpen(handler: OpenHandler<TData>): this;
+  onOpen(handler: OpenHandler<TConn>): this;
 
   /** Register connection close lifecycle hook */
-  onClose(handler: CloseHandler<TData>): this;
+  onClose(handler: CloseHandler<TConn>): this;
 
   /** Register authentication hook */
-  onAuth(handler: AuthHandler<TData>): this;
+  onAuth(handler: AuthHandler<TConn>): this;
 
   /** Register error handler */
-  onError(handler: ErrorHandler<TData>): this;
+  onError(handler: ErrorHandler<TConn>): this;
 
   /** Register global middleware */
-  use(middleware: Middleware<TData>): this;
+  use(middleware: Middleware<TConn>): this;
 
   /** Merge handlers from another router */
-  merge(router: IWebSocketRouter<TData>): this;
+  merge(router: IWebSocketRouter<TConn>): this;
 
   /** Publish message to a channel/topic */
   publish<TSchema extends SchemaMetadata & any>(
@@ -2192,12 +2192,12 @@ export interface IWebSocketRouter<TData extends WebSocketData = WebSocketData> {
    */
   readonly websocket: {
     /** Called when a WebSocket connection opens */
-    open(ws: ServerWebSocket<TData>): Promise<void>;
+    open(ws: ServerWebSocket<TConn>): Promise<void>;
     /** Called when a message arrives */
-    message(ws: ServerWebSocket<TData>, data: string | Buffer): Promise<void>;
+    message(ws: ServerWebSocket<TConn>, data: string | Buffer): Promise<void>;
     /** Called when a connection closes */
     close(
-      ws: ServerWebSocket<TData>,
+      ws: ServerWebSocket<TConn>,
       code: number,
       reason?: string,
     ): Promise<void>;

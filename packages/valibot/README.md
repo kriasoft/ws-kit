@@ -1,52 +1,91 @@
 # @ws-kit/valibot
 
-Valibot validator adapter for type-safe WebSocket routing in ws-kit.
+**Valibot validator adapter for type-safe WebSocket routing with ws-kit.**
+
+Adds validation capability and RPC support to the core router via the `withValibot()` plugin.
 
 ## Quick Start
 
-The **export-with-helpers pattern** is the recommended way to use this package—no factories, no dual imports:
-
 ```typescript
-import { v, message, createRouter } from "@ws-kit/valibot";
+import { v, message, rpc, withValibot, createRouter } from "@ws-kit/valibot";
 import { serve } from "@ws-kit/bun";
 
-// Define message schemas with full type inference
-const PingMessage = message("PING", { text: v.string() });
-const PongMessage = message("PONG", { reply: v.string() });
-
-// Create type-safe router
-type AppData = { userId?: string };
-const router = createRouter<AppData>();
-
-// Register handlers—fully typed!
-router.on(PingMessage, (ctx) => {
-  ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
+// Define message schemas with type-safe payload inference
+const Join = message("JOIN", { roomId: v.string() });
+const GetUser = rpc("GET_USER", { id: v.string() }, "USER", {
+  id: v.string(),
+  name: v.string(),
 });
 
-// Serve with type-safe handlers
+// Create router and add validation
+type AppData = { userId?: string };
+const router = createRouter<AppData>()
+  .plugin(withValibot())
+  .on(Join, (ctx) => {
+    // ctx.payload: { roomId: string } (validated)
+    ctx.send(Join, { roomId: "42" });
+  })
+  .rpc(GetUser, async (ctx) => {
+    // ctx.payload: { id: string } (validated)
+    ctx.reply({ id: ctx.payload.id, name: "Alice" });
+  });
+
 serve(router, { port: 3000 });
 ```
 
 ## What This Package Exports
 
-**Primary (recommended):**
+### Schema Builders
 
-- **`v`**: Re-exported Valibot instance (canonical import source)
-- **`message()`**: Helper to create type-safe message schemas
-- **`createRouter()`**: Create a type-safe router with full type inference
+- **`message(type, payload?)`** — Create event message schemas
+- **`rpc(requestType, requestPayload, responseType, responsePayload)`** — Create RPC schemas
 
-**Secondary (advanced use cases):**
+### Plugin
 
-- **`valibotValidator()`**: Validator adapter for custom router setup
-- **`ValibotValidatorAdapter`**: Type class for advanced patterns
-- **`ErrorMessage`**: Standard error message schema
+- **`withValibot()`** — Validation plugin that adds payload validation and RPC support
 
-**Deprecated (avoid):**
+### Type Inference
 
-- ❌ `createMessageSchema()` — Use `message()` helper instead
-- ❌ `createValibotRouter()` — Use `createRouter()` instead
+- **`InferPayload<T>`** — Extract payload type from a schema
+- **`InferResponse<T>`** — Extract response type from an RPC schema
+- **`InferType<T>`** — Extract message type from a schema
+
+### Re-exports
+
+- **`v`** — Canonical Valibot instance
+- **`createRouter`** — Core router factory (from `@ws-kit/core`)
 
 ## Key Design Principles
+
+### Plugin-Based Architecture
+
+Validation is added via the `withValibot()` plugin, not baked into the core:
+
+```typescript
+// Tiny router without validation
+const router = createRouter();
+
+// Add validation plugin for full capability
+const validated = router.plugin(withValibot());
+
+// Now you have ctx.payload, ctx.send(), ctx.reply(), etc.
+```
+
+### Capability Gating
+
+Methods only exist when enabled:
+
+```typescript
+const router = createRouter();
+
+// ❌ Type error: rpc() doesn't exist yet
+router.rpc(schema, handler);
+
+const router2 = createRouter().plugin(withValibot());
+
+// ✅ OK: rpc() is available after plugin
+router2.rpc(schema, handler);
+```
 
 ### Single Canonical Import Source
 
@@ -54,34 +93,35 @@ All validator and helper imports come from one place to prevent dual-package haz
 
 ```typescript
 // ✅ CORRECT: Single import source
-import { v, message, createRouter } from "@ws-kit/valibot";
+import { v, message, rpc, withValibot, createRouter } from "@ws-kit/valibot";
 
 // ❌ AVOID: Dual imports (creates type mismatches)
 import * as v from "valibot"; // Different instance
 import { message } from "@ws-kit/valibot"; // Uses @ws-kit/valibot's v
-// Now you have two Valibot instances!
-```
-
-### No Factory Setup Needed
-
-Messages are created with a simple helper function:
-
-```typescript
-// ✅ Direct: No factory call required
-const LoginMessage = message("LOGIN", {
-  username: v.string(),
-  password: v.pipe(v.string(), v.minLength(8)),
-});
 ```
 
 ### Full Type Inference
 
-Schemas flow through handlers with complete type safety:
+Schemas and payloads flow through handlers with complete type safety:
 
 ```typescript
-router.on(LoginMessage, (ctx) => {
-  // ✅ ctx.payload.username is inferred as string
-  // ✅ ctx.type is inferred as "LOGIN" (literal type)
+const Join = message("JOIN", { roomId: v.string() });
+
+router.on(Join, (ctx) => {
+  ctx.payload;  // ✅ { roomId: string } (inferred)
+  ctx.type;     // ✅ "JOIN" (literal)
+  ctx.send;     // ✅ Available in event handlers
+});
+
+const GetUser = rpc("GET_USER", { id: v.string() }, "USER", {
+  id: v.string(),
+  name: v.string(),
+});
+
+router.rpc(GetUser, async (ctx) => {
+  ctx.payload;   // ✅ { id: string } (inferred)
+  ctx.reply;     // ✅ Available in RPC handlers
+  ctx.progress;  // ✅ For streaming updates
 });
 ```
 

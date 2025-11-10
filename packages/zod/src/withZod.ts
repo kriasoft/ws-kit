@@ -1,0 +1,173 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
+/**
+ * withZod() plugin: adds validation capability to the router.
+ *
+ * Once plugged, the router gains:
+ * - router.rpc() method for request-response handlers
+ * - Enhanced context: ctx.payload (validated), ctx.send(), ctx.reply(), ctx.progress()
+ * - Automatic payload validation from schemas
+ * - Validation errors routed to router.onError()
+ */
+
+import type {
+  Router,
+  MessageDescriptor,
+  Plugin,
+  MinimalContext,
+  CoreRouter,
+} from "@ws-kit/core";
+import type { EventHandler } from "@ws-kit/core";
+import type { ZodObject, ZodRawShape, ZodType } from "zod";
+
+/**
+ * Validation plugin for Zod schemas.
+ * Adds validation capability and RPC support to the router.
+ *
+ * Inserts a validation middleware that:
+ * 1. Parses and validates payload from schema
+ * 2. Enriches context with payload and methods (send, reply, progress)
+ * 3. Routes validation errors to router.onError()
+ *
+ * @example
+ * ```typescript
+ * const router = createRouter()
+ *   .plugin(withZod())
+ *   .on(Join, (ctx) => {
+ *     // ctx.payload is now typed and validated
+ *     console.log(ctx.payload.roomId);
+ *   })
+ *   .rpc(GetUser, async (ctx) => {
+ *     // RPC handler: has ctx.reply() and ctx.progress()
+ *     ctx.progress({ id: ctx.payload.id, name: "Loading..." });
+ *     ctx.reply({ id: ctx.payload.id, name: "Alice" });
+ *   });
+ * ```
+ */
+export function withZod(): Plugin<any, { validation: true }> {
+  return (router) => {
+    // Get internal access to router for wrapping dispatch
+    const routerImpl = router as any as CoreRouter<any>;
+
+    // Store original context creator
+    const originalCreateContext = routerImpl.createContext.bind(routerImpl);
+
+    // Inject validation middleware that validates payload and enriches context
+    // This runs automatically before any user handler
+    router.use(async (ctx: MinimalContext<any>, next) => {
+      // Get the schema from registry by looking up the type
+      const registry = routerImpl.getInternalRegistry();
+      const entry = registry.get(ctx.type);
+
+      if (entry) {
+        const schema = entry.schema;
+        const payloadSchema = getZodPayload(schema);
+
+        // Validate payload if schema defines one
+        if (payloadSchema) {
+          const result = validatePayload(ctx.payload, payloadSchema);
+          if (!result.success) {
+            // Create validation error and route to error sink
+            const validationError = new Error(
+              `Validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
+            );
+            (validationError as any).code = "VALIDATION_ERROR";
+            (validationError as any).details = result.error;
+
+            const lifecycle = routerImpl.getInternalLifecycle();
+            await lifecycle.handleError(validationError, ctx);
+            return;
+          }
+
+          // Enrich context with validated payload
+          if (result.data !== undefined) {
+            (ctx as any).payload = result.data;
+          }
+        }
+      }
+
+      // Continue with enriched context
+      await next();
+    });
+
+    // Wrap the original createContext to attach send/reply/progress methods
+    routerImpl.createContext = function (params: any) {
+      const ctx = originalCreateContext(params);
+      const routerImpl = this as CoreRouter<any>;
+
+      // Attach send() method for event handlers (always available after validation)
+      (ctx as any).send = async (
+        schema: MessageDescriptor,
+        payload: any,
+      ) => {
+        // For now, this is a placeholder - will be implemented by adapters
+        // In a real implementation, this would serialize and send to clients
+        console.debug(`[send] ${schema.type}:`, payload);
+      };
+
+      // Attach reply() and progress() methods for RPC handlers
+      (ctx as any).reply = async (payload: any) => {
+        // RPC terminal response - to be implemented by adapters
+        console.debug(`[reply]:`, payload);
+      };
+
+      (ctx as any).progress = async (payload: any) => {
+        // RPC progress update - to be implemented by adapters
+        console.debug(`[progress]:`, payload);
+      };
+
+      return ctx;
+    };
+
+    // Type-safe RPC handler method
+    const rpcMethod = (
+      schema: MessageDescriptor & { response: MessageDescriptor },
+      handler: any,
+    ) => {
+      // Use the standard on() method but mark it internally as RPC-capable
+      return router.on(schema, handler);
+    };
+
+    // Return router with rpc method added (capability-gated)
+    const enhanced = Object.assign(router, {
+      rpc: rpcMethod,
+    }) as Router<any, { validation: true }>;
+
+    // Attach capabilities for PluginManager to track
+    (enhanced as any).__caps = { validation: true };
+
+    return enhanced;
+  };
+}
+
+/**
+ * Helper to extract Zod payload schema from a message schema.
+ * Used internally by the validation middleware.
+ * @internal
+ */
+export function getZodPayload(schema: any): ZodType | undefined {
+  return schema.__zod_payload;
+}
+
+/**
+ * Helper to validate payload against Zod schema.
+ * Returns { success: true, data } or { success: false, error }.
+ * @internal
+ */
+export function validatePayload(
+  payload: unknown,
+  payloadSchema: ZodType | undefined,
+): { success: boolean; data?: unknown; error?: any } {
+  if (!payloadSchema) {
+    // No payload schema defined (message with no payload)
+    return { success: true };
+  }
+
+  const result = (payloadSchema as any).safeParse(payload);
+  if (result.success) {
+    return { success: true, data: result.data };
+  }
+
+  return { success: false, error: result.error };
+}
