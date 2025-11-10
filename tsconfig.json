@@ -9,6 +9,7 @@
     { "path": "./packages/cloudflare-do" },
     { "path": "./packages/core" },
     { "path": "./packages/middleware" },
+    { "path": "./packages/pubsub" },
     { "path": "./packages/redis-pubsub" },
     { "path": "./packages/valibot" },
     { "path": "./packages/zod" }

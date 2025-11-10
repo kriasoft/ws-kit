@@ -1,0 +1,54 @@
+{
+  "name": "@ws-kit/pubsub",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "In-memory pub/sub adapter for WS-Kit",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/pubsub"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "pubsub",
+    "pub-sub",
+    "adapter",
+    "plugin",
+    "broadcasting",
+    "type-safe",
+    "typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "directory": "dist"
+  }
+}
