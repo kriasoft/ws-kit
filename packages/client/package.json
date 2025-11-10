@@ -38,14 +38,17 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./zod": {
       "types": "./dist/zod/index.d.ts",
+      "bun": "./src/zod/index.ts",
       "default": "./dist/zod/index.js"
     },
     "./valibot": {
       "types": "./dist/valibot/index.d.ts",
+      "bun": "./src/valibot/index.ts",
       "default": "./dist/valibot/index.js"
     }
   },
