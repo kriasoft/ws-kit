@@ -53,6 +53,9 @@
   "peerDependencies": {
     "zod": ">=4.0.0"
   },
+  "devDependencies": {
+    "@types/bun": "^1.3.2"
+  },
   "engines": {
     "node": ">=22"
   },
