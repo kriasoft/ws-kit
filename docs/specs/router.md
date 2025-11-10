@@ -676,6 +676,8 @@ type WebSocketData<T> = {
 
 ### Route Composition
 
+Routers can be merged to combine handlers from multiple modules into a single router. This is the recommended pattern for organizing features in large applications.
+
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 
@@ -690,7 +692,65 @@ chatRouter.on(SendMessage, handleChat);
 const mainRouter = createRouter<AppData>().merge(authRouter).merge(chatRouter);
 ```
 
-**Type System Note**: All routers should define the same `TData` type for composition to work correctly. Type compatibility is enforced at compile time.
+#### merge() Semantics
+
+When merging routers, the following behavior applies:
+
+**Message Handlers**: Last-write-wins. If both routers handle the same message type, the handler from the later-merged router takes precedence:
+
+```typescript
+const router1 = createRouter<AppData>().on(Msg, handler1);
+const router2 = createRouter<AppData>().on(Msg, handler2);
+
+const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+
+// Msg now routes to handler2 (from router2, merged second)
+```
+
+This is **intentional**: merge order is explicit, giving you full control. For feature modules, this is typically not an issue since each module handles distinct message types.
+
+**Lifecycle Hooks** (`onOpen`, `onClose`, `onAuth`, `onError`): Handlers are **appended**, not replaced. All handlers execute in registration order:
+
+```typescript
+const router1 = createRouter<AppData>().onOpen((ctx) => {
+  console.log("router1 onOpen");
+});
+
+const router2 = createRouter<AppData>().onOpen((ctx) => {
+  console.log("router2 onOpen");
+});
+
+const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+
+// Output:
+// router1 onOpen
+// router2 onOpen
+```
+
+**Middleware**: Global middleware is appended; per-route middleware is extended for existing message types:
+
+```typescript
+const router1 = createRouter<AppData>()
+  .use(mw1) // global middleware
+  .on(Msg, handler1);
+
+const router2 = createRouter<AppData>()
+  .use(mw2) // global middleware
+  .on(Msg, handler2)
+  .use(Msg, mwPerRoute); // per-route middleware
+
+const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+
+// Execution order for Msg:
+// 1. mw1 (global from router1)
+// 2. mw2 (global from router2)
+// 3. mwPerRoute (per-route for Msg from router2)
+// 4. handler2 (last-write-wins for Msg handler)
+```
+
+**Type Compatibility**: All merged routers must use the same `TData` type. Type compatibility is enforced at compile time.
+
+**See Also**: [docs/patterns/composition.md](../patterns/composition.md) for composition patterns, [ADR-023](../adr/023-schema-driven-type-inference.md) for type safety through composition.
 
 ### Rate Limiting Middleware
 

@@ -35,6 +35,11 @@ export type {
   EventMessageContext,
   HeartbeatConfig,
   IngressContext,
+  InferSchemaPayload,
+  InferSchemaMeta,
+  InferSchemaProgress,
+  InferSchemaResponse,
+  InferSchemaType,
   IWebSocketRouter,
   LimitExceededHandler,
   LimitExceededInfo,
@@ -62,6 +67,7 @@ export type {
   RouterHooks,
   RpcHandler,
   RpcMessageContext,
+  SchemaMetadata,
   SendFunction,
   ServerWebSocket,
   Topics,
@@ -71,6 +77,8 @@ export type {
   WebSocketData,
   WebSocketRouterOptions,
 } from "./types.js";
+
+export { SchemaBrand } from "./types.js";
 
 // ============================================================================
 // Error Handling

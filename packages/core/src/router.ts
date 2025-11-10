@@ -6,7 +6,7 @@ import { ERROR_CODE_META, ErrorCode, WsKitError } from "./error.js";
 import { normalizeInboundMessage } from "./normalize.js";
 import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "./rpc-manager.js";
-import { TopicsImpl, createTopicValidator } from "./topics-impl.js";
+import { createTopicValidator, TopicsImpl } from "./topics-impl.js";
 import type {
   AuthHandler,
   CloseHandler,
@@ -34,9 +34,6 @@ import type {
   RpcHandler,
   SendFunction,
   ServerWebSocket,
-  // Topics is used indirectly in MessageContext type constraints
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  Topics,
   ValidatorAdapter,
   WebSocketData,
   WebSocketRouterOptions,

@@ -331,6 +331,7 @@ describe("@ws-kit/zod - Type Tests", () => {
   describe("createRouter with connection data", () => {
     it("should type connection data through handlers", () => {
       interface AppData {
+        clientId: string;
         userId?: string;
         roles?: string[];
       }
@@ -346,6 +347,7 @@ describe("@ws-kit/zod - Type Tests", () => {
 
     it("should support connection data assignment", () => {
       interface AppData {
+        clientId: string;
         userId?: string;
       }
       const router = createRouter<AppData>();
@@ -359,6 +361,7 @@ describe("@ws-kit/zod - Type Tests", () => {
 
     it("should type connection data in lifecycle callbacks", () => {
       interface AppData {
+        clientId: string;
         userId?: string;
       }
       const router = createRouter<AppData>();

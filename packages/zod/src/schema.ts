@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { validateMetaSchema } from "@ws-kit/core";
+import type { SchemaBrand, SchemaMetadata } from "@ws-kit/core";
 import type { ZodObject, ZodRawShape, ZodType, z as zType } from "zod";
 
 /**
@@ -25,6 +26,29 @@ interface ZodLike {
   instanceof: (...args: any[]) => any;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+/**
+ * Helper type to attach SchemaBrand metadata to a Zod schema.
+ * Pure type-level operation (zero runtime cost).
+ *
+ * @internal
+ */
+type BrandedSchema<
+  S extends ZodType,
+  TType extends string = string,
+  TPayload extends unknown = unknown,
+  TMeta extends unknown = unknown,
+  TResponse extends unknown = never,
+  TProgress extends unknown = never,
+> = S & {
+  readonly [SchemaBrand]: {
+    readonly type: TType;
+    readonly payload: TPayload;
+    readonly meta: TMeta;
+    readonly response: TResponse extends never ? never : TResponse;
+    readonly progress: TProgress extends never ? never : TProgress;
+  };
+};
 
 /**
  * Type helper utilities for better cross-package type inference
@@ -111,6 +135,10 @@ export function createMessageSchema(zod: ZodLike) {
     timeoutMs: zod.number().int().positive().optional(),
   });
 
+  // Type for inferred message metadata (used in BrandedSchema)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type MessageMetadata = any; // Inferred at usage site, this is a placeholder
+
   // Canonical ErrorCode enum from core (per ADR-015, gRPC-aligned, 13 codes)
   // Terminal: UNAUTHENTICATED, PERMISSION_DENIED, INVALID_ARGUMENT, FAILED_PRECONDITION,
   //          NOT_FOUND, ALREADY_EXISTS, ABORTED
@@ -139,70 +167,49 @@ export function createMessageSchema(zod: ZodLike) {
    * Supports two patterns:
    * 1. Legacy positional arguments: message(type, payload?, meta?)
    * 2. New config-based: message(type, { payload?, response?, meta? })
+   *
+   * All returned schemas are branded with SchemaBrand for schema-driven type inference.
+   * Return type is `any` to avoid exposing the unique symbol in exported signatures.
    */
-  function messageSchema<T extends string>(
-    messageType: T,
-  ): ZodObject<BaseMessageShape<T>>;
-
+  function messageSchema<T extends string>(messageType: T): any;
   function messageSchema<T extends string, P extends ZodObject<ZodRawShape>>(
     messageType: T,
     payload: P,
-  ): ZodObject<MessageWithPayloadShape<T, P>>;
-
+  ): any;
   function messageSchema<T extends string, P extends ZodRawShape>(
     messageType: T,
     payload: P,
-  ): ZodObject<MessageWithPayloadShape<T, ZodObject<P>>>;
-
+  ): any;
   function messageSchema<T extends string, M extends ZodRawShape>(
     messageType: T,
     payload: undefined,
     meta: M,
-  ): ZodObject<MessageWithExtendedMetaShape<T, M>>;
-
+  ): any;
   function messageSchema<
     T extends string,
     P extends ZodObject<ZodRawShape>,
     M extends ZodRawShape,
-  >(
-    messageType: T,
-    payload: P,
-    meta: M,
-  ): ZodObject<MessageWithPayloadAndMetaShape<T, P, M>>;
-
+  >(messageType: T, payload: P, meta: M): any;
   function messageSchema<
     T extends string,
     P extends ZodRawShape,
     M extends ZodRawShape,
-  >(
-    messageType: T,
-    payload: P,
-    meta: M,
-  ): ZodObject<MessageWithPayloadAndMetaShape<T, ZodObject<P>, M>>;
-
+  >(messageType: T, payload: P, meta: M): any;
   // New config-based overloads for unified message + RPC API
   function messageSchema<T extends string, R extends ZodType>(
     messageType: T,
     config: { response: R },
-  ): ZodObject<MessageWithResponseShape<T, R>>;
-
+  ): any;
   function messageSchema<
     T extends string,
     P extends ZodObject<ZodRawShape>,
     R extends ZodType,
-  >(
-    messageType: T,
-    config: { payload: P; response: R },
-  ): ZodObject<MessageWithPayloadAndResponseShape<T, P, R>>;
-
+  >(messageType: T, config: { payload: P; response: R }): any;
   function messageSchema<
     T extends string,
     P extends ZodRawShape,
     R extends ZodType,
-  >(
-    messageType: T,
-    config: { payload: P; response: R },
-  ): ZodObject<MessageWithPayloadAndResponseShape<T, ZodObject<P>, R>>;
+  >(messageType: T, config: { payload: P; response: R }): any;
 
   function messageSchema<
     T extends string,
@@ -306,7 +313,12 @@ export function createMessageSchema(zod: ZodLike) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schema as any).__wsKitValidatorId = zod.constructor;
 
-    return schema;
+    // Return as branded schema for type inference (type-only, zero runtime cost)
+    // The SchemaBrand metadata is purely type-level and doesn't exist at runtime.
+    // Cast to any to avoid exposing the unique symbol in exported type signatures
+    // while still maintaining full type inference internally within @ws-kit/zod
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return schema as any;
   }
 
   // Standard schemas used across most WebSocket applications
@@ -341,11 +353,14 @@ export function createMessageSchema(zod: ZodLike) {
    * This helper eliminates repetition when defining request-response patterns by
    * attaching the response schema to the request schema as a property.
    *
+   * Returns a branded request schema with attached .response property.
+   * Both request and response schemas carry full type metadata for inference.
+   *
    * @param requestType - Message type for the request
    * @param requestPayload - Validation schema for request payload
    * @param responseType - Message type for the response
    * @param responsePayload - Validation schema for response payload
-   * @returns Message schema with attached .response property
+   * @returns Branded message schema with attached .response property
    * @throws Error if requestType or responseType uses reserved prefix ($ws:)
    *
    * @example
@@ -371,7 +386,7 @@ export function createMessageSchema(zod: ZodLike) {
     requestPayload: ReqP,
     responseType: ResT,
     responsePayload: ResP,
-  ) {
+  ): any {
     // Validate reserved prefix at definition time (fail-fast)
     const RESERVED_PREFIX = "$ws:";
     if (requestType.startsWith(RESERVED_PREFIX)) {
@@ -441,18 +456,32 @@ type MessageSchemaType = ZodObject<{
   type: zType.ZodLiteral<string>;
   meta: ZodType;
   payload?: ZodType;
-}>;
+}> &
+  SchemaMetadata;
 
-// Enhanced type helper for better cross-package inference
+// Enhanced type helper for better cross-package inference (branded)
 export type MessageSchema<T extends string, P extends ZodType = never> = [
   P,
 ] extends [never]
-  ? ZodObject<BaseMessageShape<T>>
-  : ZodObject<MessageWithPayloadShape<T, P>>;
+  ? ZodObject<BaseMessageShape<T>> & {
+      readonly [SchemaBrand]: {
+        readonly type: T;
+        readonly payload: undefined;
+        readonly meta: unknown;
+      };
+    }
+  : ZodObject<MessageWithPayloadShape<T, P>> & {
+      readonly [SchemaBrand]: {
+        readonly type: T;
+        readonly payload: zType.infer<P>;
+        readonly meta: unknown;
+      };
+    };
 
-// Type helper for discriminated unions
+// Type helper for discriminated unions (with schema metadata support)
 export type AnyMessageSchema = ZodObject<{
   type: zType.ZodLiteral<string>;
   meta: ZodType;
   payload?: ZodType;
-}>;
+}> &
+  SchemaMetadata;

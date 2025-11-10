@@ -72,6 +72,80 @@ export interface MessageMeta {
 }
 
 /**
+ * INTERNAL: Branded schema type for schema-driven type inference.
+ *
+ * Validators (Zod, Valibot, etc.) attach this brand to message schemas
+ * to carry type information (message type, payload shape, metadata) through
+ * the type system without any runtime cost.
+ *
+ * This allows `router.on(schema, handler)` to infer `ctx.payload` and `ctx.type`
+ * directly from the schema parameter, enabling perfect IDE and TypeScript support.
+ */
+export declare const SchemaBrand: unique symbol;
+
+export type SchemaMetadata = {
+  readonly [SchemaBrand]?: {
+    readonly type: string;
+    readonly payload: unknown;
+    readonly meta: unknown;
+    readonly response?: unknown;
+    readonly progress?: unknown;
+  };
+};
+
+/**
+ * Extract the message type literal from a branded schema.
+ * Returns `never` if schema is not branded (e.g., plain object).
+ */
+export type InferSchemaType<S> = S extends {
+  readonly [SchemaBrand]: { readonly type: infer T };
+}
+  ? T extends string
+    ? T
+    : never
+  : never;
+
+/**
+ * Extract the payload type from a branded schema.
+ * Returns `unknown` if schema is not branded.
+ */
+export type InferSchemaPayload<S> = S extends {
+  readonly [SchemaBrand]: { readonly payload: infer P };
+}
+  ? P
+  : unknown;
+
+/**
+ * Extract the metadata type from a branded schema.
+ * Returns MessageMeta if schema is not branded or has no meta.
+ */
+export type InferSchemaMeta<S> = S extends {
+  readonly [SchemaBrand]: { readonly meta: infer M };
+}
+  ? M
+  : MessageMeta;
+
+/**
+ * Extract the RPC response type from a branded schema.
+ * Returns `never` if schema is not an RPC schema.
+ */
+export type InferSchemaResponse<S> = S extends {
+  readonly [SchemaBrand]: { readonly response: infer R };
+}
+  ? R
+  : never;
+
+/**
+ * Extract the RPC progress type from a branded schema.
+ * Returns `never` if schema is not an RPC schema with progress.
+ */
+export type InferSchemaProgress<S> = S extends {
+  readonly [SchemaBrand]: { readonly progress: infer P };
+}
+  ? P
+  : never;
+
+/**
  * Context passed to fire-and-forget message handlers (via router.on()).
  *
  * Event handlers don't produce a guaranteed response, so they have access to:
@@ -86,18 +160,22 @@ export interface MessageMeta {
  * type checking). The actual schema information comes from the router's ValidatorAdapter.
  */
 export interface EventMessageContext<
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  TSchema extends MessageSchemaType = MessageSchemaType,
+  TSchema extends SchemaMetadata & any = SchemaMetadata & any,
   TData extends WebSocketData = WebSocketData,
 > {
   /** WebSocket connection with custom application data */
   ws: ServerWebSocket<TData>;
 
-  /** Message type (e.g., "PING", "PONG") */
-  type: string;
+  /** Message type (inferred from schema, or string if not branded) */
+  type: InferSchemaType<TSchema> extends never
+    ? string
+    : InferSchemaType<TSchema>;
+
+  /** Message payload (inferred from schema, or unknown if not branded) */
+  payload: InferSchemaPayload<TSchema>;
 
   /** Message metadata including clientId and receivedAt */
-  meta: MessageMeta;
+  meta: InferSchemaMeta<TSchema>;
 
   /** Server receive timestamp (milliseconds since epoch) */
   receivedAt: number;
@@ -243,9 +321,6 @@ export interface EventMessageContext<
    */
   isRpc: false;
 
-  /** Payload data (conditionally present if schema defines payload) */
-  payload?: unknown;
-
   /** Additional properties may be added by adapters or extensions */
   [key: string]: unknown;
 }
@@ -261,18 +336,22 @@ export interface EventMessageContext<
  * type checking). The actual schema information comes from the router's ValidatorAdapter.
  */
 export interface RpcMessageContext<
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  TSchema extends MessageSchemaType = MessageSchemaType,
+  TSchema extends SchemaMetadata & any = SchemaMetadata & any,
   TData extends WebSocketData = WebSocketData,
 > {
   /** WebSocket connection with custom application data */
   ws: ServerWebSocket<TData>;
 
-  /** Message type (e.g., "GET_USER", "QUERY_DB") */
-  type: string;
+  /** Message type (inferred from schema, or string if not branded) */
+  type: InferSchemaType<TSchema> extends never
+    ? string
+    : InferSchemaType<TSchema>;
 
-  /** Message metadata including clientId, receivedAt, and correlationId */
-  meta: MessageMeta;
+  /** Message payload (inferred from schema, or unknown if not branded) */
+  payload: InferSchemaPayload<TSchema>;
+
+  /** Message metadata including clientId and receivedAt */
+  meta: InferSchemaMeta<TSchema>;
 
   /** Server receive timestamp (milliseconds since epoch) */
   receivedAt: number;
@@ -469,9 +548,6 @@ export interface RpcMessageContext<
    * Always true for RPC handlers. Useful in middleware to apply RPC-specific logic.
    */
   isRpc: true;
-
-  /** Payload data (conditionally present if schema defines payload) */
-  payload?: unknown;
 
   /** Additional properties may be added by adapters or extensions */
   [key: string]: unknown;
@@ -1131,7 +1207,7 @@ export type CloseHandler<TData extends WebSocketData = WebSocketData> = (
  * @param context - Event message context (no RPC methods)
  */
 export type EventHandler<
-  TSchema extends MessageSchemaType = MessageSchemaType,
+  TSchema extends SchemaMetadata & any = SchemaMetadata & any,
   TData extends WebSocketData = WebSocketData,
 > = (context: EventMessageContext<TSchema, TData>) => void | Promise<void>;
 
@@ -1147,7 +1223,7 @@ export type EventHandler<
  * @param context - RPC message context (has reply, progress, onCancel, deadline)
  */
 export type RpcHandler<
-  TSchema extends MessageSchemaType = MessageSchemaType,
+  TSchema extends SchemaMetadata & any = SchemaMetadata & any,
   TData extends WebSocketData = WebSocketData,
 > = (context: RpcMessageContext<TSchema, TData>) => void | Promise<void>;
 
@@ -1158,7 +1234,7 @@ export type RpcHandler<
  * use EventHandler or RpcHandler.
  */
 export type MessageHandler<
-  TSchema extends MessageSchemaType = MessageSchemaType,
+  TSchema extends SchemaMetadata & any = SchemaMetadata & any,
   TData extends WebSocketData = WebSocketData,
 > = EventHandler<TSchema, TData> | RpcHandler<TSchema, TData>;
 
@@ -2052,24 +2128,24 @@ export interface RpcErrorWire {
  */
 export interface IWebSocketRouter<TData extends WebSocketData = WebSocketData> {
   /** Register handler for fire-and-forget messages */
-  on<TSchema extends MessageSchemaType>(
+  on<TSchema extends SchemaMetadata & any>(
     schema: TSchema,
-    handler: MessageHandler<TSchema, TData>,
+    handler: EventHandler<TSchema, TData>,
   ): this;
 
   /** Unregister handler for a message type */
-  off(schema: MessageSchemaType): this;
+  off(schema: SchemaMetadata & any): this;
 
   /** Register handler for RPC request-response messages */
-  rpc<TSchema extends MessageSchemaType>(
+  rpc<TSchema extends SchemaMetadata & any>(
     schema: TSchema,
     handler: RpcHandler<TSchema, TData>,
   ): this;
 
   /** Register topic subscription handler */
-  topic<TSchema extends MessageSchemaType>(
+  topic<TSchema extends SchemaMetadata & any>(
     schema: TSchema,
-    options?: { onPublish?: MessageHandler<TSchema, TData> },
+    options?: { onPublish?: EventHandler<TSchema, TData> },
   ): this;
 
   /** Register connection open lifecycle hook */
@@ -2091,7 +2167,7 @@ export interface IWebSocketRouter<TData extends WebSocketData = WebSocketData> {
   merge(router: IWebSocketRouter<TData>): this;
 
   /** Publish message to a channel/topic */
-  publish<TSchema extends MessageSchemaType>(
+  publish<TSchema extends SchemaMetadata & any>(
     channel: string,
     schema: TSchema,
     payload: unknown,

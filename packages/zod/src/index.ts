@@ -52,6 +52,7 @@ export { createMessage, ErrorMessage, message, rpc, z };
 
 // Utility exports for advanced use cases
 export { ZodValidatorAdapter } from "./adapter.js";
+export { asZodRouter } from "./narrower.js";
 
 // Type exports
 export type { TypedZodRouter } from "./router.js";

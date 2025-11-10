@@ -217,10 +217,10 @@ expect(mockWs._getMessages().length).toBe(1);
 
 ## Type-Level Testing
 
-Use `expectTypeOf` from `expect-type` for compile-time validation:
+Use `expectTypeOf` from Bun for compile-time validation:
 
 ```typescript
-import { expectTypeOf } from "expect-type";
+import { expectTypeOf } from "bun:test";
 
 // Test conditional payload typing
 const WithPayload = message("WITH", { id: z.number() });

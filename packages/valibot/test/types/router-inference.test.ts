@@ -17,7 +17,7 @@
  */
 
 import { createRouter, message, v } from "@ws-kit/valibot";
-import { expectTypeOf } from "expect-type";
+import { describe, expectTypeOf, it } from "bun:test";
 
 describe("Type inference in createRouter handlers", () => {
   // ==================================================================================
