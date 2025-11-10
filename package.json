@@ -56,7 +56,7 @@
     "clean": "bun tsc -b --clean",
     "test": "bun test",
     "test:patterns": "bash ./scripts/validate-patterns.sh && bun test examples/**/conformance.test.ts",
-    "typecheck": "bun tsc -b && bun tsc --noEmit",
+    "typecheck": "bun tsc -b tsconfig.json && bun tsc -b tsconfig.tests.json",
     "lint": "eslint --report-unused-disable-directives .",
     "lint:fix": "eslint --report-unused-disable-directives --fix .",
     "format": "prettier --write .",
