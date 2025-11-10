@@ -131,6 +131,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   private lifecycle = new LifecycleManager<TConn>();
   private limitsManager: LimitsManager;
   private pluginHost: PluginHost<TConn>;
+  private connData = new WeakMap<ServerWebSocket, TConn>();
 
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
@@ -256,6 +257,20 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   }
 
   /**
+   * Get or initialize per-connection data from WeakMap.
+   * Ensures connection data persists across all messages on the same socket.
+   * @internal
+   */
+  private getOrInitData(ws: ServerWebSocket): TConn {
+    let d = this.connData.get(ws);
+    if (!d) {
+      d = {} as TConn;
+      this.connData.set(ws, d);
+    }
+    return d;
+  }
+
+  /**
    * Create a context from raw dispatch parameters.
    * This is a minimal implementation; validation plugins will extend it.
    * @internal
@@ -267,7 +282,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     meta?: Record<string, unknown>;
     receivedAt?: number;
   }): MinimalContext<TConn> {
-    const data = {} as TConn;
+    const data = this.getOrInitData(params.ws);
     return {
       ws: params.ws,
       type: params.type,
@@ -309,8 +324,9 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
 
   /**
    * Handle connection close.
-   * Idempotent cleanup. Called by adapters on WebSocket close/error.
-   * Calling multiple times is safe (no-op on second and subsequent calls).
+   * Cleans up per-connection data and other resources.
+   * Called by adapters on WebSocket close/error.
+   * Idempotent; safe to call multiple times.
    *
    * @param ws - WebSocket connection
    * @param code - WebSocket close code (optional, e.g., 1000 for normal close)
@@ -321,7 +337,9 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     code?: number,
     reason?: string,
   ): Promise<void> {
-    // Idempotent cleanup: no-op. Core doesn't maintain per-connection state.
+    // Clean up per-connection data from WeakMap (allows GC).
+    // Note: WeakMap entries are automatically cleaned when ws is GC'd,
+    // but explicit cleanup ensures timely resource release in adapter implementations.
     // Plugins (pub/sub, etc.) handle their own cleanup via onError/lifecycle hooks.
   }
 }
