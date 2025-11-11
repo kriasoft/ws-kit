@@ -13,6 +13,8 @@ export type ErrorHandler<TConn> = (
   ctx: MinimalContext<TConn> | null,
 ) => void | Promise<void>;
 
+export type OpenHandler<TConn> = (ws: ServerWebSocket) => void | Promise<void>;
+
 export type CloseHandler<TConn> = (
   ws: ServerWebSocket,
   code?: number,
@@ -20,18 +22,24 @@ export type CloseHandler<TConn> = (
 ) => void | Promise<void>;
 
 /**
- * Managed lifecycle sink with error handling and close notifications.
+ * Managed lifecycle sink with error handling and open/close notifications.
  * - Tracks error handlers for the onError hook
+ * - Tracks open handlers for per-connection setup
  * - Tracks close handlers for per-connection cleanup
  * - Tracks last activity timestamp per connection for heartbeat monitoring
  */
 export class LifecycleManager<TConn> {
   private errorHandlers: ErrorHandler<TConn>[] = [];
+  private openHandlers: OpenHandler<TConn>[] = [];
   private closeHandlers: CloseHandler<TConn>[] = [];
   private activityMap = new WeakMap<ServerWebSocket, number>();
 
   onError(handler: ErrorHandler<TConn>): void {
     this.errorHandlers.push(handler);
+  }
+
+  onOpen(handler: OpenHandler<TConn>): void {
+    this.openHandlers.push(handler);
   }
 
   onClose(handler: CloseHandler<TConn>): void {
@@ -48,6 +56,18 @@ export class LifecycleManager<TConn> {
       } catch (e) {
         // Prevent one handler from preventing others
         console.error("Error in onError handler:", e);
+      }
+    }
+  }
+
+  async handleOpen(ws: ServerWebSocket): Promise<void> {
+    // Notify all open handlers, ensuring error isolation
+    for (const handler of this.openHandlers) {
+      try {
+        await Promise.resolve(handler(ws));
+      } catch (e) {
+        // Prevent one handler from preventing others
+        console.error("Error in onOpen handler:", e);
       }
     }
   }

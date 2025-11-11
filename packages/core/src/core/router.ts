@@ -316,7 +316,8 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
 
   /**
    * Handle connection open.
-   * Marks connection as active. Called by adapters on WebSocket upgrade.
+   * Marks connection as active, notifies open handlers, and starts heartbeat.
+   * Called by adapters on WebSocket upgrade.
    * Idempotent; safe to call multiple times.
    *
    * @param ws - WebSocket connection
@@ -324,6 +325,8 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   async handleOpen(ws: ServerWebSocket): Promise<void> {
     const now = Date.now();
     this.lifecycle.markActivity(ws, now);
+    // Notify plugins (e.g., pubsub for client tracking)
+    await this.lifecycle.handleOpen(ws);
   }
 
   /**

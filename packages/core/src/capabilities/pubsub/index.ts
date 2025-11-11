@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Pub/Sub driver and broker consumer contracts and types.
+ * Pub/Sub adapter interface and supporting types.
  * Entry point for @ws-kit/core/pubsub sub-path export.
+ *
+ * Public: PubSubAdapter (unified interface for all adapters)
+ * Internal/Optional: PubSubDriver, BrokerConsumer (for advanced composition)
  */
 
 export type {
   BrokerConsumer,
+  PubSubAdapter,
   PubSubDriver,
   PublishCapability,
   PublishEnvelope,

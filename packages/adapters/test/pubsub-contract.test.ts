@@ -34,7 +34,7 @@ export function createPubSubContractTests(
 
       // Verify by checking local subscribers
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
       assert.deepEqual(subscribers, ["client1"]);
@@ -48,7 +48,7 @@ export function createPubSubContractTests(
 
       // Should still have only one subscriber
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
       assert.equal(subscribers.length, 1);
@@ -61,7 +61,7 @@ export function createPubSubContractTests(
       await driver.subscribe("client2", "topic:123");
 
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
       assert.equal(subscribers.length, 2);
@@ -76,7 +76,7 @@ export function createPubSubContractTests(
       await driver.unsubscribe("client1", "topic:123");
 
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
       assert.equal(subscribers.length, 0);
@@ -91,7 +91,7 @@ export function createPubSubContractTests(
       await driver.unsubscribe("client1", "topic:123");
 
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
       assert.equal(subscribers.length, 0);
@@ -112,7 +112,7 @@ export function createPubSubContractTests(
       await driver.unsubscribe("client1", "topic:123");
 
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
       assert.equal(subscribers.length, 1);
@@ -133,13 +133,11 @@ export function createPubSubContractTests(
       const result = await driver.publish(envelope);
 
       assert.equal(result.ok, true);
-      assert(
-        result.capability === "exact" ||
-          result.capability === "estimate" ||
-          result.capability === "unknown",
-      );
-      assert.equal(typeof result.matchedLocal, "number");
-      assert(result.matchedLocal >= 0);
+      // matchedLocal is optional; if present, must be number >= 0
+      if (result.matchedLocal !== undefined) {
+        assert.equal(typeof result.matchedLocal, "number");
+        assert(result.matchedLocal >= 0);
+      }
     });
 
     test("publish: reports 0 matched when no subscribers", async () => {
@@ -195,14 +193,14 @@ export function createPubSubContractTests(
       // Just verify it accepts and processes the envelope
     });
 
-    // ===== getLocalSubscribers =====
+    // ===== getSubscribers =====
 
-    test("getLocalSubscribers: returns async iterable", async () => {
+    test("getSubscribers: returns async iterable", async () => {
       const driver = createDriver();
 
       await driver.subscribe("client1", "topic:123");
 
-      const result = driver.getLocalSubscribers("topic:123");
+      const result = driver.getSubscribers("topic:123");
 
       // Should be async iterable
       assert(result[Symbol.asyncIterator]);
@@ -214,7 +212,7 @@ export function createPubSubContractTests(
       assert.equal(subscribers.length, 1);
     });
 
-    test("getLocalSubscribers: yields all subscribers", async () => {
+    test("getSubscribers: yields all subscribers", async () => {
       const driver = createDriver();
 
       const clientIds = ["client1", "client2", "client3"];
@@ -223,7 +221,7 @@ export function createPubSubContractTests(
       }
 
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("topic:123")) {
+      for await (const id of driver.getSubscribers("topic:123")) {
         subscribers.push(id);
       }
 
@@ -233,18 +231,18 @@ export function createPubSubContractTests(
       }
     });
 
-    test("getLocalSubscribers: empty iterable for non-existent topic", async () => {
+    test("getSubscribers: empty iterable for non-existent topic", async () => {
       const driver = createDriver();
 
       const subscribers = [];
-      for await (const id of driver.getLocalSubscribers("non-existent")) {
+      for await (const id of driver.getSubscribers("non-existent")) {
         subscribers.push(id);
       }
 
       assert.equal(subscribers.length, 0);
     });
 
-    test("getLocalSubscribers: lazy iteration (doesn't materialize all at once)", async () => {
+    test("getSubscribers: lazy iteration (doesn't materialize all at once)", async () => {
       const driver = createDriver();
 
       // This is a behavior test: adapter should yield items lazily
@@ -253,7 +251,7 @@ export function createPubSubContractTests(
         await driver.subscribe(`client${i}`, "topic:big");
       }
 
-      const iterable = driver.getLocalSubscribers("topic:big");
+      const iterable = driver.getSubscribers("topic:big");
 
       // Partial iteration should work
       const iterator = iterable[Symbol.asyncIterator]();

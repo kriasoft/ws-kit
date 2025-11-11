@@ -2,42 +2,36 @@
 // SPDX-License-Identifier: MIT
 
 import type {
-  PubSubDriver,
+  PubSubAdapter,
   PublishEnvelope,
   PublishOptions,
   PublishResult,
 } from "@ws-kit/core/pubsub";
 
 /**
- * In-memory pub/sub driver: subscription index + local fan-out.
+ * In-memory pub/sub adapter: subscription index + local fan-out.
  *
+ * Unified adapter for single-instance deployments or local testing.
  * Tracks topic subscriptions and broadcasts router-materialized messages.
- * Ideal for single-instance deployments or local testing.
  *
- * For distributed deployments (Redis, Kafka, DO), use a distributed driver.
- * Router handles inbound broker consumption via separate consumer.
+ * No distributed ingress (no broker consumption), so omits start() entirely (zero boilerplate).
+ *
+ * For distributed deployments (Redis, Kafka, Cloudflare DO), use distributed adapters.
  *
  * Usage:
  * ```ts
  * import { memoryPubSub } from "@ws-kit/adapters/memory";
  *
- * const driver = memoryPubSub();
+ * const router = createRouter<AppData>()
+ *   .plugin(withPubSub(memoryPubSub()));
  *
- * // Router calls driver.publish() when broadcasting:
- * const result = await driver.publish(
- *   {
- *     topic: "room:123",
- *     payload: { text: "Hello" },
- *     type: "ChatMessage",
- *     meta: { userId: "123" },
- *   },
- *   { partitionKey: "room:123" },
- * );
- *
- * console.log(`Delivered to ${result.matchedLocal} subscribers`);
+ * router.on(Message, (ctx) => {
+ *   const result = await ctx.publish("room:123", MessageSchema, { text: "Hi" });
+ *   console.log(`Matched ${result.matchedLocal} local subscribers`);
+ * });
  * ```
  */
-export function memoryPubSub(): PubSubDriver {
+export function memoryPubSub(): PubSubAdapter {
   // Topic -> Set of client IDs subscribed to that topic
   const topics = new Map<string, Set<string>>();
 
@@ -60,8 +54,7 @@ export function memoryPubSub(): PubSubDriver {
 
       return {
         ok: true,
-        capability: "exact", // In-memory: we have exact subscriber count
-        matchedLocal, // 0 if no subscribers, >0 otherwise
+        matchedLocal, // 0 if no subscribers, otherwise > 0
       };
     },
 
@@ -100,7 +93,7 @@ export function memoryPubSub(): PubSubDriver {
       }
     },
 
-    async *getLocalSubscribers(topic: string): AsyncIterable<string> {
+    async *getSubscribers(topic: string): AsyncIterable<string> {
       const subscribers = topics.get(topic);
       if (subscribers) {
         for (const clientId of subscribers) {
@@ -115,6 +108,64 @@ export function memoryPubSub(): PubSubDriver {
 
     async hasTopic(topic: string): Promise<boolean> {
       return topics.has(topic) && (topics.get(topic)?.size ?? 0) > 0;
+    },
+
+    async replace(
+      clientId: string,
+      newTopics: Iterable<string>,
+    ): Promise<{ added: number; removed: number; total: number }> {
+      // Get current subscriptions
+      const currentTopics = clientTopics.get(clientId) ?? new Set<string>();
+      const newTopicsSet = new Set(newTopics);
+
+      // Early exit if sets are equal
+      if (
+        currentTopics.size === newTopicsSet.size &&
+        Array.from(currentTopics).every((t) => newTopicsSet.has(t))
+      ) {
+        return {
+          added: 0,
+          removed: 0,
+          total: currentTopics.size,
+        };
+      }
+
+      let added = 0;
+      let removed = 0;
+
+      // Remove from topics not in newTopicsSet
+      for (const topic of currentTopics) {
+        if (!newTopicsSet.has(topic)) {
+          const subs = topics.get(topic);
+          if (subs) {
+            subs.delete(clientId);
+            if (subs.size === 0) {
+              topics.delete(topic);
+            }
+          }
+          removed++;
+        }
+      }
+
+      // Add to topics not in currentTopics
+      for (const topic of newTopicsSet) {
+        if (!currentTopics.has(topic)) {
+          if (!topics.has(topic)) {
+            topics.set(topic, new Set());
+          }
+          topics.get(topic)!.add(clientId);
+          added++;
+        }
+      }
+
+      // Update client's subscription set
+      clientTopics.set(clientId, newTopicsSet);
+
+      return {
+        added,
+        removed,
+        total: newTopicsSet.size,
+      };
     },
   };
 }

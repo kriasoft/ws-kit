@@ -6,22 +6,34 @@
  */
 
 import type {
-  PubSubAdapter as CorePubSubAdapter,
-  PublishEnvelope as CorePublishEnvelope,
-  PublishOptions as CorePublishOptions,
-  PublishResult as CorePublishResult,
-  MinimalContext,
+  PubSubAdapter,
+  BrokerConsumer,
+  PubSubDriver,
+  PublishEnvelope,
+  PublishOptions,
+  PublishResult,
+  StopFn,
+  AdapterPublishError,
+  RouterPublishError,
+  PublishError,
+  PublishCapability,
 } from "@ws-kit/core/pubsub";
 
 /**
  * Re-export core types for convenience.
  */
 export type {
-  CorePubSubAdapter as PubSubAdapter,
-  CorePublishEnvelope as PublishEnvelope,
-  CorePublishOptions as PublishOptions,
-  CorePublishResult as PublishResult,
-  MinimalContext,
+  PubSubAdapter,
+  BrokerConsumer,
+  PubSubDriver,
+  PublishEnvelope,
+  PublishOptions,
+  PublishResult,
+  StopFn,
+  AdapterPublishError,
+  RouterPublishError,
+  PublishError,
+  PublishCapability,
 };
 
 /**

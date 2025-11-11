@@ -45,6 +45,11 @@
       "types": "./dist/src/cloudflare-do/index.d.ts",
       "bun": "./src/cloudflare-do/index.ts",
       "default": "./dist/src/cloudflare-do/index.js"
+    },
+    "./compose": {
+      "types": "./dist/src/compose.d.ts",
+      "bun": "./src/compose.ts",
+      "default": "./dist/src/compose.js"
     }
   },
   "main": "./dist/index.js",
