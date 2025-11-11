@@ -38,7 +38,14 @@ export { withZod } from "./plugin.js";
 export type { WithZodOptions } from "./plugin.js";
 
 // Type inference utilities (type-level only)
-export type { InferPayload, InferResponse, InferType } from "./types.js";
+export type {
+  InferPayload,
+  InferResponse,
+  InferType,
+  MessageSchema,
+  RpcSchema,
+  AnySchema,
+} from "./types.js";
 
 // Core re-exports (for convenience)
 export { createRouter } from "@ws-kit/core";

@@ -19,6 +19,7 @@ import type {
   CoreRouter,
 } from "@ws-kit/core";
 import { getValibotPayload, validatePayload } from "./internal.js";
+import type { AnySchema } from "./types.js";
 
 export interface WithValibotOptions {
   /**
@@ -150,7 +151,7 @@ export function withValibot(
 
       // Helper to validate outgoing message (full root validation)
       const validateOutgoingPayload = async (
-        schema: MessageDescriptor,
+        schema: AnySchema | MessageDescriptor,
         payload: any,
       ): Promise<any> => {
         if (!opts.validateOutgoing) {
@@ -223,12 +224,18 @@ export function withValibot(
       };
 
       // Attach send() method for event handlers (always available after validation)
-      (ctx as any).send = async (schema: MessageDescriptor, payload: any) => {
+      (ctx as any).send = async (
+        schema: AnySchema | MessageDescriptor,
+        payload: any,
+      ) => {
         // Validate outgoing payload
         const validatedPayload = await validateOutgoingPayload(schema, payload);
         // For now, this is a placeholder - will be implemented by adapters
         // In a real implementation, this would serialize and send to clients
-        console.debug(`[send] ${schema.type}:`, validatedPayload);
+        console.debug(
+          `[send] ${(schema as any).type || schema.type}:`,
+          validatedPayload,
+        );
       };
 
       // Attach reply() and progress() methods for RPC handlers

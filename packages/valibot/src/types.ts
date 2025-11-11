@@ -255,6 +255,31 @@ export type InferMeta<S extends MessageSchemaType> =
       : Record<string, never>
     : Record<string, never>;
 
+/**
+ * Event message schema: a Valibot schema with message type hint.
+ * Returned by message() builder for fire-and-forget messages.
+ *
+ * Exactly captures what ctx.send() and router.on() expect at runtime:
+ * a real Valibot schema with .safeParse() method and __descriptor metadata.
+ */
+export type MessageSchema = GenericSchema & {
+  readonly __descriptor: { readonly type: string };
+};
+
+/**
+ * RPC request-response schema: a message schema with response definition.
+ * Returned by rpc() builder for request-response patterns.
+ */
+export type RpcSchema = MessageSchema & {
+  readonly response: GenericSchema;
+};
+
+/**
+ * Union of all schema types: event messages and RPC requests.
+ * Use this for functions that accept any schema type.
+ */
+export type AnySchema = MessageSchema | RpcSchema;
+
 /** Re-export shared types that are validator-agnostic. See: @ws-kit/core */
 export type {
   CloseHandler,

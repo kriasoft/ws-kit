@@ -43,15 +43,16 @@ export type BrandedSchema<
  * type Payload = InferPayload<typeof Join>; // { roomId: string }
  * ```
  */
-export type InferPayload<S extends { readonly [SchemaBrand]?: any }> = S extends {
-  readonly [SchemaBrand]: infer B;
-}
-  ? B extends { readonly payload: infer P }
-    ? P extends never
-      ? never
-      : P
-    : never
-  : never;
+export type InferPayload<S extends { readonly [SchemaBrand]?: any }> =
+  S extends {
+    readonly [SchemaBrand]: infer B;
+  }
+    ? B extends { readonly payload: infer P }
+      ? P extends never
+        ? never
+        : P
+      : never
+    : never;
 
 /**
  * Extract response type from a branded RPC schema.
@@ -63,15 +64,16 @@ export type InferPayload<S extends { readonly [SchemaBrand]?: any }> = S extends
  * type Response = InferResponse<typeof GetUser>; // { id: string, name: string }
  * ```
  */
-export type InferResponse<S extends { readonly [SchemaBrand]?: any }> = S extends {
-  readonly [SchemaBrand]: infer B;
-}
-  ? B extends { readonly response: infer R }
-    ? R extends never
-      ? never
-      : R
-    : never
-  : never;
+export type InferResponse<S extends { readonly [SchemaBrand]?: any }> =
+  S extends {
+    readonly [SchemaBrand]: infer B;
+  }
+    ? B extends { readonly response: infer R }
+      ? R extends never
+        ? never
+        : R
+      : never
+    : never;
 
 /**
  * Extract message type literal from a branded schema.
@@ -89,3 +91,28 @@ export type InferType<S extends { readonly [SchemaBrand]?: any }> = S extends {
     ? T
     : never
   : never;
+
+/**
+ * Event message schema: a Zod object with message type hint.
+ * Returned by message() builder for fire-and-forget messages.
+ *
+ * Exactly captures what ctx.send() and router.on() expect at runtime:
+ * a real Zod schema with .safeParse() method and __descriptor metadata.
+ */
+export type MessageSchema = ZodObject<any> & {
+  readonly __descriptor: { readonly type: string };
+};
+
+/**
+ * RPC request-response schema: a message schema with response definition.
+ * Returned by rpc() builder for request-response patterns.
+ */
+export type RpcSchema = MessageSchema & {
+  readonly response: ZodObject<any>;
+};
+
+/**
+ * Union of all schema types: event messages and RPC requests.
+ * Use this for functions that accept any schema type.
+ */
+export type AnySchema = MessageSchema | RpcSchema;
