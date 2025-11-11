@@ -2,18 +2,41 @@
 // SPDX-License-Identifier: MIT
 
 import type { Policy, RateLimitDecision, RateLimiter } from "@ws-kit/core";
+import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core/pubsub";
 
 /**
  * Redis client interface (compatible with redis, ioredis, etc.)
+ *
+ * Supports both rate limiting and pub/sub operations.
  */
 export interface RedisClient {
+  // Rate limiting
   evalsha(
     sha: string,
     numKeys: number,
     ...args: (string | number)[]
   ): Promise<unknown>;
   scriptLoad(script: string): Promise<string>;
+
+  // Pub/sub
+  publish?(channel: string, message: string): Promise<number>;
+  psubscribe?(
+    pattern: string,
+    handler: (message: string, channel: string) => void | Promise<void>,
+  ): Promise<() => void>;
+  subscribe?(
+    channel: string,
+    handler: (message: string) => void | Promise<void>,
+  ): Promise<() => void>;
+  unsubscribe?(channel: string): Promise<void>;
 }
+
+// Re-export pub/sub types and factories
+export { redisPubSub } from "./pubsub.js";
+export type { RedisPubSubOptions } from "./pubsub.js";
+export { redisConsumer } from "./ingress.js";
+export type { RedisConsumerOptions } from "./ingress.js";
+export type { BrokerConsumer, PubSubDriver };
 
 /**
  * Options for Redis rate limiter.

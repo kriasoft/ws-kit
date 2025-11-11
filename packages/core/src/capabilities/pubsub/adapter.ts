@@ -195,7 +195,7 @@ export type PublishResult =
     };
 
 /**
- * Pub/Sub adapter: subscription index + local fan-out primitive.
+ * Pub/Sub driver: subscription index + local fan-out primitive.
  *
  * Responsibility:
  * - Manage per-client topic subscriptions
@@ -208,7 +208,7 @@ export type PublishResult =
  * - Decoding/validating payloads
  * - WebSocket delivery
  */
-export interface PubSubAdapter {
+export interface PubSubDriver {
   /**
    * Broadcast a message to subscribers of a topic.
    *
@@ -292,26 +292,43 @@ export interface PubSubAdapter {
   hasTopic?(topic: string): Promise<boolean>;
 
   /**
-   * Register handler for remote publishes (optional, distributed adapters only).
-   * Memory adapters don't implement this since all publishes are local.
-   *
-   * Distributed adapters (Redis, Kafka, DO) use this to wire inbound broker messages
-   * back to the router for local delivery.
-   *
-   * @param handler - Invoked when a remote publish arrives via broker
-   * @returns Unsubscribe/teardown function
-   */
-  onRemotePublished?(
-    handler: (envelope: PublishEnvelope) => void | Promise<void>,
-  ): () => void;
-
-  /**
    * Close/dispose adapter resources (optional).
    * Called during router shutdown to clean up broker connections, subscriptions, etc.
    *
    * @throws On cleanup failure
    */
   close?(): Promise<void>;
+}
+
+/**
+ * Broker consumer for distributed pub/sub systems.
+ * Separate from PubSubDriver to maintain clean responsibility separation.
+ *
+ * **Responsibility**: Consume messages from broker and invoke handler for each.
+ * **Not responsibility**: Subscription indexing, local delivery, encoding.
+ *
+ * **Usage**: Platform/router uses this to wire broker → local delivery:
+ * ```ts
+ * const consumer = redisConsumer(redis);
+ * consumer.start((envelope) => deliverLocally(envelope));
+ * ```
+ *
+ * Memory drivers never need consumer (all publishes are local).
+ * Distributed drivers (Redis, Kafka, Cloudflare DO) provide both driver + consumer.
+ */
+export interface BrokerConsumer {
+  /**
+   * Start consuming broker messages and invoke handler for each.
+   *
+   * Handler is invoked with the same PublishEnvelope that the driver.publish()
+   * receives, allowing router to treat local and remote publishes identically.
+   *
+   * @param onMessage - Invoked for each remote publish from broker
+   * @returns Teardown function to stop consuming and cleanup resources
+   */
+  start(
+    onMessage: (envelope: PublishEnvelope) => void | Promise<void>,
+  ): () => void;
 }
 
 /**

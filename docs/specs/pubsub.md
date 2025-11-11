@@ -1799,7 +1799,126 @@ Planned as `specs/pubsub-redis.md`.
 
 ---
 
-## 15. Compliance Checklist (for Adapter Implementers)
+## 15. Adapter Layer Architecture
+
+**See also**: [ADR-023](../adr/023-pubsub-adapter-split.md), [Migration Guide](../../migration/pubsub-adapter-split.md)
+
+### 15.1 Core Responsibility Separation
+
+The pub/sub system separates **two distinct concerns**:
+
+1. **`PubSubDriver`** — Local subscription index + stats
+   - Manages per-client topic subscriptions
+   - Returns exact (memory) or best-effort (distributed) local subscriber counts
+   - Broadcasts router-materialized messages to matching subscribers
+   - **Never** consumes broker messages or calls back into router
+   - **Examples**: `memoryPubSub()`, `redisPubSub()`, `durableObjectsPubSub()`
+
+2. **`BrokerConsumer`** — Inbound message consumption
+   - Consumes messages from external brokers (Redis SUBSCRIBE, Kafka, DO callbacks, etc.)
+   - Invokes router/platform callback with `PublishEnvelope`
+   - Returns cleanup function for lifecycle management
+   - **Never** maintains subscription state or delivers WebSocket frames
+   - **Examples**: `redisConsumer()`, `durableObjectsConsumer()`
+
+### 15.2 Why the Split
+
+Combining ingress into the adapter created ambiguity:
+
+- Unclear which methods were local-only vs broker-facing
+- Hard to test broker consumption independently from subscription tracking
+- Difficult to compose multiple brokers into one deployment
+- Blurred line between adapter and platform concerns
+
+The split makes each layer testable, composable, and easier to understand.
+
+### 15.3 Memory Adapter (Unchanged)
+
+Memory adapter is purely local; no ingress needed:
+
+```typescript
+import { memoryPubSub } from "@ws-kit/adapters/memory";
+
+const adapter = memoryPubSub();
+// No broker ingress—all publishes are process-local
+```
+
+### 15.4 Distributed Adapters (Redis, Cloudflare DO, Kafka)
+
+Distributed adapters provide both pieces, wired by platform:
+
+```typescript
+import { redisPubSub, redisConsumer } from "@ws-kit/adapters/redis";
+
+const adapter = redisPubSub(redis); // Local index + Redis egress
+const ingress = redisConsumer(redis); // Redis inbound handler
+
+// Platform/router wires them together:
+ingress.start((envelope) => {
+  // Deliver to local subscribers using adapter.getLocalSubscribers()
+  const frame = encodeFrame(envelope);
+  for await (const clientId of adapter.getLocalSubscribers(envelope.topic)) {
+    sessions.get(clientId)?.send(frame);
+  }
+});
+```
+
+### 15.5 `PublishEnvelope` Format
+
+All adapters receive and produce the same envelope:
+
+```typescript
+export interface PublishEnvelope {
+  topic: string; // Pre-validated by router
+  payload: unknown; // Already schema-validated
+  type?: string; // Schema name for telemetry
+  meta?: Record<string, unknown>; // Observability/routing hints
+}
+```
+
+Router owns validation; adapters just fan-out.
+
+### 15.6 `PublishResult` with Capability Levels
+
+Adapters return honest subscriber counts based on confidence level:
+
+```typescript
+export type PublishResult =
+  | {
+      ok: true;
+      capability: "exact"; // Memory: exact local count
+      matchedLocal: number;
+      details?: Record<string, unknown>;
+    }
+  | {
+      ok: true;
+      capability: "estimate"; // Lower-bound estimate
+      matchedLocal: number;
+      details?: Record<string, unknown>;
+    }
+  | {
+      ok: true;
+      capability: "unknown"; // Distributed: can't count
+      matchedLocal: 0; // Always 0 for safety
+      details?: Record<string, unknown>;
+    }
+  | {
+      ok: false;
+      error: PublishError; // Canonical error code
+      retryable: boolean; // Hint for retry logic
+      details?: Record<string, unknown>;
+    };
+```
+
+**Semantics**:
+
+- **"exact"**: In-memory adapter; matchedLocal is definitive local count
+- **"estimate"**: Distributed with subscriber tracking; matchedLocal is lower-bound
+- **"unknown"**: Distributed without tracking; matchedLocal=0 means "don't know"
+
+---
+
+## 16. Compliance Checklist (for Adapter Implementers)
 
 - [ ] `subscribe()` and `unsubscribe()` are idempotent (no error on duplicate).
 - [ ] All ops follow order: normalize → validate → authorize → **adapter call** → mutate → lifecycle hooks (adapter-before-mutation).

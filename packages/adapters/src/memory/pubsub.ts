@@ -2,29 +2,29 @@
 // SPDX-License-Identifier: MIT
 
 import type {
-  PubSubAdapter,
+  PubSubDriver,
   PublishEnvelope,
   PublishOptions,
   PublishResult,
 } from "@ws-kit/core/pubsub";
 
 /**
- * In-memory pub/sub adapter: subscription index + local fan-out.
+ * In-memory pub/sub driver: subscription index + local fan-out.
  *
  * Tracks topic subscriptions and broadcasts router-materialized messages.
  * Ideal for single-instance deployments or local testing.
  *
- * For distributed deployments (Redis, Kafka, DO), use a distributed adapter.
- * Router handles inbound broker consumption (via ctx.publish).
+ * For distributed deployments (Redis, Kafka, DO), use a distributed driver.
+ * Router handles inbound broker consumption via separate consumer.
  *
  * Usage:
  * ```ts
  * import { memoryPubSub } from "@ws-kit/adapters/memory";
  *
- * const adapter = memoryPubSub();
+ * const driver = memoryPubSub();
  *
- * // Router calls adapter.publish() when broadcasting:
- * const result = await adapter.publish(
+ * // Router calls driver.publish() when broadcasting:
+ * const result = await driver.publish(
  *   {
  *     topic: "room:123",
  *     payload: { text: "Hello" },
@@ -37,7 +37,7 @@ import type {
  * console.log(`Delivered to ${result.matchedLocal} subscribers`);
  * ```
  */
-export function memoryPubSub(): PubSubAdapter {
+export function memoryPubSub(): PubSubDriver {
   // Topic -> Set of client IDs subscribed to that topic
   const topics = new Map<string, Set<string>>();
 

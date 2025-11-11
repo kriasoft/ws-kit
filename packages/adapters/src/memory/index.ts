@@ -10,10 +10,10 @@
  */
 
 import type { Policy, RateLimitDecision, RateLimiter } from "@ws-kit/core";
-import type { PubSubAdapter } from "@ws-kit/core";
+import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core";
 
 export { memoryPubSub, createMemoryAdapter } from "./pubsub.js";
-export type { PubSubAdapter };
+export type { PubSubDriver, BrokerConsumer };
 
 /**
  * Simple FIFO async mutex for synchronizing token bucket access.

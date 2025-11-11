@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { Policy, RateLimitDecision, RateLimiter } from "@ws-kit/core";
+import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core/pubsub";
 
 /**
  * Cloudflare Durable Object namespace interface
@@ -11,6 +12,13 @@ export interface DurableObjectNamespace {
   get(id: DurableObjectId): DurableObjectStub;
   idFromName(name: string): DurableObjectId;
 }
+
+// Re-export pub/sub types and factories
+export { durableObjectsPubSub } from "./pubsub.js";
+export type { CloudflareDOPubSubOptions } from "./pubsub.js";
+export { durableObjectsConsumer } from "./ingress.js";
+export type { CloudflareDOConsumerOptions } from "./ingress.js";
+export type { BrokerConsumer, PubSubDriver };
 
 export interface DurableObjectId {
   readonly id: string;
