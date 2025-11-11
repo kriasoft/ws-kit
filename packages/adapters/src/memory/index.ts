@@ -1,7 +1,19 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+/**
+ * Memory adapter implementations for rate limiting and pub/sub.
+ *
+ * Exports:
+ * - `memoryPubSub()` — in-memory pub/sub adapter (subscription registry)
+ * - `memoryRateLimiter()` — in-memory rate limiter (token bucket algorithm)
+ */
+
 import type { Policy, RateLimitDecision, RateLimiter } from "@ws-kit/core";
+import type { PubSubAdapter } from "@ws-kit/core";
+
+export { memoryPubSub, createMemoryAdapter } from "./pubsub.js";
+export type { PubSubAdapter };
 
 /**
  * Simple FIFO async mutex for synchronizing token bucket access.

@@ -5,6 +5,11 @@
 # Path aliases that match tsconfig.json paths
 # Enables module resolution for @ws-kit/* imports at runtime
 "@ws-kit/*" = "packages/*/src"
+# Sub-path exports (explicit mappings for subpath imports in tests)
+"@ws-kit/pubsub/internal" = "packages/pubsub/src/internal"
+"@ws-kit/adapters/memory" = "packages/adapters/src/memory"
+"@ws-kit/adapters/redis" = "packages/adapters/src/redis"
+"@ws-kit/adapters/cloudflare-do" = "packages/adapters/src/cloudflare-do"
 
 [install]
 linker = "isolated"
