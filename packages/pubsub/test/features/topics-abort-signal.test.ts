@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { TopicsImpl } from "../../src/topics-impl.js";
-import { AbortError, PubSubError } from "../../src/pubsub-error.js";
+import { TopicsImpl } from "../../src/core/topics.js";
+import { AbortError, PubSubError } from "../../src/core/error.js";
 
 describe("TopicsImpl - Abort Signal Semantics", () => {
   describe("Pre-commit cancellation", () => {

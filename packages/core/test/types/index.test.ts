@@ -21,8 +21,9 @@ import type {
   RouterHooks,
   WebSocketRouterOptions,
 } from "@ws-kit/core";
-import { ErrorCode, WebSocketError, RESERVED_META_KEYS } from "@ws-kit/core";
-import { MemoryPubSub } from "@ws-kit/core";
+import { WsKitError } from "@ws-kit/core";
+import type { ErrorCode } from "@ws-kit/core";
+import { MemoryPubSub } from "../../src/internal/pubsub.js";
 
 // ============================================================================
 // ServerWebSocket Interface Tests
@@ -218,47 +219,19 @@ describe("MemoryPubSub", () => {
 // ============================================================================
 
 describe("ErrorCode", () => {
-  it("should have standard error codes from ADR-015", () => {
-    expectTypeOf(ErrorCode.UNAUTHENTICATED).toBeString();
-    expectTypeOf(ErrorCode.PERMISSION_DENIED).toBeString();
-    expectTypeOf(ErrorCode.INVALID_ARGUMENT).toBeString();
-    expectTypeOf(ErrorCode.FAILED_PRECONDITION).toBeString();
-    expectTypeOf(ErrorCode.NOT_FOUND).toBeString();
-    expectTypeOf(ErrorCode.ALREADY_EXISTS).toBeString();
-    expectTypeOf(ErrorCode.ABORTED).toBeString();
-    expectTypeOf(ErrorCode.DEADLINE_EXCEEDED).toBeString();
-    expectTypeOf(ErrorCode.RESOURCE_EXHAUSTED).toBeString();
-    expectTypeOf(ErrorCode.UNAVAILABLE).toBeString();
-    expectTypeOf(ErrorCode.UNIMPLEMENTED).toBeString();
-    expectTypeOf(ErrorCode.INTERNAL).toBeString();
-    expectTypeOf(ErrorCode.CANCELLED).toBeString();
+  it("should be a string literal union type", () => {
+    type TestCode = ErrorCode;
+    expectTypeOf<TestCode>().toBeString();
   });
 });
 
 // ============================================================================
-// WebSocketError Tests
+// WsKitError Tests
 // ============================================================================
 
-describe("WebSocketError", () => {
-  it("should be constructible with code and message", () => {
-    const error = new WebSocketError(
-      ErrorCode.INVALID_ARGUMENT,
-      "Invalid payload",
-    );
-
-    expectTypeOf(error).toMatchTypeOf<WebSocketError>();
-    expectTypeOf(error.code).toBeString();
-    expectTypeOf(error.message).toBeString();
-  });
-
-  it("should have toPayload method", () => {
-    const error = new WebSocketError(
-      ErrorCode.INVALID_ARGUMENT,
-      "Invalid payload",
-    );
-
-    expectTypeOf<typeof error>().toHaveProperty("toPayload");
-    expectTypeOf<typeof error.toPayload>().toBeFunction();
+describe("WsKitError", () => {
+  it("should be an Error subclass", () => {
+    expectTypeOf<WsKitError>().toMatchTypeOf<Error>();
   });
 });
 
@@ -333,17 +306,4 @@ describe("WebSocketRouterOptions", () => {
   });
 });
 
-// ============================================================================
-// Constants Tests
-// ============================================================================
-
-describe("Constants", () => {
-  it("RESERVED_META_KEYS should be a Set", () => {
-    expectTypeOf(RESERVED_META_KEYS).toMatchTypeOf<Set<string>>();
-  });
-
-  it("should contain clientId and receivedAt", () => {
-    expectTypeOf(RESERVED_META_KEYS.has("clientId")).toBeBoolean();
-    expectTypeOf(RESERVED_META_KEYS.has("receivedAt")).toBeBoolean();
-  });
-});
+// Constants are internal and not part of the public API

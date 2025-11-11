@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it, mock } from "bun:test";
-import { PubSubError } from "../../src/pubsub-error.js";
-import { TopicsImpl } from "../../src/topics-impl.js";
+import { PubSubError } from "../../src/core/error.js";
+import { TopicsImpl } from "../../src/core/topics.js";
 
 describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
   describe("subscribe() - adapter-first ordering", () => {

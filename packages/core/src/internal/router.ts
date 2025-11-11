@@ -4,7 +4,7 @@
 import { DEFAULT_CONFIG, RESERVED_CONTROL_PREFIX } from "../constants.js";
 import { ERROR_CODE_META, ErrorCode, WsKitError } from "../error.js";
 import { normalizeInboundMessage } from "../normalize.js";
-import { MemoryPubSub } from "../pubsub.js";
+import { MemoryPubSub } from "./pubsub.js";
 import { RpcManager } from "../rpc-manager.js";
 import { createTopicValidator, TopicsImpl } from "@ws-kit/pubsub/internal";
 import type {

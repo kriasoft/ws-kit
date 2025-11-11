@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it, mock } from "bun:test";
-import { TopicsImpl } from "../../src/topics-impl.js";
+import { TopicsImpl } from "../../src/core/topics.js";
 
 describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
   describe("Iteration happy path", () => {

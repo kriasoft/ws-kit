@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it, mock } from "bun:test";
-import { PubSubError } from "../../src/index.js";
-import { WebSocketRouter } from "../../src/router.js";
+import { PubSubError } from "../../src/core/error.js";
+import { WebSocketRouter } from "@ws-kit/core";
 
 describe("TopicsImpl - Router Integration (Topic Policy)", () => {
   describe("Custom topic pattern via router limits", () => {

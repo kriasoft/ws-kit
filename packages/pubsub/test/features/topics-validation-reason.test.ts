@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it, mock } from "bun:test";
-import { PubSubError } from "../../src/pubsub-error.js";
-import { TopicsImpl, createTopicValidator } from "../../src/topics-impl.js";
+import { PubSubError } from "../../src/core/error.js";
+import { TopicsImpl, createTopicValidator } from "../../src/core/topics.js";
 
 describe("TopicsImpl - Validation Reason Field", () => {
   describe("Default validation - reason field", () => {
