@@ -62,5 +62,12 @@ export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 // Useful type utilities
 export type { EventContext, RpcContext } from "./context/types";
 
+// Pub/Sub utilities
+export {
+  createThrottledPublish,
+  createAdvancedThrottledPublish,
+} from "./utils/throttle";
+export type { ThrottledBroadcastConfig } from "./utils/throttle";
+
 // Test harness (opt-in)
 export * as test from "./test";
