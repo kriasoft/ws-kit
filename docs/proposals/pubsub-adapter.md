@@ -76,13 +76,13 @@ export interface PubSubAdapter {
 
 # Package-level factories (names, signatures)
 
-- **Memory**: `@ws-kit/adapters/memory`
+- **Memory**: `@ws-kit/memory`
 
 ```ts
 export function memoryPubSub(): PubSubAdapter;
 ```
 
-- **Redis**: `@ws-kit/adapters/redis`
+- **Redis**: `@ws-kit/redis`
 
 ```ts
 export interface RedisPubSubOptions {
@@ -100,7 +100,7 @@ export function redisPubSub(
 ): PubSubAdapter;
 ```
 
-- **Cloudflare Durable Objects**: `@ws-kit/adapters/cloudflare`
+- **Cloudflare Durable Objects**: `@ws-kit/cloudflare`
 
 ```ts
 export interface CloudflareDOPubSubOptions {
@@ -340,8 +340,8 @@ async function publish(
 # DX checklists (naming, semantics, tests)
 
 - **Naming**
-  - Packages: `@ws-kit/pubsub-memory`, `@ws-kit/pubsub-redis`, `@ws-kit/pubsub-cloudflare`
-  - Factories: `memoryPubSub()`, `redisPubSub()`, `cloudflareDurableObjectsPubSub()`
+  - Packages: `@ws-kit/memory`, `@ws-kit/redis`, `@ws-kit/cloudflare`
+  - Factories: `memoryPubSub()`, `redisPubSub()`, `durableObjectsPubSub()`
   - Core: `PubSubAdapter`, `PublishEnvelope`, `PublishResult`, `PublishOptions`
 - **Semantics**
   - “Adapters never deliver WebSocket frames.”
