@@ -4,12 +4,12 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   WebSocketRouter,
-  MemoryPubSub,
   type ServerWebSocket,
   type WebSocketData,
   type MessageSchemaType,
   type ValidatorAdapter,
 } from "../src/index.js";
+import { MemoryPubSub } from "@ws-kit/pubsub/internal";
 
 // ============================================================================
 // Mock Implementations

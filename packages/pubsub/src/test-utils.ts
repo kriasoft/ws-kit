@@ -1,14 +1,38 @@
 /**
- * Test PubSub wrapper: intercepts publish calls for assertions.
- * Delegates actual behavior to wrapped adapter.
+ * Test utilities for Pub/Sub: TestPubSub wrapper for capturing published messages.
+ *
+ * Useful for testing applications using pub/sub functionality.
+ *
+ * @internal
  */
 
-import type { PubSubAdapter, PubSubMessage } from "../capabilities/pubsub/contracts";
-import type { PublishedFrame } from "./types";
+import type { PubSubAdapter, PubSubMessage } from "@ws-kit/core";
+
+/**
+ * Published message frame captured for testing.
+ */
+export interface PublishedFrame {
+  topic: string;
+  schema: any;
+  payload: unknown;
+  meta: Record<string, unknown> | undefined;
+}
 
 /**
  * Wraps a PubSubAdapter to capture all published messages.
  * Useful for assertions about what was broadcast.
+ *
+ * @example
+ * ```ts
+ * const adapter = createMemoryAdapter();
+ * const testAdapter = new TestPubSub(adapter);
+ *
+ * await testAdapter.publish({ topic: "chat", schema: ChatMessage, payload: { text: "hello" } });
+ *
+ * const published = testAdapter.getPublishedMessages();
+ * expect(published).toHaveLength(1);
+ * expect(published[0].topic).toBe("chat");
+ * ```
  */
 export class TestPubSub implements PubSubAdapter {
   private publishedMessages: PublishedFrame[] = [];

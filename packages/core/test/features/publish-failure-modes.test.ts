@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { z, message, createRouter } from "@ws-kit/zod";
-import { MemoryPubSub } from "../../src/internal/pubsub.js";
+import { MemoryPubSub } from "@ws-kit/pubsub/internal";
 
 const TestMessage = message("TEST", { text: z.string() });
 

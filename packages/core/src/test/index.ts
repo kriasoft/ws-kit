@@ -38,4 +38,4 @@ export { act } from "./act";
 // Internal exports (for advanced use)
 export { MockWebSocket, type ConnectionState } from "./test-websocket";
 export { MockPlatformAdapter } from "./test-adapter";
-export { TestPubSub } from "./test-pubsub";
+export { TestPubSub } from "@ws-kit/pubsub/internal";

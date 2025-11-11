@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "bun:test";
 import * as zodModule from "@ws-kit/zod";
-import { MemoryPubSub } from "../../src/internal/pubsub.js";
+import { MemoryPubSub } from "@ws-kit/pubsub/internal";
 import { WebSocketRouter } from "../../src/router.js";
 
 const { z, message } = zodModule;

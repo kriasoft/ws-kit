@@ -12,7 +12,7 @@ import {
 } from "bun:test";
 import { createRouter, message, z } from "@ws-kit/zod";
 import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { MemoryPubSub } from "../../src/internal/pubsub.js";
+import { MemoryPubSub } from "@ws-kit/pubsub/internal";
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;

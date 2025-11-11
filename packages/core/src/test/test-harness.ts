@@ -8,7 +8,7 @@ import type { MinimalContext, BaseContextData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { FakeClock, type Clock } from "./fake-clock";
 import { MockPlatformAdapter } from "./test-adapter";
-import { TestPubSub } from "./test-pubsub";
+import { TestPubSub } from "@ws-kit/pubsub/internal";
 import type {
   TestRouter,
   TestConnection,
@@ -163,7 +163,10 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
 
   // Build the TestRouter by mixing router + test methods
   const testRouter = Object.assign(router, {
-    connect(init?: { data?: Partial<TConn>; headers?: Record<string, string> }): TestConnection<TConn> {
+    connect(init?: {
+      data?: Partial<TConn>;
+      headers?: Record<string, string>;
+    }): TestConnection<TConn> {
       // Generate a unique client ID
       const clientId = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return getOrCreateConnection(clientId, init);
@@ -191,7 +194,10 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
       if (clock instanceof FakeClock) {
         const pending = clock.pendingTimers();
         if (pending.length > 0) {
-          console.warn(`[Test] Leaked ${pending.length} timers after close:`, pending);
+          console.warn(
+            `[Test] Leaked ${pending.length} timers after close:`,
+            pending,
+          );
         }
       }
     },
@@ -217,11 +223,7 @@ class TestConnectionImpl<TConn extends BaseContextData = unknown>
     readonly clock: Clock,
   ) {}
 
-  send(
-    type: string,
-    payload?: unknown,
-    meta?: Record<string, unknown>,
-  ): void {
+  send(type: string, payload?: unknown, meta?: Record<string, unknown>): void {
     // Create a JSON frame and dispatch it through the full pipeline
     const frame = JSON.stringify({ type, payload, meta });
     void dispatchMessage(frame, this.ws, this.routerImpl);

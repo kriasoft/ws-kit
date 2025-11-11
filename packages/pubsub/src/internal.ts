@@ -36,6 +36,14 @@ export type { PubSubErrorCode, PubSubAclDetails } from "./core/error";
 
 export { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./core/constants";
 
+// Legacy adapters (for backward compatibility)
+export { MemoryPubSub } from "./adapters/legacy";
+export type { PubSub, PubSubPublishOptions } from "./adapters/legacy";
+
+// Test utilities
+export { TestPubSub } from "./test-utils";
+export type { PublishedFrame } from "./test-utils";
+
 /**
  * Symbol for accessing internal adapter state in tests.
  * @internal

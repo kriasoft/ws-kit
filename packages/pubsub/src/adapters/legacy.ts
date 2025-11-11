@@ -1,13 +1,49 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSub, PubSubPublishOptions } from "../types.js";
+/**
+ * In-memory Pub/Sub implementations for the legacy PubSub interface.
+ *
+ * These implementations support the older PubSub channel-based interface
+ * used by the core router. For new code, prefer createMemoryAdapter() and
+ * the Topics API for topic-based pub/sub.
+ */
 
 /**
- * In-memory Pub/Sub implementation suitable for testing and single-server deployments.
+ * Legacy PubSub interface for channel-based pub/sub.
+ *
+ * This interface supports the router's internal pub/sub needs.
+ * For new applications, use PubSubAdapter and Topics instead.
+ */
+export interface PubSub {
+  publish(
+    channel: string,
+    message: unknown,
+    options?: PubSubPublishOptions,
+  ): Promise<void>;
+  subscribe(
+    channel: string,
+    handler: (message: unknown) => void | Promise<void>,
+  ): void;
+  unsubscribe(
+    channel: string,
+    handler: (message: unknown) => void | Promise<void>,
+  ): void;
+}
+
+/**
+ * Options for channel-based pub/sub publishing.
+ */
+export interface PubSubPublishOptions {
+  excludeSubscriber?: (message: unknown) => void | Promise<void>;
+  partitionKey?: string;
+}
+
+/**
+ * In-memory Pub/Sub implementation for the legacy channel-based interface.
  *
  * Uses a Map-based channel registry with handler arrays. Broadcasts are
- * synchronous and immediate.
+ * synchronous and immediate. Suitable for testing and single-server deployments.
  *
  * **Scope**: Messages published on one MemoryPubSub instance are only received
  * by subscribers on the same instance. Not suitable for multi-process deployments.

@@ -23,7 +23,7 @@ import type {
 } from "@ws-kit/core";
 import { WsKitError } from "@ws-kit/core";
 import type { ErrorCode } from "@ws-kit/core";
-import { MemoryPubSub } from "../../src/internal/pubsub.js";
+import { MemoryPubSub } from "@ws-kit/pubsub/internal";
 
 // ============================================================================
 // ServerWebSocket Interface Tests
