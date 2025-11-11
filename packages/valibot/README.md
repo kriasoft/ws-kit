@@ -125,6 +125,125 @@ router.rpc(GetUser, async (ctx) => {
 });
 ```
 
+## Real Valibot Schemas with Strict Validation
+
+Schemas returned by `message()` and `rpc()` are real Valibot schemas, enabling full Valibot capabilities:
+
+```typescript
+const Join = message("JOIN", { roomId: v.string() });
+
+// Use schemas for client-side validation before sending
+const clientMsg = {
+  type: "JOIN" as const,
+  meta: {},
+  payload: { roomId: "42" },
+};
+const result = Join.safeParse(clientMsg);
+
+if (!result.success) {
+  console.error("Invalid message:", result.error);
+} else {
+  sendToServer(result.data);
+}
+```
+
+### Strict Validation by Default
+
+All schemas enforce **strict mode**, rejecting unknown keys at every level:
+
+```typescript
+const TestMsg = message("TEST", { id: v.number() });
+
+// ✅ Valid: correct structure
+TestMsg.safeParse({
+  type: "TEST",
+  meta: {},
+  payload: { id: 123 },
+});
+
+// ❌ Invalid: unknown root key
+TestMsg.safeParse({
+  type: "TEST",
+  meta: {},
+  payload: { id: 123 },
+  extra: "not allowed", // Unknown key rejected
+});
+
+// ❌ Invalid: unknown payload key
+TestMsg.safeParse({
+  type: "TEST",
+  meta: {},
+  payload: { id: 123, extra: "not allowed" }, // Unknown key rejected
+});
+```
+
+### Extended Meta Fields
+
+Meta can be extended with application-specific fields:
+
+```typescript
+const WithMeta = message(
+  "TEST",
+  { data: v.string() },
+  { roomId: v.string(), priority: v.optional(v.number()) },
+);
+
+// ✅ Valid: required and optional extended fields
+WithMeta.safeParse({
+  type: "TEST",
+  meta: { roomId: "room-1", priority: 5 },
+  payload: { data: "hello" },
+});
+
+// ✅ Also valid: optional field omitted
+WithMeta.safeParse({
+  type: "TEST",
+  meta: { roomId: "room-1" },
+  payload: { data: "hello" },
+});
+```
+
+### Composable with Valibot Ecosystem
+
+Since schemas are real Valibot schemas, you can use all Valibot features:
+
+```typescript
+// Discriminated unions over message types
+const MessageSchema = v.union([
+  message("JOIN", { roomId: v.string() }),
+  message("LEAVE", { reason: v.string() }),
+  message("PING"),
+]);
+
+const result = MessageSchema.safeParse(incomingMsg);
+// Type narrowing works: result.data.type is "JOIN" | "LEAVE" | "PING"
+
+// Transformations and pipes
+const ValidatedJoin = v.pipe(
+  message("JOIN", { roomId: v.string() }),
+  v.transform((msg) => ({
+    ...msg,
+    meta: { ...msg.meta, timestamp: Date.now() },
+  })),
+);
+
+// RPC response validation
+const GetUser = rpc("GET_USER", { id: v.string() }, "USER", {
+  id: v.string(),
+  name: v.string(),
+});
+
+// Validate response independently
+const response = {
+  type: "USER",
+  meta: {},
+  payload: { id: "1", name: "Alice" },
+};
+if (GetUser.response.safeParse(response).success) {
+  console.log("Response is valid");
+}
+```
+
 ## Why Valibot?
 
 Choose Valibot if you prioritize **bundle size and performance**:

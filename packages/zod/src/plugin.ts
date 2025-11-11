@@ -88,7 +88,7 @@ export function withZod(
     // Store original context creator
     const originalCreateContext = routerImpl.createContext.bind(routerImpl);
 
-    // Inject validation middleware that validates payload and enriches context
+    // Inject validation middleware that validates root message and enriches context
     // This runs automatically before any user handler
     router.use(async (ctx: MinimalContext<any>, next) => {
       // Get the schema from registry by looking up the type
@@ -96,16 +96,19 @@ export function withZod(
       const entry = registry.get(ctx.type);
 
       if (entry) {
-        const schema = entry.schema;
-        const payloadSchema = getZodPayload(schema);
+        const schema = entry.schema as any;
 
-        // Validate inbound payload if schema defines one
-        if (payloadSchema) {
-          const result = validatePayload(
-            ctx.payload,
-            payloadSchema,
-            opts.coerce,
-          );
+        // If schema is a Zod object (has safeParse), validate the full root message
+        if (typeof schema?.safeParse === "function") {
+          // Construct normalized inbound message
+          const inboundMessage = {
+            type: ctx.type,
+            meta: ctx.meta || {},
+            ...(ctx.payload !== undefined ? { payload: ctx.payload } : {}),
+          };
+
+          // Validate against root schema (enforces strict type, meta, payload)
+          const result = schema.safeParse(inboundMessage);
           if (!result.success) {
             // Create validation error and route to error sink
             const validationError = new Error(
@@ -128,9 +131,9 @@ export function withZod(
             return;
           }
 
-          // Enrich context with validated payload
-          if (result.data !== undefined) {
-            (ctx as any).payload = result.data;
+          // Enrich context with validated payload (extracted from root validation)
+          if (result.data.payload !== undefined) {
+            (ctx as any).payload = result.data.payload;
           }
         }
       }
@@ -144,7 +147,7 @@ export function withZod(
       const ctx = originalCreateContext(params);
       const routerImpl = this as CoreRouter<any>;
 
-      // Helper to validate outgoing payload
+      // Helper to validate outgoing message (full root validation)
       const validateOutgoingPayload = async (
         schema: MessageDescriptor,
         payload: any,
@@ -153,6 +156,42 @@ export function withZod(
           return payload;
         }
 
+        const schemaObj = schema as any;
+
+        // If schema has safeParse, validate full root message
+        if (typeof schemaObj?.safeParse === "function") {
+          // Construct outbound message
+          const outboundMessage = {
+            type: schemaObj.__descriptor?.type || (schema as any).type,
+            meta: {},
+            ...(payload !== undefined ? { payload } : {}),
+          };
+
+          const result = schemaObj.safeParse(outboundMessage);
+          if (!result.success) {
+            const validationError = new Error(
+              `Outbound validation failed for ${schema.type}: ${JSON.stringify(result.error)}`,
+            );
+            (validationError as any).code = "OUTBOUND_VALIDATION_ERROR";
+            (validationError as any).details = result.error;
+
+            if (opts.onValidationError) {
+              await opts.onValidationError(validationError, {
+                type: schema.type,
+                direction: "outbound",
+                payload,
+              });
+            } else {
+              const lifecycle = routerImpl.getInternalLifecycle();
+              await lifecycle.handleError(validationError, ctx);
+            }
+            throw validationError;
+          }
+
+          return result.data.payload ?? payload;
+        }
+
+        // Fallback for non-Zod schemas (legacy path)
         const payloadSchema = getZodPayload(schema);
         if (!payloadSchema) {
           return payload;
@@ -193,13 +232,95 @@ export function withZod(
 
       // Attach reply() and progress() methods for RPC handlers
       (ctx as any).reply = async (payload: any) => {
-        // RPC terminal response - to be implemented by adapters
-        console.debug(`[reply]:`, payload);
+        // Get the schema from registry to access response type
+        const registry = routerImpl.getInternalRegistry();
+        const entry = registry.get(ctx.type);
+
+        if (entry) {
+          const schema = entry.schema as any;
+          // If this is an RPC schema with a response, validate against response schema
+          if (
+            schema?.response &&
+            typeof schema.response?.safeParse === "function"
+          ) {
+            const responseMessage = {
+              type: schema.responseType || schema.response.__descriptor?.type,
+              meta: {},
+              ...(payload !== undefined ? { payload } : {}),
+            };
+
+            const result = schema.response.safeParse(responseMessage);
+            if (!result.success) {
+              const validationError = new Error(
+                `Reply validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
+              );
+              (validationError as any).code = "REPLY_VALIDATION_ERROR";
+              (validationError as any).details = result.error;
+
+              if (opts.onValidationError) {
+                await opts.onValidationError(validationError, {
+                  type:
+                    schema.responseType || schema.response.__descriptor?.type,
+                  direction: "outbound",
+                  payload,
+                });
+              } else {
+                const lifecycle = routerImpl.getInternalLifecycle();
+                await lifecycle.handleError(validationError, ctx);
+              }
+              throw validationError;
+            }
+
+            // TODO: Implement actual reply transmission via adapter
+            console.debug(`[reply]:`, result.data.payload ?? payload);
+          }
+        }
       };
 
       (ctx as any).progress = async (payload: any) => {
-        // RPC progress update - to be implemented by adapters
-        console.debug(`[progress]:`, payload);
+        // Get the schema from registry to access response type
+        const registry = routerImpl.getInternalRegistry();
+        const entry = registry.get(ctx.type);
+
+        if (entry) {
+          const schema = entry.schema as any;
+          // If this is an RPC schema with a response, validate against response schema
+          if (
+            schema?.response &&
+            typeof schema.response?.safeParse === "function"
+          ) {
+            const responseMessage = {
+              type: schema.responseType || schema.response.__descriptor?.type,
+              meta: {},
+              ...(payload !== undefined ? { payload } : {}),
+            };
+
+            const result = schema.response.safeParse(responseMessage);
+            if (!result.success) {
+              const validationError = new Error(
+                `Progress validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
+              );
+              (validationError as any).code = "PROGRESS_VALIDATION_ERROR";
+              (validationError as any).details = result.error;
+
+              if (opts.onValidationError) {
+                await opts.onValidationError(validationError, {
+                  type:
+                    schema.responseType || schema.response.__descriptor?.type,
+                  direction: "outbound",
+                  payload,
+                });
+              } else {
+                const lifecycle = routerImpl.getInternalLifecycle();
+                await lifecycle.handleError(validationError, ctx);
+              }
+              throw validationError;
+            }
+
+            // TODO: Implement actual progress transmission via adapter
+            console.debug(`[progress]:`, result.data.payload ?? payload);
+          }
+        }
       };
 
       return ctx;

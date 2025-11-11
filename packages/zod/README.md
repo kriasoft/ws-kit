@@ -125,6 +125,124 @@ router.rpc(GetUser, async (ctx) => {
 });
 ```
 
+## Real Zod Schemas with Strict Validation
+
+Schemas returned by `message()` and `rpc()` are real Zod objects, enabling full Zod capabilities:
+
+```typescript
+const Join = message("JOIN", { roomId: z.string() });
+
+// Use schemas for client-side validation before sending
+const clientMsg = {
+  type: "JOIN" as const,
+  meta: {},
+  payload: { roomId: "42" },
+};
+const result = Join.safeParse(clientMsg);
+
+if (!result.success) {
+  console.error("Invalid message:", result.error);
+} else {
+  sendToServer(result.data);
+}
+```
+
+### Strict Validation by Default
+
+All schemas enforce **strict mode**, rejecting unknown keys at every level:
+
+```typescript
+const TestMsg = message("TEST", { id: z.number() });
+
+// ✅ Valid: correct structure
+TestMsg.safeParse({
+  type: "TEST",
+  meta: {},
+  payload: { id: 123 },
+});
+
+// ❌ Invalid: unknown root key
+TestMsg.safeParse({
+  type: "TEST",
+  meta: {},
+  payload: { id: 123 },
+  extra: "not allowed", // Unknown key rejected
+});
+
+// ❌ Invalid: unknown payload key
+TestMsg.safeParse({
+  type: "TEST",
+  meta: {},
+  payload: { id: 123, extra: "not allowed" }, // Unknown key rejected
+});
+```
+
+### Extended Meta Fields
+
+Meta can be extended with application-specific fields:
+
+```typescript
+const WithMeta = message(
+  "TEST",
+  { data: z.string() },
+  { roomId: z.string(), priority: z.number().optional() },
+);
+
+// ✅ Valid: required and optional extended fields
+WithMeta.safeParse({
+  type: "TEST",
+  meta: { roomId: "room-1", priority: 5 },
+  payload: { data: "hello" },
+});
+
+// ✅ Also valid: optional field omitted
+WithMeta.safeParse({
+  type: "TEST",
+  meta: { roomId: "room-1" },
+  payload: { data: "hello" },
+});
+```
+
+### Composable with Zod Ecosystem
+
+Since schemas are real Zod objects, you can use all Zod features:
+
+```typescript
+// Discriminated unions over message types
+const MessageSchema = z.discriminatedUnion("type", [
+  message("JOIN", { roomId: z.string() }),
+  message("LEAVE", { reason: z.string() }),
+  message("PING"),
+]);
+
+const result = MessageSchema.safeParse(incomingMsg);
+// Type narrowing works: result.data.type is "JOIN" | "LEAVE" | "PING"
+
+// Transformations and refinements
+const ValidatedJoin = message("JOIN", { roomId: z.string() }).transform(
+  (msg) => ({
+    ...msg,
+    meta: { ...msg.meta, timestamp: Date.now() },
+  }),
+);
+
+// RPC response validation
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
+  id: z.string(),
+  name: z.string(),
+});
+
+// Validate response independently
+const response = {
+  type: "USER",
+  meta: {},
+  payload: { id: "1", name: "Alice" },
+};
+if (GetUser.response.safeParse(response).success) {
+  console.log("Response is valid");
+}
+```
+
 ## Platform Support
 
 This adapter works with any ws-kit platform:
