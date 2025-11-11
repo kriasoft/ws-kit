@@ -44,7 +44,7 @@ Zero-dependency, in-process rate limiter using token bucket algorithm.
 **Best for:** Development, single-instance deployments, testing.
 
 ```typescript
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = memoryRateLimiter({
   capacity: 100, // Max tokens available
@@ -89,7 +89,7 @@ Distributed rate limiter using Redis Lua scripts for atomicity.
 **Best for:** Multi-pod production deployments, shared state across instances.
 
 ```typescript
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
@@ -142,7 +142,7 @@ Sharded rate limiter using Cloudflare Durable Objects.
 **Best for:** Cloudflare Workers, serverless edge computing, geographically distributed deployments.
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER, {
   capacity: 100,
@@ -284,7 +284,7 @@ Test with middleware:
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 test("middleware blocks rate-limited requests", async () => {
   const limiter = rateLimit({

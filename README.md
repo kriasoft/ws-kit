@@ -789,7 +789,7 @@ For development or single-instance deployments, use the in-memory adapter:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({
@@ -809,7 +809,7 @@ For distributed deployments, coordinate via Redis:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
@@ -832,7 +832,7 @@ For Cloudflare Workers, use Durable Objects for coordination:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = rateLimit({
   limiter: durableObjectRateLimiter(env.RATE_LIMITER, {

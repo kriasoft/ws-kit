@@ -49,7 +49,7 @@ This separation makes testing, composition, and understanding easier.
 **No changes needed.** Memory adapter is already pure local:
 
 ```typescript
-import { memoryPubSub } from "@ws-kit/adapters/memory";
+import { memoryPubSub } from "@ws-kit/memory";
 
 const adapter = memoryPubSub();
 // Use as before—no ingress needed
@@ -60,7 +60,7 @@ const adapter = memoryPubSub();
 #### Before
 
 ```typescript
-import { redisPubSub } from "@ws-kit/adapters/redis";
+import { redisPubSub } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 const redis = createClient();
@@ -77,7 +77,7 @@ if (adapter.onRemotePublished) {
 #### After
 
 ```typescript
-import { redisPubSub, redisConsumer } from "@ws-kit/adapters/redis";
+import { redisPubSub, redisConsumer } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 const redis = createClient();
@@ -102,7 +102,7 @@ process.on("SIGTERM", () => {
 #### Before
 
 ```typescript
-import { durableObjectsPubSub } from "@ws-kit/adapters/cloudflare";
+import { durableObjectsPubSub } from "@ws-kit/cloudflare";
 
 const adapter = durableObjectsPubSub(env.DO_NAMESPACE);
 
@@ -119,7 +119,7 @@ if (adapter.onRemotePublished) {
 import {
   durableObjectsPubSub,
   durableObjectsConsumer,
-} from "@ws-kit/adapters/cloudflare";
+} from "@ws-kit/cloudflare";
 
 const adapter = durableObjectsPubSub(env.DO_NAMESPACE);
 const ingress = durableObjectsConsumer();
@@ -235,7 +235,7 @@ Test distributed deployments by mocking the ingress:
 
 ```typescript
 import { describe, test } from "bun:test";
-import { redisPubSub, redisConsumer } from "@ws-kit/adapters/redis";
+import { redisPubSub, redisConsumer } from "@ws-kit/redis";
 
 describe("Redis pub/sub", () => {
   test("delivers remote message locally", async () => {

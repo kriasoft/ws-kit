@@ -257,7 +257,7 @@ One bucket per (user, message type) pair. Chat messages have a separate quota fr
 ```typescript
 // Per-user per-type (in-memory adapter shown; swap for Redis/Durable Objects in production)
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({
@@ -294,7 +294,7 @@ Different operations consume different amounts of resources. GitHub and Shopify 
 ```typescript
 // Single unified rate limiter with custom cost per operation
 import { rateLimit } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({
@@ -341,14 +341,14 @@ Examples above use `memoryRateLimiter`. For production, choose your adapter base
 Swap the adapter and the semantics remain identical:
 
 ```typescript
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 const limiter = rateLimit({
   limiter: redisRateLimiter(redis, { capacity: 30, tokensPerSecond: 10 }),
   key: keyPerUserPerType,
 });
 ```
 
-**Note on imports**: Each adapter is available via a subpath export. Use `@ws-kit/adapters/memory`, `@ws-kit/adapters/redis`, or `@ws-kit/adapters/cloudflare` to import only the adapter you need. Importing from `@ws-kit/adapters` directly requires explicit adapter selection via the platform-specific factories.
+**Note on imports**: Each adapter is available via a subpath export. Use `@ws-kit/memory`, `@ws-kit/redis`, or `@ws-kit/cloudflare` to import only the adapter you need. Importing from `@ws-kit/adapters` directly requires explicit adapter selection via the platform-specific factories.
 
 ### How to Calculate Costs
 
@@ -667,7 +667,7 @@ Simple, good for early-stage apps. Protects against individual users monopolizin
 ```typescript
 // Per-user rate limit
 import { rateLimit } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({
@@ -690,7 +690,7 @@ Better for apps with mixed message costs. Text chat gets higher limits than expe
 ```typescript
 // Define different limits per operation type
 import { rateLimit } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const chatLimiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 50, tokensPerSecond: 20 }),

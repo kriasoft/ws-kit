@@ -7,8 +7,9 @@
 "@ws-kit/*" = "packages/*/src"
 # Sub-path exports (explicit mappings for subpath imports in tests)
 "@ws-kit/pubsub/internal" = "packages/pubsub/src/internal"
-"@ws-kit/adapters/memory" = "packages/adapters/src/memory"
-"@ws-kit/adapters/redis" = "packages/adapters/src/redis"
+# Backward compatibility (deprecated, use @ws-kit/memory, @ws-kit/redis, @ws-kit/cloudflare)
+"@ws-kit/adapters/memory" = "packages/memory/src"
+"@ws-kit/adapters/redis" = "packages/redis/src"
 "@ws-kit/adapters/cloudflare" = "packages/adapters/src/cloudflare"
 
 [install]
