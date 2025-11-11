@@ -1837,7 +1837,7 @@ The split makes each layer testable, composable, and easier to understand.
 Memory adapter is purely local; no ingress needed:
 
 ```typescript
-import { memoryPubSub } from "@ws-kit/adapters/memory";
+import { memoryPubSub } from "@ws-kit/memory";
 
 const adapter = memoryPubSub();
 // No broker ingress—all publishes are process-local
@@ -1848,7 +1848,7 @@ const adapter = memoryPubSub();
 Distributed adapters provide both pieces, wired by platform:
 
 ```typescript
-import { redisPubSub, redisConsumer } from "@ws-kit/adapters/redis";
+import { redisPubSub, redisConsumer } from "@ws-kit/redis";
 
 const adapter = redisPubSub(redis); // Local index + Redis egress
 const ingress = redisConsumer(redis); // Redis inbound handler

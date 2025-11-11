@@ -348,7 +348,7 @@ const limiter = rateLimit({
 });
 ```
 
-**Note on imports**: Each adapter is available via a subpath export. Use `@ws-kit/memory`, `@ws-kit/redis`, or `@ws-kit/cloudflare` to import only the adapter you need. Importing from `@ws-kit/adapters` directly requires explicit adapter selection via the platform-specific factories.
+**Note on imports**: Each adapter is available via a subpath export. Use `@ws-kit/memory`, `@ws-kit/redis`, or `@ws-kit/cloudflare` to import only the adapter you need. Importing from `@ws-kit/memory, @ws-kit/redis, @ws-kit/cloudflare` directly requires explicit adapter selection via the platform-specific factories.
 
 ### How to Calculate Costs
 

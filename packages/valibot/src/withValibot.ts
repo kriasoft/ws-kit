@@ -23,14 +23,35 @@ import type {
 import type { EventHandler } from "@ws-kit/core";
 import type { GenericSchema } from "valibot";
 
+export interface WithValibotOptions {
+  /**
+   * Whether to validate outgoing payloads (send, reply, publish).
+   * Default: true
+   * Set to false for ultra-hot paths where performance is critical.
+   */
+  validateOutgoing?: boolean;
+
+  /**
+   * Hook for validation errors (inbound/outbound).
+   * If provided, called instead of routing to router.onError().
+   */
+  onValidationError?: (
+    error: Error & { code: string; details: any },
+    context: { type: string; direction: "inbound" | "outbound"; payload: unknown },
+  ) => void | Promise<void>;
+}
+
 /**
  * Validation plugin for Valibot schemas.
  * Adds validation capability and RPC support to the router.
  *
  * Inserts a validation middleware that:
- * 1. Parses and validates payload from schema
+ * 1. Parses and validates inbound payload from schema
  * 2. Enriches context with payload and methods (send, reply, progress)
- * 3. Routes validation errors to router.onError()
+ * 3. Optionally validates outbound payloads
+ * 4. Routes validation errors to router.onError() or custom onValidationError hook
+ *
+ * Mirrors the Zod plugin pattern for consistency.
  *
  * @example
  * ```typescript
@@ -43,7 +64,7 @@ import type { GenericSchema } from "valibot";
  * });
  *
  * const router = createRouter()
- *   .plugin(withValibot())
+ *   .plugin(withValibot({ validateOutgoing: true }))
  *   .on(Join, (ctx) => {
  *     // ctx.payload is now typed and validated
  *     console.log(ctx.payload.roomId);
@@ -55,7 +76,11 @@ import type { GenericSchema } from "valibot";
  *   });
  * ```
  */
-export function withValibot(): Plugin<any, { validation: true }> {
+export function withValibot(options?: WithValibotOptions): Plugin<any, { validation: true }> {
+  const opts: Required<WithValibotOptions> = {
+    validateOutgoing: options?.validateOutgoing ?? true,
+    onValidationError: options?.onValidationError,
+  };
   return (router) => {
     // Get internal access to router for wrapping dispatch
     const routerImpl = router as any as CoreRouter<any>;
@@ -74,7 +99,7 @@ export function withValibot(): Plugin<any, { validation: true }> {
         const schema = entry.schema;
         const payloadSchema = getValibotPayload(schema);
 
-        // Validate payload if schema defines one
+        // Validate inbound payload if schema defines one
         if (payloadSchema) {
           const result = validatePayload(ctx.payload, payloadSchema);
           if (!result.success) {
@@ -85,8 +110,17 @@ export function withValibot(): Plugin<any, { validation: true }> {
             (validationError as any).code = "VALIDATION_ERROR";
             (validationError as any).details = result.error;
 
-            const lifecycle = routerImpl.getInternalLifecycle();
-            await lifecycle.handleError(validationError, ctx);
+            // Call custom hook if provided, otherwise route to error handler
+            if (opts.onValidationError) {
+              await opts.onValidationError(validationError, {
+                type: ctx.type,
+                direction: "inbound",
+                payload: ctx.payload,
+              });
+            } else {
+              const lifecycle = routerImpl.getInternalLifecycle();
+              await lifecycle.handleError(validationError, ctx);
+            }
             return;
           }
 
@@ -106,14 +140,54 @@ export function withValibot(): Plugin<any, { validation: true }> {
       const ctx = originalCreateContext(params);
       const routerImpl = this as CoreRouter<any>;
 
+      // Helper to validate outgoing payload
+      const validateOutgoingPayload = async (
+        schema: MessageDescriptor,
+        payload: any,
+      ): Promise<any> => {
+        if (!opts.validateOutgoing) {
+          return payload;
+        }
+
+        const payloadSchema = getValibotPayload(schema);
+        if (!payloadSchema) {
+          return payload;
+        }
+
+        const result = validatePayload(payload, payloadSchema);
+        if (!result.success) {
+          const validationError = new Error(
+            `Outbound validation failed for ${schema.type}: ${JSON.stringify(result.error)}`,
+          );
+          (validationError as any).code = "OUTBOUND_VALIDATION_ERROR";
+          (validationError as any).details = result.error;
+
+          if (opts.onValidationError) {
+            await opts.onValidationError(validationError, {
+              type: schema.type,
+              direction: "outbound",
+              payload,
+            });
+          } else {
+            const lifecycle = routerImpl.getInternalLifecycle();
+            await lifecycle.handleError(validationError, ctx);
+          }
+          throw validationError;
+        }
+
+        return result.data ?? payload;
+      };
+
       // Attach send() method for event handlers (always available after validation)
       (ctx as any).send = async (
         schema: MessageDescriptor,
         payload: any,
       ) => {
+        // Validate outgoing payload
+        const validatedPayload = await validateOutgoingPayload(schema, payload);
         // For now, this is a placeholder - will be implemented by adapters
         // In a real implementation, this would serialize and send to clients
-        console.debug(`[send] ${schema.type}:`, payload);
+        console.debug(`[send] ${schema.type}:`, validatedPayload);
       };
 
       // Attach reply() and progress() methods for RPC handlers

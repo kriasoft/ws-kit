@@ -339,6 +339,46 @@ function buildContext<T>(
 
 **Which timestamp to use**: `ctx.receivedAt` is captured at ingress before parsing (server clock, authoritative); `meta.timestamp` is producer time and may be missing or skewed (client's clock, untrusted). **Never** base server decisions on `meta.timestamp`. See docs/specs/schema.md#Which-timestamp-to-use for detailed guidance.
 
+## Plugin Configuration {#plugin-configuration}
+
+Validators are plugged in via `withZod()` or `withValibot()` with optional configuration (see ADR-025):
+
+```typescript
+const router = createRouter()
+  .plugin(withZod({
+    validateOutgoing: true,    // Default: true; validate ctx.send(), ctx.reply(), ctx.publish()
+    coerce: false,             // Zod-only; default: false
+    onValidationError: async (err, ctx) => {
+      // Optional: custom error hook instead of router.onError()
+      logger.warn("Validation failed", {
+        type: ctx.type,
+        direction: ctx.direction, // "inbound" | "outbound"
+        code: err.code, // "VALIDATION_ERROR" | "OUTBOUND_VALIDATION_ERROR"
+        details: err.details, // Schema error details
+      });
+    },
+  }))
+  .on(ChatMessage, (ctx) => {
+    // ctx.payload validated and typed
+    ctx.send(ReplyMessage, { text: ctx.payload.text });
+  });
+```
+
+**Options**:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `validateOutgoing` | boolean | `true` | Validate payloads in `ctx.send()`, `ctx.reply()`, `ctx.publish()` (performance knob) |
+| `coerce` | boolean | `false` | Zod-only; enable schema coercion (e.g., string → number) |
+| `onValidationError` | function | undefined | Custom error hook; if omitted, routes to `router.onError()` |
+
+**Inbound vs Outbound Validation**:
+
+- **Inbound**: Always active; validates `ctx.payload` before handler runs (security critical)
+- **Outbound**: Configurable via `validateOutgoing` flag; validates data sent by handler (performance optimization)
+
+Set `validateOutgoing: false` for ultra-hot paths where you trust handler data. Runtime cost: one safeParse call per outbound message when enabled.
+
 ## Key Constraints
 
 > See docs/specs/rules.md for complete rules. Critical for validation:

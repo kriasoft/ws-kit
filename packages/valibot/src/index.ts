@@ -35,6 +35,7 @@ export { message, rpc } from "./runtime.js";
 
 // Validation plugin (capability gating)
 export { withValibot } from "./withValibot.js";
+export type { WithValibotOptions } from "./withValibot.js";
 
 // Type inference utilities (type-level only)
 export type { InferPayload, InferResponse, InferType } from "./types.js";

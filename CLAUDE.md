@@ -25,6 +25,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Architecture
 
 - **Modular Packages**: `@ws-kit/core` router with pluggable validator and platform adapters
+- **Capability Plugins**: `.plugin()` gates features (validation, pub/sub, rate limiters) for both runtime and types
 - **Composition Over Inheritance**: Single `WebSocketRouter<V>` class, any validator + platform combo works
 - **Message-Based Routing**: Routes by message `type` field to registered handlers
 - **Type Safety**: Full TypeScript inference from schema to handler via generics and overloads
@@ -41,15 +42,30 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Quick Start
 
 ```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
+import { createClient } from "redis";
+import { createRouter } from "@ws-kit/core";
+import { z, message, withZod } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimiter } from "@ws-kit/rate-limit";
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 
+const redis = createClient({ url: process.env.REDIS_URL! });
+await redis.connect();
+
+const router = createRouter<AppData>()
+  .plugin(withZod()) // or .plugin(withValibot())
+  .plugin(withPubSub(redisPubSub(redis)))
+  .plugin(
+    withRateLimiter(
+      redisRateLimiter(redis, { capacity: 200, tokensPerSecond: 100 }),
+    ),
+  );
+
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
-
-const router = createRouter<AppData>();
 
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });

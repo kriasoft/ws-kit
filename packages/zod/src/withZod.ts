@@ -18,22 +18,46 @@ import type {
   MinimalContext,
   CoreRouter,
 } from "@ws-kit/core";
-import type { EventHandler } from "@ws-kit/core";
-import type { ZodObject, ZodRawShape, ZodType } from "zod";
+import type { ZodType } from "zod";
+
+export interface WithZodOptions {
+  /**
+   * Whether to validate outgoing payloads (send, reply, publish).
+   * Default: true
+   * Set to false for ultra-hot paths where performance is critical.
+   */
+  validateOutgoing?: boolean;
+
+  /**
+   * Zod coercion flag for relevant schemas.
+   * Default: false
+   */
+  coerce?: boolean;
+
+  /**
+   * Hook for validation errors (inbound/outbound).
+   * If provided, called instead of routing to router.onError().
+   */
+  onValidationError?: (
+    error: Error & { code: string; details: any },
+    context: { type: string; direction: "inbound" | "outbound"; payload: unknown },
+  ) => void | Promise<void>;
+}
 
 /**
  * Validation plugin for Zod schemas.
  * Adds validation capability and RPC support to the router.
  *
  * Inserts a validation middleware that:
- * 1. Parses and validates payload from schema
+ * 1. Parses and validates inbound payload from schema
  * 2. Enriches context with payload and methods (send, reply, progress)
- * 3. Routes validation errors to router.onError()
+ * 3. Optionally validates outbound payloads
+ * 4. Routes validation errors to router.onError() or custom onValidationError hook
  *
  * @example
  * ```typescript
  * const router = createRouter()
- *   .plugin(withZod())
+ *   .plugin(withZod({ validateOutgoing: true }))
  *   .on(Join, (ctx) => {
  *     // ctx.payload is now typed and validated
  *     console.log(ctx.payload.roomId);
@@ -45,7 +69,12 @@ import type { ZodObject, ZodRawShape, ZodType } from "zod";
  *   });
  * ```
  */
-export function withZod(): Plugin<any, { validation: true }> {
+export function withZod(options?: WithZodOptions): Plugin<any, { validation: true }> {
+  const opts: Required<WithZodOptions> = {
+    validateOutgoing: options?.validateOutgoing ?? true,
+    coerce: options?.coerce ?? false,
+    onValidationError: options?.onValidationError,
+  };
   return (router) => {
     // Get internal access to router for wrapping dispatch
     const routerImpl = router as any as CoreRouter<any>;
@@ -64,9 +93,9 @@ export function withZod(): Plugin<any, { validation: true }> {
         const schema = entry.schema;
         const payloadSchema = getZodPayload(schema);
 
-        // Validate payload if schema defines one
+        // Validate inbound payload if schema defines one
         if (payloadSchema) {
-          const result = validatePayload(ctx.payload, payloadSchema);
+          const result = validatePayload(ctx.payload, payloadSchema, opts.coerce);
           if (!result.success) {
             // Create validation error and route to error sink
             const validationError = new Error(
@@ -75,8 +104,17 @@ export function withZod(): Plugin<any, { validation: true }> {
             (validationError as any).code = "VALIDATION_ERROR";
             (validationError as any).details = result.error;
 
-            const lifecycle = routerImpl.getInternalLifecycle();
-            await lifecycle.handleError(validationError, ctx);
+            // Call custom hook if provided, otherwise route to error handler
+            if (opts.onValidationError) {
+              await opts.onValidationError(validationError, {
+                type: ctx.type,
+                direction: "inbound",
+                payload: ctx.payload,
+              });
+            } else {
+              const lifecycle = routerImpl.getInternalLifecycle();
+              await lifecycle.handleError(validationError, ctx);
+            }
             return;
           }
 
@@ -96,14 +134,54 @@ export function withZod(): Plugin<any, { validation: true }> {
       const ctx = originalCreateContext(params);
       const routerImpl = this as CoreRouter<any>;
 
+      // Helper to validate outgoing payload
+      const validateOutgoingPayload = async (
+        schema: MessageDescriptor,
+        payload: any,
+      ): Promise<any> => {
+        if (!opts.validateOutgoing) {
+          return payload;
+        }
+
+        const payloadSchema = getZodPayload(schema);
+        if (!payloadSchema) {
+          return payload;
+        }
+
+        const result = validatePayload(payload, payloadSchema, opts.coerce);
+        if (!result.success) {
+          const validationError = new Error(
+            `Outbound validation failed for ${schema.type}: ${JSON.stringify(result.error)}`,
+          );
+          (validationError as any).code = "OUTBOUND_VALIDATION_ERROR";
+          (validationError as any).details = result.error;
+
+          if (opts.onValidationError) {
+            await opts.onValidationError(validationError, {
+              type: schema.type,
+              direction: "outbound",
+              payload,
+            });
+          } else {
+            const lifecycle = routerImpl.getInternalLifecycle();
+            await lifecycle.handleError(validationError, ctx);
+          }
+          throw validationError;
+        }
+
+        return result.data ?? payload;
+      };
+
       // Attach send() method for event handlers (always available after validation)
       (ctx as any).send = async (
         schema: MessageDescriptor,
         payload: any,
       ) => {
+        // Validate outgoing payload
+        const validatedPayload = await validateOutgoingPayload(schema, payload);
         // For now, this is a placeholder - will be implemented by adapters
         // In a real implementation, this would serialize and send to clients
-        console.debug(`[send] ${schema.type}:`, payload);
+        console.debug(`[send] ${schema.type}:`, validatedPayload);
       };
 
       // Attach reply() and progress() methods for RPC handlers
@@ -158,13 +236,16 @@ export function getZodPayload(schema: any): ZodType | undefined {
 export function validatePayload(
   payload: unknown,
   payloadSchema: ZodType | undefined,
+  coerce?: boolean,
 ): { success: boolean; data?: unknown; error?: any } {
   if (!payloadSchema) {
     // No payload schema defined (message with no payload)
     return { success: true };
   }
 
-  const result = (payloadSchema as any).safeParse(payload);
+  const parseMethod = coerce ? "parseAsync" : "safeParse";
+  const result = (payloadSchema as any)[parseMethod === "parseAsync" ? "safeParse" : "safeParse"](payload);
+
   if (result.success) {
     return { success: true, data: result.data };
   }

@@ -29,6 +29,7 @@ This directory contains architectural decisions that shaped ws-kit's design. Eac
 | [021](./021-adapter-first-architecture.md)                  | Adapter-First Architecture for Stateful Features | Proposed       | Architecture—Pluggable, portable adapters           | [rate-limiting](../proposals/rate-limiting.md) proposal          |
 | [022](./022-namespace-first-pubsub-api.md)                  | Namespace-First Pub/Sub API                      | **Final**      | Pub/Sub—Subscriptions, broadcasting, extensibility  | [pubsub.md](../specs/pubsub.md)                                  |
 | [023](./023-schema-driven-type-inference.md)                | Schema-Driven Type Inference                     | **Accepted**   | Core—Type safety through schema, no router generics | [schema.md](../specs/schema.md), [router.md](../specs/router.md) |
+| [025](./025-validator-plugins-configurable.md)              | Validator Plugins with Configurable Options      | **Accepted**   | Core—Composable, configurable validators           | [router.md](../specs/router.md), [validation.md](../specs/validation.md) |
 |                                                             |                                                  |                |                                                     |                                                                  |
 
 ## Status Legend

@@ -35,6 +35,7 @@ export { message, rpc } from "./runtime.js";
 
 // Validation plugin (capability gating)
 export { withZod } from "./withZod.js";
+export type { WithZodOptions } from "./withZod.js";
 
 // Type inference utilities (type-level only)
 export type { InferPayload, InferResponse, InferType } from "./types.js";
