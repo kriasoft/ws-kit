@@ -254,14 +254,17 @@ export interface PubSubAdapter {
   unsubscribe(clientId: string, topic: string): Promise<void>;
 
   /**
-   * Get local subscribers for a topic.
-   * Router uses this to deliver messages to actual connections.
+   * Get local subscribers for a topic as an async iterable.
+   * Router uses this to stream messages to subscribers with backpressure support.
+   *
+   * Implementations should yield subscriber IDs lazily to avoid materializing
+   * large subscriber lists. Router iterates and applies per-subscriber backpressure.
    *
    * @param topic - Topic name
-   * @returns Array of client IDs subscribed to this topic (empty array = no subscribers)
+   * @returns Async iterable of client IDs subscribed to this topic (empty if none)
    * @throws On adapter failure
    */
-  getLocalSubscribers(topic: string): Promise<readonly string[]>;
+  getLocalSubscribers(topic: string): AsyncIterable<string>;
 
   /**
    * List all active topics in this process (optional).

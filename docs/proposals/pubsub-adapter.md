@@ -43,8 +43,8 @@ export interface PubSubAdapter {
   subscribe(clientId: ClientId, topic: Topic): Promise<void>;
   unsubscribe(clientId: ClientId, topic: Topic): Promise<void>;
 
-  // Router uses this for actual delivery.
-  getLocalSubscribers(topic: Topic): Promise<readonly ClientId[]>;
+  // Router uses this for actual delivery (lazy async iterable, no materialization).
+  getLocalSubscribers(topic: Topic): AsyncIterable<ClientId>;
 
   // Optional local introspection (best-effort, local-only).
   listTopics?(): Promise<readonly Topic[]>;
@@ -142,8 +142,11 @@ export function memoryPubSub(): PubSubAdapter {
       set.delete(id);
       if (!set.size) byTopic.delete(topic);
     },
-    async getLocalSubscribers(topic) {
-      return Object.freeze(Array.from(byTopic.get(topic) ?? []));
+    async *getLocalSubscribers(topic) {
+      const subscribers = byTopic.get(topic);
+      if (subscribers) {
+        for (const id of subscribers) yield id;
+      }
     },
     async listTopics() {
       return Object.freeze(Array.from(byTopic.keys()));
@@ -178,8 +181,11 @@ export function redisPubSub(
     async publish(e, { partitionKey } = {}) {
       // distributed side-effect
       await redis.publish(channelFor(e.topic), encode(e));
-      // local stats (don’t assume we also receive our own message)
-      const matchedLocal = (await local.getLocalSubscribers(e.topic)).length;
+      // local stats (don't assume we also receive our own message)
+      let matchedLocal = 0;
+      for await (const _id of local.getLocalSubscribers(e.topic)) {
+        matchedLocal++;
+      }
       return { matchedLocal, capability: "unknown" };
     },
 
@@ -265,7 +271,10 @@ export function durableObjectsPubSub(
       const id = ns.idFromName(e.topic);
       const stub = ns.get(id);
       await stub.fetch(path, { method: "POST", body: encode(e) });
-      const matchedLocal = (await local.getLocalSubscribers(e.topic)).length;
+      let matchedLocal = 0;
+      for await (const _id of local.getLocalSubscribers(e.topic)) {
+        matchedLocal++;
+      }
       return { matchedLocal, capability: "unknown" };
     },
 
@@ -319,9 +328,10 @@ async function publish(
     p: envelope.payload,
     m: envelope.meta,
   });
-  let ids = await adapter.getLocalSubscribers(topic);
-  if (opts?.excludeSelf) ids = ids.filter((id) => id !== ctx.clientId);
-  for (const id of ids) sessions.get(id)?.send(frame);
+  for await (const id of adapter.getLocalSubscribers(topic)) {
+    if (opts?.excludeSelf && id === ctx.clientId) continue;
+    sessions.get(id)?.send(frame);
+  }
 
   return res; // local-only stats
 }
@@ -339,7 +349,7 @@ async function publish(
   - `subscribe`/`unsubscribe` **throw** on real errors; otherwise silent/idempotent.
   - `onRemotePublished` is **optional**; memory never calls it.
 - **Tests (happy path & edge)**
-  - Memory: subscribe/unsubscribe, list/has, publish returns exact counts, getLocalSubscribers stable.
-  - Redis: publishes out; `onRemotePublished` is invoked when remote node sends; local stats remain local.
-  - DO: publish calls DO; `onRemotePublished` invoked via simulated alarm; local index intact.
-  - Router: excludeSelf filtered at router; delivery path independent of adapter.
+  - Memory: subscribe/unsubscribe, list/has, publish returns exact counts, getLocalSubscribers iterates lazily.
+  - Redis: publishes out; `onRemotePublished` is invoked when remote node sends; local iteration works.
+  - DO: publish calls DO; `onRemotePublished` invoked via simulated alarm; local iteration works.
+  - Router: excludeSelf filtered during iteration; async iterable streaming supports backpressure.

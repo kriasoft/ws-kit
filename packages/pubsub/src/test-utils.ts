@@ -80,7 +80,7 @@ export class TestPubSub implements PubSubAdapter {
   /**
    * Get local subscribers (delegated).
    */
-  async getLocalSubscribers(topic: string): Promise<readonly string[]> {
+  getLocalSubscribers(topic: string): AsyncIterable<string> {
     return this.wrapped.getLocalSubscribers(topic);
   }
 

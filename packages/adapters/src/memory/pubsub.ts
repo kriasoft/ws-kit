@@ -100,9 +100,13 @@ export function memoryPubSub(): PubSubAdapter {
       }
     },
 
-    async getLocalSubscribers(topic: string): Promise<readonly string[]> {
+    async *getLocalSubscribers(topic: string): AsyncIterable<string> {
       const subscribers = topics.get(topic);
-      return Object.freeze(Array.from(subscribers ?? []));
+      if (subscribers) {
+        for (const clientId of subscribers) {
+          yield clientId;
+        }
+      }
     },
 
     async listTopics(): Promise<readonly string[]> {
