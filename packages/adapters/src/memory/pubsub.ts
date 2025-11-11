@@ -20,7 +20,7 @@ import type {
  *
  * Usage:
  * ```ts
- * import { memoryPubSub } from "@ws-kit/adapters/memory";
+ * import { memoryPubSub } from "@ws-kit/memory";
  *
  * const router = createRouter<AppData>()
  *   .plugin(withPubSub(memoryPubSub()));

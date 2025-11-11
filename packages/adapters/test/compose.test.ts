@@ -8,7 +8,7 @@ import type {
   BrokerConsumer,
   PublishEnvelope,
 } from "@ws-kit/core/pubsub";
-import { withBroker, combineBrokers } from "@ws-kit/adapters/compose";
+import { withBroker, combineBrokers } from "@ws-kit/pubsub/internal";
 
 /**
  * Test suite for composition utilities (withBroker, combineBrokers).

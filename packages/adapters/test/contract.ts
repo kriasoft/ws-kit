@@ -13,7 +13,7 @@ import { describe, expect, test } from "bun:test";
  * Usage in adapter-specific test files:
  * ```typescript
  * import { describeRateLimiterContract } from "./contract";
- * import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+ * import { memoryRateLimiter } from "@ws-kit/memory";
  *
  * const testPolicy = { capacity: 10, tokensPerSecond: 1 };
  * describeRateLimiterContract("Memory", () => memoryRateLimiter(testPolicy));

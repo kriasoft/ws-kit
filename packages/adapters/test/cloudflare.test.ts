@@ -7,11 +7,8 @@ import type {
   DurableObjectState,
   DurableObjectStorage,
   DurableObjectStub,
-} from "@ws-kit/adapters/cloudflare";
-import {
-  durableObjectRateLimiter,
-  RateLimiterDO,
-} from "@ws-kit/adapters/cloudflare";
+} from "@ws-kit/cloudflare";
+import { durableObjectRateLimiter, RateLimiterDO } from "@ws-kit/cloudflare";
 import { describe, expect, test } from "bun:test";
 
 /**

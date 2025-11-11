@@ -60,7 +60,7 @@ export interface CloudflareDOPubSubOptions {
  *
  * Usage:
  * ```ts
- * import { durableObjectsPubSub, durableObjectsConsumer } from "@ws-kit/adapters/cloudflare";
+ * import { durableObjectsPubSub, durableObjectsConsumer } from "@ws-kit/cloudflare";
  *
  * const driver = durableObjectsPubSub(env.DO_NAMESPACE);
  * const consumer = durableObjectsConsumer(env.DO_NAMESPACE);

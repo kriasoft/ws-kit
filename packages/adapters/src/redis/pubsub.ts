@@ -51,7 +51,7 @@ export interface RedisPubSubOptions {
  *
  * Usage:
  * ```ts
- * import { redisPubSub, redisConsumer } from "@ws-kit/adapters/redis";
+ * import { redisPubSub, redisConsumer } from "@ws-kit/redis";
  * import { createClient } from "redis";
  *
  * const redis = createClient();

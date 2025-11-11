@@ -91,7 +91,7 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
  *
  * @example
  * import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
- * import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+ * import { memoryRateLimiter } from "@ws-kit/memory";
  *
  * const limiter = rateLimit({
  *   limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 import { describe, expect, test } from "bun:test";
 import { describeRateLimiterContract } from "./contract";
 
