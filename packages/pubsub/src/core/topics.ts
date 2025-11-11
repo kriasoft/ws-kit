@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { AbortError, PubSubError } from "../pubsub-error.js";
-import type { ServerWebSocket, Topics } from "../types.js";
-import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "../limits.js";
+import { AbortError, PubSubError } from "./error";
+import type { ServerWebSocket, Topics } from "@ws-kit/core";
+import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./constants";
 
 /**
  * Validator function for topic validation.
@@ -20,7 +20,7 @@ import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "../limits.js";
  *   if (topic.length > 128) {
  *     throw new PubSubError("INVALID_TOPIC", "Too long", { reason: "length", length: topic.length, max: 128 });
  *   }
- *   if (!/^[a-z0-9:_\-/.]{1,128}$/i.test(topic)) {
+ *   if (!/^[a-z0-9:_\\-/.]{1,128}$/i.test(topic)) {
  *     throw new PubSubError("INVALID_TOPIC", "Invalid pattern", { reason: "pattern" });
  *   }
  * };

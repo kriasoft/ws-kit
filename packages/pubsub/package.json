@@ -1,8 +1,8 @@
 {
   "name": "@ws-kit/pubsub",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "type": "module",
-  "description": "In-memory pub/sub adapter for WS-Kit",
+  "description": "Pub/Sub plugin for WS-Kit with in-memory adapter",
   "sideEffects": false,
   "license": "MIT",
   "author": "Konstantin Tarkus",
@@ -32,6 +32,11 @@
       "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "bun": "./src/internal.ts",
+      "default": "./dist/internal.js"
     }
   },
   "main": "./dist/index.js",
