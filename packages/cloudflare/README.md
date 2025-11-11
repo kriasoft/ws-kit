@@ -1,10 +1,10 @@
-# @ws-kit/cloudflare-do
+# @ws-kit/cloudflare
 
 Cloudflare Durable Objects platform adapter for WS-Kit with per-instance pub/sub and explicit multi-DO federation.
 
 ## Purpose
 
-`@ws-kit/cloudflare-do` provides the platform-specific integration layer for WS-Kit on Cloudflare Durable Objects, enabling:
+`@ws-kit/cloudflare` provides the platform-specific integration layer for WS-Kit on Cloudflare Durable Objects, enabling:
 
 - Per-instance WebSocket broadcasting via BroadcastChannel
 - State management integration with durable storage
@@ -34,7 +34,7 @@ Cloudflare Durable Objects platform adapter for WS-Kit with per-instance pub/sub
 ## Installation
 
 ```bash
-bun add @ws-kit/core @ws-kit/cloudflare-do
+bun add @ws-kit/core @ws-kit/cloudflare
 ```
 
 Install with a validator adapter (optional but recommended):
@@ -57,7 +57,7 @@ Create a Durable Object handler for your WebSocket router:
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
 type AppData = { userId?: string };
 
@@ -84,7 +84,7 @@ export default {
 For custom authentication or options, you can pass them to the handler factory:
 
 ```typescript
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
@@ -112,7 +112,7 @@ In Cloudflare DO, `router.publish()` broadcasts **ONLY to WebSocket connections 
 For multi-DO setups, use the `federate()` helper for explicit cross-DO coordination:
 
 ```typescript
-import { federate } from "@ws-kit/cloudflare-do";
+import { federate } from "@ws-kit/cloudflare";
 
 router.on(AnnouncementSchema, async (ctx) => {
   const rooms = ["room:1", "room:2", "room:3"];
@@ -201,7 +201,7 @@ When using Cloudflare Durable Objects with pub/sub, each DO instance is limited 
 **`topicToDoName(topic, shards, prefix)`** - Compute shard name from topic
 
 ```typescript
-import { topicToDoName } from "@ws-kit/cloudflare-do";
+import { topicToDoName } from "@ws-kit/cloudflare";
 
 // Same topic always routes to same shard
 topicToDoName("room:general", 10); // → "ws-router-2"
@@ -212,7 +212,7 @@ topicToDoName("room:random", 10); // → "ws-router-7"
 **`getShardedDoId(env, topic, shards, prefix)`** - Get DO ID for a topic
 
 ```typescript
-import { getShardedDoId } from "@ws-kit/cloudflare-do";
+import { getShardedDoId } from "@ws-kit/cloudflare";
 
 const doId = getShardedDoId(env, `room:${roomId}`, 10);
 const stub = env.ROUTER.get(doId);
@@ -221,7 +221,7 @@ const stub = env.ROUTER.get(doId);
 **`getShardedStub(env, topic, shards, prefix)`** - Get DO stub ready for fetch
 
 ```typescript
-import { getShardedStub } from "@ws-kit/cloudflare-do";
+import { getShardedStub } from "@ws-kit/cloudflare";
 
 export default {
   async fetch(req: Request, env: Env) {

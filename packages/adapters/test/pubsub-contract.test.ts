@@ -8,7 +8,7 @@ import type { PubSubDriver, PublishEnvelope } from "@ws-kit/core/pubsub";
 /**
  * PubSubDriver contract tests.
  *
- * Every driver implementation (memory, redis, cloudflare-do, etc.)
+ * Every driver implementation (memory, redis, cloudflare, etc.)
  * must satisfy these tests to ensure consistent behavior.
  */
 export function createPubSubContractTests(

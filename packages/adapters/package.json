@@ -1,7 +1,8 @@
 {
   "name": "@ws-kit/adapters",
   "version": "5.0.0",
-  "description": "Adapter implementations for WS-Kit: memory, Redis, Durable Objects, and more",
+  "description": "[DEPRECATED] Use @ws-kit/memory, @ws-kit/redis, or @ws-kit/cloudflare-do instead",
+  "deprecated": true,
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -28,7 +29,8 @@
     "cloudflare",
     "type-safe",
     "typescript",
-    "distributed"
+    "distributed",
+    "deprecated"
   ],
   "exports": {
     "./memory": {
@@ -41,10 +43,10 @@
       "bun": "./src/redis/index.ts",
       "default": "./dist/src/redis/index.js"
     },
-    "./cloudflare-do": {
-      "types": "./dist/src/cloudflare-do/index.d.ts",
-      "bun": "./src/cloudflare-do/index.ts",
-      "default": "./dist/src/cloudflare-do/index.js"
+    "./cloudflare": {
+      "types": "./dist/src/cloudflare/index.d.ts",
+      "bun": "./src/cloudflare/index.ts",
+      "default": "./dist/src/cloudflare/index.js"
     },
     "./compose": {
       "types": "./dist/src/compose.d.ts",
@@ -57,6 +59,12 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "@ws-kit/memory": "workspace:^",
+    "@ws-kit/redis": "workspace:^",
+    "@ws-kit/cloudflare-do": "workspace:^",
+    "@ws-kit/pubsub": "workspace:^"
+  },
   "peerDependencies": {
     "@ws-kit/core": "workspace:^"
   },

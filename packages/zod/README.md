@@ -108,9 +108,9 @@ Schemas and payloads flow through handlers with complete type safety:
 const Join = message("JOIN", { roomId: z.string() });
 
 router.on(Join, (ctx) => {
-  ctx.payload;  // ✅ { roomId: string } (inferred)
-  ctx.type;     // ✅ "JOIN" (literal)
-  ctx.send;     // ✅ Available in event handlers
+  ctx.payload; // ✅ { roomId: string } (inferred)
+  ctx.type; // ✅ "JOIN" (literal)
+  ctx.send; // ✅ Available in event handlers
 });
 
 const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
@@ -119,9 +119,9 @@ const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
 });
 
 router.rpc(GetUser, async (ctx) => {
-  ctx.payload;   // ✅ { id: string } (inferred)
-  ctx.reply;     // ✅ Available in RPC handlers
-  ctx.progress;  // ✅ For streaming updates
+  ctx.payload; // ✅ { id: string } (inferred)
+  ctx.reply; // ✅ Available in RPC handlers
+  ctx.progress; // ✅ For streaming updates
 });
 ```
 
@@ -130,7 +130,7 @@ router.rpc(GetUser, async (ctx) => {
 This adapter works with any ws-kit platform:
 
 - **`@ws-kit/bun`** — Bun WebSocket server (recommended)
-- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects
+- **`@ws-kit/cloudflare`** — Cloudflare Durable Objects
 - Custom platforms via `@ws-kit/core`
 
 ## Dependencies
@@ -138,5 +138,5 @@ This adapter works with any ws-kit platform:
 - **`@ws-kit/core`** (required) — Core router
 - **`zod`** (peer) — Validation library
 - **`@ws-kit/bun`** (optional) — Bun platform adapter with `serve()` helper
-- **`@ws-kit/cloudflare-do`** (optional) — Cloudflare Durable Objects adapter
+- **`@ws-kit/cloudflare`** (optional) — Cloudflare Durable Objects adapter
 - **`@ws-kit/client`** (optional) — Type-safe browser client

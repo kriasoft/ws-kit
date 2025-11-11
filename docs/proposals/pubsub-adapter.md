@@ -100,7 +100,7 @@ export function redisPubSub(
 ): PubSubAdapter;
 ```
 
-- **Cloudflare Durable Objects**: `@ws-kit/adapters/cloudflare-do`
+- **Cloudflare Durable Objects**: `@ws-kit/adapters/cloudflare`
 
 ```ts
 export interface CloudflareDOPubSubOptions {
@@ -340,7 +340,7 @@ async function publish(
 # DX checklists (naming, semantics, tests)
 
 - **Naming**
-  - Packages: `@ws-kit/pubsub-memory`, `@ws-kit/pubsub-redis`, `@ws-kit/pubsub-cloudflare-do`
+  - Packages: `@ws-kit/pubsub-memory`, `@ws-kit/pubsub-redis`, `@ws-kit/pubsub-cloudflare`
   - Factories: `memoryPubSub()`, `redisPubSub()`, `cloudflareDurableObjectsPubSub()`
   - Core: `PubSubAdapter`, `PublishEnvelope`, `PublishResult`, `PublishOptions`
 - **Semantics**

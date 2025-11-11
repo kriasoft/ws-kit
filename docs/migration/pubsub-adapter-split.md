@@ -102,7 +102,7 @@ process.on("SIGTERM", () => {
 #### Before
 
 ```typescript
-import { durableObjectsPubSub } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectsPubSub } from "@ws-kit/adapters/cloudflare";
 
 const adapter = durableObjectsPubSub(env.DO_NAMESPACE);
 
@@ -119,7 +119,7 @@ if (adapter.onRemotePublished) {
 import {
   durableObjectsPubSub,
   durableObjectsConsumer,
-} from "@ws-kit/adapters/cloudflare-do";
+} from "@ws-kit/adapters/cloudflare";
 
 const adapter = durableObjectsPubSub(env.DO_NAMESPACE);
 const ingress = durableObjectsConsumer();

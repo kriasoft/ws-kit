@@ -1,179 +1,145 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSub } from "@ws-kit/core";
+import type {
+  PubSubDriver,
+  PublishEnvelope,
+  PublishOptions,
+  PublishResult,
+} from "@ws-kit/core/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 
 /**
- * Cloudflare Durable Object Pub/Sub implementation using BroadcastChannel.
+ * Cloudflare Durable Object namespace interface for pub/sub.
+ */
+export interface DurableObjectNamespace {
+  get(id: DurableObjectId): DurableObjectStub;
+  idFromName(name: string): DurableObjectId;
+}
+
+export interface DurableObjectId {
+  readonly id: string;
+}
+
+export interface DurableObjectStub {
+  fetch(request: Request | string, options?: RequestInit): Promise<Response>;
+}
+
+/**
+ * Options for Cloudflare DO pub/sub driver.
+ */
+export interface CloudflareDOPubSubOptions {
+  /**
+   * HTTP path for publish requests sent to DO.
+   * @default "/publish"
+   */
+  publishPath?: string;
+
+  /**
+   * Custom encoder for PublishEnvelope → string.
+   * @default JSON.stringify
+   */
+  encode?: (envelope: PublishEnvelope) => string;
+
+  /**
+   * Custom decoder for string → PublishEnvelope.
+   * @default JSON.parse
+   */
+  decode?: (data: string) => PublishEnvelope;
+}
+
+/**
+ * Cloudflare Durable Objects pub/sub driver: subscription index + DO publish.
  *
- * All WebSocket connections within a DO instance can publish and receive messages
- * via BroadcastChannel. This is suitable for per-resource setups (one DO per room,
- * game session, etc.).
+ * Uses Durable Objects as a pub/sub coordinator. Each topic maps to a single DO
+ * instance (via `idFromName(topic)`). Publishing sends an HTTP request to the DO,
+ * which handles broadcasting to other instances.
  *
- * **Scope**: Messages are broadcast ONLY to WebSocket connections **within this DO instance**.
- * They do NOT automatically propagate to other DO instances. For multi-DO coordination,
- * use the `federate()` helper to explicitly coordinate across shards.
+ * **Local stats only**: `matchedLocal` reflects process-local subscribers.
+ * For distributed systems, use `capability: "unknown"` (we can't know global count).
  *
- * **Usage**:
- * ```typescript
- * const pubsub = new DurablePubSub();
- * await pubsub.publish("notifications", JSON.stringify({ type: "NOTIFICATION", text: "Hello" }));
+ * Usage:
+ * ```ts
+ * import { durableObjectsPubSub, durableObjectsConsumer } from "@ws-kit/cloudflare-do";
  *
- * // In message handlers via router:
- * router.on(SomeSchema, async (ctx) => {
- *   ctx.ws.subscribe("room:123");  // Subscribe to channel
- *   await router.publish("room:123", ResponseMessage, response);  // Broadcast within this DO
- * });
+ * const driver = durableObjectsPubSub(env.DO_NAMESPACE);
+ * const consumer = durableObjectsConsumer(env.DO_NAMESPACE);
+ *
+ * // Wire consumer to router delivery (via DO alarms, queues, or webhooks)
+ * consumer.start((envelope) => deliverLocally(driver, envelope));
  * ```
  *
- * **Performance characteristics**:
- * - In-memory: Messages stay within the DO instance
- * - Synchronous: BroadcastChannel messages are immediate
- * - No serialization overhead: Direct JavaScript objects
- * - Automatic cleanup: Subscriptions cleaned up when connections close
+ * **Implementation notes**:
+ * - Each topic → one DO instance (via `idFromName(topic)`)
+ * - Publishing sends HTTP POST to DO at `{publishPath}`
+ * - DO handles inbound message distribution (via alarms, queues, webhooks, etc.)
+ * - Ingress wires DO callbacks back to router for local delivery
  */
-export class DurablePubSub implements PubSub {
-  private subscriptions = new Map<
-    string,
-    Set<(message: unknown) => void | Promise<void>>
-  >();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private broadcastChannel: any;
+export function durableObjectsPubSub(
+  namespace: DurableObjectNamespace,
+  opts?: CloudflareDOPubSubOptions,
+): PubSubDriver {
+  const { publishPath = "/publish", encode = JSON.stringify } = opts ?? {};
 
-  constructor() {
-    // BroadcastChannel is available in Cloudflare Workers
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const BC = globalThis.BroadcastChannel as any;
-    if (!BC) {
-      console.warn(
-        "[DurablePubSub] BroadcastChannel not available, subscriptions will not work",
-      );
-      return;
-    }
+  // Maintain local subscription index
+  const local = memoryPubSub();
 
-    this.broadcastChannel = new BC("ws-kit:pubsub");
+  return {
+    async publish(
+      envelope: PublishEnvelope,
+      _opts?: PublishOptions,
+    ): Promise<PublishResult> {
+      // Send to topic's DO (one DO per topic via idFromName)
+      const doId = namespace.idFromName(envelope.topic);
+      const stub = namespace.get(doId);
+      const body = encode(envelope);
 
-    // Listen for messages from other open handlers in this DO
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.broadcastChannel.onmessage = (event: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { channel, message } = (event as any).data;
-      const handlers = this.subscriptions.get(channel);
-      if (handlers) {
-        handlers.forEach((handler) => {
-          Promise.resolve(handler(message)).catch((error: unknown) => {
-            console.error(
-              `[DurablePubSub] Error in handler for ${channel}:`,
-              error,
-            );
-          });
+      try {
+        const response = await stub.fetch(publishPath, {
+          method: "POST",
+          body,
+          headers: {
+            "Content-Type": "application/json",
+          },
         });
-      }
-    };
-  }
 
-  /**
-   * Publish a message to a channel.
-   *
-   * The message is broadcast via BroadcastChannel to all handlers subscribed
-   * to this channel within this DO instance.
-   *
-   * @param channel - Channel name
-   * @param message - Message to broadcast
-   */
-  async publish(channel: string, message: unknown): Promise<void> {
-    // Serialize message if needed
-    let data: unknown;
-
-    if (typeof message === "string") {
-      data = message;
-    } else if (
-      message instanceof Uint8Array ||
-      message instanceof ArrayBuffer
-    ) {
-      data = message;
-    } else {
-      // JSON-serialize objects and other types
-      data = JSON.stringify(message);
-    }
-
-    // Broadcast to all handlers via BroadcastChannel
-    // This reaches all open connections within this DO instance
-    this.broadcastChannel.postMessage({
-      channel,
-      message: data,
-    });
-
-    // Also trigger local handlers immediately
-    const handlers = this.subscriptions.get(channel);
-    if (handlers) {
-      for (const handler of handlers) {
-        try {
-          await handler(data);
-        } catch (error) {
+        if (!response.ok) {
           console.error(
-            `[DurablePubSub] Error in handler for ${channel}:`,
-            error,
+            `[durableObjectsDriver] publish to ${envelope.topic} failed: ${response.status}`,
           );
         }
+      } catch (err) {
+        // Log error but don't fail the entire publish
+        console.error(
+          `[durableObjectsDriver] publish to ${envelope.topic} failed:`,
+          err,
+        );
       }
-    }
-  }
 
-  /**
-   * Subscribe to a channel.
-   *
-   * The handler will be called whenever a message is published to this channel
-   * within this DO instance.
-   *
-   * @param channel - Channel name
-   * @param handler - Handler to call when messages arrive
-   */
-  subscribe(
-    channel: string,
-    handler: (message: unknown) => void | Promise<void>,
-  ): void {
-    if (!this.subscriptions.has(channel)) {
-      this.subscriptions.set(channel, new Set());
-    }
-    const handlers = this.subscriptions.get(channel);
-    if (handlers) {
-      handlers.add(handler);
-    }
-  }
-
-  /**
-   * Unsubscribe from a channel.
-   *
-   * @param channel - Channel name
-   * @param handler - Handler to remove
-   */
-  unsubscribe(
-    channel: string,
-    handler: (message: unknown) => void | Promise<void>,
-  ): void {
-    const handlers = this.subscriptions.get(channel);
-    if (handlers) {
-      handlers.delete(handler);
-      if (handlers.size === 0) {
-        this.subscriptions.delete(channel);
+      // Return local stats only
+      let matchedLocal = 0;
+      for await (const _id of local.getLocalSubscribers(envelope.topic)) {
+        matchedLocal++;
       }
-    }
-  }
 
-  /**
-   * Close the BroadcastChannel and clean up subscriptions.
-   *
-   * Called by the handler when the DO is being destroyed.
-   */
-  destroy(): void {
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.close();
-      } catch (error) {
-        console.error("[DurablePubSub] Error closing BroadcastChannel:", error);
-      }
-    }
-    this.subscriptions.clear();
-  }
+      return {
+        ok: true,
+        capability: "unknown", // Distributed adapter: can't know global count
+        matchedLocal, // Local-only: process subscribers only
+      };
+    },
+
+    subscribe: (clientId: string, topic: string): Promise<void> =>
+      local.subscribe(clientId, topic),
+
+    unsubscribe: (clientId: string, topic: string): Promise<void> =>
+      local.unsubscribe(clientId, topic),
+
+    getLocalSubscribers: (topic: string): AsyncIterable<string> =>
+      local.getLocalSubscribers(topic),
+
+    listTopics: local.listTopics?.bind(local),
+
+    hasTopic: local.hasTopic?.bind(local),
+  };
 }

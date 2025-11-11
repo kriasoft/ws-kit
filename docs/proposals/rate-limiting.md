@@ -16,7 +16,7 @@
 - ✅ `rateLimit()` middleware in `@ws-kit/middleware`
 - ✅ Memory adapter in `@ws-kit/adapters/memory`
 - ✅ Redis adapter in `@ws-kit/adapters/redis`
-- ✅ Cloudflare Durable Objects adapter in `@ws-kit/adapters/cloudflare-do`
+- ✅ Cloudflare Durable Objects adapter in `@ws-kit/adapters/cloudflare`
 - ✅ Comprehensive tests and contract validation
 - ✅ Full integration with router error handling
 
@@ -524,7 +524,7 @@ router.use(limiter);
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
 
 const limiter = rateLimit({
   limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
@@ -1196,7 +1196,7 @@ for (const [staleKey] of staleKeys) {
 This bounds iteration to one hour's worth of keys but adds complexity (hour boundary precision, two lookup paths) that is premature for Tier 1.
 
 ```typescript
-// In @ws-kit/adapters/cloudflare-do
+// In @ws-kit/adapters/cloudflare
 
 // Fast, deterministic hash for sharding (FNV-1a)
 function hashKey(key: string): number {
@@ -1379,7 +1379,7 @@ Instead of shipping a hardcoded rate limiter, establish **common adapter interfa
 @ws-kit/adapters
 ├── memory/                    // In-process, O(1), no IO
 ├── redis/                     // Multi-pod coordination
-└── cloudflare-do/             // Cloudflare Durable Objects
+└── cloudflare/                // Cloudflare Durable Objects
 ```
 
 **Future expansions** (same pattern applies):
@@ -1600,12 +1600,12 @@ test("redis: multiple limiters share same connection", async () => {
 
 ### Core Implementation
 
-| Feature                         | Package                          | Rationale                                                     |
-| ------------------------------- | -------------------------------- | ------------------------------------------------------------- |
-| **Rate Limiter** (token bucket) | `@ws-kit/middleware`             | Cross-runtime middleware; adapters stay in `@ws-kit/adapters` |
-| **Memory Adapter**              | `@ws-kit/adapters/memory`        | Dev, single-instance Bun/Node.js                              |
-| **Redis Adapter**               | `@ws-kit/adapters/redis`         | Multi-pod production deployments                              |
-| **Durable Objects Adapter**     | `@ws-kit/adapters/cloudflare-do` | Cloudflare Workers, sharded                                   |
+| Feature                         | Package                       | Rationale                                                     |
+| ------------------------------- | ----------------------------- | ------------------------------------------------------------- |
+| **Rate Limiter** (token bucket) | `@ws-kit/middleware`          | Cross-runtime middleware; adapters stay in `@ws-kit/adapters` |
+| **Memory Adapter**              | `@ws-kit/adapters/memory`     | Dev, single-instance Bun/Node.js                              |
+| **Redis Adapter**               | `@ws-kit/adapters/redis`      | Multi-pod production deployments                              |
+| **Durable Objects Adapter**     | `@ws-kit/adapters/cloudflare` | Cloudflare Workers, sharded                                   |
 
 **Note**: Middleware may re-export adapters for ergonomics (e.g., `@ws-kit/middleware/adapters`), but the canonical source lives in `@ws-kit/adapters`. Consumers opt-in to runtime-specific dependencies intentionally.
 
@@ -1682,7 +1682,7 @@ router.use(limiter); // Same error semantics, atomic guarantees, distributed sup
 
 Adapter implementations stay in `@ws-kit/adapters` (not scattered across the ecosystem) because:
 
-- **Dependency isolation**: Redis, Durable Objects, and other runtime-specific dependencies are centralized; consumers opt-in via targeted imports (`@ws-kit/adapters/redis`, `@ws-kit/adapters/cloudflare-do`).
+- **Dependency isolation**: Redis, Durable Objects, and other runtime-specific dependencies are centralized; consumers opt-in via targeted imports (`@ws-kit/adapters/redis`, `@ws-kit/adapters/cloudflare`).
 - **Reuse for future features**: Deduplication, presence, delta sync, and sessions will all reuse the same adapter contracts (same pattern as `RateLimiter`). This design avoids redundant implementations.
 - **Contract enforcement**: New adapters must implement the published store/pubsub contracts and pass the same atomicity test suite. This ensures correctness across all backends.
 
@@ -1706,7 +1706,7 @@ Rate limiting in distributed systems requires **correct atomicity semantics, ser
 To prevent package sprawl and keep maintenance tractable, ws-kit enforces these boundaries:
 
 - **`@ws-kit/middleware`**: Cross-runtime middleware only (rate limiting, deduplication, observability hooks). No runtime-specific logic.
-- **`@ws-kit/adapters`**: Implementations of published adapter contracts. Each adapter (memory, redis, cloudflare-do) is a subdirectory with its own dependencies and test suite.
+- **`@ws-kit/adapters`**: Implementations of published adapter contracts. Each adapter (memory, redis, cloudflare) is a subdirectory with its own dependencies and test suite.
 - **New packages**: Spawn only when a _second_ feature needs them. For example, if deduplication and rate limiting both need state machines, a `@ws-kit/patterns` package makes sense. A single feature always fits in middleware or adapters.
 
 This keeps the ecosystem focused and avoids fractured implementations of the same interface.

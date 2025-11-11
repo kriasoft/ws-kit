@@ -34,23 +34,25 @@ router.onError((err, ctx) => {
 ### Base Router (always available)
 
 ```typescript
-router.use(mw);                              // Global middleware
-router.on(schema, handler);                  // Event handler
-router.route(schema).use(mw).on(handler);    // Per-route middleware + handler
+router.use(mw); // Global middleware
+router.on(schema, handler); // Event handler
+router.route(schema).use(mw).on(handler); // Per-route middleware + handler
 router.merge(other, { onConflict: "error" }); // Combine routers
-router.mount("prefix.", other);              // Prefix types for namespacing
-router.plugin(withZod());                    // Add capabilities
-router.onError((err, ctx) => {});            // Universal error sink
+router.mount("prefix.", other); // Prefix types for namespacing
+router.plugin(withZod()); // Add capabilities
+router.onError((err, ctx) => {}); // Universal error sink
 ```
 
 ### Added by Plugins
 
 After `withZod()` or `withValibot()`:
+
 ```typescript
-router.rpc(schema, handler);  // RPC handlers (request-response)
+router.rpc(schema, handler); // RPC handlers (request-response)
 ```
 
 After `withPubSub()`:
+
 ```typescript
 router.publish(topic, schema, payload);
 // ctx.subscribe(topic), ctx.unsubscribe(topic), ctx.subscriptions
@@ -85,15 +87,15 @@ Full type inference from schema through handlers:
 
 ```typescript
 // Schema defines the contract
-const UserUpdate = message("USER_UPDATE", { 
+const UserUpdate = message("USER_UPDATE", {
   id: z.string(),
-  name: z.string()
+  name: z.string(),
 });
 
 // Handler context is inferred
 router.on(UserUpdate, (ctx) => {
-  ctx.payload;  // { id: string; name: string }
-  ctx.type;     // "USER_UPDATE"
+  ctx.payload; // { id: string; name: string }
+  ctx.type; // "USER_UPDATE"
 });
 ```
 
@@ -104,7 +106,7 @@ Single universal error sink with error codes:
 ```typescript
 router.onError((err, ctx) => {
   if (err instanceof WsKitError) {
-    console.log("Error code:", err.code);  // "BAD_REQUEST", "INVALID_ARGUMENT", etc.
+    console.log("Error code:", err.code); // "BAD_REQUEST", "INVALID_ARGUMENT", etc.
     console.log("Retryable:", err.retryable);
   }
 });
@@ -119,14 +121,14 @@ import { createTestRouter } from "@ws-kit/core/test";
 
 const testRouter = createTestRouter(router);
 testRouter.clock.advance(30_000); // Fast-forward heartbeat
-testRouter.capture.errors();      // Assert on errors
+testRouter.capture.errors(); // Assert on errors
 ```
 
 ## See Also
 
 - **Router proposal**: [docs/proposals/router.md](../../docs/proposals/router.md)
 - **Validator contracts**: See `@ws-kit/zod`, `@ws-kit/valibot`
-- **Platform adapters**: See `@ws-kit/bun`, `@ws-kit/cloudflare-do`
+- **Platform adapters**: See `@ws-kit/bun`, `@ws-kit/cloudflare`
 - **Pub/Sub adapters**: See `@ws-kit/redis`, `@ws-kit/kafka`
 
 ## License

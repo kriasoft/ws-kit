@@ -1,6 +1,6 @@
 /**
  * Platform adapter contract.
- * Concrete implementations: @ws-kit/bun, @ws-kit/cloudflare-do, etc.
+ * Concrete implementations: @ws-kit/bun, @ws-kit/cloudflare, etc.
  *
  * Core is platform-agnostic; adapters provide the transport layer.
  */

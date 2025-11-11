@@ -87,7 +87,7 @@ router.use(limiter);
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
 
 const limiter = rateLimit({
   limiter: durableObjectRateLimiter(env.RATE_LIMITER, {

@@ -5,7 +5,7 @@
     { "path": "./packages/adapters/tsconfig.test.json" },
     { "path": "./packages/bun/tsconfig.test.json" },
     { "path": "./packages/client/tsconfig.test.json" },
-    { "path": "./packages/cloudflare-do/tsconfig.test.json" },
+    { "path": "./packages/cloudflare/tsconfig.test.json" },
     { "path": "./packages/core/tsconfig.test.json" },
     { "path": "./packages/middleware/tsconfig.test.json" },
     { "path": "./packages/redis-pubsub/tsconfig.test.json" },

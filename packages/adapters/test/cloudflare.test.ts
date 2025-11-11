@@ -1,19 +1,18 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import {
-  durableObjectRateLimiter,
-  RateLimiterDO,
-} from "@ws-kit/adapters/cloudflare-do";
 import type {
   DurableObjectId,
   DurableObjectNamespace,
   DurableObjectState,
   DurableObjectStorage,
   DurableObjectStub,
-} from "@ws-kit/adapters/cloudflare-do";
+} from "@ws-kit/adapters/cloudflare";
+import {
+  durableObjectRateLimiter,
+  RateLimiterDO,
+} from "@ws-kit/adapters/cloudflare";
 import { describe, expect, test } from "bun:test";
-import { describeRateLimiterContract } from "./contract";
 
 /**
  * Mock Durable Object storage for testing without Cloudflare environment.

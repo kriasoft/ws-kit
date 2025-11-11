@@ -11,7 +11,7 @@ import type {
   DurableObjectWebSocketData,
 } from "../../src/types.js";
 
-describe("@ws-kit/cloudflare-do type tests", () => {
+describe("@ws-kit/cloudflare type tests", () => {
   describe("createDurableObjectAdapter", () => {
     it("should return PlatformAdapter type", () => {
       const adapter = createDurableObjectAdapter();

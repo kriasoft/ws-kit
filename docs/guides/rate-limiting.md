@@ -187,7 +187,7 @@ const limiter = redisRateLimiter(
 **Use when**: Cloudflare Workers with persistent coordination needs
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER, {
   capacity: 200,

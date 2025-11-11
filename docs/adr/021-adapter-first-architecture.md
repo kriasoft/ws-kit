@@ -56,7 +56,7 @@ export function createRateLimiter(opts: {
 // Adapters (one per backend)
 export function createMemoryBackend(): RateLimitBackend; // @ws-kit/adapters/memory
 export function createRedisBackend(): RateLimitBackend; // @ws-kit/adapters/redis
-export function createDurableObjectBackend(): RateLimitBackend; // @ws-kit/adapters/cloudflare-do
+export function createDurableObjectBackend(): RateLimitBackend; // @ws-kit/adapters/cloudflare
 ```
 
 ### Package Structure
@@ -75,7 +75,7 @@ export function createDurableObjectBackend(): RateLimitBackend; // @ws-kit/adapt
 @ws-kit/adapters
 ├── memory/        → memoryStore, memoryPubSub (Bun, Node.js dev)
 ├── redis/         → redisStore, redisPubSub (multi-pod production)
-└── cloudflare-do/ → durableObjectStore, durableObjectPubSub (Workers)
+└── cloudflare/ → durableObjectStore, durableObjectPubSub (Workers)
 ```
 
 ## Design Directives
@@ -128,7 +128,7 @@ interface RateLimitStore {
 
 - **Core logic** → `@ws-kit/core` (interfaces only; no impl)
 - **Cross-runtime adapters** → `@ws-kit/adapters` (memory, Redis, etc.)
-- **Runtime-specific helpers** → Runtime packages (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare-do`)
+- **Runtime-specific helpers** → Runtime packages (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare`)
 
 **Not allowed**: Scattered `@ws-kit/rate-limit-redis`, `@ws-kit/rate-limit-memory`, etc. (splinters ecosystem).
 

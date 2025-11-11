@@ -20,7 +20,7 @@ import type { DurableObjectNamespace, DurableObjectStub } from "./types.js";
  *
  * **Usage**:
  * ```typescript
- * import { federate } from "@ws-kit/cloudflare-do";
+ * import { federate } from "@ws-kit/cloudflare";
  *
  * // Broadcast to multiple room shards
  * await federate(env.ROOMS, ["room:1", "room:2", "room:3"], async (room) => {

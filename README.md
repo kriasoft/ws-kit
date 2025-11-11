@@ -47,7 +47,7 @@ WS-Kit is a modular monorepo. Mix any validator with any platform:
 **Platform Adapters:**
 
 - **`@ws-kit/bun`** — Bun platform adapter with `serve()` and `createBunHandler()`
-- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
+- **`@ws-kit/cloudflare`** — Cloudflare Durable Objects, KV adapter
 
 **Client:**
 
@@ -236,7 +236,7 @@ Benefits:
 **For Cloudflare Durable Objects:**
 
 ```ts
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
@@ -832,7 +832,7 @@ For Cloudflare Workers, use Durable Objects for coordination:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
 
 const limiter = rateLimit({
   limiter: durableObjectRateLimiter(env.RATE_LIMITER, {

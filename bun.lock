@@ -57,7 +57,13 @@
     },
     "packages/adapters": {
       "name": "@ws-kit/adapters",
-      "version": "5.0.0",
+      "version": "6.0.0",
+      "dependencies": {
+        "@ws-kit/cloudflare-do": "workspace:^",
+        "@ws-kit/memory": "workspace:^",
+        "@ws-kit/pubsub": "workspace:^",
+        "@ws-kit/redis": "workspace:^",
+      },
       "devDependencies": {
         "@types/bun": "^1.3.2",
       },
@@ -90,8 +96,8 @@
         "@types/bun": "^1.3.2",
       },
     },
-    "packages/cloudflare-do": {
-      "name": "@ws-kit/cloudflare-do",
+    "packages/cloudflare": {
+      "name": "@ws-kit/cloudflare",
       "version": "0.2.5",
       "dependencies": {
         "@ws-kit/core": "workspace:^",
@@ -104,11 +110,36 @@
         "@cloudflare/workers-types": ">4.20251109.0",
       },
     },
+    "packages/cloudflare-do": {
+      "name": "@ws-kit/cloudflare-do",
+      "version": "1.0.0",
+      "dependencies": {
+        "@ws-kit/pubsub": "workspace:^",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "^4.20251109.0",
+        "@types/bun": "^1.3.2",
+      },
+      "peerDependencies": {
+        "@cloudflare/workers-types": ">=4.0.0",
+        "@ws-kit/core": "workspace:^",
+      },
+    },
     "packages/core": {
       "name": "@ws-kit/core",
       "version": "0.0.1",
       "devDependencies": {
         "typescript": "^5.0.0",
+      },
+    },
+    "packages/memory": {
+      "name": "@ws-kit/memory",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.2",
+      },
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:^",
       },
     },
     "packages/middleware": {
@@ -130,6 +161,21 @@
       },
       "peerDependencies": {
         "@ws-kit/core": "workspace:^",
+      },
+    },
+    "packages/redis": {
+      "name": "@ws-kit/redis",
+      "version": "1.0.0",
+      "dependencies": {
+        "@ws-kit/pubsub": "workspace:^",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.2",
+        "redis": "^5.9.0",
+      },
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:^",
+        "redis": ">=5.0.0",
       },
     },
     "packages/redis-pubsub": {
@@ -573,13 +619,19 @@
 
     "@ws-kit/client": ["@ws-kit/client@workspace:packages/client"],
 
+    "@ws-kit/cloudflare": ["@ws-kit/cloudflare@workspace:packages/cloudflare"],
+
     "@ws-kit/cloudflare-do": ["@ws-kit/cloudflare-do@workspace:packages/cloudflare-do"],
 
     "@ws-kit/core": ["@ws-kit/core@workspace:packages/core"],
 
+    "@ws-kit/memory": ["@ws-kit/memory@workspace:packages/memory"],
+
     "@ws-kit/middleware": ["@ws-kit/middleware@workspace:packages/middleware"],
 
     "@ws-kit/pubsub": ["@ws-kit/pubsub@workspace:packages/pubsub"],
+
+    "@ws-kit/redis": ["@ws-kit/redis@workspace:packages/redis"],
 
     "@ws-kit/redis-pubsub": ["@ws-kit/redis-pubsub@workspace:packages/redis-pubsub"],
 

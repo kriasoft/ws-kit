@@ -1,4 +1,4 @@
-# @ws-kit/cloudflare-do
+# @ws-kit/cloudflare
 
 ## 0.2.5
 

@@ -22,7 +22,7 @@ const { v7: uuidv7 } = uuid;
  * **Recommended Usage**:
  * ```typescript
  * import { createRouter } from "@ws-kit/zod";
- * import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+ * import { createDurableObjectHandler } from "@ws-kit/cloudflare";
  *
  * const router = createRouter<AppData>();
  *

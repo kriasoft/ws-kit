@@ -1142,7 +1142,7 @@ Bun.serve({ port: 3000, fetch, websocket });
 ### Cloudflare Durable Objects
 
 ```typescript
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
 const handler = createDurableObjectHandler(router, {
   /* ... */
@@ -1178,4 +1178,4 @@ This is the **recommended approach** for all production deployments.
 6. **Middleware execution** — Global runs first, then per-route, then handler (see ADR-008)
 7. **Validation flow** — Trust schema validation; never re-validate in handlers (see docs/specs/rules.md#validation-flow)
 8. **Broadcasting** — For multicast messaging, see docs/specs/pubsub.md (not covered in this spec)
-9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare-do`)
+9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare`)

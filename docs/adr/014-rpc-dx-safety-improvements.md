@@ -166,7 +166,7 @@ serve(router, {
   // Bun: 1-4MB typical, varies by system memory
 });
 
-// @ws-kit/cloudflare-do
+// @ws-kit/cloudflare
 handler = createCloudflareHandler(router, {
   maxQueuedBytesPerSocket: 512_000, // 512KB, conservative for DO limits
   // DO: message cap ~125KB, request cap ~30MB

@@ -61,7 +61,7 @@ import { serve } from "@ws-kit/bun";
 serve(router, { port: 3000 });
 
 // ✅ Cloudflare Durable Objects
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 const handler = createDurableObjectHandler(router);
 export default {
   fetch(req: Request, state: DurableObjectState, env: Env) {

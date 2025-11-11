@@ -7,7 +7,7 @@ Every package owns its tests under `packages/<name>/test`. Use sub-folders consi
 - `runtime/` (behavioral tests, normalization, queue)
 - `types/` (expectTypeOf suites)
 - `features/` (integration-style specs per feature area)
-- Adapter-specific folders (`bun/`, `cloudflare-do/`, etc.) follow the same pattern
+- Adapter-specific folders (`bun/`, `cloudflare/`, etc.) follow the same pattern
 
 ### When Adding Tests
 

@@ -142,7 +142,7 @@ Sharded rate limiter using Cloudflare Durable Objects.
 **Best for:** Cloudflare Workers, serverless edge computing, geographically distributed deployments.
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER, {
   capacity: 100,

@@ -417,7 +417,7 @@ When using Cloudflare Durable Objects with pub/sub, each DO instance is limited 
 **Worker entrypoint** (routes incoming requests to sharded DO instances):
 
 ```typescript
-import { getShardedStub } from "@ws-kit/cloudflare-do/sharding";
+import { getShardedStub } from "@ws-kit/cloudflare/sharding";
 
 export default {
   async fetch(req: Request, env: Env) {
@@ -439,7 +439,7 @@ export default {
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
 // Message schemas
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
@@ -641,7 +641,7 @@ const decision = await limiter.consume("user:123", 1);
 Uses sharded Durable Objects for high-concurrency distributed rate limiting:
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER_NAMESPACE, {
   capacity: 500,

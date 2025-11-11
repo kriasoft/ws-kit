@@ -20,7 +20,7 @@ import type { DurableObjectNamespace, DurableObjectStub } from "./types.js";
  *
  * @example
  * ```typescript
- * import { topicToDoName } from "@ws-kit/cloudflare-do/sharding";
+ * import { topicToDoName } from "@ws-kit/cloudflare/sharding";
  *
  * // Consistent mapping
  * topicToDoName("room:general", 10) // → "ws-router-2"
@@ -65,7 +65,7 @@ export function topicToDoName(
  *
  * @example
  * ```typescript
- * import { getShardedDoId } from "@ws-kit/cloudflare-do/sharding";
+ * import { getShardedDoId } from "@ws-kit/cloudflare/sharding";
  *
  * // In a Worker fetch handler
  * const doId = getShardedDoId(env, `room:${roomId}`, 10);
@@ -90,7 +90,7 @@ export function getShardedDoId(
  *
  * **Usage**:
  * ```typescript
- * import { getShardedStub } from "@ws-kit/cloudflare-do/sharding";
+ * import { getShardedStub } from "@ws-kit/cloudflare/sharding";
  *
  * const stub = getShardedStub(env, `room:${roomId}`, 10);
  * return stub.fetch(req); // Upgrade and route to the right DO
@@ -105,7 +105,7 @@ export function getShardedDoId(
  *
  * @example
  * ```typescript
- * import { getShardedStub } from "@ws-kit/cloudflare-do/sharding";
+ * import { getShardedStub } from "@ws-kit/cloudflare/sharding";
  *
  * export default {
  *   async fetch(req: Request, env: Env) {

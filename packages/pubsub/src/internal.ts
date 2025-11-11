@@ -15,6 +15,8 @@ export type {
   PubSubAdapter,
   PublishEnvelope,
   PublishOptions,
+  PubSubDriver,
+  BrokerConsumer,
 } from "@ws-kit/core/pubsub";
 
 export type {
@@ -30,6 +32,10 @@ export type {
   PublishOptions,
   PublishResult,
 } from "./types";
+
+// Composition utilities for adapter authors
+export { withBroker, combineBrokers } from "./compose";
+export type { BrokerStartMode } from "./compose";
 
 // Core pub/sub primitives (internal implementation details)
 export { TopicsImpl, createTopicValidator } from "./core/topics";

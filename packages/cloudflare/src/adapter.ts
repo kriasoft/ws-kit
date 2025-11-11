@@ -13,7 +13,7 @@ import { DurablePubSub } from "./pubsub.js";
  *
  * **Usage**:
  * ```typescript
- * import { createDurableObjectAdapter } from "@ws-kit/cloudflare-do";
+ * import { createDurableObjectAdapter } from "@ws-kit/cloudflare";
  * import { createRouter } from "@ws-kit/zod";
  *
  * const router = createRouter({

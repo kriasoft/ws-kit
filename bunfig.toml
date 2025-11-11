@@ -9,7 +9,7 @@
 "@ws-kit/pubsub/internal" = "packages/pubsub/src/internal"
 "@ws-kit/adapters/memory" = "packages/adapters/src/memory"
 "@ws-kit/adapters/redis" = "packages/adapters/src/redis"
-"@ws-kit/adapters/cloudflare-do" = "packages/adapters/src/cloudflare-do"
+"@ws-kit/adapters/cloudflare" = "packages/adapters/src/cloudflare"
 
 [install]
 linker = "isolated"

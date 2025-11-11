@@ -761,7 +761,7 @@ Subsequent calls to `close()` are safe and idempotent. All operations after `clo
 
 - **[@ws-kit/core](https://www.npmjs.com/package/@ws-kit/core)** — Core router and types
 - **[@ws-kit/bun](https://www.npmjs.com/package/@ws-kit/bun)** — Bun platform adapter
-- **[@ws-kit/cloudflare-do](https://www.npmjs.com/package/@ws-kit/cloudflare-do)** — Cloudflare Durable Objects adapter
+- **[@ws-kit/cloudflare](https://www.npmjs.com/package/@ws-kit/cloudflare)** — Cloudflare Durable Objects adapter
 - **[@ws-kit/zod](https://www.npmjs.com/package/@ws-kit/zod)** — Zod validator
 - **[@ws-kit/valibot](https://www.npmjs.com/package/@ws-kit/valibot)** — Valibot validator
 - **[@ws-kit/client](https://www.npmjs.com/package/@ws-kit/client)** — Browser/Node.js client

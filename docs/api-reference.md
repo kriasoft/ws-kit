@@ -59,7 +59,7 @@ import { MemoryPubSub } from "@ws-kit/core";
 import { createBunHandler } from "@ws-kit/bun";
 
 // Cloudflare Durable Objects adapter
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 ```
 
 **Optional add-ons:**

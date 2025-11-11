@@ -1,74 +1,9 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
-
-import type { Policy, RateLimitDecision, RateLimiter } from "@ws-kit/core";
-import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core/pubsub";
-
-/**
- * Cloudflare Durable Object namespace interface
- * (compatible with Cloudflare Workers environment)
- */
-export interface DurableObjectNamespace {
-  get(id: DurableObjectId): DurableObjectStub;
-  idFromName(name: string): DurableObjectId;
-}
-
 // Re-export pub/sub types and factories
 export { durableObjectsPubSub } from "./pubsub.js";
-export type { CloudflareDOPubSubOptions } from "./pubsub.js";
-export { durableObjectsConsumer } from "./ingress.js";
-export type { CloudflareDOConsumerOptions } from "./ingress.js";
-export type { BrokerConsumer, PubSubDriver };
-
-export interface DurableObjectId {
-  readonly id: string;
-}
-
-export interface DurableObjectStub {
-  fetch(request: Request | string, options?: RequestInit): Promise<Response>;
-}
-
-export interface DurableObjectState {
-  storage: DurableObjectStorage;
-}
-
-export interface DurableObjectStorage {
-  get<T = unknown>(key: string): Promise<T | undefined>;
-  put(key: string, value: unknown): Promise<void>;
-  delete(key: string): Promise<void>;
-  list<T = unknown>(options?: {
-    prefix?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<Map<string, T>>;
-  setAlarm(scheduledTime: number | Date): Promise<void>;
-}
-
-/**
- * Token bucket stored in Durable Object storage.
- *
- * @internal
- */
-interface TokenBucket {
-  tokens: number;
-  lastRefill: number;
-}
-
-/**
- * Options for Durable Objects rate limiter.
- */
-export interface DurableObjectRateLimiterOptions {
-  /**
-   * Number of shards to distribute rate limit keys across.
-   *
-   * @default 128
-   *
-   * Higher shard count distributes load better but creates more Durable Objects.
-   * 128 shards is a good balance for most applications.
-   */
-  shards?: number;
-}
-
+export { durableObjectsConsumer } from "./consumer.js";
+export { handleDOPublish } from "./consumer.js";
 /**
  * Distributed rate limiter using Cloudflare Durable Objects.
  *
@@ -95,7 +30,7 @@ export interface DurableObjectRateLimiterOptions {
  *
  * @example
  * ```typescript
- * import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+ * import { durableObjectRateLimiter } from "@ws-kit/cloudflare-do";
  *
  * export default {
  *   async fetch(request, env) {
@@ -114,11 +49,7 @@ export interface DurableObjectRateLimiterOptions {
  * };
  * ```
  */
-export function durableObjectRateLimiter(
-  namespace: DurableObjectNamespace,
-  policy: Policy,
-  opts?: DurableObjectRateLimiterOptions,
-): RateLimiter {
+export function durableObjectRateLimiter(namespace, policy, opts) {
   // Validate policy at factory creation time
   if (policy.capacity < 1) {
     throw new Error("Rate limit capacity must be ≥ 1");
@@ -126,27 +57,23 @@ export function durableObjectRateLimiter(
   if (policy.tokensPerSecond <= 0) {
     throw new Error("tokensPerSecond must be > 0");
   }
-
   const { capacity, tokensPerSecond, prefix } = policy;
   const shardCount = opts?.shards ?? 128;
-
   // Validate shard count to prevent invalid DO names
   if (!Number.isInteger(shardCount) || shardCount < 1) {
     throw new Error("Shard count must be a positive integer");
   }
-
   // Create immutable policy snapshot for getPolicy()
-  const policySnapshot: Policy = Object.freeze({
+  const policySnapshot = Object.freeze({
     capacity,
     tokensPerSecond,
     ...(prefix !== undefined && { prefix }),
-  }) as Policy;
-
+  });
   /**
    * FNV-1a hash for deterministic key-to-shard distribution.
    * Fast, simple, and good distribution properties.
    */
-  function hashKey(key: string): number {
+  function hashKey(key) {
     let hash = 2166136261; // FNV offset basis (32-bit)
     for (let i = 0; i < key.length; i++) {
       hash ^= key.charCodeAt(i);
@@ -156,29 +83,24 @@ export function durableObjectRateLimiter(
     }
     return hash >>> 0; // Ensure 32-bit unsigned
   }
-
   /**
    * Map a rate limit key to a Durable Object shard name.
    */
-  function getShardName(key: string): string {
+  function getShardName(key) {
     const shard = hashKey(key) % shardCount;
     return `rate-limiter-${shard}`;
   }
-
   return {
     getPolicy() {
       return policySnapshot;
     },
-
-    async consume(key: string, cost: number): Promise<RateLimitDecision> {
+    async consume(key, cost) {
       // Apply prefix if configured (isolates multiple policies)
       const prefixedKey = prefix ? `${prefix}${key}` : key;
-
       // Get the Durable Object shard for this key
       const shardName = getShardName(prefixedKey);
       const doId = namespace.idFromName(shardName);
       const stub = namespace.get(doId);
-
       // Send consume request to the DO shard
       const response = await stub.fetch("https://internal/consume", {
         method: "POST",
@@ -189,14 +111,12 @@ export function durableObjectRateLimiter(
           tokensPerSecond,
         }),
       });
-
       // Parse and return the decision
       const result = await response.json();
-      return result as RateLimitDecision;
+      return result;
     },
   };
 }
-
 /**
  * Durable Object implementation for rate limiting.
  *
@@ -214,36 +134,30 @@ export function durableObjectRateLimiter(
  * @internal
  */
 export class RateLimiterDO {
-  private state: DurableObjectState;
-  private bucketPrefix = "bucket:";
-  private alarmScheduled = false;
-
-  constructor(state: DurableObjectState) {
+  state;
+  bucketPrefix = "bucket:";
+  alarmScheduled = false;
+  constructor(state) {
     this.state = state;
   }
-
   /**
    * Handle incoming consume requests.
    * Single request handler ensures atomicity (single-threaded per shard).
    */
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request) {
     const url = new URL(request.url);
-
     if (url.pathname === "/consume" && request.method === "POST") {
       try {
-        const payload = (await request.json()) as Record<string, unknown>;
-
-        const key = payload.key as string;
-        const cost = payload.cost as number;
-        const capacity = payload.capacity as number;
-        const tokensPerSecond = payload.tokensPerSecond as number;
+        const payload = await request.json();
+        const key = payload.key;
+        const cost = payload.cost;
+        const capacity = payload.capacity;
+        const tokensPerSecond = payload.tokensPerSecond;
         const now = Date.now();
-
         // Load bucket from storage (or initialize if missing)
         const storageKey = this.bucketPrefix + key;
-        const stored = await this.state.storage.get<TokenBucket>(storageKey);
+        const stored = await this.state.storage.get(storageKey);
         const bucket = stored ?? { tokens: capacity, lastRefill: now };
-
         // Refill based on elapsed time
         const elapsed = Math.max(0, (now - bucket.lastRefill) / 1000);
         bucket.tokens = Math.min(
@@ -251,7 +165,6 @@ export class RateLimiterDO {
           bucket.tokens + Math.floor(elapsed * tokensPerSecond),
         );
         bucket.lastRefill = now;
-
         // Check if cost can be satisfied
         if (bucket.tokens < cost) {
           // Blocked: compute retry time or null if impossible
@@ -259,21 +172,17 @@ export class RateLimiterDO {
             cost > capacity
               ? null
               : Math.ceil(((cost - bucket.tokens) / tokensPerSecond) * 1000);
-
           // Persist bucket
           await this.state.storage.put(storageKey, bucket);
-
           return Response.json({
             allowed: false,
             remaining: Math.floor(bucket.tokens),
             retryAfterMs,
           });
         }
-
         // Allowed: deduct cost
         bucket.tokens -= cost;
         await this.state.storage.put(storageKey, bucket);
-
         // Schedule periodic cleanup (once per shard)
         // Runs hourly to clean up stale buckets (inactive for 24h)
         if (!this.alarmScheduled) {
@@ -281,7 +190,6 @@ export class RateLimiterDO {
           const alarmMs = Date.now() + 3_600_000; // 1 hour
           await this.state.storage.setAlarm(alarmMs);
         }
-
         return Response.json({
           allowed: true,
           remaining: Math.floor(bucket.tokens),
@@ -290,10 +198,8 @@ export class RateLimiterDO {
         return new Response(`Error: ${err}`, { status: 400 });
       }
     }
-
     return new Response("Not found", { status: 404 });
   }
-
   /**
    * Alarm handler for periodic cleanup (mark-and-sweep).
    *
@@ -309,37 +215,31 @@ export class RateLimiterDO {
    * - Hourly segmentation: prepend hour to key format, delete only prev hour's keys
    * - O(buckets/hour) per cleanup, but adds format complexity
    */
-  async alarm(): Promise<void> {
+  async alarm() {
     const now = Date.now();
     const maxAge = 86_400_000; // 24 hours in milliseconds
     const cutoff = now - maxAge;
-
     // Cursor-based pagination: process large key sets in batches
-    let cursor: string | undefined;
+    let cursor;
     do {
-      const listOptions: { prefix: string; limit: number; cursor?: string } = {
+      const listOptions = {
         prefix: this.bucketPrefix,
         limit: 1000, // Process 1k keys per iteration
       };
       if (cursor !== undefined) {
         listOptions.cursor = cursor;
       }
-
-      const batch = await this.state.storage.list<TokenBucket>(listOptions);
-
+      const batch = await this.state.storage.list(listOptions);
       // Delete stale buckets (inactive for 24h)
       for (const [key, bucket] of batch) {
         if (bucket && bucket.lastRefill < cutoff) {
           await this.state.storage.delete(key);
         }
       }
-
-      cursor = (batch as unknown as Record<string, unknown>).cursor as
-        | string
-        | undefined;
+      cursor = batch.cursor;
     } while (cursor);
-
     // Reschedule alarm for next hour
     await this.state.storage.setAlarm(now + 3_600_000);
   }
 }
+//# sourceMappingURL=index.js.map

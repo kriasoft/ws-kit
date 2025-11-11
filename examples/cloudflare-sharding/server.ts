@@ -12,7 +12,7 @@
  * Use `router.ts` with `getShardedStub()` to distribute rooms across multiple shards.
  */
 
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 import { createRouter, message, z } from "@ws-kit/zod";
 
 // Message schemas

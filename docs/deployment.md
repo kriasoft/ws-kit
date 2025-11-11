@@ -6,12 +6,12 @@ This guide covers best practices for deploying WS-Kit applications to production
 
 WS-Kit's pub/sub layer is pluggable, allowing you to choose the right adapter for your deployment scenario:
 
-| Scenario                     | Adapter             | Package                 | Notes                                                                                 |
-| ---------------------------- | ------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
-| Single-instance server       | In-memory (default) | `@ws-kit/core`          | Perfect for development and small deployments                                         |
-| Multi-instance load-balanced | Redis               | `@ws-kit/redis-pubsub`  | Automatic cross-instance broadcasting with atomic token bucket rate limiting          |
-| Cloudflare Workers           | Durable Objects     | `@ws-kit/cloudflare-do` | Serverless with stateful compute; 100 connections per DO, sharding required for scale |
-| Custom backend               | Your implementation | Custom                  | Implement the `PubSub` interface                                                      |
+| Scenario                     | Adapter             | Package                | Notes                                                                                 |
+| ---------------------------- | ------------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| Single-instance server       | In-memory (default) | `@ws-kit/core`         | Perfect for development and small deployments                                         |
+| Multi-instance load-balanced | Redis               | `@ws-kit/redis-pubsub` | Automatic cross-instance broadcasting with atomic token bucket rate limiting          |
+| Cloudflare Workers           | Durable Objects     | `@ws-kit/cloudflare`   | Serverless with stateful compute; 100 connections per DO, sharding required for scale |
+| Custom backend               | Your implementation | Custom                 | Implement the `PubSub` interface                                                      |
 
 For detailed adapter specifications, limits, and guarantees, see [Adapter Responsibilities](/specs/adapters).
 
@@ -134,7 +134,7 @@ Cloudflare Durable Objects provide stateful serverless compute for WebSocket con
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
 type AppData = {
   userId?: string;
