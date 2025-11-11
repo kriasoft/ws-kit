@@ -15,6 +15,8 @@ import {
   string,
   number,
   strictObject,
+  pipe,
+  default as default_,
   parse as valibot_parse,
   safeParse as valibot_safeParse,
   type GenericSchema,
@@ -95,7 +97,7 @@ export function message<
   // Build root schema: { type, meta, payload? }
   const rootShape: Record<string, GenericSchema> = {
     type: literal(type),
-    meta: metaObj,
+    meta: pipe(metaObj, optional(), default_({})),
     ...(payloadObj ? { payload: payloadObj } : {}),
   };
 

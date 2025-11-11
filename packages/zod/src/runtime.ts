@@ -89,7 +89,7 @@ export function message<
   // Build root schema: { type, meta, payload? }
   const rootShape: ZodRawShape = {
     type: z.literal(type),
-    meta: metaObj,
+    meta: metaObj.optional().default({}),
     ...(payloadObj ? { payload: payloadObj } : {}),
   };
 
