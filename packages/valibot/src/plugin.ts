@@ -284,6 +284,30 @@ export function withValibot(
         return result.data ?? payload;
       };
 
+      // Helper: serialize and send an outbound message
+      const sendMessage = (
+        type: string,
+        payload: any,
+        meta: Record<string, unknown>,
+      ): void => {
+        const message = {
+          type,
+          meta,
+          ...(payload !== undefined ? { payload } : {}),
+        };
+        try {
+          ctx.ws.send(JSON.stringify(message));
+        } catch (err) {
+          // Connection may have closed; error will be caught by socket wrapper
+          const sendError = new Error(
+            `Failed to send message ${type}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          (sendError as any).code = "SEND_ERROR";
+          const lifecycle = routerImpl.getInternalLifecycle();
+          lifecycle.handleError(sendError, ctx);
+        }
+      };
+
       // Attach send() method for event handlers (always available after validation)
       (ctx as any).send = async (
         schema: AnySchema | MessageDescriptor,
@@ -291,12 +315,15 @@ export function withValibot(
       ) => {
         // Validate outgoing payload
         const validatedPayload = await validateOutgoingPayload(schema, payload);
-        // For now, this is a placeholder - will be implemented by adapters
-        // In a real implementation, this would serialize and send to clients
-        console.debug(
-          `[send] ${(schema as any).type || schema.type}:`,
-          validatedPayload,
-        );
+
+        // Get message type from schema
+        const messageType =
+          (schema as any).__descriptor?.type ||
+          (schema as any).type ||
+          schema.type;
+
+        // Send with no meta
+        sendMessage(messageType, validatedPayload, {});
       };
 
       // Helper: send outbound message (terminal or progress)
@@ -357,10 +384,11 @@ export function withValibot(
           replied = true;
         }
 
-        // TODO: Implement actual transmission via adapter
-        console.debug(
-          isProgress ? `[progress]:` : `[reply]:`,
-          responseMessage.payload ?? payload,
+        // Send the message via WebSocket
+        sendMessage(
+          responseMessage.type,
+          responseMessage.payload,
+          responseMessage.meta,
         );
       };
 
