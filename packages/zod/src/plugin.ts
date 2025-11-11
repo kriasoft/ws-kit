@@ -18,7 +18,7 @@ import type {
   MinimalContext,
   CoreRouter,
 } from "@ws-kit/core";
-import type { ZodType } from "zod";
+import { getZodPayload, validatePayload } from "./internal.js";
 
 export interface WithZodOptions {
   /**
@@ -40,7 +40,11 @@ export interface WithZodOptions {
    */
   onValidationError?: (
     error: Error & { code: string; details: any },
-    context: { type: string; direction: "inbound" | "outbound"; payload: unknown },
+    context: {
+      type: string;
+      direction: "inbound" | "outbound";
+      payload: unknown;
+    },
   ) => void | Promise<void>;
 }
 
@@ -69,7 +73,9 @@ export interface WithZodOptions {
  *   });
  * ```
  */
-export function withZod(options?: WithZodOptions): Plugin<any, { validation: true }> {
+export function withZod(
+  options?: WithZodOptions,
+): Plugin<any, { validation: true }> {
   const opts: Required<WithZodOptions> = {
     validateOutgoing: options?.validateOutgoing ?? true,
     coerce: options?.coerce ?? false,
@@ -95,7 +101,11 @@ export function withZod(options?: WithZodOptions): Plugin<any, { validation: tru
 
         // Validate inbound payload if schema defines one
         if (payloadSchema) {
-          const result = validatePayload(ctx.payload, payloadSchema, opts.coerce);
+          const result = validatePayload(
+            ctx.payload,
+            payloadSchema,
+            opts.coerce,
+          );
           if (!result.success) {
             // Create validation error and route to error sink
             const validationError = new Error(
@@ -173,10 +183,7 @@ export function withZod(options?: WithZodOptions): Plugin<any, { validation: tru
       };
 
       // Attach send() method for event handlers (always available after validation)
-      (ctx as any).send = async (
-        schema: MessageDescriptor,
-        payload: any,
-      ) => {
+      (ctx as any).send = async (schema: MessageDescriptor, payload: any) => {
         // Validate outgoing payload
         const validatedPayload = await validateOutgoingPayload(schema, payload);
         // For now, this is a placeholder - will be implemented by adapters
@@ -217,38 +224,4 @@ export function withZod(options?: WithZodOptions): Plugin<any, { validation: tru
 
     return enhanced;
   };
-}
-
-/**
- * Helper to extract Zod payload schema from a message schema.
- * Used internally by the validation middleware.
- * @internal
- */
-export function getZodPayload(schema: any): ZodType | undefined {
-  return schema.__zod_payload;
-}
-
-/**
- * Helper to validate payload against Zod schema.
- * Returns { success: true, data } or { success: false, error }.
- * @internal
- */
-export function validatePayload(
-  payload: unknown,
-  payloadSchema: ZodType | undefined,
-  coerce?: boolean,
-): { success: boolean; data?: unknown; error?: any } {
-  if (!payloadSchema) {
-    // No payload schema defined (message with no payload)
-    return { success: true };
-  }
-
-  const parseMethod = coerce ? "parseAsync" : "safeParse";
-  const result = (payloadSchema as any)[parseMethod === "parseAsync" ? "safeParse" : "safeParse"](payload);
-
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-
-  return { success: false, error: result.error };
 }

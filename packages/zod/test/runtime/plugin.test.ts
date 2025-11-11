@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { z } from "zod";
-import { createRouter, message, rpc, withZod } from "../src/index";
+import { createRouter, message, rpc, withZod } from "../../src/index";
 import type { MessageDescriptor } from "@ws-kit/core";
 
 describe("withZod() Plugin", () => {
@@ -105,16 +105,15 @@ describe("withZod() Plugin", () => {
     expect(errorCaught).toBe(null); // No error yet
   });
 
-  it("should support per-route middleware with validation", () => {
+  it("should support middleware with validation", () => {
     const Join = message("JOIN", { roomId: z.string() });
 
     const router = createRouter()
       .plugin(withZod())
-      .route(Join)
       .use(async (ctx, next) => {
         await next();
       })
-      .on(async (ctx: any) => {
+      .on(Join, async (ctx: any) => {
         // Handler with context enrichment
       });
 

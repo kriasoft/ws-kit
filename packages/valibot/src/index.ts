@@ -34,8 +34,8 @@ export * as v from "valibot";
 export { message, rpc } from "./runtime.js";
 
 // Validation plugin (capability gating)
-export { withValibot } from "./withValibot.js";
-export type { WithValibotOptions } from "./withValibot.js";
+export { withValibot } from "./plugin.js";
+export type { WithValibotOptions } from "./plugin.js";
 
 // Type inference utilities (type-level only)
 export type { InferPayload, InferResponse, InferType } from "./types.js";

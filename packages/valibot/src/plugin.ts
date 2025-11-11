@@ -9,8 +9,6 @@
  * - Enhanced context: ctx.payload (validated), ctx.send(), ctx.reply(), ctx.progress()
  * - Automatic payload validation from schemas
  * - Validation errors routed to router.onError()
- *
- * Mirrors the Zod plugin pattern for consistency.
  */
 
 import type {
@@ -20,8 +18,7 @@ import type {
   MinimalContext,
   CoreRouter,
 } from "@ws-kit/core";
-import type { EventHandler } from "@ws-kit/core";
-import type { GenericSchema } from "valibot";
+import { getValibotPayload, validatePayload } from "./internal.js";
 
 export interface WithValibotOptions {
   /**
@@ -37,7 +34,11 @@ export interface WithValibotOptions {
    */
   onValidationError?: (
     error: Error & { code: string; details: any },
-    context: { type: string; direction: "inbound" | "outbound"; payload: unknown },
+    context: {
+      type: string;
+      direction: "inbound" | "outbound";
+      payload: unknown;
+    },
   ) => void | Promise<void>;
 }
 
@@ -50,8 +51,6 @@ export interface WithValibotOptions {
  * 2. Enriches context with payload and methods (send, reply, progress)
  * 3. Optionally validates outbound payloads
  * 4. Routes validation errors to router.onError() or custom onValidationError hook
- *
- * Mirrors the Zod plugin pattern for consistency.
  *
  * @example
  * ```typescript
@@ -76,7 +75,9 @@ export interface WithValibotOptions {
  *   });
  * ```
  */
-export function withValibot(options?: WithValibotOptions): Plugin<any, { validation: true }> {
+export function withValibot(
+  options?: WithValibotOptions,
+): Plugin<any, { validation: true }> {
   const opts: Required<WithValibotOptions> = {
     validateOutgoing: options?.validateOutgoing ?? true,
     onValidationError: options?.onValidationError,
@@ -179,10 +180,7 @@ export function withValibot(options?: WithValibotOptions): Plugin<any, { validat
       };
 
       // Attach send() method for event handlers (always available after validation)
-      (ctx as any).send = async (
-        schema: MessageDescriptor,
-        payload: any,
-      ) => {
+      (ctx as any).send = async (schema: MessageDescriptor, payload: any) => {
         // Validate outgoing payload
         const validatedPayload = await validateOutgoingPayload(schema, payload);
         // For now, this is a placeholder - will be implemented by adapters
@@ -223,37 +221,4 @@ export function withValibot(options?: WithValibotOptions): Plugin<any, { validat
 
     return enhanced;
   };
-}
-
-/**
- * Helper to extract Valibot payload schema from a message schema.
- * Used internally by the validation middleware.
- * @internal
- */
-export function getValibotPayload(schema: any): GenericSchema | undefined {
-  return schema.__valibot_payload;
-}
-
-/**
- * Helper to validate payload against Valibot schema.
- * Returns { success: true, data } or { success: false, error }.
- * @internal
- */
-export function validatePayload(
-  payload: unknown,
-  payloadSchema: GenericSchema | undefined,
-): { success: boolean; data?: unknown; error?: any } {
-  if (!payloadSchema) {
-    // No payload schema defined (message with no payload)
-    return { success: true };
-  }
-
-  try {
-    // Dynamic import to avoid circular dependency on valibot
-    // In a real implementation, valibot would be passed as a parameter
-    const parsed = (payloadSchema as any).parse?.(payload);
-    return { success: true, data: parsed };
-  } catch (error) {
-    return { success: false, error };
-  }
 }
