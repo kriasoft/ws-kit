@@ -210,12 +210,6 @@ interface PublishOptions {
   partitionKey?: string;
 
   /**
-   * Optional metadata passed through to subscribers (if adapter supports it).
-   * Default empty; not validated by core.
-   */
-  meta?: Record<string, unknown>;
-
-  /**
    * **Status**: Not yet implemented (all adapters return {ok: false, error: "UNSUPPORTED"}).
    *
    * **Purpose**: Exclude the sender from receiving the published message.

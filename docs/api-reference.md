@@ -609,7 +609,6 @@ publish(
 interface PublishOptions {
   excludeSelf?: boolean; // Throws error if true (not yet implemented)
   partitionKey?: string; // For sharding (future use)
-  meta?: Record<string, unknown>; // Custom metadata
 }
 ```
 

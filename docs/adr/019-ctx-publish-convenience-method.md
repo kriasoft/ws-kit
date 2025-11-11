@@ -113,13 +113,12 @@ const publish = async (channel, schema, payload, options) => {
 interface PublishOptions {
   excludeSelf?: boolean; // Raises error if true (not yet implemented)
   partitionKey?: string; // Future: distributed sharding
-  meta?: Record<string, unknown>; // Custom metadata
 }
 ```
 
-- **Current**: Only `meta` is used; validation enforced for all options
 - **excludeSelf**: Reserved and validated (raises error if set to `true`)
 - **partitionKey**: Future feature for distributed pubsub without breaking API
+- **Metadata**: Defined in message schema (third parameter to `message()`), not in options
 
 ## Return Value: Promise&lt;PublishResult&gt;
 

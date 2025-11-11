@@ -7,17 +7,20 @@
 
 import type {
   PubSubAdapter as CorePubSubAdapter,
-  PubSubMessage as CorePubSubMessage,
-  MessageDescriptor,
+  PublishEnvelope as CorePublishEnvelope,
+  PublishOptions as CorePublishOptions,
+  PublishResult as CorePublishResult,
   MinimalContext,
-} from "@ws-kit/core";
+} from "@ws-kit/core/pubsub";
 
 /**
  * Re-export core types for convenience.
  */
 export type {
   CorePubSubAdapter as PubSubAdapter,
-  CorePubSubMessage as PubSubMessage,
+  CorePublishEnvelope as PublishEnvelope,
+  CorePublishOptions as PublishOptions,
+  CorePublishResult as PublishResult,
   MinimalContext,
 };
 
@@ -90,48 +93,10 @@ export interface Topics extends ReadonlySet<string> {
 }
 
 /**
- * Options for publishing a message.
+ * Note: PublishOptions is re-exported from @ws-kit/core/pubsub above.
+ * Controls distribution logic only: partitionKey (sharding), excludeSelf (filter),
+ * signal (cancellation). Message metadata belongs in the envelope, not options.
  */
-export interface PublishOptions {
-  /**
-   * Optional sharding or routing hint (advisory; adapters may ignore).
-   * Useful for Redis Cluster, DynamoDB Streams, etc.
-   */
-  partitionKey?: string;
-
-  /**
-   * Optional metadata passed through to subscribers (if adapter supports it).
-   * Default empty; not validated by core.
-   */
-  meta?: Record<string, unknown>;
-
-  /**
-   * Exclude the sender from receiving the published message.
-   * Note: Not yet implemented in all adapters; portable pattern is to include
-   * sender identity in payload and filter on subscriber side.
-   */
-  excludeSelf?: boolean;
-}
-
-/**
- * Result of a publish operation.
- */
-export interface PublishResult {
-  /**
-   * Whether the adapter successfully handled the publish request.
-   */
-  ok: boolean;
-
-  /**
-   * If ok=false, the error code or message.
-   */
-  error?: string;
-
-  /**
-   * Approximate subscriber count (if known by adapter).
-   */
-  subscribers?: number;
-}
 
 /**
  * Policy hooks for pub/sub operations.
