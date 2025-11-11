@@ -55,7 +55,7 @@ interface ScheduledTimer {
  *   await clock.flush();      // Flush microtasks without advancing time
  */
 export class FakeClock implements Clock {
-  private now_: number = 0;
+  private now_ = 0;
   private timers = new Map<unknown, ScheduledTimer>();
   private nextId = 0;
   private queue: ScheduledTimer[] = [];
@@ -134,7 +134,7 @@ export class FakeClock implements Clock {
   /**
    * Get list of pending timers (for debugging/leak detection).
    */
-  pendingTimers(): Array<{ id: unknown; dueAt: number; isInterval: boolean }> {
+  pendingTimers(): { id: unknown; dueAt: number; isInterval: boolean }[] {
     return Array.from(this.timers.values()).map((t) => ({
       id: t.id,
       dueAt: t.dueAt,

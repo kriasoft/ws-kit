@@ -9,9 +9,7 @@
 
 import type { ServerWebSocket } from "../ws/platform-adapter";
 
-export interface BaseContextData {
-  [key: string]: unknown;
-}
+export type BaseContextData = Record<string, unknown>;
 
 export interface MinimalContext<TConn extends BaseContextData = unknown> {
   /**

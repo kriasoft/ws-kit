@@ -185,7 +185,9 @@ describe("dispatch pipeline", () => {
       await conn.drain();
 
       // Should have error about reserved type
-      const reservedError = errors.find((e) => String(e).includes("Reserved type"));
+      const reservedError = errors.find((e) =>
+        String(e).includes("Reserved type"),
+      );
       expect(reservedError).toBeDefined();
 
       await tr.close();
@@ -210,7 +212,9 @@ describe("dispatch pipeline", () => {
       conn.send("UNKNOWN_TYPE");
       await conn.drain();
 
-      const error = errors.find((e) => String(e).includes("No handler registered"));
+      const error = errors.find((e) =>
+        String(e).includes("No handler registered"),
+      );
       expect(error).toBeDefined();
 
       await tr.close();
@@ -239,7 +243,9 @@ describe("dispatch pipeline", () => {
       conn.send("THROW");
       await conn.drain();
 
-      const handlerError = errors.find((e) => String(e).includes("Handler error"));
+      const handlerError = errors.find((e) =>
+        String(e).includes("Handler error"),
+      );
       expect(handlerError).toBeDefined();
 
       await tr.close();
@@ -270,7 +276,9 @@ describe("dispatch pipeline", () => {
       conn.send("TEST");
       await conn.drain();
 
-      const mwError = errors.find((e) => String(e).includes("Middleware error"));
+      const mwError = errors.find((e) =>
+        String(e).includes("Middleware error"),
+      );
       expect(mwError).toBeDefined();
 
       await tr.close();
@@ -281,8 +289,8 @@ describe("dispatch pipeline", () => {
     it("provides basic context fields", async () => {
       const router = createRouter();
       let receivedType: string | undefined;
-      let hasWs: boolean = false;
-      let hasSetData: boolean = false;
+      let hasWs = false;
+      let hasSetData = false;
 
       router.on(schema("MSG"), async (ctx) => {
         receivedType = ctx.type;

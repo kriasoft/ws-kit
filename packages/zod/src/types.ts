@@ -20,17 +20,17 @@ declare const SchemaBrand: unique symbol;
  * Works entirely at the type level using TypeScript utility types.
  * @internal
  */
-export type BrandedSchema<
+export interface BrandedSchema<
   TType extends string = string,
   TPayload extends unknown = unknown,
   TResponse extends unknown = never,
-> = {
+> {
   readonly [SchemaBrand]: {
     readonly type: TType;
     readonly payload: TPayload;
     readonly response: TResponse extends never ? never : TResponse;
   };
-};
+}
 
 /**
  * Extract payload type from a branded schema.

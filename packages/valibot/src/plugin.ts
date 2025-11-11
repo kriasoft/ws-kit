@@ -21,6 +21,12 @@ import type {
 import { getValibotPayload, validatePayload } from "./internal.js";
 import type { AnySchema } from "./types.js";
 
+interface WsContext {
+  kind?: string; // "event" | "rpc" if set by schema registry
+  request: AnySchema; // root message schema
+  response?: AnySchema; // only set for RPC
+}
+
 export interface WithValibotOptions {
   /**
    * Whether to validate outgoing payloads (send, reply, publish).
@@ -41,6 +47,20 @@ export interface WithValibotOptions {
       payload: unknown;
     },
   ) => void | Promise<void>;
+}
+
+export interface ReplyOptions {
+  /**
+   * Whether to validate the outgoing payload.
+   * Default: uses plugin validateOutgoing setting
+   */
+  validate?: boolean;
+
+  /**
+   * Additional metadata to merge into response meta.
+   * Reserved keys (type, correlationId, progress) are immutable and cannot be overridden.
+   */
+  meta?: Record<string, unknown>;
 }
 
 /**
@@ -137,6 +157,13 @@ export function withValibot(
           if (result.data.payload !== undefined) {
             (ctx as any).payload = result.data.payload;
           }
+
+          // Stash schema info for later use in reply/progress/send
+          (ctx as any).__wskit = {
+            kind: (entry as any).kind, // may be undefined; that's ok
+            request: schema,
+            response: (schema as any).response,
+          } as WsContext;
         }
       }
 
@@ -148,6 +175,40 @@ export function withValibot(
     routerImpl.createContext = function (params: any) {
       const ctx = originalCreateContext(params);
       const routerImpl = this as CoreRouter<any>;
+
+      // Track reply idempotency
+      let replied = false;
+
+      // Guard: ensure we're in an RPC context
+      function guardRpc() {
+        const wskit = (ctx as any).__wskit as WsContext | undefined;
+        if (!wskit?.response) {
+          throw new Error(
+            "ctx.reply() and ctx.progress() are only available in RPC handlers",
+          );
+        }
+        return wskit;
+      }
+
+      // Extract base metadata from request (preserves correlationId)
+      function baseMeta(ctx: any): Record<string, unknown> {
+        return {
+          correlationId: ctx.meta?.correlationId,
+        };
+      }
+
+      // Sanitize user-provided meta: strip reserved keys
+      function sanitizeMeta(
+        userMeta: Record<string, unknown> | undefined,
+      ): Record<string, unknown> {
+        if (!userMeta) return {};
+        const sanitized = { ...userMeta };
+        // Strip reserved keys that cannot be overridden
+        delete sanitized.type;
+        delete sanitized.correlationId;
+        delete sanitized.progress;
+        return sanitized;
+      }
 
       // Helper to validate outgoing message (full root validation)
       const validateOutgoingPayload = async (
@@ -238,97 +299,133 @@ export function withValibot(
         );
       };
 
-      // Attach reply() and progress() methods for RPC handlers
-      (ctx as any).reply = async (payload: any) => {
-        // Get the schema from registry to access response type
-        const registry = routerImpl.getInternalRegistry();
-        const entry = registry.get(ctx.type);
+      // Helper: send outbound message (terminal or progress)
+      const sendOutbound = async (
+        payload: any,
+        isProgress: boolean,
+        replyOpts?: ReplyOptions,
+      ): Promise<void> => {
+        const wskit = guardRpc();
+        const responseSchema = wskit.response as any;
 
-        if (entry) {
-          const schema = entry.schema as any;
-          // If this is an RPC schema with a response, validate against response schema
-          if (
-            schema?.response &&
-            typeof schema.response?.safeParse === "function"
-          ) {
-            const responseMessage = {
-              type: schema.responseType || schema.response.__descriptor?.type,
-              meta: {},
-              ...(payload !== undefined ? { payload } : {}),
-            };
+        // Determine if validation is enabled for this call
+        const shouldValidate = replyOpts?.validate ?? opts.validateOutgoing;
 
-            const result = schema.response.safeParse(responseMessage);
-            if (!result.success) {
-              const validationError = new Error(
-                `Reply validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
-              );
-              (validationError as any).code = "REPLY_VALIDATION_ERROR";
-              (validationError as any).details = result.error;
+        // Construct response message with sanitized meta
+        const responseMessage = {
+          type:
+            responseSchema.responseType ||
+            responseSchema.__descriptor?.type ||
+            responseSchema.type,
+          meta: {
+            ...baseMeta(ctx),
+            ...sanitizeMeta(replyOpts?.meta),
+            ...(isProgress ? { progress: true } : null),
+          },
+          ...(payload !== undefined ? { payload } : {}),
+        };
 
-              if (opts.onValidationError) {
-                await opts.onValidationError(validationError, {
-                  type:
-                    schema.responseType || schema.response.__descriptor?.type,
-                  direction: "outbound",
-                  payload,
-                });
-              } else {
-                const lifecycle = routerImpl.getInternalLifecycle();
-                await lifecycle.handleError(validationError, ctx);
-              }
-              throw validationError;
+        // Validate if enabled
+        if (shouldValidate && typeof responseSchema?.safeParse === "function") {
+          const result = responseSchema.safeParse(responseMessage);
+          if (!result.success) {
+            const errorCode = isProgress
+              ? "PROGRESS_VALIDATION_ERROR"
+              : "REPLY_VALIDATION_ERROR";
+            const validationError = new Error(
+              `${isProgress ? "Progress" : "Reply"} validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
+            );
+            (validationError as any).code = errorCode;
+            (validationError as any).details = result.error;
+
+            if (opts.onValidationError) {
+              await opts.onValidationError(validationError, {
+                type: responseMessage.type,
+                direction: "outbound",
+                payload,
+              });
+            } else {
+              const lifecycle = routerImpl.getInternalLifecycle();
+              await lifecycle.handleError(validationError, ctx);
             }
-
-            // TODO: Implement actual reply transmission via adapter
-            console.debug(`[reply]:`, result.data.payload ?? payload);
+            throw validationError;
           }
         }
+
+        // Mark as replied (unless this is a progress update)
+        if (!isProgress) {
+          replied = true;
+        }
+
+        // TODO: Implement actual transmission via adapter
+        console.debug(
+          isProgress ? `[progress]:` : `[reply]:`,
+          responseMessage.payload ?? payload,
+        );
       };
 
-      (ctx as any).progress = async (payload: any) => {
-        // Get the schema from registry to access response type
-        const registry = routerImpl.getInternalRegistry();
-        const entry = registry.get(ctx.type);
+      // Attach reply() method for RPC handlers
+      (ctx as any).reply = async (payload: any, opts?: ReplyOptions) => {
+        guardRpc();
+        if (replied) return; // Idempotent: silently ignore if already replied
+        await sendOutbound(payload, false, opts);
+      };
 
-        if (entry) {
-          const schema = entry.schema as any;
-          // If this is an RPC schema with a response, validate against response schema
-          if (
-            schema?.response &&
-            typeof schema.response?.safeParse === "function"
-          ) {
-            const responseMessage = {
-              type: schema.responseType || schema.response.__descriptor?.type,
-              meta: {},
-              ...(payload !== undefined ? { payload } : {}),
-            };
+      // Attach progress() method for RPC handlers
+      (ctx as any).progress = async (payload: any, opts?: ReplyOptions) => {
+        guardRpc();
+        // Progress can be called multiple times; doesn't set replied flag
+        await sendOutbound(payload, true, opts);
+      };
 
-            const result = schema.response.safeParse(responseMessage);
-            if (!result.success) {
-              const validationError = new Error(
-                `Progress validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
-              );
-              (validationError as any).code = "PROGRESS_VALIDATION_ERROR";
-              (validationError as any).details = result.error;
+      // Attach getData() method - retrieve connection data
+      (ctx as any).getData = (key: string): unknown => {
+        // Access per-connection data store (stored on the socket/connection object)
+        // The adapter is responsible for maintaining this store
+        const store = (ctx as any).__connData || {};
+        return store[key];
+      };
 
-              if (opts.onValidationError) {
-                await opts.onValidationError(validationError, {
-                  type:
-                    schema.responseType || schema.response.__descriptor?.type,
-                  direction: "outbound",
-                  payload,
-                });
-              } else {
-                const lifecycle = routerImpl.getInternalLifecycle();
-                await lifecycle.handleError(validationError, ctx);
-              }
-              throw validationError;
-            }
-
-            // TODO: Implement actual progress transmission via adapter
-            console.debug(`[progress]:`, result.data.payload ?? payload);
-          }
+      // Attach assignData() method - merge partial connection data
+      (ctx as any).assignData = (partial: Record<string, unknown>): void => {
+        // Initialize per-connection data store if not present
+        if (!(ctx as any).__connData) {
+          (ctx as any).__connData = {};
         }
+        // Shallow merge the provided data
+        Object.assign((ctx as any).__connData, partial);
+        // TODO: Emit "data changed" event for adapters to persist if needed
+      };
+
+      // Attach publish() method - broadcast to topic subscribers
+      // Implemented by withPubSub plugin; stub here for IDE support
+      (ctx as any).publish = async (
+        topic: string,
+        schema: AnySchema | MessageDescriptor,
+        payload: any,
+      ): Promise<void> => {
+        throw new Error(
+          "ctx.publish() requires withPubSub plugin to be installed",
+        );
+      };
+
+      // Attach topics helper for subscriptions
+      (ctx as any).topics = {
+        subscribe: async (topic: string): Promise<void> => {
+          throw new Error(
+            "ctx.topics.subscribe() requires withPubSub plugin to be installed",
+          );
+        },
+        unsubscribe: async (topic: string): Promise<void> => {
+          throw new Error(
+            "ctx.topics.unsubscribe() requires withPubSub plugin to be installed",
+          );
+        },
+        has: (topic: string): boolean => {
+          throw new Error(
+            "ctx.topics.has() requires withPubSub plugin to be installed",
+          );
+        },
       };
 
       return ctx;

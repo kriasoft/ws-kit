@@ -31,7 +31,7 @@ export interface CreateTestRouterOptions<TConn> {
   /**
    * Plugins to apply after creating the router.
    */
-  plugins?: Array<(router: Router<TConn, any>) => Router<TConn, any>>;
+  plugins?: ((router: Router<TConn, any>) => Router<TConn, any>)[];
 
   /**
    * Clock implementation (default: FakeClock for determinism).

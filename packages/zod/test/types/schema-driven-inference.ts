@@ -38,7 +38,11 @@ const GetUser = message("GET_USER", {
   id: z.string().uuid(),
 });
 
-type AppData = { clientId: string; userId?: string; roomId?: string };
+interface AppData {
+  clientId: string;
+  userId?: string;
+  roomId?: string;
+}
 
 // ============================================================================
 // Test 1: Handler defined separately with explicit typing

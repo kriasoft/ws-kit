@@ -96,8 +96,8 @@ router.on(Message, async (ctx) => {
 
 // Request-response pattern (RPC)
 router.rpc(Request, (ctx) => {
-  ctx.reply(schema, data); // Terminal response (one-shot)
-  ctx.progress(data); // Non-terminal progress updates
+  ctx.reply(payload, opts?); // Terminal response (one-shot)
+  ctx.progress(update, opts?); // Non-terminal progress updates
 });
 
 // Client-side

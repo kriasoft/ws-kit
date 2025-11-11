@@ -240,7 +240,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       // Track sends at adapter level
       const originalGetSubscribers = adapter.getSubscribers.bind(adapter);
-      let deliveryAttempts = 0;
+      const deliveryAttempts = 0;
 
       adapter.getSubscribers = async function* (topic: string) {
         if (topic === "test-topic") {
