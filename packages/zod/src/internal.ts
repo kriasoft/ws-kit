@@ -33,9 +33,7 @@ export function validatePayload(
   }
 
   const parseMethod = coerce ? "parseAsync" : "safeParse";
-  const result = (payloadSchema as any)[
-    parseMethod === "parseAsync" ? "safeParse" : "safeParse"
-  ](payload);
+  const result = (payloadSchema as any)[parseMethod](payload);
 
   if (result.success) {
     return { success: true, data: result.data };

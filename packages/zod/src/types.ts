@@ -7,7 +7,6 @@
  */
 
 import type { ZodObject, ZodRawShape, ZodType } from "zod";
-import { z } from "zod";
 
 /**
  * Symbol for branding schemas at the type level.
