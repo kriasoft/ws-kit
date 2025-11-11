@@ -1016,8 +1016,8 @@ export class WebSocketRouter<
    *     UserListInvalidated,
    *     { orgId: ctx.payload.orgId }
    *   );
-   *   if (result.ok && result.matched !== undefined) {
-   *     console.log(`Notified ${result.matched} subscribers`);
+   *   if (result.ok) {
+   *     console.log(`Notified ${result.matchedLocal} local subscribers`);
    *   }
    * });
    * ```

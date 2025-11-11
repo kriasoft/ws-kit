@@ -1,65 +1,116 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSubAdapter } from "@ws-kit/core";
+import type {
+  PubSubAdapter,
+  PublishEnvelope,
+  PublishOptions,
+  PublishResult,
+} from "@ws-kit/core/pubsub";
 
 /**
- * In-memory pub/sub adapter using a topic subscription registry.
+ * In-memory pub/sub adapter: subscription index + local fan-out.
  *
+ * Tracks topic subscriptions and broadcasts router-materialized messages.
  * Ideal for single-instance deployments or local testing.
- * Tracks subscribers per topic using a Map<topic, Set<clientId>>.
- * Applications are responsible for delivering messages to subscribers
- * (this adapter only manages subscription state).
  *
- * **Scope**: Subscriptions are stored only in memory on this instance.
- * Not suitable for multi-process deployments without a distributed adapter.
+ * For distributed deployments (Redis, Kafka, DO), use a distributed adapter.
+ * Router handles inbound broker consumption (via ctx.publish).
  *
  * Usage:
  * ```ts
  * import { memoryPubSub } from "@ws-kit/adapters/memory";
  *
  * const adapter = memoryPubSub();
- * // Use with Topics API or custom pub/sub layer
+ *
+ * // Router calls adapter.publish() when broadcasting:
+ * const result = await adapter.publish(
+ *   {
+ *     topic: "room:123",
+ *     payload: { text: "Hello" },
+ *     type: "ChatMessage",
+ *     meta: { userId: "123" },
+ *   },
+ *   { partitionKey: "room:123" },
+ * );
+ *
+ * console.log(`Delivered to ${result.matchedLocal} subscribers`);
  * ```
  */
 export function memoryPubSub(): PubSubAdapter {
+  // Topic -> Set of client IDs subscribed to that topic
   const topics = new Map<string, Set<string>>();
 
+  // Client -> Set of topics that client is subscribed to
+  // Used for efficient cleanup and stats
+  const clientTopics = new Map<string, Set<string>>();
+
   return {
-    async publish(msg) {
-      // In-memory implementation: state is managed, caller handles delivery
-      // In a real distributed implementation, this would broadcast to other instances
+    async publish(
+      envelope: PublishEnvelope,
+      _opts?: PublishOptions,
+    ): Promise<PublishResult> {
+      const subscribers = topics.get(envelope.topic);
+      const matchedLocal = subscribers?.size ?? 0;
+
+      // Router/platform layer handles actual delivery to websockets.
+      // Adapter just returns metrics.
+      // In a real distributed adapter (Redis, Kafka), publish would
+      // broadcast to broker; router would handle inbound consumption.
+
+      return {
+        ok: true,
+        capability: "exact", // In-memory: we have exact subscriber count
+        matchedLocal, // 0 if no subscribers, >0 otherwise
+      };
     },
 
-    async subscribe(clientId: string, topic: string) {
+    async subscribe(clientId: string, topic: string): Promise<void> {
+      // Get or create subscriber set for this topic
       if (!topics.has(topic)) {
         topics.set(topic, new Set());
       }
-      topics.get(topic)?.add(clientId);
+      const subscribers = topics.get(topic)!;
+
+      // Add to topic subscribers (idempotent)
+      subscribers.add(clientId);
+
+      // Track client's subscriptions for cleanup
+      if (!clientTopics.has(clientId)) {
+        clientTopics.set(clientId, new Set());
+      }
+      clientTopics.get(clientId)!.add(topic);
     },
 
-    async unsubscribe(clientId: string, topic: string) {
+    async unsubscribe(clientId: string, topic: string): Promise<void> {
       const subscribers = topics.get(topic);
+
+      // Remove from topic (idempotent)
       if (subscribers) {
         subscribers.delete(clientId);
         if (subscribers.size === 0) {
           topics.delete(topic);
         }
       }
+
+      // Remove from client topics
+      const clientSubs = clientTopics.get(clientId);
+      if (clientSubs) {
+        clientSubs.delete(topic);
+      }
     },
 
-    listTopics(): readonly string[] {
-      return Array.from(topics.keys());
+    async getLocalSubscribers(topic: string): Promise<readonly string[]> {
+      const subscribers = topics.get(topic);
+      return Object.freeze(Array.from(subscribers ?? []));
     },
 
-    hasTopic(topic: string): boolean {
+    async listTopics(): Promise<readonly string[]> {
+      return Object.freeze(Array.from(topics.keys()));
+    },
+
+    async hasTopic(topic: string): Promise<boolean> {
       return topics.has(topic) && (topics.get(topic)?.size ?? 0) > 0;
     },
   };
 }
-
-/**
- * Create an in-memory pub/sub adapter.
- * @deprecated Use {@link memoryPubSub} instead.
- */
-export const createMemoryAdapter = memoryPubSub;

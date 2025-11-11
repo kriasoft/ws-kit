@@ -6,15 +6,20 @@
  * @internal
  */
 
-import type { PubSubAdapter, PubSubMessage } from "@ws-kit/core";
+import type {
+  PubSubAdapter,
+  PublishEnvelope,
+  PublishOptions,
+  PublishResult,
+} from "@ws-kit/core/pubsub";
 
 /**
  * Published message frame captured for testing.
  */
 export interface PublishedFrame {
   topic: string;
-  schema: any;
   payload: unknown;
+  type?: string;
   meta: Record<string, unknown> | undefined;
 }
 
@@ -42,17 +47,20 @@ export class TestPubSub implements PubSubAdapter {
   /**
    * Publish a message and record it.
    */
-  async publish(msg: PubSubMessage): Promise<void> {
+  async publish(
+    envelope: PublishEnvelope,
+    opts?: PublishOptions,
+  ): Promise<PublishResult> {
     // Record the message
     this.publishedMessages.push({
-      topic: msg.topic,
-      schema: msg.schema,
-      payload: msg.payload,
-      meta: msg.meta,
+      topic: envelope.topic,
+      payload: envelope.payload,
+      type: envelope.type,
+      meta: envelope.meta,
     });
 
     // Delegate to wrapped adapter
-    await this.wrapped.publish(msg);
+    return this.wrapped.publish(envelope, opts);
   }
 
   /**
@@ -70,17 +78,40 @@ export class TestPubSub implements PubSubAdapter {
   }
 
   /**
+   * Get local subscribers (delegated).
+   */
+  async getLocalSubscribers(topic: string): Promise<readonly string[]> {
+    return this.wrapped.getLocalSubscribers(topic);
+  }
+
+  /**
    * List topics (delegated).
    */
-  listTopics(): readonly string[] {
-    return this.wrapped.listTopics();
+  async listTopics(): Promise<readonly string[]> {
+    return this.wrapped.listTopics?.() ?? [];
   }
 
   /**
    * Check if topic exists (delegated).
    */
-  hasTopic(topic: string): boolean {
-    return this.wrapped.hasTopic(topic);
+  async hasTopic(topic: string): Promise<boolean> {
+    return this.wrapped.hasTopic?.(topic) ?? false;
+  }
+
+  /**
+   * Register remote published handler (delegated).
+   */
+  onRemotePublished(
+    handler: (envelope: PublishEnvelope) => void | Promise<void>,
+  ): () => void {
+    return this.wrapped.onRemotePublished?.(handler) ?? (() => {});
+  }
+
+  /**
+   * Close (delegated).
+   */
+  async close(): Promise<void> {
+    return this.wrapped.close?.();
   }
 
   // Test-specific helpers

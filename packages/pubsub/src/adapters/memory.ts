@@ -27,9 +27,14 @@ export function createMemoryAdapter(): PubSubAdapter {
   const topics = new Map<string, Set<string>>();
 
   return {
-    async publish(msg) {
-      // In-memory implementation: state is managed, caller handles delivery
-      // In a real distributed implementation, this would broadcast to other instances
+    async publish(envelope) {
+      // In-memory implementation: count local subscribers
+      const matchedLocal = topics.get(envelope.topic)?.size ?? 0;
+      return {
+        ok: true,
+        capability: "exact",
+        matchedLocal,
+      };
     },
 
     async subscribe(clientId: string, topic: string) {
@@ -49,11 +54,16 @@ export function createMemoryAdapter(): PubSubAdapter {
       }
     },
 
-    listTopics(): readonly string[] {
-      return Array.from(topics.keys());
+    async getLocalSubscribers(topic: string): Promise<readonly string[]> {
+      const subscribers = topics.get(topic);
+      return Object.freeze(Array.from(subscribers ?? []));
     },
 
-    hasTopic(topic: string): boolean {
+    async listTopics(): Promise<readonly string[]> {
+      return Object.freeze(Array.from(topics.keys()));
+    },
+
+    async hasTopic(topic: string): Promise<boolean> {
       return topics.has(topic) && (topics.get(topic)?.size ?? 0) > 0;
     },
   };

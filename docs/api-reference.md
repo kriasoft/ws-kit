@@ -626,8 +626,8 @@ router.on(UserCreated, async (ctx) => {
     UserListInvalidated,
     { orgId: ctx.payload.orgId },
   );
-  if (result.ok && result.matched !== undefined) {
-    console.log(`Notified ${result.matched} subscribers`);
+  if (result.ok && result.matchedLocal !== undefined) {
+    console.log(`Notified ${result.matchedLocal} subscribers`);
   }
 });
 
@@ -993,7 +993,7 @@ router.on(SendMessage, async (ctx) => {
     roomId: ctx.payload.roomId,
   });
   if (result.ok) {
-    console.log(`Published to ${result.matched ?? "?"} subscribers`);
+    console.log(`Published to ${result.matchedLocal ?? "?"} subscribers`);
   }
 });
 ```

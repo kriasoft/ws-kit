@@ -476,7 +476,10 @@ const result = await ctx.publish(`room:${roomId}`, RoomUpdate, {
 
 if (result.ok) {
   // Broadcast succeeded
-  console.log(`Delivered to ${result.matched} subscribers`, result.capability);
+  console.log(
+    `Delivered to ${result.matchedLocal} subscribers`,
+    result.capability,
+  );
 } else {
   // Broadcast failed (platform error, ACL rejection, etc.)
   console.error(`Broadcast failed: ${result.error}`);

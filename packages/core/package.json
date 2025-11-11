@@ -7,10 +7,17 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./pubsub": {
+      "types": "./dist/capabilities/pubsub/index.d.ts",
+      "bun": "./src/capabilities/pubsub/index.ts",
+      "import": "./dist/capabilities/pubsub/index.js"
     },
     "./test": {
       "types": "./dist/test/index.d.ts",
+      "bun": "./src/test/index.ts",
       "import": "./dist/test/index.js"
     }
   },

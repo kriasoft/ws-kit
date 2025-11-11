@@ -284,7 +284,7 @@ export interface TypedZodRouter<TData extends WebSocketData = WebSocketData> {
    *   text: "Server maintenance at 02:00 UTC",
    * });
    * if (result.ok) {
-   *   console.log(`Notified ${result.matched} subscribers (${result.capability})`);
+   *   console.log(`Notified ${result.matchedLocal} local subscribers (${result.capability})`);
    * }
    * ```
    */

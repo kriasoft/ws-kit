@@ -37,8 +37,10 @@ import type {
  *   .plugin(withPubSub(createMemoryAdapter()));
  *
  * router.on(Message, (ctx) => {
- *   const stats = await ctx.publish("topic", schema, payload);
- *   console.log(`Matched ${stats.matched} subscribers`);
+ *   const result = await ctx.publish("topic", schema, payload);
+ *   if (result.ok) {
+ *     console.log(`Matched ${result.matchedLocal} local subscribers`);
+ *   }
  *
  *   await ctx.topics.subscribe("room:123");
  * });

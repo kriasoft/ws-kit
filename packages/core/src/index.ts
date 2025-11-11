@@ -21,13 +21,14 @@ export type { CreateRouterOptions } from "./core/types";
 
 // Schema runtime shape
 export type { MessageDescriptor } from "./protocol/message-descriptor";
-export { isMessageDescriptor, isEventDescriptor, isRpcDescriptor } from "./schema/guards";
+export {
+  isMessageDescriptor,
+  isEventDescriptor,
+  isRpcDescriptor,
+} from "./schema/guards";
 
 // Minimal context (always present)
-export type {
-  MinimalContext,
-  BaseContextData,
-} from "./context/base-context";
+export type { MinimalContext, BaseContextData } from "./context/base-context";
 
 // Middleware types
 export type { Middleware, EventHandler } from "./core/types";
@@ -46,15 +47,17 @@ export type {
 } from "./capabilities/validation/contracts";
 export type {
   PubSubAdapter,
-  PubSubMessage,
-} from "./capabilities/pubsub/contracts";
-export type { Observer, TelemetryHooks } from "./capabilities/telemetry/contracts";
+  PublishEnvelope,
+  PublishOptions,
+  PublishResult,
+} from "./capabilities/pubsub/adapter";
+export type {
+  Observer,
+  TelemetryHooks,
+} from "./capabilities/telemetry/contracts";
 
 // Platform adapter contract
-export type {
-  PlatformAdapter,
-  ServerWebSocket,
-} from "./ws/platform-adapter";
+export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 
 // Useful type utilities
 export type { EventContext, RpcContext } from "./context/types";

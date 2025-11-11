@@ -490,9 +490,9 @@ describe("@ws-kit/bun integration tests", () => {
       const result = await publishPromise;
       expect(result).toBeDefined();
       expect(typeof result).toBe("object");
-      expect(result).toHaveProperty("matched");
-      expect(typeof result.matched).toBe("number");
-      expect(result.matched).toBeGreaterThanOrEqual(0);
+      expect(result).toHaveProperty("matchedLocal");
+      expect(typeof result.matchedLocal).toBe("number");
+      expect(result.matchedLocal).toBeGreaterThanOrEqual(0);
     });
 
     it("should support connection topic subscriptions", async () => {

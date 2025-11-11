@@ -275,7 +275,7 @@ try {
 // Publish returns result with actionable retryability hint
 const result = await ctx.publish(topic, schema, data);
 if (result.ok) {
-  logger.info(`published to ${result.matched ?? "?"} subscribers`);
+  logger.info(`published to ${result.matchedLocal ?? "?"} local subscribers`);
 } else if (result.retryable) {
   // Schedule retry with exponential backoff
   scheduleRetry(topic, data, exponentialBackoff());

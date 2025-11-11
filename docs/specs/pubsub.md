@@ -849,10 +849,10 @@ if (result.ok) {
   // Publication succeeded
   if (result.capability === "exact") {
     // Reliable exact count (in-process or single-node)
-    console.log(`Delivered to exactly ${result.matched} subscribers`);
+    console.log(`Delivered to exactly ${result.matchedLocal} subscribers`);
   } else if (result.capability === "estimate") {
     // Lower-bound estimate (polyfill or distributed)
-    console.log(`Delivered to ≥${result.matched} subscribers`);
+    console.log(`Delivered to ≥${result.matchedLocal} subscribers`);
   } else {
     // Unknown count (distributed, no tracking)
     console.log(`Delivered (subscriber count unknown)`);
@@ -885,7 +885,7 @@ if (result.ok) {
 const result = await ctx.publish(topic, Schema, payload, options);
 
 if (result.ok) {
-  logger.info(`published to ${result.matched ?? "?"} subscribers`);
+  logger.info(`published to ${result.matchedLocal ?? "?"} subscribers`);
 } else if (result.retryable) {
   // Schedule retry with exponential backoff
   scheduleRetry(topic, payload, { backoff: exponentialBackoff() });
@@ -1065,7 +1065,7 @@ try {
 const result = await ctx.publish(topic, Schema, payload);
 
 if (result.ok) {
-  logger.info(`Published to ${result.matched ?? "?"} subscribers`);
+  logger.info(`Published to ${result.matchedLocal ?? "?"} subscribers`);
 } else if (result.retryable) {
   scheduleRetry(topic, payload, { backoff: exponentialBackoff() });
 } else {
@@ -1211,7 +1211,7 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
     const result = await ctx.publish(topic, UserJoined, {
       userId: ctx.user.id,
     });
-    console.log(`Delivered to ${result.matched ?? "?"} subscribers`);
+    console.log(`Delivered to ${result.matchedLocal ?? "?"} subscribers`);
   }
 
   ctx.reply(Ack, { topics: [...ctx.topics] });
@@ -1296,7 +1296,7 @@ setInterval(async () => {
   const result = await router.publish("system:heartbeat", Heartbeat, {
     timestamp: Date.now(),
   });
-  logger.debug(`Heartbeat delivered to ${result.matched ?? "?"} clients`);
+  logger.debug(`Heartbeat delivered to ${result.matchedLocal ?? "?"} clients`);
 }, 10_000);
 ```
 
@@ -1360,7 +1360,7 @@ router.on(JoinRoom, async (ctx) => {
 
   if (result.ok) {
     logger.info(
-      `User joined room:${roomId} (matched: ${result.matched ?? "?"})`,
+      `User joined room:${roomId} (matched: ${result.matchedLocal ?? "?"})`,
     );
   }
 });

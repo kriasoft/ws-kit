@@ -68,7 +68,7 @@ describe("publish() failure modes", () => {
   });
 
   describe("success cases", () => {
-    it("returns { ok: true } with capability and matched count", async () => {
+    it("returns { ok: true } with capability and matchedLocal count", async () => {
       const router = createRouter({ pubsub: new MemoryPubSub() });
 
       const result = await router.publish("topic", TestMessage, {
@@ -77,9 +77,8 @@ describe("publish() failure modes", () => {
 
       expect(result.ok).toBe(true);
       expect(result.capability).toMatch(/^(exact|estimate|unknown)$/);
-      if (result.capability !== "unknown") {
-        expect(typeof result.matched).toBe("number");
-      }
+      expect(typeof result.matchedLocal).toBe("number");
+      expect(result.matchedLocal).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -126,7 +125,6 @@ describe("publish() failure modes", () => {
       if (!result.ok) {
         expect("error" in result).toBe(true);
         expect("retryable" in result).toBe(true);
-        expect("cause" in result).toBe(true);
         expect(typeof result.error).toBe("string");
         expect(typeof result.retryable).toBe("boolean");
       }
@@ -134,29 +132,29 @@ describe("publish() failure modes", () => {
   });
 
   describe("capability semantics", () => {
-    it("omits matched when capability is 'unknown'", async () => {
+    it("always includes matchedLocal in success result", async () => {
       const router = createRouter({ pubsub: new MemoryPubSub() });
 
       const result = await router.publish("topic", TestMessage, {
         text: "test",
       });
 
-      if (result.ok && result.capability === "unknown") {
-        expect(result.matched).toBeUndefined();
+      if (result.ok) {
+        expect(typeof result.matchedLocal).toBe("number");
+        expect(result.matchedLocal).toBeGreaterThanOrEqual(0);
       }
     });
 
-    it("includes matched when capability is 'exact'", async () => {
+    it("MemoryPubSub provides exact capability", async () => {
       const router = createRouter({ pubsub: new MemoryPubSub() });
 
-      // MemoryPubSub provides exact capability
       const result = await router.publish("topic", TestMessage, {
         text: "test",
       });
 
-      if (result.ok && result.capability === "exact") {
-        expect(typeof result.matched).toBe("number");
-        expect(result.matched).toBeGreaterThanOrEqual(0);
+      if (result.ok) {
+        expect(result.capability).toBe("exact");
+        expect(typeof result.matchedLocal).toBe("number");
       }
     });
   });

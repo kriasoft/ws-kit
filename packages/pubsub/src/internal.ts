@@ -13,7 +13,11 @@
 
 export type {
   PubSubAdapter,
-  PubSubMessage,
+  PublishEnvelope,
+  PublishOptions,
+} from "@ws-kit/core/pubsub";
+
+export type {
   MessageDescriptor,
   MinimalContext,
   Middleware,

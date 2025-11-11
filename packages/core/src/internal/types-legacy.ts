@@ -719,14 +719,15 @@ export type PublishCapability = "exact" | "estimate" | "unknown";
  * Enables reliable error classification and retry logic across all adapters.
  */
 export type PublishError =
-  | "VALIDATION" // Schema validation failed (local)
-  | "ACL" // authorizePublish hook denied
-  | "STATE" // Illegal in current router/connection state
-  | "BACKPRESSURE" // Adapter's send queue full
-  | "PAYLOAD_TOO_LARGE" // Exceeds adapter limit
-  | "UNSUPPORTED" // Option/feature not supported (e.g., excludeSelf)
-  | "ADAPTER_ERROR" // Unexpected adapter failure
-  | "CONNECTION_CLOSED"; // Connection/router disposed
+  | "VALIDATION" // Schema validation failed (router level)
+  | "ACL" // authorizePublish hook denied (router level)
+  | "STATE" // Illegal in current router/connection state (router level)
+  | "BACKPRESSURE" // Adapter's send queue full (adapter level)
+  | "BROKER_UNAVAILABLE" // Destination unreachable (distributed adapters)
+  | "RATE_LIMITED" // Quota exceeded (distributed/brokered adapters)
+  | "UNSUPPORTED" // Feature/option not supported (router or adapter level)
+  | "ADAPTER_ERROR" // Unexpected adapter failure (adapter level)
+  | "CONNECTION_CLOSED"; // Connection/router disposed (router level)
 
 /**
  * Retryability mapping for publish errors.
@@ -741,7 +742,8 @@ export const PUBLISH_ERROR_RETRYABLE: Record<PublishError, boolean> = {
   ACL: false, // Authorization won't change
   STATE: false, // Router/adapter not ready
   BACKPRESSURE: true, // Queue might clear
-  PAYLOAD_TOO_LARGE: false, // Size won't change
+  BROKER_UNAVAILABLE: true, // Infrastructure might recover
+  RATE_LIMITED: true, // Quota might reset
   UNSUPPORTED: false, // Feature won't appear
   ADAPTER_ERROR: true, // Infrastructure might recover
   CONNECTION_CLOSED: true, // Retryable after reconnection

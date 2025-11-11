@@ -186,7 +186,7 @@ router.on(UserCreated, async (ctx) => {
 
   if (result.ok) {
     ctx.log.debug(
-      `Notified ${result.matched ?? "?"} subscribers (${result.capability})`,
+      `Notified ${result.matchedLocal ?? "?"} local subscribers (${result.capability})`,
     );
   } else {
     ctx.log.error(`Failed to notify: ${result.error}`, {
@@ -208,7 +208,7 @@ const result = await router.publish(
 );
 
 if (result.ok) {
-  console.log(`Published to ${result.matched ?? "subscribers"}`);
+  console.log(`Published to ${result.matchedLocal ?? "0"} local subscribers`);
 } else {
   console.error(`Failed to publish`, result.error);
 }

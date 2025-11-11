@@ -46,11 +46,11 @@ export { usePubSub, type UsePubSubOptions } from "./middleware";
 // Types
 export type {
   PubSubAdapter,
-  PubSubMessage,
+  PublishEnvelope,
+  PublishResult,
   MinimalContext,
   Topics,
   TopicMutateOptions,
   PublishOptions,
-  PublishResult,
   PubSubPolicyHooks,
 } from "./types";

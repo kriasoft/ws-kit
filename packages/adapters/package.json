@@ -32,19 +32,19 @@
   ],
   "exports": {
     "./memory": {
-      "types": "./dist/memory/index.d.ts",
+      "types": "./dist/src/memory/index.d.ts",
       "bun": "./src/memory/index.ts",
-      "default": "./dist/memory/index.js"
+      "default": "./dist/src/memory/index.js"
     },
     "./redis": {
-      "types": "./dist/redis/index.d.ts",
+      "types": "./dist/src/redis/index.d.ts",
       "bun": "./src/redis/index.ts",
-      "default": "./dist/redis/index.js"
+      "default": "./dist/src/redis/index.js"
     },
     "./cloudflare-do": {
-      "types": "./dist/cloudflare-do/index.d.ts",
+      "types": "./dist/src/cloudflare-do/index.d.ts",
       "bun": "./src/cloudflare-do/index.ts",
-      "default": "./dist/cloudflare-do/index.js"
+      "default": "./dist/src/cloudflare-do/index.js"
     }
   },
   "main": "./dist/index.js",
