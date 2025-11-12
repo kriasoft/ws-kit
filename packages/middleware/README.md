@@ -425,5 +425,6 @@ The router handles this error and sends:
 
 - [ADR-021: Adapter-First Architecture](../../docs/adr/021-adapter-first-architecture.md) — Design rationale
 - [Rate Limiting Proposal](../../docs/proposals/rate-limiting.md) — Full specification
-- [@ws-kit/adapters](../adapters) — Adapter implementations
+- [@ws-kit/redis](../redis) — Redis rate limiter and pub/sub
+- [@ws-kit/memory](../memory) — In-memory pub/sub
 - [@ws-kit/core](../core) — Router and types

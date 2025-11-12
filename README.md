@@ -56,8 +56,8 @@ WS-Kit is a modular monorepo. Mix any validator with any platform:
 **Extensions:**
 
 - **`@ws-kit/middleware`** — Production-ready middleware (rate limiting, auth helpers, logging)
-- **`@ws-kit/adapters`** — Pluggable adapters (rate limiters for memory, Redis, Durable Objects)
-- **`@ws-kit/redis-pubsub`** — Optional Redis for multi-server pub/sub deployments
+- **`@ws-kit/memory`** — In-memory pub/sub (local deployments)
+- **`@ws-kit/redis`** — Redis rate limiter and pub/sub (distributed deployments)
 
 ## Patterns & Advanced Use Cases
 
