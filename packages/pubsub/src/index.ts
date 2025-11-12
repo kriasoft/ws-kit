@@ -53,4 +53,8 @@ export type {
   TopicMutateOptions,
   PublishOptions,
   PubSubPolicyHooks,
+  VerifyResult,
 } from "./types";
+
+export { isSubscribed } from "./core/topics";
+export type { TopicValidator } from "./core/topics";

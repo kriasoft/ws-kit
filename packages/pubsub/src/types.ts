@@ -18,6 +18,7 @@ import type {
   PublishError,
   PublishCapability,
 } from "@ws-kit/core/pubsub";
+import type { VerifyResult } from "./core/topics";
 
 /**
  * Re-export core types for convenience.
@@ -49,19 +50,19 @@ export interface TopicMutateOptions {
   signal?: AbortSignal;
 
   /**
-   * Settlement semantics.
+   * Wait for operation settlement semantics.
    * - "optimistic" (default): return immediately after local mutation and adapter enqueue
-   * - "settled": await adapter settlement; respects timeoutMs and signal
+   * - "settled": wait for adapter settlement; respects timeoutMs and signal
    *
    * Use "settled" for tests and correctness-critical flows that require deterministic
    * settlement before proceeding. Note: "settled" means the operation completed locally
    * and the adapter processed it; use verify() to check adapter truth across failures/failovers.
    */
-  confirm?: "optimistic" | "settled";
+  waitFor?: "optimistic" | "settled";
 
   /**
    * Timeout in milliseconds for "settled" operations.
-   * Only meaningful when confirm === "settled".
+   * Only meaningful when waitFor === "settled".
    * On timeout, operation throws AbortError.
    * Composes with signal: if either aborts, operation rejects.
    */
@@ -69,16 +70,13 @@ export interface TopicMutateOptions {
 
   /**
    * After settlement, verify adapter truth before returning.
-   * Requires adapter support for hasSubscription(). Falls back per verifyBestEffort.
-   * Only meaningful when confirm === "settled".
+   * Only meaningful when waitFor === "settled".
+   *
+   * - "strict": Must verify; throw if adapter lacks capability or verification fails
+   * - "best-effort": Try to verify; fall back to local state if adapter doesn't support
+   * - "off" (default): Skip verification
    */
-  verify?: boolean;
-
-  /**
-   * If verify=true and adapter lacks capability, fall back to local has() instead of throwing.
-   * Only meaningful when verify=true.
-   */
-  verifyBestEffort?: boolean;
+  verify?: "strict" | "best-effort" | "off";
 }
 
 /**
@@ -231,27 +229,35 @@ export interface Topics extends ReadonlySet<string> {
    * **Key difference from status()**: status() reflects local settlement state;
    * verify() checks adapter truth (useful after failures/failovers or for correctness checks).
    *
+   * Returns a discriminated union representing different verification outcomes, allowing
+   * precise error handling (retry on error/timeout, fallback on unsupported, etc).
+   *
    * @param topic - Topic to verify
    * @param options - Optional: bestEffort (fall back to local has() if capability missing),
-   *                  throwOnError (throw instead of returning "unknown" if adapter errors),
    *                  signal (abort)
-   * @returns Promise<boolean | "unknown">
-   *   - `true`: adapter confirms this connection is subscribed to topic
-   *   - `false`: adapter confirms this connection is NOT subscribed to topic
-   *   - `"unknown"`: adapter lacks capability or verification failed (unless throwOnError=true)
+   * @returns Promise<VerifyResult>
+   *   - { kind: "subscribed" }: adapter confirms this connection is subscribed
+   *   - { kind: "unsubscribed" }: adapter confirms this connection is NOT subscribed
+   *   - { kind: "unsupported" }: adapter lacks verification capability
+   *   - { kind: "error"; cause }: transient error from adapter (may retry)
+   *   - { kind: "timeout" }: operation timed out
    * @throws AbortError if signal aborts
-   * @throws Error if throwOnError=true and adapter errors
    *
    * @example
    * ```typescript
    * // Check if subscription is confirmed by the adapter
-   * const ok = await ctx.topics.verify("room:123");
-   * if (ok === true) {
-   *   // Adapter guarantees subscription
-   * } else if (ok === false) {
-   *   // Adapter confirms we are NOT subscribed
+   * const result = await ctx.topics.verify("room:123");
+   * if (isSubscribed(result)) {
+   *   console.log("Adapter confirms subscription");
+   * } else if (result.kind === "unsubscribed") {
+   *   console.log("Adapter confirms NOT subscribed");
+   * } else if (result.kind === "unsupported") {
+   *   // Fallback to local state
+   *   console.log("Subscribed locally:", ctx.topics.has("room:123"));
+   * } else if (result.kind === "error") {
+   *   console.error("Verification failed:", result.cause);
    * } else {
-   *   // Adapter doesn't support verification
+   *   console.error("Verification timed out");
    * }
    * ```
    */
@@ -259,10 +265,9 @@ export interface Topics extends ReadonlySet<string> {
     topic: string,
     options?: {
       bestEffort?: boolean;
-      throwOnError?: boolean;
       signal?: AbortSignal;
     },
-  ): Promise<boolean | "unknown">;
+  ): Promise<VerifyResult>;
 }
 
 /**

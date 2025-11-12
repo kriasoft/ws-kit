@@ -121,19 +121,19 @@ interface TopicMutateOptions {
   signal?: AbortSignal;
 
   /**
-   * Settlement semantics.
+   * Wait for operation settlement semantics.
    * - "optimistic" (default): Return immediately after local mutation and adapter enqueue (fast path)
-   * - "settled": Await adapter settlement; respects timeoutMs and signal
+   * - "settled": Wait for adapter settlement; respects timeoutMs and signal
    *
    * Use "settled" for tests and correctness-critical flows requiring deterministic settlement.
    * Note: "settled" means the operation completed locally after a successful adapter call;
    * use verify() to check adapter truth across failures/failovers.
    */
-  confirm?: "optimistic" | "settled";
+  waitFor?: "optimistic" | "settled";
 
   /**
    * Timeout in milliseconds for "settled" operations.
-   * Only meaningful when confirm === "settled".
+   * Only meaningful when waitFor === "settled".
    * On timeout, operation throws AbortError.
    * Composes with signal: if either aborts, operation rejects.
    */
@@ -141,16 +141,13 @@ interface TopicMutateOptions {
 
   /**
    * After settlement, verify adapter truth before returning.
-   * Requires adapter support for hasSubscription() or hasTopic(). Falls back per verifyBestEffort.
-   * Only meaningful when confirm === "settled".
+   * Only meaningful when waitFor === "settled".
+   *
+   * - "strict": Must verify; throw if adapter lacks capability or verification fails
+   * - "best-effort": Try to verify; fall back to local state if adapter doesn't support
+   * - "off" (default): Skip verification
    */
-  verify?: boolean;
-
-  /**
-   * If verify=true and adapter lacks capability, fall back to local has() instead of throwing.
-   * Only meaningful when verify=true.
-   */
-  verifyBestEffort?: boolean;
+  verify?: "strict" | "best-effort" | "off";
 }
 
 /**
@@ -261,24 +258,27 @@ interface Topics extends ReadonlySet<string> {
 
   /**
    * Probe the adapter for current subscription truth.
-   * Returns adapter's view of whether this connection is subscribed to the topic.
-   * If adapter doesn't support probing, returns "unknown" (or falls back to local has() if bestEffort).
+   *
+   * Returns a discriminated union representing different verification outcomes, allowing
+   * precise error handling (retry on error/timeout, fallback on unsupported, etc).
    *
    * @param topic - Topic to verify
-   * @param options - Optional: bestEffort (fall back to local state), throwOnError, signal
-   * @returns Promise<boolean | "unknown">:
-   *   - true: adapter confirms subscribed
-   *   - false: adapter confirms NOT subscribed
-   *   - "unknown": adapter lacks capability or error occurred (unless throwOnError=true)
+   * @param options - Optional: mode ("strict" | "best-effort"), signal (abort)
+   * @returns Promise<VerifyResult>
+   *   - { kind: "subscribed" }: adapter confirms this connection is subscribed
+   *   - { kind: "unsubscribed" }: adapter confirms this connection is NOT subscribed
+   *   - { kind: "unsupported" }: adapter lacks verification capability
+   *   - { kind: "error"; cause }: transient error from adapter (may retry)
+   *   - { kind: "timeout" }: operation timed out
+   * @throws AbortError if signal aborts
    */
   verify(
     topic: string,
     options?: {
-      bestEffort?: boolean;
-      throwOnError?: boolean;
+      mode?: "strict" | "best-effort";
       signal?: AbortSignal;
     },
-  ): Promise<boolean | "unknown">;
+  ): Promise<VerifyResult>;
 }
 
 // Augmentation
@@ -935,13 +935,13 @@ try {
 }
 ```
 
-### 6.6 Settlement Semantics (Optional Confirm & Timeout)
+### 6.6 Settlement Semantics (Optional Wait & Timeout)
 
-All topic mutation methods accept `{ confirm?: "optimistic" | "settled", timeoutMs?: number, verify?: boolean, verifyBestEffort?: boolean }` for deterministic settlement and adapter verification.
+All topic mutation methods accept `{ waitFor?: "optimistic" | "settled", timeoutMs?: number, verify?: "strict" | "best-effort" | "off" }` for deterministic settlement and adapter verification.
 
 **Default Behavior (Optimistic):**
 
-By default (`confirm` omitted or `"optimistic"`), operations return immediately after local state mutation and adapter enqueue. This is the fast path, matching historical behavior:
+By default (`waitFor` omitted or `"optimistic"`), operations return immediately after local state mutation and adapter enqueue. This is the fast path, matching historical behavior:
 
 ```typescript
 // Optimistic (default)
@@ -951,16 +951,16 @@ await ctx.topics.subscribe("room:1");
 
 **Settled Behavior:**
 
-Pass `confirm: "settled"` to await adapter settlement before returning. Useful for tests or correctness-critical flows:
+Pass `waitFor: "settled"` to await adapter settlement before returning. Useful for tests or correctness-critical flows:
 
 ```typescript
 // Block until adapter settlement
-await ctx.topics.subscribe("room:1", { confirm: "settled" });
+await ctx.topics.subscribe("room:1", { waitFor: "settled" });
 // Now guaranteed: adapter.subscribe("room:1") has completed
 
 // With timeout (5 seconds)
 await ctx.topics.subscribe("room:1", {
-  confirm: "settled",
+  waitFor: "settled",
   timeoutMs: 5000,
 });
 // Throws AbortError if adapter doesn't settle within 5s
@@ -976,7 +976,7 @@ setTimeout(() => controller.abort(), 1000);
 
 try {
   await ctx.topics.set(["room:1", "room:2"], {
-    confirm: "settled",
+    waitFor: "settled",
     signal: controller.signal,
     timeoutMs: 5000,
   });
@@ -990,10 +990,10 @@ try {
 For already-settled topics, settled subscribe returns promptly (no extra wait):
 
 ```typescript
-await ctx.topics.subscribe("room:1", { confirm: "settled" });
+await ctx.topics.subscribe("room:1", { waitFor: "settled" });
 // Waits for settlement
 
-await ctx.topics.subscribe("room:1", { confirm: "settled" });
+await ctx.topics.subscribe("room:1", { waitFor: "settled" });
 // Already settled; returns immediately (fast path)
 ```
 
@@ -1003,16 +1003,16 @@ Settlement does not change return types or error semantics:
 
 ```typescript
 // Still returns void
-await ctx.topics.subscribe("room:1", { confirm: "settled" });
+await ctx.topics.subscribe("room:1", { waitFor: "settled" });
 
 // Still returns counts
 const { added, removed, total } = await ctx.topics.set(["a", "b"], {
-  confirm: "settled",
+  waitFor: "settled",
 });
 
 // Still throws on error (no Result unions)
 try {
-  await ctx.topics.subscribe("invalid_topic", { confirm: "settled" });
+  await ctx.topics.subscribe("invalid_topic", { waitFor: "settled" });
 } catch (err) {
   // err is PubSubError or AbortError
 }
@@ -1159,18 +1159,25 @@ Probe the adapter for the current subscription truth. Useful when you need to di
 verify(
   topic: string,
   options?: {
-    bestEffort?: boolean;
-    throwOnError?: boolean;
+    mode?: "strict" | "best-effort";
     signal?: AbortSignal;
   }
-): Promise<boolean | "unknown">
+): Promise<VerifyResult>
 ```
 
-**Return values:**
+**Verification modes:**
 
-- **`true`** — Adapter confirms this connection is subscribed to the topic
-- **`false`** — Adapter confirms this connection is NOT subscribed to the topic
-- **`"unknown"`** — Adapter lacks capability or verification failed (unless `throwOnError=true`)
+- **`"strict"`** — Must verify; throw if adapter lacks capability or verification fails
+- **`"best-effort"`** — Try to verify; fall back to local state if adapter doesn't support
+- Omitted (default) — Same as not calling verify at all
+
+**Return values (VerifyResult):**
+
+- **`{ kind: "subscribed" }`** — Adapter confirms this connection is subscribed to the topic
+- **`{ kind: "unsubscribed" }`** — Adapter confirms this connection is NOT subscribed to the topic
+- **`{ kind: "unsupported" }`** — Adapter lacks verification capability (strict mode only)
+- **`{ kind: "error"; cause }`** — Transient error from adapter (may retry)
+- **`{ kind: "timeout" }`** — Verification operation timed out
 
 **Key difference from `status()`:**
 
@@ -1184,46 +1191,64 @@ verify(
 - Correctness-critical flows requiring adapter confirmation
 - Testing adapter behavior and failure modes
 
-**Example:**
+**Example with strict mode:**
 
 ```typescript
 // Subscribe locally
-await ctx.topics.subscribe("room:1", { confirm: "settled" });
+await ctx.topics.subscribe("room:1", { waitFor: "settled" });
 console.log(ctx.topics.status("room:1")); // "settled"
 
-// Check adapter truth
-const ok = await ctx.topics.verify("room:1");
-if (ok === true) {
+// Check adapter truth (strict: errors on unsupported)
+const result = await ctx.topics.verify("room:1", { mode: "strict" });
+if (result.kind === "subscribed") {
   // Adapter confirms subscription
-} else if (ok === false) {
+} else if (result.kind === "unsubscribed") {
   // Adapter says we're NOT subscribed (drift detected!)
   // Re-subscribe or escalate
-} else {
-  // Adapter doesn't support verification
-  // Fall back to local state or retry
+} else if (result.kind === "error") {
+  console.error("Verification error:", result.cause);
+  // Retry or handle failure
+} else if (result.kind === "timeout") {
+  console.error("Verification timed out");
+  // Retry or fall back to local state
 }
 ```
 
-**Adapter capability:**
+**Example with best-effort mode:**
 
-- If adapter implements `hasSubscription(clientId, topic)` or legacy `hasTopic(topic, clientId)`, `verify()` returns `true` or `false`
-- If adapter lacks capability:
-  - With `bestEffort: true` — Falls back to `has()` (local state)
-  - With `bestEffort: false` (default) — Returns `"unknown"`
-  - With `throwOnError: true` — Throws error
+```typescript
+// Check adapter truth, fall back to local state
+const result = await ctx.topics.verify("room:1", { mode: "best-effort" });
+if (result.kind === "subscribed" || result.kind === "unsubscribed") {
+  // Verified (exact state from adapter)
+  console.log("Verified:", result.kind);
+} else if (result.kind === "unsupported") {
+  // Adapter doesn't support verification; local state shows:
+  console.log("Local state:", ctx.topics.has("room:1"));
+} else {
+  // Error or timeout; fall back
+  console.log("Verification failed:", result);
+}
+```
 
 **Composition with mutations:**
 
-Use `verify: true` option in mutation methods to check adapter truth after settlement:
+Use `verify` option in mutation methods to check adapter truth after settlement:
 
 ```typescript
 // Subscribe and verify in one call
 await ctx.topics.subscribe("room:1", {
-  confirm: "settled",
-  verify: true, // Check adapter truth after settlement
-  verifyBestEffort: true, // Fall back to local if adapter lacks capability
+  waitFor: "settled",
+  verify: "best-effort", // Try to verify; fall back to local
 });
-// Guaranteed: adapter confirms subscription (or local state for adapters without capability)
+// On return: subscription is settled and verified (or falls back to local state)
+
+// Strict mode: throw if adapter doesn't support verification
+await ctx.topics.subscribe("room:1", {
+  waitFor: "settled",
+  verify: "strict", // Require adapter support
+});
+// On return: adapter has confirmed subscription or error was thrown
 ```
 
 ---

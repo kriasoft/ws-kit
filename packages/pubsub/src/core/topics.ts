@@ -118,6 +118,44 @@ function awaitWithAbort<T>(
 export type TopicValidator = (topic: string) => void;
 
 /**
+ * Result of verifying a subscription with the adapter.
+ *
+ * Discriminated union that precisely represents different verification outcomes:
+ * - "subscribed": Adapter confirms the connection is subscribed to the topic
+ * - "unsubscribed": Adapter confirms the connection is NOT subscribed to the topic
+ * - "unsupported": Adapter lacks verification capability (use fallback to local state)
+ * - "error": Transient error from adapter (may retry)
+ * - "timeout": Verification operation timed out
+ */
+export type VerifyResult =
+  | { kind: "subscribed" }
+  | { kind: "unsubscribed" }
+  | { kind: "unsupported" }
+  | { kind: "error"; cause: unknown }
+  | { kind: "timeout" };
+
+/**
+ * Convenience helper to check if verification confirms subscription.
+ *
+ * @example
+ * ```typescript
+ * const result = await ctx.topics.verify("orders");
+ * if (isSubscribed(result)) {
+ *   console.log("Confirmed subscribed");
+ * } else if (result.kind === "unsupported") {
+ *   console.log("Fall back to local state:", ctx.topics.has("orders"));
+ * } else if (result.kind === "error") {
+ *   console.error("Verification failed:", result.cause);
+ * }
+ * ```
+ */
+export function isSubscribed(
+  result: VerifyResult,
+): result is { kind: "subscribed" } {
+  return result.kind === "subscribed";
+}
+
+/**
  * Default implementation of the Topics interface.
  *
  * Provides per-connection topic subscription state and operations.
@@ -249,10 +287,9 @@ export class TopicsImpl<
     topic: string,
     options?: {
       signal?: AbortSignal;
-      confirm?: "optimistic" | "settled";
+      waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: boolean;
-      verifyBestEffort?: boolean;
+      verify?: "strict" | "best-effort" | "off";
     },
   ): Promise<void> {
     // Step 1: Validate (use input topic directly; normalization is a middleware concern)
@@ -282,9 +319,9 @@ export class TopicsImpl<
     // Idempotency: already subscribed? → no-op (checked AFTER waiting for in-flight)
     // For "settled" mode, if already settled, return quickly (local idempotency only; use verify() if you require adapter truth)
     if (this.subscriptions.has(normalizedTopic)) {
-      // If confirm==="settled" and already settled, idempotency shortcut (fast path)
+      // If waitFor==="settled" and already settled, idempotency shortcut (fast path)
       if (
-        options?.confirm === "settled" &&
+        options?.waitFor === "settled" &&
         this.status(normalizedTopic) === "settled"
       ) {
         return; // Already settled; return immediately
@@ -345,7 +382,7 @@ export class TopicsImpl<
     try {
       // Default behavior: optimistic (await for error handling, but this is consistent with current behavior)
       // For "settled" mode: compose signal with timeout and await
-      if (options?.confirm === "settled") {
+      if (options?.waitFor === "settled") {
         const signal = composeSignal(options?.signal, options?.timeoutMs);
         await awaitWithAbort(operation, signal);
       } else {
@@ -353,23 +390,42 @@ export class TopicsImpl<
       }
 
       // If verify requested, check adapter truth after settlement
-      if (options?.confirm === "settled" && options?.verify) {
+      if (
+        options?.waitFor === "settled" &&
+        options?.verify &&
+        options.verify !== "off"
+      ) {
         const verifyResult = await this.verify(normalizedTopic, {
-          bestEffort: options?.verifyBestEffort,
+          mode: options.verify,
           signal: options?.signal,
         });
-        if (verifyResult === false) {
+        if (verifyResult.kind === "unsubscribed") {
           throw new PubSubError(
             "ADAPTER_ERROR",
             `Subscription to "${normalizedTopic}" failed adapter verification`,
           );
         }
-        // If "unknown" and not bestEffort, throw error
-        if (verifyResult === "unknown" && !options?.verifyBestEffort) {
+        if (
+          verifyResult.kind === "unsupported" &&
+          options.verify === "strict"
+        ) {
           throw new PubSubError(
             "ADAPTER_ERROR",
             `Cannot verify subscription: adapter lacks capability`,
             { code: "VERIFY_UNSUPPORTED" },
+          );
+        }
+        if (verifyResult.kind === "error" && options.verify === "strict") {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Subscription verification error`,
+            { cause: verifyResult.cause },
+          );
+        }
+        if (verifyResult.kind === "timeout" && options.verify === "strict") {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Subscription verification timed out`,
           );
         }
       }
@@ -386,10 +442,9 @@ export class TopicsImpl<
     topic: string,
     options?: {
       signal?: AbortSignal;
-      confirm?: "optimistic" | "settled";
+      waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: boolean;
-      verifyBestEffort?: boolean;
+      verify?: "strict" | "best-effort" | "off";
     },
   ): Promise<void> {
     // Soft no-op semantics (docs/specs/pubsub.md#idempotency): not subscribed? → return without validation.
@@ -452,7 +507,7 @@ export class TopicsImpl<
     this.inflight.set(normalizedTopic, operation);
     try {
       // For "settled" mode: compose signal with timeout and await
-      if (options?.confirm === "settled") {
+      if (options?.waitFor === "settled") {
         const signal = composeSignal(options?.signal, options?.timeoutMs);
         await awaitWithAbort(operation, signal);
       } else {
@@ -460,23 +515,42 @@ export class TopicsImpl<
       }
 
       // If verify requested, check adapter truth after settlement
-      if (options?.confirm === "settled" && options?.verify) {
+      if (
+        options?.waitFor === "settled" &&
+        options?.verify &&
+        options.verify !== "off"
+      ) {
         const verifyResult = await this.verify(normalizedTopic, {
-          bestEffort: options?.verifyBestEffort,
+          mode: options.verify,
           signal: options?.signal,
         });
-        if (verifyResult === true) {
+        if (verifyResult.kind === "subscribed") {
           throw new PubSubError(
             "ADAPTER_ERROR",
             `Unsubscription from "${normalizedTopic}" failed adapter verification`,
           );
         }
-        // If "unknown" and not bestEffort, throw error
-        if (verifyResult === "unknown" && !options?.verifyBestEffort) {
+        if (
+          verifyResult.kind === "unsupported" &&
+          options.verify === "strict"
+        ) {
           throw new PubSubError(
             "ADAPTER_ERROR",
             `Cannot verify unsubscription: adapter lacks capability`,
             { code: "VERIFY_UNSUPPORTED" },
+          );
+        }
+        if (verifyResult.kind === "error" && options.verify === "strict") {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Unsubscription verification error`,
+            { cause: verifyResult.cause },
+          );
+        }
+        if (verifyResult.kind === "timeout" && options.verify === "strict") {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Unsubscription verification timed out`,
           );
         }
       }
@@ -499,7 +573,7 @@ export class TopicsImpl<
    * Input: ["room:1", "room:1", "room:2"] → internally processed as 2 unique topics.
    *
    * @param topics - Iterable of topic names to subscribe to
-   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
+   * @param options - Optional: `signal` for cancellation support, `waitFor` for settlement semantics, `timeoutMs` for timeout
    * @returns { added, total } where added = newly subscribed topics, total = all subscriptions
    * @throws {PubSubError} if any topic fails validation or adapter call
    * @throws {AbortError} if `signal` is aborted before commit (no state change)
@@ -508,10 +582,9 @@ export class TopicsImpl<
     topics: Iterable<string>,
     options?: {
       signal?: AbortSignal;
-      confirm?: "optimistic" | "settled";
+      waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: boolean;
-      verifyBestEffort?: boolean;
+      verify?: "strict" | "best-effort" | "off";
     },
   ): Promise<{ added: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
@@ -620,7 +693,7 @@ export class TopicsImpl<
    * **Deduplication**: Duplicate topics in input are coalesced into unique set.
    *
    * @param topics - Iterable of topic names to unsubscribe from
-   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
+   * @param options - Optional: `signal` for cancellation support, `waitFor` for settlement semantics, `timeoutMs` for timeout
    * @returns { removed, total } where removed = actually-unsubscribed topics, total = remaining subscriptions
    * @throws {PubSubError} if any subscribed topic fails validation or adapter call
    * @throws {AbortError} if `signal` is aborted before commit (no state change)
@@ -629,10 +702,9 @@ export class TopicsImpl<
     topics: Iterable<string>,
     options?: {
       signal?: AbortSignal;
-      confirm?: "optimistic" | "settled";
+      waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: boolean;
-      verifyBestEffort?: boolean;
+      verify?: "strict" | "best-effort" | "off";
     },
   ): Promise<{ removed: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
@@ -727,10 +799,9 @@ export class TopicsImpl<
    */
   async clear(options?: {
     signal?: AbortSignal;
-    confirm?: "optimistic" | "settled";
+    waitFor?: "optimistic" | "settled";
     timeoutMs?: number;
-    verify?: boolean;
-    verifyBestEffort?: boolean;
+    verify?: "strict" | "best-effort" | "off";
   }): Promise<{ removed: number }> {
     const result = await this.set([], options);
     return { removed: result.removed };
@@ -763,10 +834,9 @@ export class TopicsImpl<
     mutator: (draft: Set<string>) => void,
     options?: {
       signal?: AbortSignal;
-      confirm?: "optimistic" | "settled";
+      waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: boolean;
-      verifyBestEffort?: boolean;
+      verify?: "strict" | "best-effort" | "off";
     },
   ): Promise<{ added: number; removed: number; total: number }> {
     // Create a draft Set of current subscriptions
@@ -862,24 +932,27 @@ export class TopicsImpl<
   /**
    * Probe the adapter for current subscription truth.
    *
-   * Returns adapter's view of whether this connection is subscribed to the topic.
-   * If adapter doesn't support probing, returns "unknown" (or falls back to local has() if bestEffort).
+   * Returns a discriminated union representing the adapter's view of subscription state.
+   * If adapter doesn't support probing, behavior depends on mode:
+   * - "strict": returns "unsupported"
+   * - "best-effort": falls back to local has()
    *
    * @param topic - Topic to verify
-   * @param options - Optional: bestEffort, throwOnError, signal
-   * @returns Promise<boolean | "unknown">:
-   *   - true: adapter confirms subscribed
-   *   - false: adapter confirms NOT subscribed
-   *   - "unknown": adapter lacks capability or error occurred (unless throwOnError=true)
+   * @param options - Optional: mode ("strict" | "best-effort"), signal
+   * @returns Promise<VerifyResult>:
+   *   - { kind: "subscribed" }: adapter confirms subscribed
+   *   - { kind: "unsubscribed" }: adapter confirms NOT subscribed
+   *   - { kind: "unsupported" }: adapter lacks capability (strict mode)
+   *   - { kind: "error"; cause }: transient error from adapter
+   *   - { kind: "timeout" }: operation timed out
    */
   async verify(
     topic: string,
     options?: {
-      bestEffort?: boolean;
-      throwOnError?: boolean;
+      mode?: "strict" | "best-effort";
       signal?: AbortSignal;
     },
-  ): Promise<boolean | "unknown"> {
+  ): Promise<VerifyResult> {
     // Check if signal is already aborted
     if (options?.signal?.aborted) {
       throw options.signal.reason instanceof Error
@@ -889,42 +962,48 @@ export class TopicsImpl<
 
     try {
       // Check if adapter has verification capability
-      // Adapters expose either hasSubscription(clientId, topic) or hasTopic(topic, clientId)
+      // Adapters expose either isSubscribed(clientId, topic) or hasTopic(topic, clientId)
       const wsAdapter = this.ws as unknown as {
-        hasSubscription?: (clientId: string, topic: string) => Promise<boolean>;
+        isSubscribed?: (clientId: string, topic: string) => Promise<boolean>;
         hasTopic?: (topic: string, clientId: string) => Promise<boolean>;
       };
 
+      // Create a signal that combines user signal and timeout
+      const verifySignal = composeSignal(options?.signal);
+
       // Try new API first
-      if (typeof wsAdapter.hasSubscription === "function") {
+      if (typeof wsAdapter.isSubscribed === "function") {
         const result = await awaitWithAbort(
-          wsAdapter.hasSubscription(this.clientId, topic),
-          options?.signal || new AbortController().signal,
+          wsAdapter.isSubscribed(this.clientId, topic),
+          verifySignal,
         );
-        return result;
+        return result ? { kind: "subscribed" } : { kind: "unsubscribed" };
       }
 
       // Fall back to legacy API
       if (typeof wsAdapter.hasTopic === "function") {
         const result = await awaitWithAbort(
           wsAdapter.hasTopic(topic, this.clientId),
-          options?.signal || new AbortController().signal,
+          verifySignal,
         );
-        return result;
+        return result ? { kind: "subscribed" } : { kind: "unsubscribed" };
       }
 
       // Adapter doesn't support verification
-      if (options?.bestEffort) {
+      if (options?.mode === "best-effort") {
         // Fall back to local state
-        return this.subscriptions.has(topic);
+        return this.subscriptions.has(topic)
+          ? { kind: "subscribed" }
+          : { kind: "unsubscribed" };
       }
 
-      return "unknown";
+      return { kind: "unsupported" };
     } catch (err) {
-      if (options?.throwOnError) {
-        throw err;
+      // Distinguish timeout from other errors
+      if (err instanceof AbortError) {
+        return { kind: "timeout" };
       }
-      return "unknown";
+      return { kind: "error", cause: err };
     }
   }
 
@@ -954,7 +1033,7 @@ export class TopicsImpl<
    * Order: unsubscribe first (free space) then subscribe (minimize message gaps).
    *
    * @param topics - Iterable of desired topic names
-   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
+   * @param options - Optional: `signal` for cancellation support, `waitFor` for settlement semantics, `timeoutMs` for timeout
    * @returns { added, removed, total }
    * @throws PubSubError with code TOPIC_LIMIT_EXCEEDED if resulting size exceeds maxTopicsPerConnection,
    *                       or other codes if validation, authorization, or adapter fails
@@ -964,10 +1043,9 @@ export class TopicsImpl<
     topics: Iterable<string>,
     options?: {
       signal?: AbortSignal;
-      confirm?: "optimistic" | "settled";
+      waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: boolean;
-      verifyBestEffort?: boolean;
+      verify?: "strict" | "best-effort" | "off";
     },
   ): Promise<{ added: number; removed: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
@@ -1038,7 +1116,7 @@ export class TopicsImpl<
         toAdd,
         toRemove,
         options?.signal,
-        options?.confirm,
+        options?.waitFor,
         options?.timeoutMs,
       );
     }
@@ -1048,7 +1126,7 @@ export class TopicsImpl<
       toAdd,
       toRemove,
       options?.signal,
-      options?.confirm,
+      options?.waitFor,
       options?.timeoutMs,
     );
   }
@@ -1056,7 +1134,7 @@ export class TopicsImpl<
   /**
    * Set implementation when adapter natively supports replace().
    * Simpler path: optimistic local update + single adapter call.
-   * Note: set operations are inherently atomic; confirm/timeoutMs are accepted for API consistency.
+   * Note: set operations are inherently atomic; waitFor/timeoutMs are accepted for API consistency.
    */
   private async setWithAdapterSupport(
     toAdd: Set<string>,
@@ -1106,7 +1184,7 @@ export class TopicsImpl<
    * Uses per-connection lock to prevent race conditions with per-topic ops.
    * Order: unsubscribe first (free space) then subscribe (minimize gaps).
    * Includes proper rollback with best-effort error recovery.
-   * Note: set operations are inherently atomic; confirm/timeoutMs are accepted for API consistency.
+   * Note: set operations are inherently atomic; waitFor/timeoutMs are accepted for API consistency.
    */
   private async setWithFallback(
     toAdd: Set<string>,
