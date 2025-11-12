@@ -110,7 +110,7 @@ router2.on(Message, async (ctx) => {
 ```typescript
 /**
  * Options for topic mutation operations.
- * Supports cancellation via AbortSignal.
+ * Supports cancellation via AbortSignal and settlement semantics.
  */
 interface TopicMutateOptions {
   /**
@@ -119,6 +119,38 @@ interface TopicMutateOptions {
    * If aborted after commit begins, operation completes normally (late aborts ignored).
    */
   signal?: AbortSignal;
+
+  /**
+   * Settlement semantics.
+   * - "optimistic" (default): Return immediately after local mutation and adapter enqueue (fast path)
+   * - "settled": Await adapter settlement; respects timeoutMs and signal
+   *
+   * Use "settled" for tests and correctness-critical flows requiring deterministic settlement.
+   * Note: "settled" means the operation completed locally after a successful adapter call;
+   * use verify() to check adapter truth across failures/failovers.
+   */
+  confirm?: "optimistic" | "settled";
+
+  /**
+   * Timeout in milliseconds for "settled" operations.
+   * Only meaningful when confirm === "settled".
+   * On timeout, operation throws AbortError.
+   * Composes with signal: if either aborts, operation rejects.
+   */
+  timeoutMs?: number;
+
+  /**
+   * After settlement, verify adapter truth before returning.
+   * Requires adapter support for hasSubscription() or hasTopic(). Falls back per verifyBestEffort.
+   * Only meaningful when confirm === "settled".
+   */
+  verify?: boolean;
+
+  /**
+   * If verify=true and adapter lacks capability, fall back to local has() instead of throwing.
+   * Only meaningful when verify=true.
+   */
+  verifyBestEffort?: boolean;
 }
 
 /**
@@ -176,12 +208,77 @@ interface Topics extends ReadonlySet<string> {
    * Idempotent: if input set equals current set, returns early (no adapter calls).
    * Soft unsubscribe semantics: topics not currently subscribed are skipped.
    * Returns counts of topics added, removed, and total subscriptions after operation.
-   * @param options - Optional cancellation signal
+   * @param options - Optional cancellation signal, settlement, verification
    */
-  replace(
+  set(
     topics: Iterable<string>,
     options?: TopicMutateOptions,
   ): Promise<{ added: number; removed: number; total: number }>;
+
+  /**
+   * Get detailed subscription status (settled, pending, or absent).
+   * Use when you need to distinguish in-flight operations from settled state.
+   *
+   * **Important**: "settled" means the operation completed locally after a successful adapter call.
+   * It does NOT guarantee adapter truth across failures, failovers, or other connections.
+   * Use verify() to check adapter truth if needed.
+   *
+   * @returns One of: 'settled' (last mutation completed locally after adapter call),
+   *          'pending-subscribe' (subscribe in-flight),
+   *          'pending-unsubscribe' (unsubscribe in-flight),
+   *          'absent' (not subscribed)
+   */
+  status(
+    topic: string,
+  ): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent";
+
+  /**
+   * Update subscriptions using a callback that mutates a draft Set.
+   * Provides Set-like ergonomics while maintaining atomicity.
+   *
+   * @param mutator - Function that mutates the draft Set in-place
+   * @param options - Optional cancellation signal, settlement, verification
+   * @returns { added, removed, total } - Counts of topics changed
+   */
+  update(
+    mutator: (draft: Set<string>) => void,
+    options?: TopicMutateOptions,
+  ): Promise<{ added: number; removed: number; total: number }>;
+
+  /**
+   * Wait for all in-flight operations to settle.
+   * Useful for tests and tooling: ensures all pending subscribe/unsubscribe/set/update calls
+   * have completed before you assert state.
+   *
+   * @param topic - Optional: wait for a specific topic's operations. If omitted, wait for all.
+   * @param options - Optional: `timeoutMs` for timeout, `signal` for cancellation
+   * @returns Promise that resolves when settlement is complete
+   */
+  flush(
+    topic?: string,
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<void>;
+
+  /**
+   * Probe the adapter for current subscription truth.
+   * Returns adapter's view of whether this connection is subscribed to the topic.
+   * If adapter doesn't support probing, returns "unknown" (or falls back to local has() if bestEffort).
+   *
+   * @param topic - Topic to verify
+   * @param options - Optional: bestEffort (fall back to local state), throwOnError, signal
+   * @returns Promise<boolean | "unknown">:
+   *   - true: adapter confirms subscribed
+   *   - false: adapter confirms NOT subscribed
+   *   - "unknown": adapter lacks capability or error occurred (unless throwOnError=true)
+   */
+  verify(
+    topic: string,
+    options?: {
+      bestEffort?: boolean;
+      throwOnError?: boolean;
+      signal?: AbortSignal;
+    },
+  ): Promise<boolean | "unknown">;
 }
 
 // Augmentation
@@ -753,9 +850,9 @@ try {
 }
 ```
 
-### 6.4 Replace Semantics
+### 6.4 Set Semantics
 
-`replace(topics)` atomically replaces current subscriptions with a desired set. Useful for reconnection: avoids manual diffing and ensures single atomic operation.
+`set(topics)` atomically replaces current subscriptions with a desired set. Useful for reconnection: avoids manual diffing and ensures single atomic operation.
 
 **Order of checks (normative):**
 
@@ -809,7 +906,7 @@ Throws `PubSubError` with same codes as `subscribe()`/`unsubscribe()`. State unc
 
 ```typescript
 // Reconnection: atomically sync to desired state
-const result = await ctx.topics.replace(["room:123", "system:announcements"]);
+const result = await ctx.topics.set(["room:123", "system:announcements"]);
 // { added: number, removed: number, total: number }
 ```
 
@@ -838,9 +935,300 @@ try {
 }
 ```
 
+### 6.6 Settlement Semantics (Optional Confirm & Timeout)
+
+All topic mutation methods accept `{ confirm?: "optimistic" | "settled", timeoutMs?: number, verify?: boolean, verifyBestEffort?: boolean }` for deterministic settlement and adapter verification.
+
+**Default Behavior (Optimistic):**
+
+By default (`confirm` omitted or `"optimistic"`), operations return immediately after local state mutation and adapter enqueue. This is the fast path, matching historical behavior:
+
+```typescript
+// Optimistic (default)
+await ctx.topics.subscribe("room:1");
+// Returns immediately; adapter call may still be in-flight
+```
+
+**Settled Behavior:**
+
+Pass `confirm: "settled"` to await adapter settlement before returning. Useful for tests or correctness-critical flows:
+
+```typescript
+// Block until adapter settlement
+await ctx.topics.subscribe("room:1", { confirm: "settled" });
+// Now guaranteed: adapter.subscribe("room:1") has completed
+
+// With timeout (5 seconds)
+await ctx.topics.subscribe("room:1", {
+  confirm: "settled",
+  timeoutMs: 5000,
+});
+// Throws AbortError if adapter doesn't settle within 5s
+```
+
+**Timeout Composition:**
+
+Timeout composes with `AbortSignal`: either can abort the operation:
+
+```typescript
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 1000);
+
+try {
+  await ctx.topics.set(["room:1", "room:2"], {
+    confirm: "settled",
+    signal: controller.signal,
+    timeoutMs: 5000,
+  });
+} catch (err) {
+  // Either signal aborted (at 1s) or timeout fired (at 5s)
+}
+```
+
+**Idempotent Settled Subscribe:**
+
+For already-settled topics, settled subscribe returns promptly (no extra wait):
+
+```typescript
+await ctx.topics.subscribe("room:1", { confirm: "settled" });
+// Waits for settlement
+
+await ctx.topics.subscribe("room:1", { confirm: "settled" });
+// Already settled; returns immediately (fast path)
+```
+
+**Return Values Unchanged:**
+
+Settlement does not change return types or error semantics:
+
+```typescript
+// Still returns void
+await ctx.topics.subscribe("room:1", { confirm: "settled" });
+
+// Still returns counts
+const { added, removed, total } = await ctx.topics.set(["a", "b"], {
+  confirm: "settled",
+});
+
+// Still throws on error (no Result unions)
+try {
+  await ctx.topics.subscribe("invalid_topic", { confirm: "settled" });
+} catch (err) {
+  // err is PubSubError or AbortError
+}
+```
+
+### 6.6.1 Topic Status & Introspection (`status()`)
+
+Query the detailed subscription status of a topic:
+
+```typescript
+status(topic: string): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent"
+```
+
+**States:**
+
+- **`"settled"`** — Last mutation completed locally after a successful adapter call (not a guarantee of adapter truth; use `verify()` for that)
+- **`"pending-subscribe"`** — Subscribe operation in-flight (optimistic local state shows subscribed)
+- **`"pending-unsubscribe"`** — Unsubscribe operation in-flight (optimistic local state shows unsubscribed)
+- **`"absent"`** — Not subscribed
+
+**Optimistic vs Settled Semantics (Quick Reference):**
+
+| Scenario                         | `has(topic)` | `status(topic)`         | Notes                                          |
+| -------------------------------- | ------------ | ----------------------- | ---------------------------------------------- |
+| Not subscribed, no in-flight ops | `false`      | `"absent"`              | Initial state                                  |
+| Subscribe in-flight              | `true`       | `"pending-subscribe"`   | Optimistic: local mutation happens immediately |
+| Subscribe completed              | `true`       | `"settled"`             | Operation completed locally after adapter call |
+| Unsubscribe in-flight            | `false`      | `"pending-unsubscribe"` | Optimistic: local state already changed        |
+| Unsubscribe completed            | `false`      | `"absent"`              | Operation completed locally after adapter call |
+
+**Key insight:** `has()` returns the _optimistic_ local state (includes in-flight mutations), while `status()` reveals the precise state of each operation. Use `has()` for fast checks; use `status()` when you need to distinguish pending from settled. Note: "settled" is local completion, not adapter truth. Use `verify()` for adapter-side checks.
+
+**Use cases:**
+
+- Distinguish in-flight operations from settled state for testing or debugging
+- Conditional subscription logic: only resubscribe if pending
+- Monitor subscription health across connection lifecycle
+
+**Example:**
+
+```typescript
+await ctx.topics.subscribe("room:1");
+const status = ctx.topics.status("room:1");
+
+if (status === "pending-subscribe") {
+  // Still in-flight; adapter may reject it
+  await ctx.topics.flush("room:1", { timeoutMs: 5000 });
+}
+if (status === "settled") {
+  // Operation completed locally; subscription may be valid
+  // Use verify() to check adapter truth if needed
+}
+```
+
+### 6.6.2 Update Subscriptions with Callback (`update()`)
+
+Provide ergonomic, callback-based subscription updates with full atomicity:
+
+```typescript
+update(
+  mutator: (draft: Set<string>) => void,
+  options?: TopicMutateOptions
+): Promise<{ added: number; removed: number; total: number }>
+```
+
+**Semantics:**
+
+1. Creates a draft `Set<string>` of current subscriptions
+2. Calls `mutator(draft)` to modify (e.g., `draft.add()`, `draft.delete()`)
+3. Computes delta and applies via atomic `set()` call
+4. Returns counts of added/removed/total topics
+
+**Behavior:**
+
+- All validation, normalization, limit checks apply (same as `set()`)
+- Full rollback semantics on adapter failure
+- Supports cancellation and confirmation options
+
+**Example:**
+
+```typescript
+// Atomically update subscriptions
+await ctx.topics.update((draft) => {
+  draft.delete("room:old");
+  draft.add("room:new");
+  draft.add("room:announcements");
+});
+// All changes apply atomically or none at all
+```
+
+**vs. `set()`:**
+
+- **`set([...])` — Declarative:** Replace subscriptions with exact desired set
+- **`update(mutator)` — Imperative:** Mutate via callback for ergonomics
+
+Both are atomic; choose based on readability for your use case.
+
+### 6.6.3 Await In-Flight Operations (`flush()`)
+
+Block until all in-flight subscription operations settle:
+
+```typescript
+flush(
+  topic?: string,
+  options?: { timeoutMs?: number; signal?: AbortSignal }
+): Promise<void>
+```
+
+**Parameters:**
+
+- `topic` — Optional: wait for a specific topic. If omitted, waits for all.
+- `options.timeoutMs` — Timeout in milliseconds; throws `AbortError` on timeout.
+- `options.signal` — `AbortSignal` for cancellation.
+
+**Use cases:**
+
+- **Tests:** Ensure all pending operations complete before assertions
+- **Correctness:** Distinguish optimistic state (`.has()`) from settled state (post-`flush()`)
+- **Debugging:** Monitor operation settlement across the connection
+
+**Example:**
+
+```typescript
+// Optimistic operation (returns immediately)
+await ctx.topics.subscribe("room:1");
+console.log(ctx.topics.has("room:1")); // true (optimistic)
+
+// Wait for settlement
+await ctx.topics.flush("room:1", { timeoutMs: 5000 });
+console.log(ctx.topics.status("room:1")); // "settled" (settled)
+```
+
+**Guarantees:**
+
+- If `flush()` completes, all in-flight operations have settled (success or error)
+- Error handling: If any in-flight operation failed before `flush()` was called, that error was already thrown by the operation itself
+- Idempotent: Calling `flush()` multiple times is safe
+
+### 6.6.4 Verify Adapter Truth (`verify()`)
+
+Probe the adapter for the current subscription truth. Useful when you need to distinguish local state from actual adapter state (after failures, failovers, or across different connections).
+
+```typescript
+verify(
+  topic: string,
+  options?: {
+    bestEffort?: boolean;
+    throwOnError?: boolean;
+    signal?: AbortSignal;
+  }
+): Promise<boolean | "unknown">
+```
+
+**Return values:**
+
+- **`true`** — Adapter confirms this connection is subscribed to the topic
+- **`false`** — Adapter confirms this connection is NOT subscribed to the topic
+- **`"unknown"`** — Adapter lacks capability or verification failed (unless `throwOnError=true`)
+
+**Key difference from `status()`:**
+
+- **`status(topic)`** — Reflects local settlement state (did the last mutation complete locally?)
+- **`verify(topic)`** — Checks adapter truth (is this connection actually subscribed according to the adapter?)
+
+**Use cases:**
+
+- Detect adapter drift (subscription failed silently, or was evicted during failover)
+- Distributed setups where adapter is remote (Redis, Kafka, etc.)
+- Correctness-critical flows requiring adapter confirmation
+- Testing adapter behavior and failure modes
+
+**Example:**
+
+```typescript
+// Subscribe locally
+await ctx.topics.subscribe("room:1", { confirm: "settled" });
+console.log(ctx.topics.status("room:1")); // "settled"
+
+// Check adapter truth
+const ok = await ctx.topics.verify("room:1");
+if (ok === true) {
+  // Adapter confirms subscription
+} else if (ok === false) {
+  // Adapter says we're NOT subscribed (drift detected!)
+  // Re-subscribe or escalate
+} else {
+  // Adapter doesn't support verification
+  // Fall back to local state or retry
+}
+```
+
+**Adapter capability:**
+
+- If adapter implements `hasSubscription(clientId, topic)` or legacy `hasTopic(topic, clientId)`, `verify()` returns `true` or `false`
+- If adapter lacks capability:
+  - With `bestEffort: true` — Falls back to `has()` (local state)
+  - With `bestEffort: false` (default) — Returns `"unknown"`
+  - With `throwOnError: true` — Throws error
+
+**Composition with mutations:**
+
+Use `verify: true` option in mutation methods to check adapter truth after settlement:
+
+```typescript
+// Subscribe and verify in one call
+await ctx.topics.subscribe("room:1", {
+  confirm: "settled",
+  verify: true, // Check adapter truth after settlement
+  verifyBestEffort: true, // Fall back to local if adapter lacks capability
+});
+// Guaranteed: adapter confirms subscription (or local state for adapters without capability)
+```
+
 ---
 
-### 6.6 Publishing Semantics
+### 6.7 Publishing Semantics
 
 **Key Invariant:** `publish()` **never throws** for runtime conditions. All expected failures return `{ok: false}` with an error code and a `retryable` hint, enabling predictable result-based error handling.
 
@@ -962,7 +1350,7 @@ const r7 = await ctx.publish("topic", Schema, data);
 // {ok: false, error: "ADAPTER_ERROR", retryable: true, adapter: "redis", cause: Error(...), details: { transient: true }}
 ```
 
-### 6.7 Connection Lifecycle & Cleanup
+### 6.8 Connection Lifecycle & Cleanup
 
 - On connection close, all subscriptions are **automatically removed** by the adapter.
 - No subscriptions leak or persist.
@@ -1144,28 +1532,28 @@ Subscriptions **do NOT persist** across connection close/reconnect. Clients MUST
 
 **Rationale**: Subscriptions are per-connection state. On disconnect, adapter clears them automatically. On reconnect, connection is fresh (no subscriptions). This is intentional: apps maintain control via explicit re-subscription.
 
-**Recommended Pattern: Atomic Resync using `replace()`**
+**Recommended Pattern: Atomic Resync using `set()`**
 
 ```typescript
 const desiredTopics = ["room:123", "system:announcements"];
 
 router.onOpen((ctx) => {
   // Atomically resync to desired set (no manual diffing)
-  await ctx.topics.replace(desiredTopics);
+  await ctx.topics.set(desiredTopics);
 });
 
 router.on(JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
   desiredTopics.push(`room:${roomId}`);
   // Update subscriptions atomically
-  await ctx.topics.replace(desiredTopics);
+  await ctx.topics.set(desiredTopics);
 });
 
 router.on(LeaveRoom, (ctx) => {
   const { roomId } = ctx.payload;
   desiredTopics = desiredTopics.filter((t) => t !== `room:${roomId}`);
   // Atomic resync (adds/removes as needed)
-  await ctx.topics.replace(desiredTopics);
+  await ctx.topics.set(desiredTopics);
 });
 ```
 
@@ -1442,7 +1830,7 @@ router.on(UpdateSubscriptions, async (ctx, { desired }) => {
   const before = new Set(ctx.topics);
 
   // Execute atomic operation
-  const result = await ctx.topics.replace(desired);
+  const result = await ctx.topics.set(desired);
 
   // Compute diff once
   const added = [...ctx.topics].filter((t) => !before.has(t));
@@ -1592,7 +1980,7 @@ const sync = (
   topics: Topics,
   desired: Iterable<string>,
   options?: { signal?: AbortSignal },
-) => topics.replace(desired, options);
+) => topics.set(desired, options);
 
 // Batch unsubscribe with automatic filtering (soft no-op on non-subscribed)
 async function dropMany(topics: Topics, toUnsubscribe: Iterable<string>) {
@@ -1634,7 +2022,7 @@ These invariants must hold for all adapters. See [ADR-022 Implementation Invaria
 
 - **Errors only on state changes**: Validation, authorization, connection errors **only throw** when a state change would occur. Idempotent no-ops (already in target state) **never throw**.
 
-- **Per-batch**: Within `subscribeMany()`, `unsubscribeMany()`, `replace()`, each topic gets idempotency-checked individually. Already-subscribed/unsubscribed topics are skipped (no validation, no authorization, no adapter call) before the batch processes remaining topics.
+- **Per-batch**: Within `subscribeMany()`, `unsubscribeMany()`, `set()`, each topic gets idempotency-checked individually. Already-subscribed/unsubscribed topics are skipped (no validation, no authorization, no adapter call) before the batch processes remaining topics.
 
 **Adapter-before-mutation (critical for all operations):**
 
@@ -1667,9 +2055,9 @@ Per §6.1, all operations (single and batch) follow: normalize → **await in-fl
 
 - **On success**: All topics requiring state change are subscribed atomically; final state is consistent. Already-subscribed topics remain unchanged (transparent no-op).
 
-**Replace atomicity:**
+**Set atomicity:**
 
-`replace()` follows the same atomic pattern:
+`set()` follows the same atomic pattern:
 
 1. Check desired set against current set (idempotency check)
 2. Return early if no delta (transparent no-op, no validation, no authorization, no adapter calls)
@@ -1683,7 +2071,7 @@ Per §6.1, all operations (single and batch) follow: normalize → **await in-fl
 - `ctx.topics` is immutable from caller perspective (ReadonlySet contract).
 - Callers **cannot mutate** via `.add()`, `.delete()`, or direct access.
 - Adapters must prevent mutation: use `Object.freeze()`, proxy, or wrapper.
-- State changes only via `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()`, `clear()`, and `replace()`.
+- State changes only via `subscribe()`, `unsubscribe()`, `subscribeMany()`, `unsubscribeMany()`, `clear()`, and `set()`.
 
 **Authorization timing:**
 

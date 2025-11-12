@@ -217,7 +217,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
     });
   });
 
-  describe("replace() with limit enforcement", () => {
+  describe("set() with limit enforcement", () => {
     it("should allow replace when resulting size within limit", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
@@ -231,12 +231,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
       // Replace with 4 topics (some new, some removed)
-      const result = await topics.replace([
-        "room:2",
-        "room:3",
-        "room:4",
-        "room:5",
-      ]);
+      const result = await topics.set(["room:2", "room:3", "room:4", "room:5"]);
 
       expect(result.added).toBe(2); // room:4, room:5
       expect(result.removed).toBe(1); // room:1
@@ -257,7 +252,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
 
       // Try to replace with 5 new topics (would remove 2, add 5 = net +3, resulting in 5 total)
       try {
-        await topics.replace([
+        await topics.set([
           "room:10",
           "room:11",
           "room:12",
@@ -308,7 +303,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
       await topics.subscribeMany(["a", "b", "c"]); // at limit
 
       // Replace: remove 2, add 1 (net -1, stays within limit)
-      const result = await topics.replace(["a", "d"]);
+      const result = await topics.set(["a", "d"]);
 
       expect(result.removed).toBe(2); // b, c
       expect(result.added).toBe(1); // d
@@ -328,7 +323,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
       await topics.subscribeMany(["a", "b"]);
 
       // Replace with desired set of 3 (add 1, remove 0)
-      const result = await topics.replace(["a", "b", "c"]);
+      const result = await topics.set(["a", "b", "c"]);
 
       expect(result.added).toBe(1);
       expect(result.removed).toBe(0);
@@ -349,7 +344,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
 
       // Try to replace with 4 topics (exceeds limit by 1)
       try {
-        await topics.replace(["a", "b", "c", "d"]);
+        await topics.set(["a", "b", "c", "d"]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect((err as PubSubError).code).toBe("TOPIC_LIMIT_EXCEEDED");
@@ -405,7 +400,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
       const topics = new TopicsImpl(mockWs, Infinity);
 
       const topicArray = Array.from({ length: 1000 }, (_, i) => `topic:${i}`);
-      const result = await topics.replace(topicArray);
+      const result = await topics.set(topicArray);
 
       expect(result.added).toBe(1000);
       expect(result.total).toBe(1000);

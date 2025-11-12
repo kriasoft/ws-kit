@@ -218,7 +218,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
     });
   });
 
-  describe("replace() - soft removal semantics", () => {
+  describe("set() - soft removal semantics", () => {
     it("should be idempotent: replace with same topics returns early", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
@@ -234,7 +234,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
       const initialCalls = mockWs.subscribe.mock.calls.length;
 
       // Replace with the exact same set
-      const result = await topics.replace(["room:1", "room:2"]);
+      const result = await topics.set(["room:1", "room:2"]);
 
       // Should be idempotent (no-op)
       expect(result.added).toBe(0);
@@ -257,7 +257,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
 
       // Try to replace with invalid topic in desired set
       try {
-        await topics.replace(["room:1", "!invalid@#", "room:2"]);
+        await topics.set(["room:1", "!invalid@#", "room:2"]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -286,7 +286,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
       const initialUnsubscribeCalls = mockWs.unsubscribe.mock.calls.length;
 
       // Replace with room:1 and room:3 (adds room:3, removes room:2)
-      const result = await topics.replace(["room:1", "room:3"]);
+      const result = await topics.set(["room:1", "room:3"]);
 
       expect(result.added).toBe(1); // room:3
       expect(result.removed).toBe(1); // room:2
@@ -321,7 +321,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
       const initialUnsubscribeCalls = mockWs.unsubscribe.mock.calls.length;
 
       // Replace with empty set (removes all)
-      const result = await topics.replace([]);
+      const result = await topics.set([]);
 
       expect(result.added).toBe(0);
       expect(result.removed).toBe(2);
@@ -354,7 +354,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
 
       // Try to replace with room:1, room:2, room:3 (will fail on room:3)
       try {
-        await topics.replace(["room:1", "room:2", "room:3"]);
+        await topics.set(["room:1", "room:2", "room:3"]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -378,7 +378,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
       const topics = new TopicsImpl(mockWs);
 
       // Replace with duplicates in desired set
-      const result = await topics.replace([
+      const result = await topics.set([
         "room:1",
         "room:1", // Duplicate
         "room:2",
@@ -413,7 +413,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
       const initialUnsubscribeCalls = mockWs.unsubscribe.mock.calls.length;
 
       // Replace with same topics but different order
-      const result = await topics.replace(["room:3", "room:1", "room:2"]);
+      const result = await topics.set(["room:3", "room:1", "room:2"]);
 
       // Should be idempotent (no change)
       expect(result.added).toBe(0);

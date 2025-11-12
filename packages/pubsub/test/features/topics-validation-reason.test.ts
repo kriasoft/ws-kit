@@ -229,7 +229,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
       const longTopic = "a".repeat(129);
 
       try {
-        await topics.replace(["room:1", longTopic]);
+        await topics.set(["room:1", longTopic]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         const error = err as PubSubError;

@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { TopicsImpl } from "../../src/core/topics.js";
 import { PubSubError } from "../../src/core/error.js";
 
-describe("TopicsImpl - replace()", () => {
+describe("TopicsImpl - set()", () => {
   describe("basic replace semantics", () => {
     it("should replace topics: add and remove in one operation", async () => {
       const mockWs = {
@@ -21,7 +21,7 @@ describe("TopicsImpl - replace()", () => {
       expect(topics.size).toBe(2);
 
       // Replace with room:2 and room:3 (remove room:1, keep room:2, add room:3)
-      const result = await topics.replace(["room:2", "room:3"]);
+      const result = await topics.set(["room:2", "room:3"]);
 
       expect(result.added).toBe(1); // room:3
       expect(result.removed).toBe(1); // room:1
@@ -46,7 +46,7 @@ describe("TopicsImpl - replace()", () => {
       expect(topics.size).toBe(3);
 
       // Replace with empty set (unsubscribe all)
-      const result = await topics.replace([]);
+      const result = await topics.set([]);
 
       expect(result.added).toBe(0);
       expect(result.removed).toBe(3);
@@ -67,7 +67,7 @@ describe("TopicsImpl - replace()", () => {
       expect(topics.size).toBe(0);
 
       // Replace with 3 new topics
-      const result = await topics.replace(["room:1", "room:2", "room:3"]);
+      const result = await topics.set(["room:1", "room:2", "room:3"]);
 
       expect(result.added).toBe(3);
       expect(result.removed).toBe(0);
@@ -100,7 +100,7 @@ describe("TopicsImpl - replace()", () => {
       // Replace with the SAME set (idempotent no-op)
       adapterCalls.subscribe = 0;
       adapterCalls.unsubscribe = 0;
-      const result = await topics.replace(["room:1", "room:2", "room:3"]);
+      const result = await topics.set(["room:1", "room:2", "room:3"]);
 
       // No adapter calls should be made
       expect(adapterCalls.subscribe).toBe(0);
@@ -135,7 +135,7 @@ describe("TopicsImpl - replace()", () => {
       setupPhase = false; // Now enter replace phase where adapter calls should not happen
 
       // Replace with same set - should not throw, should not call adapter
-      const result = await topics.replace(["room:1", "room:2"]);
+      const result = await topics.set(["room:1", "room:2"]);
 
       expect(result.added).toBe(0);
       expect(result.removed).toBe(0);
@@ -158,12 +158,7 @@ describe("TopicsImpl - replace()", () => {
 
       // Replace with duplicates
       adapterCalls.length = 0;
-      const result = await topics.replace([
-        "room:1",
-        "room:1",
-        "room:2",
-        "room:1",
-      ]);
+      const result = await topics.set(["room:1", "room:1", "room:2", "room:1"]);
 
       // Only 2 unique topics should be subscribed
       expect(result.added).toBe(2);
@@ -190,7 +185,7 @@ describe("TopicsImpl - replace()", () => {
 
       // Try to replace with an invalid topic in the middle
       try {
-        await topics.replace(["room:1", "invalid topic!!!", "room:2"]);
+        await topics.set(["room:1", "invalid topic!!!", "room:2"]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -212,7 +207,7 @@ describe("TopicsImpl - replace()", () => {
       const topics = new TopicsImpl(mockWs);
 
       try {
-        await topics.replace(["topic with spaces"]);
+        await topics.set(["topic with spaces"]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -245,7 +240,7 @@ describe("TopicsImpl - replace()", () => {
 
       // Try to replace with new topics; adapter will fail
       try {
-        await topics.replace(["room:2", "room:3", "room:4"]);
+        await topics.set(["room:2", "room:3", "room:4"]);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -281,7 +276,7 @@ describe("TopicsImpl - replace()", () => {
 
       // Try to replace; adapter will fail on first unsubscribe
       try {
-        await topics.replace(["room:1"]); // Should remove room:2 and room:3
+        await topics.set(["room:1"]); // Should remove room:2 and room:3
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -309,7 +304,7 @@ describe("TopicsImpl - replace()", () => {
       expect(topics.size).toBe(4);
 
       // Replace with mixed set
-      const result = await topics.replace([
+      const result = await topics.set([
         "room:2", // keep
         "room:5", // add
         "room:6", // add
@@ -385,7 +380,7 @@ describe("TopicsImpl - replace()", () => {
       inReplacePhase = true;
       subscribeCountInPhase = 0;
       try {
-        await topics.replace(["room:3", "room:4", "room:5"]);
+        await topics.set(["room:3", "room:4", "room:5"]);
         expect.unreachable("Should have thrown due to adapter failure");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -424,7 +419,7 @@ describe("TopicsImpl - replace()", () => {
 
       // Replace with a different large set
       const desired = Array.from({ length: 100 }, (_, i) => `topic:${i}`);
-      const result = await topics.replace(desired);
+      const result = await topics.set(desired);
 
       expect(result.added).toBe(100);
       expect(result.removed).toBe(100);
@@ -456,7 +451,7 @@ describe("TopicsImpl - replace()", () => {
       ]);
 
       // Replace with rooms 3-7 (keep 3,4,5; remove 1,2; add 6,7)
-      const result = await topics.replace([
+      const result = await topics.set([
         "room:3",
         "room:4",
         "room:5",
@@ -491,7 +486,7 @@ describe("TopicsImpl - replace()", () => {
 
       // Replace using a Set (iterable)
       const desiredSet = new Set(["room:2", "room:3"]);
-      const result = await topics.replace(desiredSet);
+      const result = await topics.set(desiredSet);
 
       expect(result.added).toBe(1);
       expect(result.removed).toBe(1);
@@ -510,7 +505,7 @@ describe("TopicsImpl - replace()", () => {
       // Maximum length topic (128 chars)
       const maxLengthTopic = "a".repeat(128);
 
-      const result = await topics.replace([maxLengthTopic]);
+      const result = await topics.set([maxLengthTopic]);
 
       expect(result.added).toBe(1);
       expect(topics.has(maxLengthTopic)).toBe(true);
@@ -531,7 +526,7 @@ describe("TopicsImpl - replace()", () => {
       await topics.subscribeMany(["keep:1", "keep:2", "remove:1", "remove:2"]);
 
       // Replace: keep some, remove some, add new
-      const result = await topics.replace([
+      const result = await topics.set([
         "keep:1",
         "keep:2",
         "add:1",
@@ -563,7 +558,7 @@ describe("TopicsImpl - replace()", () => {
       ]);
 
       // Replace with the same set (no-op)
-      const result = await topics.replace([
+      const result = await topics.set([
         "room:1",
         "room:2",
         "room:3",
@@ -588,7 +583,7 @@ describe("TopicsImpl - replace()", () => {
       const topics = new TopicsImpl(mockWs);
 
       // Replace with some topics
-      await topics.replace(["room:1", "room:2", "room:3"]);
+      await topics.set(["room:1", "room:2", "room:3"]);
 
       // All ReadonlySet methods should work
       expect(topics.size).toBe(3);

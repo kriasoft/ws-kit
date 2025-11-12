@@ -273,7 +273,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
     });
   });
 
-  describe("Batch atomicity - replace() rollback", () => {
+  describe("Batch atomicity - set() rollback", () => {
     it("should rollback replace on subscribe failure", async () => {
       let callCount = 0;
       const mockWs = {
@@ -299,7 +299,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
       // Should rollback: re-subscribe rooms unsubscribed, then throw
       let errorThrown = false;
       try {
-        await topics.replace(["room:2", "room:4", "room:5"]);
+        await topics.set(["room:2", "room:4", "room:5"]);
       } catch (err) {
         errorThrown = true;
         expect(err).toBeInstanceOf(PubSubError);
@@ -337,7 +337,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
       // room:1 to unsubscribe, room:4 and room:5 to subscribe
       // Unsubscribe room:1 (fails), should rollback room:4 and room:5
       try {
-        await topics.replace(["room:2", "room:4", "room:5"]);
+        await topics.set(["room:2", "room:4", "room:5"]);
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
         expect((err as PubSubError).code).toBe("ADAPTER_ERROR");
@@ -363,7 +363,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
       // Replace with ["room:2", "room:4", "room:5"]
-      const result = await topics.replace(["room:2", "room:4", "room:5"]);
+      const result = await topics.set(["room:2", "room:4", "room:5"]);
 
       expect(result.added).toBe(2); // room:4, room:5
       expect(result.removed).toBe(2); // room:1, room:3
@@ -486,7 +486,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
     });
   });
 
-  describe("replace() operation ordering - at limit", () => {
+  describe("set() operation ordering - at limit", () => {
     it("should allow replace when swapping topics at maxTopicsPerConnection", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
@@ -502,7 +502,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
 
       // Replace one topic with another while at limit
       // Desired: ["room:1", "room:2", "room:4"] (swap room:3 for room:4)
-      const result = await topics.replace(["room:1", "room:2", "room:4"]);
+      const result = await topics.set(["room:1", "room:2", "room:4"]);
 
       expect(result.added).toBe(1); // room:4
       expect(result.removed).toBe(1); // room:3
@@ -533,7 +533,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
       callOrder.length = 0; // Reset
 
       // Replace: should unsubscribe room:1, then subscribe room:3
-      await topics.replace(["room:2", "room:3"]);
+      await topics.set(["room:2", "room:3"]);
 
       // Verify order: unsubscribe first, then subscribe
       expect(callOrder).toEqual(["unsubscribe", "subscribe"]);
@@ -561,7 +561,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
 
       // Replace with room:3, fails when unsubscribing room:1
       try {
-        await topics.replace(["room:2", "room:3"]);
+        await topics.set(["room:2", "room:3"]);
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
       }
@@ -595,7 +595,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
 
       // Replace with room:3, fails when subscribing to room:3
       try {
-        await topics.replace(["room:2", "room:3"]);
+        await topics.set(["room:2", "room:3"]);
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
       }

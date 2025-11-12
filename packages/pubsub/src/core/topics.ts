@@ -5,6 +5,95 @@ import { AbortError, PubSubError } from "./error";
 import type { ServerWebSocket, Topics } from "@ws-kit/core";
 import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./constants";
 
+// ============================================================================
+// Helper Utilities for Confirmation and Timeout Handling
+// ============================================================================
+
+/**
+ * Compose an AbortSignal from an optional base signal and timeout.
+ * Returns an AbortSignal that aborts when:
+ * - The base signal aborts (if provided), OR
+ * - The timeout elapses (if timeoutMs is provided)
+ */
+function composeSignal(base?: AbortSignal, timeoutMs?: number): AbortSignal {
+  // No composition needed: no timeout and no base
+  if (!timeoutMs && !base) {
+    // Return a signal that never aborts
+    return new AbortController().signal;
+  }
+
+  // Only timeout: create a new controller with timeout
+  if (!base && timeoutMs) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    // Track the timeout so cleanup is possible if needed
+    (
+      controller as unknown as { __timeoutId: ReturnType<typeof setTimeout> }
+    ).__timeoutId = timeoutId;
+    return controller.signal;
+  }
+
+  // Only base: return as-is
+  if (!timeoutMs) {
+    return base;
+  }
+
+  // Both: create a composite controller
+  // This controller aborts if either the base aborts or timeout fires
+  const composite = new AbortController();
+
+  // Abort on base signal
+  if (base.aborted) {
+    composite.abort(base.reason);
+  } else {
+    base.addEventListener("abort", () => {
+      if (!composite.signal.aborted) {
+        composite.abort(base.reason);
+      }
+    });
+  }
+
+  // Abort on timeout
+  const timeoutId = setTimeout(() => {
+    if (!composite.signal.aborted) {
+      composite.abort(); // Timeout doesn't have a reason; just AbortError
+    }
+  }, timeoutMs);
+
+  // Store the timeout for cleanup
+  (
+    composite as unknown as { __timeoutId: ReturnType<typeof setTimeout> }
+  ).__timeoutId = timeoutId;
+
+  return composite.signal;
+}
+
+/**
+ * Await a promise with an AbortSignal.
+ * If the signal aborts, the promise is rejected with AbortError (or the abort reason).
+ */
+function awaitWithAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason instanceof Error ? signal.reason : new AbortError(),
+    );
+  }
+
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      signal.addEventListener("abort", () => {
+        reject(
+          signal.reason instanceof Error ? signal.reason : new AbortError(),
+        );
+      });
+    }),
+  ]);
+}
+
 /**
  * Validator function for topic validation.
  *
@@ -67,6 +156,8 @@ export class TopicsImpl<
   private readonly maxTopicsPerConnection: number;
   private readonly customValidator: TopicValidator | undefined;
   private readonly inflight = new Map<string, Promise<void>>();
+  // Per-connection lock for fallback set() atomicity (wrapper to avoid reassignment after freeze)
+  private readonly setQueue = { current: Promise.resolve() };
 
   /**
    * Create a Topics instance for managing a connection's subscriptions.
@@ -99,6 +190,8 @@ export class TopicsImpl<
   // ============================================================================
 
   has(topic: string): boolean {
+    // Optimistic: returns local view (includes in-flight subscriptions).
+    // Adapter may still reject the in-flight operation, but local visibility is immediate.
     return this.subscriptions.has(topic);
   }
 
@@ -154,7 +247,13 @@ export class TopicsImpl<
 
   async subscribe(
     topic: string,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      confirm?: "optimistic" | "settled";
+      timeoutMs?: number;
+      verify?: boolean;
+      verifyBestEffort?: boolean;
+    },
   ): Promise<void> {
     // Step 1: Validate (use input topic directly; normalization is a middleware concern)
     this.validateTopic(topic);
@@ -181,7 +280,15 @@ export class TopicsImpl<
     }
 
     // Idempotency: already subscribed? → no-op (checked AFTER waiting for in-flight)
+    // For "settled" mode, if already settled, return quickly (local idempotency only; use verify() if you require adapter truth)
     if (this.subscriptions.has(normalizedTopic)) {
+      // If confirm==="settled" and already settled, idempotency shortcut (fast path)
+      if (
+        options?.confirm === "settled" &&
+        this.status(normalizedTopic) === "settled"
+      ) {
+        return; // Already settled; return immediately
+      }
       return;
     }
 
@@ -236,15 +343,54 @@ export class TopicsImpl<
     // If another operation checks inflight while this one is running, it will see this promise.
     this.inflight.set(normalizedTopic, operation);
     try {
-      await operation;
+      // Default behavior: optimistic (await for error handling, but this is consistent with current behavior)
+      // For "settled" mode: compose signal with timeout and await
+      if (options?.confirm === "settled") {
+        const signal = composeSignal(options?.signal, options?.timeoutMs);
+        await awaitWithAbort(operation, signal);
+      } else {
+        await operation;
+      }
+
+      // If verify requested, check adapter truth after settlement
+      if (options?.confirm === "settled" && options?.verify) {
+        const verifyResult = await this.verify(normalizedTopic, {
+          bestEffort: options?.verifyBestEffort,
+          signal: options?.signal,
+        });
+        if (verifyResult === false) {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Subscription to "${normalizedTopic}" failed adapter verification`,
+          );
+        }
+        // If "unknown" and not bestEffort, throw error
+        if (verifyResult === "unknown" && !options?.verifyBestEffort) {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Cannot verify subscription: adapter lacks capability`,
+            { code: "VERIFY_UNSUPPORTED" },
+          );
+        }
+      }
     } finally {
-      this.inflight.delete(normalizedTopic);
+      // Only delete if this promise is still the latest for this topic.
+      // If a newer operation installed a different promise, leave the map entry.
+      if (this.inflight.get(normalizedTopic) === operation) {
+        this.inflight.delete(normalizedTopic);
+      }
     }
   }
 
   async unsubscribe(
     topic: string,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      confirm?: "optimistic" | "settled";
+      timeoutMs?: number;
+      verify?: boolean;
+      verifyBestEffort?: boolean;
+    },
   ): Promise<void> {
     // Soft no-op semantics (docs/specs/pubsub.md#idempotency): not subscribed? → return without validation.
     // This matches unsubscribeMany() behavior (phase 1: filter to subscribed, phase 2: validate).
@@ -305,9 +451,41 @@ export class TopicsImpl<
     // Track in-flight operation
     this.inflight.set(normalizedTopic, operation);
     try {
-      await operation;
+      // For "settled" mode: compose signal with timeout and await
+      if (options?.confirm === "settled") {
+        const signal = composeSignal(options?.signal, options?.timeoutMs);
+        await awaitWithAbort(operation, signal);
+      } else {
+        await operation;
+      }
+
+      // If verify requested, check adapter truth after settlement
+      if (options?.confirm === "settled" && options?.verify) {
+        const verifyResult = await this.verify(normalizedTopic, {
+          bestEffort: options?.verifyBestEffort,
+          signal: options?.signal,
+        });
+        if (verifyResult === true) {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Unsubscription from "${normalizedTopic}" failed adapter verification`,
+          );
+        }
+        // If "unknown" and not bestEffort, throw error
+        if (verifyResult === "unknown" && !options?.verifyBestEffort) {
+          throw new PubSubError(
+            "ADAPTER_ERROR",
+            `Cannot verify unsubscription: adapter lacks capability`,
+            { code: "VERIFY_UNSUPPORTED" },
+          );
+        }
+      }
     } finally {
-      this.inflight.delete(normalizedTopic);
+      // Only delete if this promise is still the latest for this topic.
+      // If a newer operation installed a different promise, leave the map entry.
+      if (this.inflight.get(normalizedTopic) === operation) {
+        this.inflight.delete(normalizedTopic);
+      }
     }
   }
 
@@ -321,14 +499,20 @@ export class TopicsImpl<
    * Input: ["room:1", "room:1", "room:2"] → internally processed as 2 unique topics.
    *
    * @param topics - Iterable of topic names to subscribe to
-   * @param options - Optional: `signal` for cancellation support
+   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
    * @returns { added, total } where added = newly subscribed topics, total = all subscriptions
    * @throws {PubSubError} if any topic fails validation or adapter call
    * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   async subscribeMany(
     topics: Iterable<string>,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      confirm?: "optimistic" | "settled";
+      timeoutMs?: number;
+      verify?: boolean;
+      verifyBestEffort?: boolean;
+    },
   ): Promise<{ added: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
     if (options?.signal?.aborted) {
@@ -436,14 +620,20 @@ export class TopicsImpl<
    * **Deduplication**: Duplicate topics in input are coalesced into unique set.
    *
    * @param topics - Iterable of topic names to unsubscribe from
-   * @param options - Optional: `signal` for cancellation support
+   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
    * @returns { removed, total } where removed = actually-unsubscribed topics, total = remaining subscriptions
    * @throws {PubSubError} if any subscribed topic fails validation or adapter call
    * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   async unsubscribeMany(
     topics: Iterable<string>,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      confirm?: "optimistic" | "settled";
+      timeoutMs?: number;
+      verify?: boolean;
+      verifyBestEffort?: boolean;
+    },
   ): Promise<{ removed: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
     if (options?.signal?.aborted) {
@@ -525,68 +715,217 @@ export class TopicsImpl<
 
   /**
    * Remove all current subscriptions atomically.
+   * Equivalent to `set([])`.
    *
    * **Atomicity guarantee**: All subscriptions succeed in being removed or all fail.
    * If any adapter call fails, the connection state is unchanged.
    *
-   * @param options - Optional: `signal` for cancellation support
+   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
    * @returns { removed } - Count of subscriptions that were removed
    * @throws {PubSubError} if any adapter call fails
    * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
   async clear(options?: {
     signal?: AbortSignal;
+    confirm?: "optimistic" | "settled";
+    timeoutMs?: number;
+    verify?: boolean;
+    verifyBestEffort?: boolean;
   }): Promise<{ removed: number }> {
-    // Pre-commit cancellation: Check if signal is already aborted
-    if (options?.signal?.aborted) {
-      throw new AbortError();
-    }
+    const result = await this.set([], options);
+    return { removed: result.removed };
+  }
 
-    const removed = this.subscriptions.size;
-    const topicArray = Array.from(this.subscriptions);
+  /**
+   * Update subscriptions using a callback that mutates a draft Set.
+   * Provides Set-like ergonomics while maintaining atomicity.
+   *
+   * **How it works**:
+   * 1. Creates a draft Set of current subscriptions
+   * 2. Calls mutator to modify the draft (draft.add(), draft.delete())
+   * 3. Atomically applies the diff via a single `set()` call
+   * 4. All validation, normalization, rollback semantics apply
+   *
+   * @param mutator - Function that mutates the draft Set in-place
+   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
+   * @returns { added, removed, total } - Counts of topics changed
+   *
+   * @example
+   * ```typescript
+   * // Update multiple topics atomically
+   * await ctx.topics.update(draft => {
+   *   draft.add("orders.eu");
+   *   draft.delete("orders.us");
+   * }, { signal: abortCtrl.signal });
+   * ```
+   */
+  async update(
+    mutator: (draft: Set<string>) => void,
+    options?: {
+      signal?: AbortSignal;
+      confirm?: "optimistic" | "settled";
+      timeoutMs?: number;
+      verify?: boolean;
+      verifyBestEffort?: boolean;
+    },
+  ): Promise<{ added: number; removed: number; total: number }> {
+    // Create a draft Set of current subscriptions
+    const draft = new Set<string>(Array.from(this.subscriptions));
 
-    // Pre-commit cancellation: Check again before commit starts
-    if (options?.signal?.aborted) {
-      throw new AbortError();
-    }
+    // Let caller mutate the draft
+    mutator(draft);
 
-    // Step 1: Call adapter to unsubscribe from all topics.
-    // Track successes for rollback if any topic fails (docs/specs/pubsub.md#batch-atomicity).
-    // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
-    const successfulTopics = new Set<string>();
-    try {
-      for (const topic of topicArray) {
-        this.ws.unsubscribe(topic); // May throw; internal state unchanged
-        successfulTopics.add(topic);
-      }
-    } catch (err) {
-      // ROLLBACK: Re-subscribe to all topics we successfully unsubscribed from
-      // This ensures atomicity: if any topic fails, all are rolled back (no partial state).
-      const failedRollback = new Set<string>();
-      for (const topic of successfulTopics) {
-        try {
-          this.ws.subscribe(topic);
-        } catch {
-          // Rollback failure: adapter and local state are now divergent.
-          // Track failed rollbacks to surface in error details for monitoring.
-          failedRollback.add(topic);
+    // Apply the final state via set()
+    return this.set(draft, options);
+  }
+
+  /**
+   * Wait for all in-flight operations to settle.
+   *
+   * Useful for tests and determinism: ensures all pending subscribe/unsubscribe/set/update calls
+   * have completed before you assert state.
+   *
+   * **Note**: `has()` returns optimistic state; `flush()` ensures that state is confirmed
+   * by the adapter (or rejected, in which case your error handler caught it).
+   *
+   * @param topic - Optional: wait for a specific topic's operations. If omitted, wait for all.
+   * @param options - Optional: `timeoutMs` for timeout, `signal` for cancellation
+   * @returns Promise that resolves when all (or specified topic's) in-flight operations complete.
+   *
+   * @example
+   * ```typescript
+   * await ctx.topics.subscribe("room:123");
+   * // Maybe still in-flight; assert after flush:
+   * await ctx.topics.flush("room:123", { timeoutMs: 5000 });
+   * assert(ctx.topics.has("room:123"));
+   * ```
+   */
+  async flush(
+    topic?: string,
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<void> {
+    const signal = composeSignal(options?.signal, options?.timeoutMs);
+
+    if (topic) {
+      // Wait for a specific topic's in-flight operation
+      const inFlight = this.inflight.get(topic);
+      if (inFlight) {
+        await awaitWithAbort(inFlight, signal);
+      } else {
+        // No in-flight operation, but check if signal is already aborted
+        if (signal.aborted) {
+          throw signal.reason instanceof Error
+            ? signal.reason
+            : new AbortError();
         }
       }
-      throw new PubSubError("ADAPTER_ERROR", `Failed to clear subscriptions`, {
-        cause: err,
-        rollbackFailed: failedRollback.size > 0,
-        failedRollbackTopics: Array.from(failedRollback),
-      });
+      return;
     }
 
-    // Step 2: Mutate internal state only after all adapter calls succeed (post-commit, late aborts ignored).
-    // Invariant: We only reach here if all adapter calls succeeded.
-    // This guarantees atomicity: either all subscriptions are cleared or none are.
-    this.subscriptions.clear();
+    // Wait for all in-flight operations
+    const promises = Array.from(this.inflight.values());
+    if (promises.length > 0) {
+      await awaitWithAbort(Promise.all(promises), signal);
+    } else {
+      // No in-flight operations, but check if signal is already aborted
+      if (signal.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new AbortError();
+      }
+    }
+  }
 
-    // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
+  /**
+   * Get detailed subscription status (settled, pending, or absent).
+   * Use when you need to distinguish in-flight operations from settled state.
+   *
+   * **Important**: "settled" means the operation completed locally after a successful adapter call.
+   * It does NOT guarantee adapter truth across failures, failovers, or other connections.
+   * Use verify() to check adapter truth if needed.
+   *
+   * @returns One of: 'settled' (last mutation completed locally after adapter call),
+   *          'pending-subscribe' (subscribe in-flight),
+   *          'pending-unsubscribe' (unsubscribe in-flight),
+   *          'absent' (not subscribed)
+   */
+  status(
+    topic: string,
+  ): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent" {
+    const inFlight = this.inflight.has(topic);
+    const subscribed = this.subscriptions.has(topic);
 
-    return { removed };
+    if (inFlight && subscribed) return "pending-subscribe";
+    if (inFlight && !subscribed) return "pending-unsubscribe";
+    if (subscribed) return "settled";
+    return "absent";
+  }
+
+  /**
+   * Probe the adapter for current subscription truth.
+   *
+   * Returns adapter's view of whether this connection is subscribed to the topic.
+   * If adapter doesn't support probing, returns "unknown" (or falls back to local has() if bestEffort).
+   *
+   * @param topic - Topic to verify
+   * @param options - Optional: bestEffort, throwOnError, signal
+   * @returns Promise<boolean | "unknown">:
+   *   - true: adapter confirms subscribed
+   *   - false: adapter confirms NOT subscribed
+   *   - "unknown": adapter lacks capability or error occurred (unless throwOnError=true)
+   */
+  async verify(
+    topic: string,
+    options?: {
+      bestEffort?: boolean;
+      throwOnError?: boolean;
+      signal?: AbortSignal;
+    },
+  ): Promise<boolean | "unknown"> {
+    // Check if signal is already aborted
+    if (options?.signal?.aborted) {
+      throw options.signal.reason instanceof Error
+        ? options.signal.reason
+        : new AbortError();
+    }
+
+    try {
+      // Check if adapter has verification capability
+      // Adapters expose either hasSubscription(clientId, topic) or hasTopic(topic, clientId)
+      const wsAdapter = this.ws as unknown as {
+        hasSubscription?: (clientId: string, topic: string) => Promise<boolean>;
+        hasTopic?: (topic: string, clientId: string) => Promise<boolean>;
+      };
+
+      // Try new API first
+      if (typeof wsAdapter.hasSubscription === "function") {
+        const result = await awaitWithAbort(
+          wsAdapter.hasSubscription(this.clientId, topic),
+          options?.signal || new AbortController().signal,
+        );
+        return result;
+      }
+
+      // Fall back to legacy API
+      if (typeof wsAdapter.hasTopic === "function") {
+        const result = await awaitWithAbort(
+          wsAdapter.hasTopic(topic, this.clientId),
+          options?.signal || new AbortController().signal,
+        );
+        return result;
+      }
+
+      // Adapter doesn't support verification
+      if (options?.bestEffort) {
+        // Fall back to local state
+        return this.subscriptions.has(topic);
+      }
+
+      return "unknown";
+    } catch (err) {
+      if (options?.throwOnError) {
+        throw err;
+      }
+      return "unknown";
+    }
   }
 
   // ============================================================================
@@ -594,31 +933,42 @@ export class TopicsImpl<
   // ============================================================================
 
   /**
-   * Atomically replace current subscriptions with a desired set.
+   * Make subscriptions equal to the provided set.
    *
    * Computes the delta (topics to add and remove) and applies it in a single atomic operation.
-   * Useful for reconnection scenarios where you want to sync to a desired state.
+   * Useful for syncing subscription state to a desired set.
    *
    * **Order of operations (normative):**
    * 1. Normalize and validate all desired topics
    * 2. Authorize all desired topics for subscription
    * 3. Compute delta: toAdd and toRemove
    * 4. Idempotency check: if both empty, return early
-   * 5. Check topic limit: currentSize - removed + added <= maxTopicsPerConnection (docs/specs/pubsub.md#replace-semantics)
+   * 5. Check topic limit: currentSize - removed + added <= maxTopicsPerConnection (docs/specs/pubsub.md#set-semantics)
    * 6. Adapter phase: call adapter for all changes (before mutation)
    * 7. Mutate state only after all adapter calls succeed
    * 8. Return counts
    *
+   * **Fallback atomicity**: When the underlying WebSocket adapter doesn't support
+   * atomic replace(), uses a per-connection lock to serialize the fallback diff + individual ops,
+   * preventing race conditions with per-topic operations.
+   * Order: unsubscribe first (free space) then subscribe (minimize message gaps).
+   *
    * @param topics - Iterable of desired topic names
-   * @param options - Optional: `signal` for cancellation support
+   * @param options - Optional: `signal` for cancellation support, `confirm` for settlement semantics, `timeoutMs` for timeout
    * @returns { added, removed, total }
    * @throws PubSubError with code TOPIC_LIMIT_EXCEEDED if resulting size exceeds maxTopicsPerConnection,
    *                       or other codes if validation, authorization, or adapter fails
    * @throws {AbortError} if `signal` is aborted before commit (no state change)
    */
-  async replace(
+  async set(
     topics: Iterable<string>,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      confirm?: "optimistic" | "settled";
+      timeoutMs?: number;
+      verify?: boolean;
+      verifyBestEffort?: boolean;
+    },
   ): Promise<{ added: number; removed: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
     if (options?.signal?.aborted) {
@@ -682,83 +1032,190 @@ export class TopicsImpl<
       throw new AbortError();
     }
 
-    // Step 6: Call adapter for all changes atomically
-    // Track successes for rollback if any topic fails (docs/specs/pubsub.md#replace-semantics).
-    // Invariant: If any adapter call fails, rollback happens before throwing (true atomicity).
-    // CRITICAL: Unsubscribe FIRST (freeing space) before subscribing. This ensures adapter never
-    // sees a transient count exceeding maxTopicsPerConnection (docs/specs/pubsub.md:593-596).
-    const subscribedTopics = new Set<string>();
-    const unsubscribedTopics = new Set<string>();
-    try {
-      // UNSUBSCRIBE FIRST: Free up space before adding new topics
-      for (const topic of toRemove) {
-        this.ws.unsubscribe(topic); // May throw; internal state unchanged
-        unsubscribedTopics.add(topic);
-      }
-
-      // SUBSCRIBE SECOND: Add new topics to the freed space
-      for (const topic of toAdd) {
-        this.ws.subscribe(topic); // May throw; internal state unchanged
-        subscribedTopics.add(topic);
-      }
-    } catch (err) {
-      // ROLLBACK: Undo all successful adapter calls IN REVERSE ORDER
-      // This ensures atomicity: if any topic fails, all changes are rolled back (no partial state).
-      // CRITICAL: Unsubscribe newly-added topics FIRST (freeing space) before re-subscribing removed topics.
-      // This mirrors the forward order and respects maxTopicsPerConnection limits during rollback.
-      const failedRollback = new Set<string>();
-
-      // Rollback step 1: Unsubscribe newly-added topics (free space first)
-      for (const topic of subscribedTopics) {
-        try {
-          this.ws.unsubscribe(topic);
-        } catch {
-          // Rollback failure: adapter and local state are now divergent.
-          // Track failed rollbacks to surface in error details for monitoring.
-          failedRollback.add(topic);
-        }
-      }
-
-      // Rollback step 2: Re-subscribe removed topics (restore removed state)
-      for (const topic of unsubscribedTopics) {
-        try {
-          this.ws.subscribe(topic);
-        } catch {
-          // Rollback failure: adapter and local state are now divergent.
-          // Track failed rollbacks to surface in error details for monitoring.
-          failedRollback.add(topic);
-        }
-      }
-
-      throw new PubSubError(
-        "ADAPTER_ERROR",
-        `Failed to replace subscriptions`,
-        {
-          cause: err,
-          rollbackFailed: failedRollback.size > 0,
-          failedRollbackTopics: Array.from(failedRollback),
-        },
+    // If adapter supports replace(), use it directly
+    if (typeof this.ws.replace === "function") {
+      return this.setWithAdapterSupport(
+        toAdd,
+        toRemove,
+        options?.signal,
+        options?.confirm,
+        options?.timeoutMs,
       );
     }
 
-    // Step 7: Mutate internal state only after all adapter calls succeed (post-commit, late aborts ignored)
-    // Invariant: We only reach here if all validations and adapter calls succeeded.
-    // This guarantees atomicity: either all topics are added/removed or none are.
+    // Fallback: use per-connection lock to serialize against per-topic ops
+    return this.setWithFallback(
+      toAdd,
+      toRemove,
+      options?.signal,
+      options?.confirm,
+      options?.timeoutMs,
+    );
+  }
+
+  /**
+   * Set implementation when adapter natively supports replace().
+   * Simpler path: optimistic local update + single adapter call.
+   * Note: set operations are inherently atomic; confirm/timeoutMs are accepted for API consistency.
+   */
+  private async setWithAdapterSupport(
+    toAdd: Set<string>,
+    toRemove: Set<string>,
+    _signal?: AbortSignal,
+    _confirm?: "optimistic" | "settled",
+    _timeoutMs?: number,
+  ): Promise<{ added: number; removed: number; total: number }> {
+    const prev = new Set(this.subscriptions);
+
+    // Optimistic local update
     for (const topic of toAdd) {
       this.subscriptions.add(topic);
     }
-
     for (const topic of toRemove) {
       this.subscriptions.delete(topic);
     }
 
-    // Lifecycle hooks are handled by usePubSub() middleware (request-scoped, context-aware)
+    try {
+      // Call adapter to replace subscriptions
+      const replace = this.ws.replace as unknown as (
+        topics: string[],
+      ) => Promise<void>;
+      await replace(Array.from(this.subscriptions));
+    } catch (err) {
+      // Rollback local state
+      this.subscriptions.clear();
+      for (const topic of prev) {
+        this.subscriptions.add(topic);
+      }
+      throw new PubSubError(
+        "ADAPTER_ERROR",
+        `Failed to replace subscriptions`,
+        { cause: err },
+      );
+    }
 
     return {
       added: toAdd.size,
       removed: toRemove.size,
       total: this.subscriptions.size,
     };
+  }
+
+  /**
+   * Set implementation when adapter doesn't support replace().
+   * Uses per-connection lock to prevent race conditions with per-topic ops.
+   * Order: unsubscribe first (free space) then subscribe (minimize gaps).
+   * Includes proper rollback with best-effort error recovery.
+   * Note: set operations are inherently atomic; confirm/timeoutMs are accepted for API consistency.
+   */
+  private async setWithFallback(
+    toAdd: Set<string>,
+    toRemove: Set<string>,
+    signal?: AbortSignal,
+    _confirm?: "optimistic" | "settled",
+    _timeoutMs?: number,
+  ): Promise<{ added: number; removed: number; total: number }> {
+    // Wait for previous set operation to complete
+    const prevSet = this.setQueue.current;
+    let resolveSet!: () => void;
+    const nextSet = new Promise<void>((r) => (resolveSet = r));
+    this.setQueue.current = nextSet;
+
+    try {
+      await prevSet; // Wait for previous set to settle
+
+      // Abort check after waiting
+      if (signal?.aborted) {
+        throw new AbortError();
+      }
+
+      // Stage local state optimistically; save for rollback
+      const prev = new Set(this.subscriptions);
+      for (const topic of toAdd) {
+        this.subscriptions.add(topic);
+      }
+      for (const topic of toRemove) {
+        this.subscriptions.delete(topic);
+      }
+
+      // Track successful operations for rollback
+      const unsubscribedTopics = new Set<string>();
+      const subscribedTopics = new Set<string>();
+
+      try {
+        // Fallback: call individual adapter methods in order (unsub first, then sub)
+        // This order frees space before adding, reducing transient limit violations
+
+        // Step 1: UNSUBSCRIBE FIRST (free up space)
+        for (const topic of toRemove) {
+          try {
+            this.ws.unsubscribe(topic);
+            unsubscribedTopics.add(topic);
+          } catch (err) {
+            throw new PubSubError(
+              "ADAPTER_ERROR",
+              `Failed to unsubscribe from topic "${topic}" during set`,
+              err,
+            );
+          }
+        }
+
+        // Step 2: SUBSCRIBE SECOND (add new topics to freed space)
+        for (const topic of toAdd) {
+          try {
+            this.ws.subscribe(topic);
+            subscribedTopics.add(topic);
+          } catch (err) {
+            throw new PubSubError(
+              "ADAPTER_ERROR",
+              `Failed to subscribe to topic "${topic}" during set`,
+              err,
+            );
+          }
+        }
+      } catch (err) {
+        // ROLLBACK: Undo all successful adapter calls IN REVERSE ORDER
+        const failedRollback = new Set<string>();
+
+        // Rollback step 1: Unsubscribe newly-added topics (free space first)
+        for (const topic of subscribedTopics) {
+          try {
+            this.ws.unsubscribe(topic);
+          } catch {
+            failedRollback.add(topic);
+          }
+        }
+
+        // Rollback step 2: Re-subscribe removed topics (restore removed state)
+        for (const topic of unsubscribedTopics) {
+          try {
+            this.ws.subscribe(topic);
+          } catch {
+            failedRollback.add(topic);
+          }
+        }
+
+        // Rollback local state
+        this.subscriptions.clear();
+        for (const topic of prev) {
+          this.subscriptions.add(topic);
+        }
+
+        throw new PubSubError("ADAPTER_ERROR", `Failed to set subscriptions`, {
+          cause: err,
+          rollbackFailed: failedRollback.size > 0,
+          failedRollbackTopics: Array.from(failedRollback),
+        });
+      }
+
+      return {
+        added: toAdd.size,
+        removed: toRemove.size,
+        total: this.subscriptions.size,
+      };
+    } finally {
+      resolveSet();
+    }
   }
 
   /**

@@ -267,7 +267,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
       });
     });
 
-    describe("replace()", () => {
+    describe("set()", () => {
       it("should reject with AbortError if signal is already aborted", async () => {
         const mockWs = {
           data: { clientId: "test-123" },
@@ -282,7 +282,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
         ctrl.abort();
 
         try {
-          await topics.replace(["room:3"], { signal: ctrl.signal });
+          await topics.set(["room:3"], { signal: ctrl.signal });
           expect.unreachable("Should have thrown AbortError");
         } catch (err) {
           expect(err).toBeInstanceOf(AbortError);
@@ -308,7 +308,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
         ctrl.abort();
 
         try {
-          await topics.replace(["room:3", "room:4"], { signal: ctrl.signal });
+          await topics.set(["room:3", "room:4"], { signal: ctrl.signal });
           expect.unreachable("Should have thrown AbortError");
         } catch (err) {
           expect(err).toBeInstanceOf(AbortError);
