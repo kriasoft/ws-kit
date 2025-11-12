@@ -1,19 +1,16 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/adapters" },
     { "path": "./packages/bun" },
     { "path": "./packages/client" },
     { "path": "./packages/client/valibot" },
     { "path": "./packages/client/zod" },
     { "path": "./packages/cloudflare" },
-    { "path": "./packages/cloudflare-do" },
     { "path": "./packages/core" },
     { "path": "./packages/memory" },
     { "path": "./packages/middleware" },
     { "path": "./packages/pubsub" },
     { "path": "./packages/redis" },
-    { "path": "./packages/redis-pubsub" },
     { "path": "./packages/valibot" },
     { "path": "./packages/zod" }
   ]
