@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Plugin system: pure functions that widen router capabilities.
  *
@@ -11,20 +14,20 @@
 import type { Router } from "../core/router";
 
 /**
- * Plugin<TConn, CAdd> takes a router, returns a router with added capabilities.
- * CAdd describes what capabilities are added (e.g., { validation: true }).
- * TConn — the per-connection data structure available throughout the router.
+ * Plugin<TContext, TCaps> takes a router, returns a router with added capabilities.
+ * TCaps describes what capabilities are added (e.g., { validation: true }).
+ * TContext — the per-connection data structure available throughout the router.
  */
-export type Plugin<TConn = unknown, CAdd = unknown> = (
-  router: Router<TConn, any>,
-) => Router<TConn, MergeCaps<CAdd>>;
+export type Plugin<TContext = unknown, TCaps = unknown> = (
+  router: Router<TContext, any>,
+) => Router<TContext, MergeCapabilities<TCaps>>;
 
 /**
  * Capability bit-flags (internal union).
  * Plugins merge their capabilities into this type.
  * @internal
  */
-export interface CapabilityMap {
+export interface Capabilities {
   validation?: boolean;
   pubsub?: boolean;
   telemetry?: boolean;
@@ -33,7 +36,13 @@ export interface CapabilityMap {
 /**
  * Merge capabilities (used by Router type narrowing).
  */
-export type MergeCaps<T = unknown> = T extends CapabilityMap ? T : {};
+export type MergeCapabilities<T = unknown> = T extends Capabilities ? T : {};
+
+/**
+ * Internal alias for MergeCapabilities.
+ * @internal
+ */
+export type AsCapabilities<T = unknown> = MergeCapabilities<T>;
 
 /**
  * Example: Memory PubSub Plugin
@@ -52,14 +61,14 @@ export type MergeCaps<T = unknown> = T extends CapabilityMap ? T : {};
  *       pubsub.publish(topic, payload);
  *     };
  *
- *     const subscriptions = {
+ *     const topics = {
  *       list: () => pubsub.topics(),
  *       has: (topic: string) => pubsub.hasTopic(topic),
  *     };
  *
  *     const enhanced = Object.assign(router, {
  *       publish,
- *       subscriptions,
+ *       topics,
  *     }) as Router<any, { pubsub: true }>;
  *
  *     (enhanced as any).__caps = { pubsub: true };

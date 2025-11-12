@@ -1,5 +1,8 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
- * Factory: createRouter(opts?) → Router<TConn>
+ * Factory: createRouter(opts?) → Router<TContext>
  *
  * Options:
  * - heartbeat: { intervalMs?, timeoutMs? } → enables heartbeat behavior
@@ -9,8 +12,8 @@
  */
 
 import type { Router } from "./router";
-import type { CreateRouterOptions } from "./types";
 import { CoreRouter } from "./router";
+import type { CreateRouterOptions } from "./types";
 
 /**
  * Create a new router instance.
@@ -28,14 +31,14 @@ import { CoreRouter } from "./router";
  * });
  * ```
  */
-export function createRouter<TConn = unknown>(
+export function createRouter<TContext = unknown>(
   opts?: CreateRouterOptions,
-): Router<TConn> {
-  const router = new CoreRouter<TConn>(opts?.limits);
+): Router<TContext> {
+  const router = new CoreRouter<TContext>(opts?.limits);
 
   // Options are stored and enforced in dispatch/adapter layer
   // heartbeat: implemented by adapters (Bun, Cloudflare, etc.)
   // limits: enforced during message processing in dispatchMessage
 
-  return router as any as Router<TConn>;
+  return router as any as Router<TContext>;
 }

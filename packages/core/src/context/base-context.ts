@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Base context: always available (no plugin dependency).
  * Minimal surface: clientId, ws, type, data, setData.
@@ -14,7 +17,7 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
 
 export type BaseContextData = Record<string, unknown>;
 
-export interface MinimalContext<TConn extends BaseContextData = unknown> {
+export interface MinimalContext<TContext extends BaseContextData = unknown> {
   /**
    * Stable client identifier (assigned at accept-time, unique per connection).
    * Used for pub/sub membership, middleware authorization, and logging.
@@ -32,16 +35,16 @@ export interface MinimalContext<TConn extends BaseContextData = unknown> {
   readonly type: string;
 
   /**
-   * Per-connection data (passed to createRouter<TConn>).
-   * TConn represents the data structure available on ctx.data.
+   * Per-connection data (passed to createRouter<TContext>).
+   * TContext represents the data structure available on ctx.data.
    * Keep separate from clientId (app state vs. router identity).
    */
-  readonly data: TConn;
+  readonly data: TContext;
 
   /**
    * Update connection data (partial merge).
    */
-  setData(partial: Partial<TConn>): void;
+  setData(partial: Partial<TContext>): void;
 }
 
 /**

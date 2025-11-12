@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * @ws-kit/core — Tiny, type-safe WebSocket router
  *
@@ -16,56 +19,56 @@
 
 // Router factory and types
 export { createRouter } from "./core/createRouter";
-export type { Router, BaseRouter, RouteBuilder } from "./core/router";
+export type { BaseRouter, RouteBuilder, Router } from "./core/router";
 export type { CreateRouterOptions } from "./core/types";
 
 // Schema runtime shape
 export type { MessageDescriptor } from "./protocol/message-descriptor";
 export {
-  isMessageDescriptor,
   isEventDescriptor,
+  isMessageDescriptor,
   isRpcDescriptor,
 } from "./schema/guards";
 
 // Minimal context (always present)
-export type { MinimalContext, BaseContextData } from "./context/base-context";
+export type { BaseContextData, MinimalContext } from "./context/base-context";
 
 // Middleware types
-export type { Middleware, EventHandler } from "./core/types";
+export type { EventHandler, Middleware } from "./core/types";
 
 // Plugin system
-export type { Plugin, MergeCaps } from "./plugin/types";
+export type { AsCapabilities, MergeCapabilities, Plugin } from "./plugin/types";
 
 // Error handling
-export { WsKitError } from "./error/error";
 export type { ErrorCode, WsKitErrorData } from "./error/codes";
+export { WsKitError } from "./error/error";
 
 // Capability contracts (core only; validators add validation, adapters add transport)
 export type {
-  ValidatorAdapter,
-  ValidationContext,
-} from "./capabilities/validation/contracts";
-export type {
-  PubSubAdapter,
   PublishEnvelope,
   PublishOptions,
   PublishResult,
+  PubSubAdapter,
 } from "./capabilities/pubsub/adapter";
 export type {
   Observer,
   TelemetryHooks,
 } from "./capabilities/telemetry/contracts";
+export type {
+  ValidationContext,
+  ValidatorAdapter,
+} from "./capabilities/validation/contracts";
 
 // Platform adapter contract
 export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 
 // Useful type utilities (capability-gated context types)
-export type { EventContext, RpcContext, PubSubContext } from "./context/types";
+export type { EventContext, PubSubContext, RpcContext } from "./context/types";
 
 // Pub/Sub utilities
 export {
-  createThrottledPublish,
   createAdvancedThrottledPublish,
+  createThrottledPublish,
 } from "./utils/throttle";
 export type { ThrottledBroadcastConfig } from "./utils/throttle";
 

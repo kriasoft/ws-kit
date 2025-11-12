@@ -1,27 +1,26 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Message dispatch pipeline: decode → discriminate → lookup → context → middleware → handler
  * Full message processing from raw frame to handler execution.
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { MinimalContext, BaseContextData } from "../context/base-context";
-import type { Middleware, EventHandler } from "../core/types";
+import type { BaseContextData, MinimalContext } from "../context/base-context";
 import type { CoreRouter } from "../core/router";
-import type { MessageEnvelope } from "./types";
+import type { EventHandler, Middleware } from "../core/types";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
+import { isMessageDescriptor } from "../schema/guards";
+import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved";
+import { safeJsonParse } from "../utils/json";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import { composePipeline } from "./middleware";
-import { safeJsonParse } from "../utils/json";
-import {
-  isMessageDescriptor,
-  isEventDescriptor,
-  isRpcDescriptor,
-} from "../schema/guards";
-import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved";
+import type { MessageEnvelope } from "./types";
 
-export interface DispatchOptions<TConn> {
-  globalMiddleware: Middleware<TConn>[];
-  routeMiddleware: Middleware<TConn>[];
-  handler: EventHandler<TConn>;
+export interface DispatchOptions<TContext> {
+  globalMiddleware: Middleware<TContext>[];
+  routeMiddleware: Middleware<TContext>[];
+  handler: EventHandler<TContext>;
 }
 
 /**
@@ -30,10 +29,10 @@ export interface DispatchOptions<TConn> {
  *
  * Errors are NOT caught here; callers handle error routing.
  */
-export async function dispatch<TConn>(
-  ctx: MinimalContext<TConn>,
+export async function dispatch<TContext>(
+  ctx: MinimalContext<TContext>,
   schema: MessageDescriptor,
-  opts: DispatchOptions<TConn>,
+  opts: DispatchOptions<TContext>,
 ): Promise<void> {
   // Compose middleware: global then per-route
   const allMiddleware = [...opts.globalMiddleware, ...opts.routeMiddleware];
@@ -54,11 +53,11 @@ export async function dispatch<TConn>(
  * @param ws WebSocket connection
  * @param impl Router implementation (provides registry, lifecycle, context factory, etc.)
  */
-export async function dispatchMessage<TConn extends BaseContextData>(
+export async function dispatchMessage<TContext extends BaseContextData>(
   raw: string | ArrayBuffer,
   clientId: string,
   ws: ServerWebSocket,
-  impl: CoreRouter<TConn>,
+  impl: CoreRouter<TContext>,
 ): Promise<void> {
   const now = Date.now();
 

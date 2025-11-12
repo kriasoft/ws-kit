@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Handler registry: stores routes by schema.type.
  * Implements conflict resolution for merge() and mount().
@@ -18,14 +21,14 @@ export interface RouteTableOptions {
  * - "skip": keep existing handler, ignore incoming
  * - "replace": replace existing with incoming
  */
-export class RouteTable<TConn> {
-  private handlers = new Map<string, RouteEntry<TConn>>();
+export class RouteTable<TContext> {
+  private handlers = new Map<string, RouteEntry<TContext>>();
 
   /**
    * Register a handler for a message type.
    * Throws if type already registered (use merge() for conflict handling).
    */
-  register(schema: MessageDescriptor, entry: RouteEntry<TConn>): this {
+  register(schema: MessageDescriptor, entry: RouteEntry<TContext>): this {
     const type = schema?.type;
     if (typeof type !== "string" || type.length === 0) {
       throw new Error(`Invalid schema.type: ${String(type)}`);
@@ -42,7 +45,7 @@ export class RouteTable<TConn> {
   /**
    * Get handler for a message type.
    */
-  get(type: string): RouteEntry<TConn> | undefined {
+  get(type: string): RouteEntry<TContext> | undefined {
     return this.handlers.get(type);
   }
 
@@ -63,7 +66,7 @@ export class RouteTable<TConn> {
   /**
    * List all registered [type, entry] pairs.
    */
-  list(): readonly [string, RouteEntry<TConn>][] {
+  list(): readonly [string, RouteEntry<TContext>][] {
     return Array.from(this.handlers.entries());
   }
 
@@ -76,7 +79,7 @@ export class RouteTable<TConn> {
    *   - "skip": keep existing, ignore incoming
    *   - "replace": replace existing with incoming
    */
-  merge(other: RouteTable<TConn>, opts: RouteTableOptions = {}): this {
+  merge(other: RouteTable<TContext>, opts: RouteTableOptions = {}): this {
     const { onConflict = "error" } = opts;
 
     for (const [type, entry] of other.list()) {
@@ -111,14 +114,14 @@ export class RouteTable<TConn> {
    */
   mount(
     prefix: string,
-    other: RouteTable<TConn>,
+    other: RouteTable<TContext>,
     opts: RouteTableOptions = {},
   ): this {
     const { onConflict = "error" } = opts;
 
     for (const [type, entry] of other.list()) {
       const prefixedType = prefix + type;
-      const nextEntry: RouteEntry<TConn> = {
+      const nextEntry: RouteEntry<TContext> = {
         ...entry,
         schema: {
           ...entry.schema,

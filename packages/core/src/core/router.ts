@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * BaseRouter implementation.
  *
@@ -14,27 +17,27 @@
  * Capability-gated: rpc(), publish(), subscribe() exist only when plugins add them.
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { MinimalContext, BaseContextData } from "../context/base-context";
-import type {
-  Middleware,
-  EventHandler,
-  RouteEntry,
-  CreateRouterOptions,
-} from "./types";
-import type { Plugin } from "../plugin/types";
-import type { ServerWebSocket } from "../ws/platform-adapter";
-import { RouteTable } from "./route-table";
+import type { BaseContextData, MinimalContext } from "../context/base-context";
+import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
 import { PluginHost } from "../plugin/manager";
-import { dispatchMessage } from "../engine/dispatch";
+import type { Plugin } from "../plugin/types";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
+import type { ServerWebSocket } from "../ws/platform-adapter";
+import { RouteTable } from "./route-table";
 import { INTERNAL_ROUTES } from "./symbols";
+import type {
+  CreateRouterOptions,
+  EventHandler,
+  Middleware,
+  RouteEntry,
+} from "./types";
 
-export interface BaseRouter<TConn> {
-  use(mw: Middleware<TConn>): this;
-  on(schema: MessageDescriptor, handler: EventHandler<TConn>): this;
-  route(schema: MessageDescriptor): RouteBuilder<TConn>;
+export interface BaseRouter<TContext> {
+  use(mw: Middleware<TContext>): this;
+  on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
+  route(schema: MessageDescriptor): RouteBuilder<TContext>;
   merge(
     other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
@@ -44,33 +47,35 @@ export interface BaseRouter<TConn> {
     other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
-  plugin<P extends Plugin<TConn>>(plugin: P): ReturnType<P>;
-  onError(fn: (err: unknown, ctx: MinimalContext<TConn> | null) => void): this;
+  plugin<P extends Plugin<TContext>>(plugin: P): ReturnType<P>;
+  onError(
+    fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
+  ): this;
 }
 
 /**
- * Router<TConn, Caps> = BaseRouter + capability-gated APIs
+ * Router<TContext, Caps> = BaseRouter + capability-gated APIs
  * Caps is merged from plugins; unknown plugins don't widen the type.
  */
-export type Router<TConn = unknown, Caps = {}> = BaseRouter<TConn> &
-  (Caps extends { validation: true } ? ValidationAPI<TConn> : {}) &
-  (Caps extends { pubsub: true } ? PubSubAPI<TConn> : {});
+export type Router<TContext = unknown, Caps = {}> = BaseRouter<TContext> &
+  (Caps extends { validation: true } ? ValidationAPI<TContext> : {}) &
+  (Caps extends { pubsub: true } ? PubSubAPI<TContext> : {});
 
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
  * Only addition: rpc() method (on() already exists in base).
  */
-export interface ValidationAPI<TConn> {
+export interface ValidationAPI<TContext> {
   rpc(
     schema: MessageDescriptor & { response: MessageDescriptor },
-    handler: any, // RpcHandler<TConn> (inferred by validation plugin)
+    handler: any, // RpcHandler<TContext> (inferred by validation plugin)
   ): this;
 }
 
 /**
  * Pub/Sub API appears when withPubSub() is plugged.
  */
-export interface PubSubAPI<TConn> {
+export interface PubSubAPI<TContext> {
   publish(
     topic: string,
     schema: MessageDescriptor,
@@ -78,7 +83,7 @@ export interface PubSubAPI<TConn> {
     opts?: { partitionKey?: string; meta?: Record<string, unknown> },
   ): Promise<void>;
 
-  subscriptions: {
+  topics: {
     list(): readonly string[];
     has(topic: string): boolean;
   };
@@ -88,30 +93,30 @@ export interface PubSubAPI<TConn> {
  * Per-route builder (fluent interface):
  *   router.route(schema).use(mw).use(mw2).on(handler)
  */
-export interface RouteBuilder<TConn> {
-  use(mw: Middleware<TConn>): this;
-  on(handler: EventHandler<TConn>): void;
+export interface RouteBuilder<TContext> {
+  use(mw: Middleware<TContext>): this;
+  on(handler: EventHandler<TContext>): void;
 }
 
 /**
  * Per-route builder implementation.
  * Accumulates middleware for a single message type, then registers with router.
  */
-export class CoreRouteBuilder<TConn> implements RouteBuilder<TConn> {
-  private middlewares: Middleware<TConn>[] = [];
+export class CoreRouteBuilder<TContext> implements RouteBuilder<TContext> {
+  private middlewares: Middleware<TContext>[] = [];
 
   constructor(
-    private router: CoreRouter<TConn>,
+    private router: CoreRouter<TContext>,
     private schema: MessageDescriptor,
   ) {}
 
-  use(mw: Middleware<TConn>): this {
+  use(mw: Middleware<TContext>): this {
     this.middlewares.push(mw);
     return this;
   }
 
-  on(handler: EventHandler<TConn>): void {
-    const entry: RouteEntry<TConn> = {
+  on(handler: EventHandler<TContext>): void {
+    const entry: RouteEntry<TContext> = {
       schema: this.schema,
       middlewares: this.middlewares,
       handler,
@@ -124,30 +129,30 @@ export class CoreRouteBuilder<TConn> implements RouteBuilder<TConn> {
  * CoreRouter implementation.
  * Stores global middleware, per-route handlers (via registry), and error hooks.
  */
-export class CoreRouter<TConn extends BaseContextData = unknown>
-  implements BaseRouter<TConn>
+export class CoreRouter<TContext extends BaseContextData = unknown>
+  implements BaseRouter<TContext>
 {
-  private globalMiddlewares: Middleware<TConn>[] = [];
-  private routes = new RouteTable<TConn>();
-  private lifecycle = new LifecycleManager<TConn>();
+  private globalMiddlewares: Middleware<TContext>[] = [];
+  private routes = new RouteTable<TContext>();
+  private lifecycle = new LifecycleManager<TContext>();
   private limitsManager: LimitsManager;
-  private pluginHost: PluginHost<TConn>;
-  private connData = new WeakMap<ServerWebSocket, TConn>();
+  private pluginHost: PluginHost<TContext>;
+  private connData = new WeakMap<ServerWebSocket, TContext>();
   private wsToClientId = new WeakMap<ServerWebSocket, string>();
 
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
     // Initialize plugin host with self reference (cast to bypass recursive type)
-    this.pluginHost = new PluginHost<TConn>(this as any as Router<TConn>);
+    this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);
   }
 
-  use(mw: Middleware<TConn>): this {
+  use(mw: Middleware<TContext>): this {
     this.globalMiddlewares.push(mw);
     return this;
   }
 
-  on(schema: MessageDescriptor, handler: EventHandler<TConn>): this {
-    const entry: RouteEntry<TConn> = {
+  on(schema: MessageDescriptor, handler: EventHandler<TContext>): this {
+    const entry: RouteEntry<TContext> = {
       schema,
       middlewares: [],
       handler,
@@ -156,7 +161,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     return this;
   }
 
-  route(schema: MessageDescriptor): RouteBuilder<TConn> {
+  route(schema: MessageDescriptor): RouteBuilder<TContext> {
     return new CoreRouteBuilder(this, schema);
   }
 
@@ -164,7 +169,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Register a route (called by RouteBuilder after middleware chain is set).
    * @internal
    */
-  registerRoute(entry: RouteEntry<TConn>): void {
+  registerRoute(entry: RouteEntry<TContext>): void {
     this.routes.register(entry.schema, entry);
   }
 
@@ -187,11 +192,13 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     return this;
   }
 
-  plugin<P extends Plugin<TConn>>(plugin: P): ReturnType<P> {
+  plugin<P extends Plugin<TContext>>(plugin: P): ReturnType<P> {
     return this.pluginHost.apply(plugin);
   }
 
-  onError(fn: (err: unknown, ctx: MinimalContext<TConn> | null) => void): this {
+  onError(
+    fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
+  ): this {
     this.lifecycle.onError(fn);
     return this;
   }
@@ -201,7 +208,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Enables cross-bundle duck-typing without instanceof brittleness.
    * @internal
    */
-  [INTERNAL_ROUTES](): RouteTable<TConn> {
+  [INTERNAL_ROUTES](): RouteTable<TContext> {
     return this.routes;
   }
 
@@ -210,7 +217,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Works across multiple bundle copies (monorepo, playgrounds, etc.).
    * @internal
    */
-  private extractRouteTable(other: Router<any>): RouteTable<TConn> {
+  private extractRouteTable(other: Router<any>): RouteTable<TContext> {
     const extractor = (other as any)[INTERNAL_ROUTES];
     if (typeof extractor === "function") {
       return extractor.call(other);
@@ -225,7 +232,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Delegates to extractRouteTable() for symbol-based access.
    * @internal
    */
-  private getRouteTable(other: Router<any>): RouteTable<TConn> {
+  private getRouteTable(other: Router<any>): RouteTable<TContext> {
     return this.extractRouteTable(other);
   }
 
@@ -233,7 +240,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Internal route table (used by plugins and testing).
    * @internal
    */
-  get routeTable(): RouteTable<TConn> {
+  get routeTable(): RouteTable<TContext> {
     return this.routes;
   }
 
@@ -241,7 +248,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Get internal lifecycle manager (used by plugins and testing).
    * @internal
    */
-  getInternalLifecycle(): LifecycleManager<TConn> {
+  getInternalLifecycle(): LifecycleManager<TContext> {
     return this.lifecycle;
   }
 
@@ -249,7 +256,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Get global middleware array (used by dispatch and testing).
    * @internal
    */
-  getGlobalMiddlewares(): readonly Middleware<TConn>[] {
+  getGlobalMiddlewares(): readonly Middleware<TContext>[] {
     return this.globalMiddlewares;
   }
 
@@ -283,10 +290,10 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
    * Ensures connection data persists across all messages on the same socket.
    * @internal
    */
-  private getOrInitData(ws: ServerWebSocket): TConn {
+  private getOrInitData(ws: ServerWebSocket): TContext {
     let d = this.connData.get(ws);
     if (!d) {
-      d = {} as TConn;
+      d = {} as TContext;
       this.connData.set(ws, d);
     }
     return d;
@@ -332,14 +339,14 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     payload?: unknown;
     meta?: Record<string, unknown>;
     receivedAt?: number;
-  }): MinimalContext<TConn> {
+  }): MinimalContext<TContext> {
     const data = this.getOrInitData(params.ws);
     return {
       clientId: params.clientId,
       ws: params.ws,
       type: params.type,
       data,
-      setData: (partial: Partial<TConn>) => {
+      setData: (partial: Partial<TContext>) => {
         Object.assign(data, partial);
       },
     };

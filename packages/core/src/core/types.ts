@@ -1,10 +1,13 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Core type definitions for router, middleware, and handlers.
  * These types exist at the base level (no validation plugin dependency).
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { MinimalContext } from "../context/base-context";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 
 /**
  * Middleware is the same for global and per-route:
@@ -13,10 +16,10 @@ import type { MinimalContext } from "../context/base-context";
  *
  * All middleware runs in order (global first, then per-route), before handler.
  *
- * TConn — the per-connection data available on ctx.data.
+ * TContext — the per-connection data available on ctx.data.
  */
-export type Middleware<TConn = unknown> = (
-  ctx: MinimalContext<TConn>,
+export type Middleware<TContext = unknown> = (
+  ctx: MinimalContext<TContext>,
   next: () => Promise<void>,
 ) => Promise<void>;
 
@@ -25,10 +28,10 @@ export type Middleware<TConn = unknown> = (
  * Available after validation plugin adds payload inference.
  * Can use ctx.send() to broadcast to other clients (requires validation plugin).
  *
- * TConn — the per-connection data available on ctx.data.
+ * TContext — the per-connection data available on ctx.data.
  */
-export type EventHandler<TConn = unknown> = (
-  ctx: any, // MinimalContext<TConn> + payload (from validation)
+export type EventHandler<TContext = unknown> = (
+  ctx: any, // MinimalContext<TContext> + payload (from validation)
 ) => Promise<void> | void;
 
 /**
@@ -49,8 +52,8 @@ export interface CreateRouterOptions {
  * Handler registry entry (internal).
  * Tracks middleware chain + handler for each schema.type.
  */
-export interface RouteEntry<TConn> {
+export interface RouteEntry<TContext> {
   schema: MessageDescriptor;
-  middlewares: Middleware<TConn>[];
-  handler: EventHandler<TConn>;
+  middlewares: Middleware<TContext>[];
+  handler: EventHandler<TContext>;
 }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * RPC handler context (after validation plugin adds payload + response inference).
  *
@@ -10,10 +13,10 @@
 import type { MinimalContext } from "./base-context";
 
 export interface RpcContext<
-  TConn = unknown,
+  TContext = unknown,
   TPayload = unknown,
   TResponse = unknown,
-> extends MinimalContext<TConn> {
+> extends MinimalContext<TContext> {
   /**
    * Parsed + validated RPC request payload.
    */

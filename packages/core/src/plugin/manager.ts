@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Plugin host: manages plugin registration and capability widening.
  * - Ensures idempotency: same plugin applied twice is a no-op
@@ -7,22 +10,22 @@
  * Internal; called by router.plugin().
  */
 
-import type { Plugin, CapabilityMap } from "./types";
 import type { Router } from "../core/router";
+import type { Capabilities, Plugin } from "./types";
 
-export class PluginHost<TConn> {
+export class PluginHost<TContext> {
   private readonly applied = new WeakSet<Function>();
-  private capabilities: CapabilityMap = {};
+  private capabilities: Capabilities = {};
 
-  constructor(private readonly router: Router<TConn, any>) {}
+  constructor(private readonly router: Router<TContext, any>) {}
 
   /**
    * Apply a plugin with idempotency check.
    * - If the plugin was already applied, return the router as-is (type-widened).
    * - Otherwise, call the plugin, merge capabilities, and return the result.
-   * @param plugin Pure function: (router) => Router<TConn, CapAdd>
+   * @param plugin Pure function: (router) => Router<TContext, TCaps>
    */
-  apply<P extends Plugin<TConn, any>>(plugin: P): ReturnType<P> {
+  apply<P extends Plugin<TContext, any>>(plugin: P): ReturnType<P> {
     // Idempotency: if plugin was already applied, skip silently
     if (this.applied.has(plugin)) {
       return this.router as unknown as ReturnType<P>;
@@ -35,7 +38,7 @@ export class PluginHost<TConn> {
     const result = plugin(this.router);
 
     // Merge capabilities from result (plugins attach __caps to the result)
-    const caps = (result as any).__caps as CapabilityMap | undefined;
+    const caps = (result as any).__caps as Capabilities | undefined;
     if (caps) {
       Object.assign(this.capabilities, caps);
     }
@@ -48,7 +51,7 @@ export class PluginHost<TConn> {
   /**
    * Get readonly view of merged capabilities.
    */
-  getCapabilities(): Readonly<CapabilityMap> {
+  getCapabilities(): Readonly<Capabilities> {
     return { ...this.capabilities };
   }
 }

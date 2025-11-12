@@ -14,10 +14,10 @@
  */
 
 import type {
-  Router,
-  Plugin,
-  MessageDescriptor,
   CoreRouter,
+  MessageDescriptor,
+  Plugin,
+  Router,
 } from "@ws-kit/core";
 import type {
   PubSubAdapter,
@@ -66,10 +66,10 @@ import type {
  * await router.pubsub.shutdown(); // Clean up
  * ```
  */
-export function withPubSub<TConn>(
+export function withPubSub<TContext>(
   adapter: PubSubAdapter,
-): Plugin<TConn, { pubsub: true }> {
-  return (router: Router<TConn, any>) => {
+): Plugin<TContext, { pubsub: true }> {
+  return (router: Router<TContext, any>) => {
     // Track active send functions by client ID for local delivery
     const sends = new Map<string, (frame: unknown) => void | Promise<void>>();
 
@@ -191,9 +191,9 @@ export function withPubSub<TConn>(
     };
 
     /**
-     * Convenience helpers for querying subscription state.
+     * Convenience helpers for querying topic state.
      */
-    const subscriptions = {
+    const topics = {
       /**
        * List all active topics in this process.
        */
@@ -280,10 +280,10 @@ export function withPubSub<TConn>(
       };
     }
 
-    // Initialize enhanced router with publish/subscriptions + pubsub.init/shutdown
+    // Initialize enhanced router with publish/topics + pubsub.init/shutdown
     const enhanced = Object.assign(router, {
       publish,
-      subscriptions,
+      topics,
       pubsub: {
         /**
          * Initialize distributed broker consumer (idempotent).
@@ -332,7 +332,7 @@ export function withPubSub<TConn>(
           stop = null;
         },
       },
-    }) as Router<TConn, { pubsub: true }>;
+    }) as Router<TContext, { pubsub: true }>;
 
     (enhanced as any).__caps = { pubsub: true };
     return enhanced;

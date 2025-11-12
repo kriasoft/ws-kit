@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Event handler context (after validation plugin adds payload).
  *
@@ -9,8 +12,8 @@
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { MinimalContext } from "./base-context";
 
-export interface EventContext<TConn = unknown, TPayload = unknown>
-  extends MinimalContext<TConn> {
+export interface EventContext<TContext = unknown, TPayload = unknown>
+  extends MinimalContext<TContext> {
   /**
    * Parsed + validated message payload.
    */

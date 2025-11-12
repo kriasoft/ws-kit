@@ -1,22 +1,21 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it } from "bun:test";
-import { expectTypeOf } from "bun:test";
-import type { Plugin, MergeCaps } from "@ws-kit/core";
+import type { MergeCapabilities, Plugin } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
 
 describe("@ws-kit/core - Internal Symbol Isolation", () => {
   it("Plugin should work with typed connection data", () => {
     type PluginTest = Plugin<{ clientId: string }, { validation: true }>;
 
-    // Plugin should be usable without referencing CapabilityMap
+    // Plugin should be usable without referencing Capabilities
     // Type-level test: just ensure the type is valid
     expectTypeOf<PluginTest>().toMatchTypeOf<object>();
   });
 
-  it("MergeCaps should merge capabilities correctly", () => {
-    // MergeCaps should work without exposing CapabilityMap
-    type Merged = MergeCaps<{ validation: true }>;
+  it("MergeCapabilities should merge capabilities correctly", () => {
+    // MergeCapabilities should work without exposing Capabilities
+    type Merged = MergeCapabilities<{ validation: true }>;
     expectTypeOf<Merged>().toMatchTypeOf<{ validation: true }>();
   });
 

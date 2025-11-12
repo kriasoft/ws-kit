@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Lifecycle hooks: onError sink + activity tracking.
  * All errors (validation, middleware, handler, pubsub) flow here.
@@ -8,14 +11,16 @@
 import type { MinimalContext } from "../context/base-context";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 
-export type ErrorHandler<TConn> = (
+export type ErrorHandler<TContext> = (
   err: unknown,
-  ctx: MinimalContext<TConn> | null,
+  ctx: MinimalContext<TContext> | null,
 ) => void | Promise<void>;
 
-export type OpenHandler<TConn> = (ws: ServerWebSocket) => void | Promise<void>;
+export type OpenHandler<TContext> = (
+  ws: ServerWebSocket,
+) => void | Promise<void>;
 
-export type CloseHandler<TConn> = (
+export type CloseHandler<TContext> = (
   ws: ServerWebSocket,
   code?: number,
   reason?: string,
@@ -28,27 +33,27 @@ export type CloseHandler<TConn> = (
  * - Tracks close handlers for per-connection cleanup
  * - Tracks last activity timestamp per connection for heartbeat monitoring
  */
-export class LifecycleManager<TConn> {
-  private errorHandlers: ErrorHandler<TConn>[] = [];
-  private openHandlers: OpenHandler<TConn>[] = [];
-  private closeHandlers: CloseHandler<TConn>[] = [];
+export class LifecycleManager<TContext> {
+  private errorHandlers: ErrorHandler<TContext>[] = [];
+  private openHandlers: OpenHandler<TContext>[] = [];
+  private closeHandlers: CloseHandler<TContext>[] = [];
   private activityMap = new WeakMap<ServerWebSocket, number>();
 
-  onError(handler: ErrorHandler<TConn>): void {
+  onError(handler: ErrorHandler<TContext>): void {
     this.errorHandlers.push(handler);
   }
 
-  onOpen(handler: OpenHandler<TConn>): void {
+  onOpen(handler: OpenHandler<TContext>): void {
     this.openHandlers.push(handler);
   }
 
-  onClose(handler: CloseHandler<TConn>): void {
+  onClose(handler: CloseHandler<TContext>): void {
     this.closeHandlers.push(handler);
   }
 
   async handleError(
     err: unknown,
-    ctx: MinimalContext<TConn> | null,
+    ctx: MinimalContext<TContext> | null,
   ): Promise<void> {
     for (const handler of this.errorHandlers) {
       try {

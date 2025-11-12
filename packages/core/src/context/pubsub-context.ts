@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Pub/Sub context methods (added by withPubSub plugin).
  *
@@ -6,9 +9,8 @@
  */
 
 import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { MinimalContext } from "./base-context";
 
-export interface PubSubContext<TConn = unknown> {
+export interface PubSubContext<TContext = unknown> {
   /**
    * Publish message to a topic (broadcast to all subscribers).
    * Only available when withPubSub() plugin is installed.

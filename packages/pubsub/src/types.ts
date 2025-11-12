@@ -6,37 +6,37 @@
  */
 
 import type {
-  PubSubAdapter,
+  AdapterPublishError,
   BrokerConsumer,
+  PubSubAdapter,
   PubSubDriver,
+  PublishCapability,
   PublishEnvelope,
+  PublishError,
   PublishOptions,
   PublishResult,
-  StopFn,
-  AdapterPublishError,
   RouterPublishError,
-  PublishError,
-  PublishCapability,
+  StopFn,
 } from "@ws-kit/core/pubsub";
-import type { VerifyResult, VerifyMode } from "./core/topics";
+import type { VerifyMode, VerifyResult } from "./core/topics";
 
 /**
  * Re-export core types for convenience.
  */
 export type {
-  PubSubAdapter,
+  AdapterPublishError,
   BrokerConsumer,
+  PubSubAdapter,
   PubSubDriver,
+  PublishCapability,
   PublishEnvelope,
+  PublishError,
   PublishOptions,
   PublishResult,
-  StopFn,
-  AdapterPublishError,
   RouterPublishError,
-  PublishError,
-  PublishCapability,
-  VerifyResult,
+  StopFn,
   VerifyMode,
+  VerifyResult,
 };
 
 /**
@@ -282,14 +282,14 @@ export interface Topics extends ReadonlySet<string> {
  * Policy hooks for pub/sub operations.
  * Used by middleware to apply normalization and authorization.
  */
-export interface PubSubPolicyHooks<TConn> {
+export interface PubSubPolicyHooks<TContext> {
   /**
    * Normalize a topic name before use (e.g., lowercase, trim whitespace).
    * If not provided, topics are used as-is.
    */
   normalizeTopic?: (
     topic: string,
-    ctx: { clientId: string; data: TConn },
+    ctx: { clientId: string; data: TContext },
   ) => string;
 
   /**
@@ -300,6 +300,6 @@ export interface PubSubPolicyHooks<TConn> {
   authorize?: (
     action: "subscribe" | "unsubscribe" | "publish",
     topic: string,
-    ctx: { clientId: string; data: TConn },
+    ctx: { clientId: string; data: TContext },
   ) => Promise<void> | void;
 }

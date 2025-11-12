@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Middleware pipeline runner.
  *
@@ -5,8 +8,8 @@
  * next() is async; exceptions bubble to onError.
  */
 
-import type { Middleware } from "../core/types";
 import type { MinimalContext } from "../context/base-context";
+import type { Middleware } from "../core/types";
 
 /**
  * Compose multiple middleware into a single pipeline.
@@ -36,10 +39,10 @@ import type { MinimalContext } from "../context/base-context";
  * await pipeline(async () => console.log("handler"));
  * ```
  */
-export function composePipeline<TConn>(
-  middlewares: Middleware<TConn>[],
-): (ctx: MinimalContext<TConn>, next: () => Promise<void>) => Promise<void> {
-  return async (ctx: MinimalContext<TConn>, next: () => Promise<void>) => {
+export function composePipeline<TContext>(
+  middlewares: Middleware<TContext>[],
+): (ctx: MinimalContext<TContext>, next: () => Promise<void>) => Promise<void> {
+  return async (ctx: MinimalContext<TContext>, next: () => Promise<void>) => {
     let index = -1;
 
     async function dispatch(i: number): Promise<void> {
