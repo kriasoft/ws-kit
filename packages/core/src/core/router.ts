@@ -26,7 +26,7 @@ import type { Plugin } from "../plugin/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import { RouteTable } from "./route-table";
-import { INTERNAL_ROUTES } from "./symbols";
+import { ROUTE_TABLE } from "./symbols";
 import type {
   CreateRouterOptions,
   EventHandler,
@@ -123,6 +123,46 @@ export interface PubSubAPI<TContext> {
 export interface RouteBuilder<TContext> {
   use(mw: Middleware<TContext>): this;
   on(handler: EventHandler<TContext>): void;
+}
+
+/**
+ * Read-only route index for plugins.
+ * Plugins only need schema lookups; they should never mutate routes.
+ * @internal
+ */
+export interface ReadonlyRouteIndex {
+  get(type: string): { schema: MessageDescriptor } | undefined;
+  has(type: string): boolean;
+  list(): readonly { type: string; schema: MessageDescriptor }[];
+}
+
+/**
+ * Extract a read-only route index from a router.
+ * This is the preferred way for plugins to access schema lookups.
+ * Uses the internal symbol to work across bundle boundaries.
+ * @internal
+ */
+export function getRouteIndex(router: Router<unknown>): ReadonlyRouteIndex {
+  // Extract RouteTable via symbol (works across bundle boundaries)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractor = (router as any)[ROUTE_TABLE];
+  if (typeof extractor !== "function") {
+    throw new Error(
+      "Cannot extract route index: router does not expose internal route table symbol",
+    );
+  }
+  const table = extractor.call(router) as RouteTable<unknown>;
+
+  // Wrap RouteTable in read-only interface, exposing only schema metadata
+  return {
+    get: (type) => {
+      const entry = table.get(type);
+      return entry ? { schema: entry.schema } : undefined;
+    },
+    has: (type) => table.has(type),
+    list: () =>
+      table.list().map(([type, entry]) => ({ type, schema: entry.schema })),
+  };
 }
 
 /**
@@ -274,10 +314,13 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
 
   /**
    * Expose internal route table via symbol.
-   * Enables cross-bundle duck-typing without instanceof brittleness.
+   * This is the ONLY sanctioned way to access the mutable route table.
+   * Works across bundle boundaries without instanceof brittleness.
+   *
+   * Plugins should use getRouteIndex() helper instead to access schemas read-only.
    * @internal
    */
-  [INTERNAL_ROUTES](): RouteTable<TContext> {
+  [ROUTE_TABLE](): RouteTable<TContext> {
     return this.routes;
   }
 
@@ -288,7 +331,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    */
   private extractRouteTable(other: Router<unknown>): RouteTable<TContext> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const extractor = (other as any)[INTERNAL_ROUTES];
+    const extractor = (other as any)[ROUTE_TABLE];
     if (typeof extractor === "function") {
       return extractor.call(other);
     }
@@ -307,8 +350,11 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   }
 
   /**
-   * Internal route table (used by plugins and testing).
+   * Internal route table accessor (test utility only).
+   * Plugins should use getRouteIndex() instead for read-only schema lookups.
+   * Access via symbol ([ROUTE_TABLE]) is the standard internal pattern.
    * @internal
+   * @deprecated Use getRouteIndex() or [ROUTE_TABLE]() instead
    */
   get routeTable(): RouteTable<TContext> {
     return this.routes;
@@ -320,14 +366,6 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    */
   getInternalLifecycle(): LifecycleManager<TContext> {
     return this.lifecycle;
-  }
-
-  /**
-   * Get internal route registry (used by validation plugin to lookup schemas).
-   * @internal
-   */
-  getInternalRegistry(): RouteTable<TContext> {
-    return this.routes;
   }
 
   /**

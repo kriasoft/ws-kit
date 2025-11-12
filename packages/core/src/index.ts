@@ -19,7 +19,13 @@
 
 // Router factory and types
 export { createRouter } from "./core/createRouter";
-export type { BaseRouter, RouteBuilder, Router } from "./core/router";
+export { getRouteIndex } from "./core/router";
+export type {
+  BaseRouter,
+  ReadonlyRouteIndex,
+  RouteBuilder,
+  Router,
+} from "./core/router";
 export type { CreateRouterOptions } from "./core/types";
 
 // Schema runtime shape

@@ -12,12 +12,13 @@
  */
 
 import type {
-  Router,
-  MessageDescriptor,
-  Plugin,
-  MinimalContext,
   CoreRouter,
+  MessageDescriptor,
+  MinimalContext,
+  Plugin,
+  Router,
 } from "@ws-kit/core";
+import { getRouteIndex } from "@ws-kit/core";
 import { getValibotPayload, validatePayload } from "./internal.js";
 import { getSchemaOpts, typeOf, type SchemaOpts } from "./metadata.js";
 import type { AnySchema } from "./types.js";
@@ -137,12 +138,12 @@ export function withValibot(
     // Inject validation middleware that validates root message and enriches context
     // This runs automatically before any user handler
     router.use(async (ctx: MinimalContext<any>, next) => {
-      // Get the schema from registry by looking up the type
-      const registry = routerImpl.getInternalRegistry();
-      const entry = registry.get(ctx.type);
+      // Get the schema from route index by looking up the type
+      const routeIndex = getRouteIndex(router);
+      const schemaInfo = routeIndex.get(ctx.type);
 
-      if (entry) {
-        const schema = entry.schema as any;
+      if (schemaInfo) {
+        const schema = schemaInfo.schema as any;
 
         // If schema has safeParse (Valibot), validate the full root message
         if (typeof schema?.safeParse === "function") {

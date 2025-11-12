@@ -8,6 +8,7 @@
 
 import type { BaseContextData, MinimalContext } from "../context/base-context";
 import type { CoreRouter } from "../core/router";
+import { ROUTE_TABLE } from "../core/symbols";
 import type { EventHandler, Middleware } from "../core/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { isMessageDescriptor } from "../schema/guards";
@@ -128,7 +129,17 @@ export async function dispatchMessage<TContext extends BaseContextData>(
   }
 
   // 4) Lookup handler by message type
-  const routeTable = impl.routeTable;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractRoutes = (impl as any)[ROUTE_TABLE];
+  if (typeof extractRoutes !== "function") {
+    const lifecycle = impl.getInternalLifecycle();
+    const err = new Error(
+      "Router does not expose internal route table (missing symbol accessor)",
+    );
+    await lifecycle.handleError(err, null);
+    return;
+  }
+  const routeTable = extractRoutes.call(impl);
   const entry = routeTable.get(envelope.type);
   if (!entry) {
     const lifecycle = impl.getInternalLifecycle();
@@ -151,7 +162,7 @@ export async function dispatchMessage<TContext extends BaseContextData>(
   }
 
   // 6) Build minimal context
-  let ctx: MinimalContext<TConn> | null = null;
+  let ctx: MinimalContext<TContext> | null = null;
   try {
     ctx = impl.createContext({
       clientId,
