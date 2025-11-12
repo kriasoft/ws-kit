@@ -37,10 +37,6 @@
 // Plugin
 export { withPubSub } from "./plugin";
 
-// Adapters
-// The in-memory pub/sub adapter is also available via @ws-kit/memory as memoryPubSub()
-export { createMemoryAdapter } from "./adapters/memory";
-
 // Middleware
 export { usePubSub, type UsePubSubOptions } from "./middleware";
 

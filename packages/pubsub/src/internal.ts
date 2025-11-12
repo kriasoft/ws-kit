@@ -56,10 +56,6 @@ export {
   DEFAULT_TOPIC_PATTERN,
 } from "./core/constants";
 
-// Legacy adapters (for backward compatibility)
-export { MemoryPubSub } from "./adapters/legacy";
-export type { PubSub, PubSubPublishOptions } from "./adapters/legacy";
-
 // Test utilities
 export { TestPubSub } from "./test-utils";
 export type { PublishRecord } from "./test-utils";
