@@ -118,6 +118,14 @@ function awaitWithAbort<T>(
 export type TopicValidator = (topic: string) => void;
 
 /**
+ * Subscription verification mode:
+ * - "strict": Fail if verification is unsupported or errors
+ * - "best-effort": Fall back to local state if unsupported
+ * - "off": Skip verification entirely
+ */
+export type VerifyMode = "strict" | "best-effort" | "off";
+
+/**
  * Result of verifying a subscription with the adapter.
  *
  * Discriminated union that precisely represents different verification outcomes:
@@ -289,7 +297,7 @@ export class TopicsImpl<
       signal?: AbortSignal;
       waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: "strict" | "best-effort" | "off";
+      verify?: VerifyMode;
     },
   ): Promise<void> {
     // Step 1: Validate (use input topic directly; normalization is a middleware concern)
@@ -444,7 +452,7 @@ export class TopicsImpl<
       signal?: AbortSignal;
       waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: "strict" | "best-effort" | "off";
+      verify?: VerifyMode;
     },
   ): Promise<void> {
     // Soft no-op semantics (docs/specs/pubsub.md#idempotency): not subscribed? → return without validation.
@@ -584,7 +592,7 @@ export class TopicsImpl<
       signal?: AbortSignal;
       waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: "strict" | "best-effort" | "off";
+      verify?: VerifyMode;
     },
   ): Promise<{ added: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
@@ -704,7 +712,7 @@ export class TopicsImpl<
       signal?: AbortSignal;
       waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: "strict" | "best-effort" | "off";
+      verify?: VerifyMode;
     },
   ): Promise<{ removed: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted
@@ -801,7 +809,7 @@ export class TopicsImpl<
     signal?: AbortSignal;
     waitFor?: "optimistic" | "settled";
     timeoutMs?: number;
-    verify?: "strict" | "best-effort" | "off";
+    verify?: VerifyMode;
   }): Promise<{ removed: number }> {
     const result = await this.set([], options);
     return { removed: result.removed };
@@ -836,7 +844,7 @@ export class TopicsImpl<
       signal?: AbortSignal;
       waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: "strict" | "best-effort" | "off";
+      verify?: VerifyMode;
     },
   ): Promise<{ added: number; removed: number; total: number }> {
     // Create a draft Set of current subscriptions
@@ -1045,7 +1053,7 @@ export class TopicsImpl<
       signal?: AbortSignal;
       waitFor?: "optimistic" | "settled";
       timeoutMs?: number;
-      verify?: "strict" | "best-effort" | "off";
+      verify?: VerifyMode;
     },
   ): Promise<{ added: number; removed: number; total: number }> {
     // Pre-commit cancellation: Check if signal is already aborted

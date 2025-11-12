@@ -18,7 +18,7 @@ import type {
   PublishError,
   PublishCapability,
 } from "@ws-kit/core/pubsub";
-import type { VerifyResult } from "./core/topics";
+import type { VerifyResult, VerifyMode } from "./core/topics";
 
 /**
  * Re-export core types for convenience.
@@ -35,6 +35,8 @@ export type {
   RouterPublishError,
   PublishError,
   PublishCapability,
+  VerifyResult,
+  VerifyMode,
 };
 
 /**
@@ -76,7 +78,7 @@ export interface TopicMutateOptions {
    * - "best-effort": Try to verify; fall back to local state if adapter doesn't support
    * - "off" (default): Skip verification
    */
-  verify?: "strict" | "best-effort" | "off";
+  verify?: VerifyMode;
 }
 
 /**
@@ -264,7 +266,7 @@ export interface Topics extends ReadonlySet<string> {
   verify(
     topic: string,
     options?: {
-      bestEffort?: boolean;
+      mode?: VerifyMode;
       signal?: AbortSignal;
     },
   ): Promise<VerifyResult>;
