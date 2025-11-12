@@ -168,7 +168,7 @@ describe("WebSocketServer E2E", () => {
     closeHandlerCalls = 0;
 
     // Create a new router with validator and pubsub
-    router = createRouter().plugin(withPubSub(memoryPubSub()));
+    router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 
     // Set up message handlers
     router.on(Ping, (ctx) => {

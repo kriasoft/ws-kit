@@ -57,7 +57,7 @@ This spec defines a **minimal, portable, and hard-to-misuse topic-based pub/sub 
 
 ### Capability Gating & Identity
 
-Pub/Sub is a **capability-gated** feature: `ctx.publish()` and `ctx.topics` exist **only** when `withPubSub(adapter)` is plugged into the router.
+Pub/Sub is a **capability-gated** feature: `ctx.publish()` and `ctx.topics` exist **only** when `withPubSub({ adapter })` is plugged into the router.
 
 **Router identity:**
 
@@ -75,7 +75,13 @@ Pub/Sub is a **capability-gated** feature: `ctx.publish()` and `ctx.topics` exis
 
 ```typescript
 // With withPubSub:
-const router = createRouter().plugin(withZod()).plugin(withPubSub(adapter));
+const router = createRouter()
+  .plugin(withZod())
+  .plugin(
+    withPubSub({
+      adapter: memoryPubSub(),
+    }),
+  );
 
 router.on(Message, async (ctx) => {
   await ctx.topics.subscribe("room:123"); // ✅ Allowed; passes ctx.clientId to adapter
@@ -548,7 +554,7 @@ export function usePubSub<TContext = unknown>(
 import { memoryPubSub } from "@ws-kit/memory";
 
 const router = createRouter<AppData>()
-  .plugin(withPubSub(memoryPubSub()))
+  .plugin(withPubSub({ adapter: memoryPubSub() }))
   .use(
     usePubSub({
       hooks: {

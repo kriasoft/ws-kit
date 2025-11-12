@@ -57,7 +57,7 @@ await redis.connect();
 
 const router = createRouter<AppData>()
   .plugin(withZod()) // or .plugin(withValibot())
-  .plugin(withPubSub(redisPubSub(redis)))
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }))
   .plugin(
     withRateLimiter(
       redisRateLimiter(redis, { capacity: 200, tokensPerSecond: 100 }),

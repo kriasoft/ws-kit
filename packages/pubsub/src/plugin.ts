@@ -22,7 +22,8 @@ import type {
   PublishResult,
   Router,
 } from "@ws-kit/core";
-import type { PubSubAdapter, PublishEnvelope } from "@ws-kit/core/pubsub";
+import type { PublishEnvelope } from "@ws-kit/core/pubsub";
+import type { PubSubObserver, WithPubSubOptions } from "./types";
 
 /**
  * Pub/Sub plugin factory.
@@ -31,12 +32,14 @@ import type { PubSubAdapter, PublishEnvelope } from "@ws-kit/core/pubsub";
  * - subscriptions — query active topics
  * - pubsub.init() — start broker consumer if present
  * - pubsub.shutdown() — stop broker consumer and close adapter
+ * - pubsub.tap(observer) — register observer for publish/subscribe events (test/instrumentation)
  *
  * **Plugin Responsibilities**:
  * - Track connected clients (onOpen/onClose hooks)
  * - Deliver messages to local subscribers (deliverLocally)
  * - Manage adapter lifecycle (init/shutdown)
  * - Fast-fail excludeSelf: true with UNSUPPORTED error
+ * - Notify observers of publish/subscribe operations
  *
  * **Adapter Responsibilities**:
  * - Maintain per-client subscriptions
@@ -47,10 +50,20 @@ import type { PubSubAdapter, PublishEnvelope } from "@ws-kit/core/pubsub";
  * Platforms MUST call router.pubsub.init() after routes are registered
  * and before accepting external traffic. This ensures subscribers are ready.
  *
- * Usage:
+ * **Usage**:
  * ```ts
  * const router = createRouter()
- *   .plugin(withPubSub(memoryAdapter()));
+ *   .plugin(withPubSub({
+ *     adapter: memoryPubSub(),
+ *     observer: {
+ *       onPublish: (rec) => console.log(`Published to ${rec.topic}`),
+ *     },
+ *     limits: { maxTopicsPerConn: 100 },
+ *     topic: {
+ *       normalize: (t) => t.toLowerCase(),
+ *       validate: (t) => { if (!t) throw new Error("empty topic"); },
+ *     },
+ *   }));
  *
  * router.on(Message, (ctx) => {
  *   const result = await ctx.publish("topic", schema, payload);
@@ -67,11 +80,38 @@ import type { PubSubAdapter, PublishEnvelope } from "@ws-kit/core/pubsub";
  * ```
  */
 export function withPubSub<TContext>(
-  adapter: PubSubAdapter,
+  opts: WithPubSubOptions,
 ): Plugin<TContext, { pubsub: true }> {
-  return (router: Router<TContext, any>) => {
+  const adapter = opts.adapter;
+  const observer = opts.observer;
+
+  return (
+    router: Router<TContext, any>,
+  ): Router<TContext, { pubsub: true }> => {
     // Track active send functions by client ID for local delivery
     const sends = new Map<string, (frame: unknown) => void | Promise<void>>();
+
+    // Track observers for testing/instrumentation
+    const observers: PubSubObserver[] = [];
+    if (observer) {
+      observers.push(observer);
+    }
+
+    /**
+     * Notify all observers of an event.
+     */
+    const notifyObservers = async (
+      method: keyof PubSubObserver,
+      arg: any,
+    ): Promise<void> => {
+      // Fire all observers in parallel (don't block on slow observers)
+      const promises = observers
+        .map((obs) => obs[method]?.(arg))
+        .filter(Boolean);
+      if (promises.length > 0) {
+        await Promise.allSettled(promises);
+      }
+    };
 
     /**
      * Register a send function for a client when connection opens.
@@ -207,6 +247,18 @@ export function withPubSub<TContext>(
         : undefined;
 
       const result = await adapter.publish(envelope, publishOpts);
+
+      // Notify observers after successful publish
+      if (result.ok) {
+        void notifyObservers("onPublish", {
+          topic: envelope.topic,
+          type: envelope.type,
+          payload: envelope.payload,
+          meta: envelope.meta,
+          timestamp: Date.now(),
+        });
+      }
+
       return result;
     };
 
@@ -274,12 +326,24 @@ export function withPubSub<TContext>(
             // clientId is stable and unique per connection
             if (typeof adapter.subscribe === "function") {
               await adapter.subscribe(ctx.clientId, topic);
+              // Notify observers after successful subscription
+              void notifyObservers("onSubscribe", {
+                clientId: ctx.clientId,
+                topic,
+                timestamp: Date.now(),
+              });
             }
           },
           unsubscribe: async (topic: string): Promise<void> => {
             // Unsubscribe this client from a topic via the adapter
             if (typeof adapter.unsubscribe === "function") {
               await adapter.unsubscribe(ctx.clientId, topic);
+              // Notify observers after successful unsubscription
+              void notifyObservers("onUnsubscribe", {
+                clientId: ctx.clientId,
+                topic,
+                timestamp: Date.now(),
+              });
             }
           },
           has: (topic: string): boolean => {
@@ -302,6 +366,32 @@ export function withPubSub<TContext>(
       publish,
       topics,
       pubsub: {
+        /**
+         * Register an observer for pub/sub operations (testing, instrumentation).
+         * Can be called multiple times to add multiple observers.
+         * Returns an unsubscribe function to remove the observer.
+         *
+         * @example
+         * ```ts
+         * const observer = {
+         *   onPublish(rec) { console.log(`Published: ${rec.topic}`); },
+         *   onSubscribe(info) { console.log(`Subscribed: ${info.clientId} -> ${info.topic}`); },
+         * };
+         *
+         * const unsub = router.pubsub.tap(observer);
+         * // ... router operations ...
+         * unsub(); // Remove observer
+         * ```
+         */
+        tap(observer: PubSubObserver): () => void {
+          observers.push(observer);
+          // Return unsubscribe function
+          return () => {
+            const idx = observers.indexOf(observer);
+            if (idx >= 0) observers.splice(idx, 1);
+          };
+        },
+
         /**
          * Initialize distributed broker consumer (idempotent).
          * Platforms MUST call this after routes are registered and before traffic.

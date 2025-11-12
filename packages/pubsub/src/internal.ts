@@ -29,8 +29,10 @@ export type {
 export type {
   PublishOptions,
   PublishResult,
+  PubSubObserver,
   TopicMutateOptions,
   Topics,
+  WithPubSubOptions,
 } from "./types";
 
 // Composition utilities for adapter authors

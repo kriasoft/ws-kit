@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, mock } from "bun:test";
+import { createRouter } from "@ws-kit/core";
 import type { PubSubAdapter, PublishEnvelope } from "@ws-kit/core/pubsub";
 import { withPubSub } from "@ws-kit/pubsub";
-import { createRouter } from "@ws-kit/core";
+import { describe, expect, it } from "bun:test";
 
 /**
  * Test suite for pub/sub plugin delivery orchestration.
@@ -30,7 +30,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // First init should call adapter.start
       await (enhanced as any).pubsub.init();
@@ -67,7 +67,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // Initialize
       await (enhanced as any).pubsub.init();
@@ -96,7 +96,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       await (enhanced as any).pubsub.init();
 
@@ -126,7 +126,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // Init -> Shutdown -> Init again should call start twice
       await (enhanced as any).pubsub.init();
@@ -152,7 +152,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // First init should throw
       try {
@@ -180,7 +180,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router2 = createRouter();
-      const enhanced2 = router2.plugin(withPubSub(retryAdapter));
+      const enhanced2 = router2.plugin(withPubSub({ adapter: retryAdapter }));
 
       await (enhanced2 as any).pubsub.init();
       expect(retrySuccess).toBe(true);
@@ -198,7 +198,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // Should not throw even without start()
       await (enhanced as any).pubsub.init();
@@ -236,7 +236,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // Track sends at adapter level
       const originalGetSubscribers = adapter.getSubscribers.bind(adapter);
@@ -278,7 +278,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       await (enhanced as any).pubsub.init();
       await (enhanced as any).pubsub.shutdown();
@@ -301,7 +301,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // Should not throw
       await (enhanced as any).pubsub.init();
@@ -337,7 +337,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // This is an internal test - we verify the logic exists
       // by checking that the plugin was created successfully
@@ -359,7 +359,7 @@ describe("Plugin Delivery Orchestration", () => {
       };
 
       const router = createRouter();
-      const enhanced = router.plugin(withPubSub(adapter));
+      const enhanced = router.plugin(withPubSub({ adapter }));
 
       // Setup error handler to capture errors
       let errorCaught: unknown = null;

@@ -23,10 +23,14 @@ export interface OutgoingFrame {
 
 /**
  * Publish record: message broadcast via router.publish().
+ *
+ * **Note**: When captured via pub/sub observer (test harness), the `schema` field
+ * will be undefined since the adapter layer only has access to the message type (string).
+ * For assertions, you typically check `topic` and `payload`.
  */
 export interface PublishRecord {
   topic: string;
-  schema: MessageDescriptor;
+  schema?: MessageDescriptor;
   payload: unknown;
   meta?: Record<string, unknown>;
 }

@@ -8,10 +8,10 @@
  * Tests subscribe/unsubscribe lifecycle and verify that clientId is passed to adapter.
  */
 
-import { describe, it, expect } from "bun:test";
 import { createRouter } from "@ws-kit/core";
-import { withZod, message } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/pubsub";
+import { message, withZod } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 
 describe("Capability Gating (Runtime)", () => {
@@ -27,10 +27,12 @@ describe("Capability Gating (Runtime)", () => {
       },
       async unsubscribe() {},
       async *getSubscribers() {},
-      subscribedClients: [] as Array<{ clientId: string; topic: string }>,
+      subscribedClients: [] as { clientId: string; topic: string }[],
     };
 
-    const router = createRouter().plugin(withZod()).plugin(withPubSub(adapter));
+    const router = createRouter()
+      .plugin(withZod())
+      .plugin(withPubSub({ adapter }));
 
     const Message = message("MSG", { text: z.string() });
 
@@ -56,7 +58,7 @@ describe("Capability Gating (Runtime)", () => {
     // Simulate a message
     const testRouter = createRouter()
       .plugin(withZod())
-      .plugin(withPubSub(adapter));
+      .plugin(withPubSub({ adapter }));
 
     testRouter.on(Message, router.routeTable.get("MSG")!.handler);
 
@@ -66,7 +68,7 @@ describe("Capability Gating (Runtime)", () => {
   });
 
   it("should use clientId when calling adapter.subscribe", async () => {
-    const subscribeCalls: Array<[string, string]> = [];
+    const subscribeCalls: [string, string][] = [];
 
     const adapter = {
       async publish() {
@@ -79,7 +81,9 @@ describe("Capability Gating (Runtime)", () => {
       async *getSubscribers() {},
     };
 
-    const router = createRouter().plugin(withZod()).plugin(withPubSub(adapter));
+    const router = createRouter()
+      .plugin(withZod())
+      .plugin(withPubSub({ adapter }));
 
     const Message = message("MSG", { text: z.string() });
 
@@ -94,7 +98,7 @@ describe("Capability Gating (Runtime)", () => {
   });
 
   it("should clean up subscriptions on connection close", async () => {
-    const replaceCalls: Array<[string, string[]]> = [];
+    const replaceCalls: [string, string[]][] = [];
 
     const adapter = {
       async publish() {
@@ -108,7 +112,9 @@ describe("Capability Gating (Runtime)", () => {
       },
     };
 
-    const router = createRouter().plugin(withZod()).plugin(withPubSub(adapter));
+    const router = createRouter()
+      .plugin(withZod())
+      .plugin(withPubSub({ adapter }));
 
     expect(router.routeTable).toBeDefined();
   });

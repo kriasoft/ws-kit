@@ -46,7 +46,7 @@ export function createBunAdapter(): PlatformAdapter {
  *
  * const server = await Bun.serve({...});
  * const adapter = createBunAdapterWithServer(server);
- * const router = createRouter().plugin(withPubSub(adapter.pubsub));
+ * const router = createRouter().plugin(withPubSub({ adapter: adapter.pubsub }));
  * const { fetch, websocket } = createBunHandler(router);
  * ```
  *

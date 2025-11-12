@@ -97,7 +97,9 @@ export function hybridPubSub(redis, kafka): PubSubAdapter {
 
 ```typescript
 // Just pick an adapter, plug it in. Router handles the rest.
-const router = createRouter<AppData>().plugin(withPubSub(memoryPubSub()));
+const router = createRouter<AppData>().plugin(
+  withPubSub({ adapter: memoryPubSub() }),
+);
 
 router.on(Message, (ctx) => {
   await ctx.publish("topic", schema, payload);

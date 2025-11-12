@@ -6,6 +6,13 @@
  */
 
 import type {
+  PublishCapability,
+  PublishError,
+  PublishOptions,
+  PublishResult,
+} from "@ws-kit/core";
+import { isPublishError } from "@ws-kit/core";
+import type {
   BrokerConsumer,
   PubSubAdapter,
   PubSubDriver,
@@ -17,13 +24,6 @@ import {
   isPublishSuccess,
   wasDeliveredLocally,
 } from "@ws-kit/core/pubsub";
-import type {
-  PublishCapability,
-  PublishError,
-  PublishOptions,
-  PublishResult,
-} from "@ws-kit/core";
-import { isPublishError } from "@ws-kit/core";
 import type { VerifyMode, VerifyResult } from "./core/topics";
 
 /**
@@ -291,6 +291,131 @@ export interface Topics extends ReadonlySet<string> {
  * Controls distribution logic only: partitionKey (sharding), excludeSelf (filter),
  * signal (cancellation). Message metadata belongs in the envelope, not options.
  */
+
+/**
+ * Observe pub/sub operations for testing and instrumentation.
+ *
+ * @example
+ * ```ts
+ * const observer = {
+ *   onPublish(rec) { console.log(`Published to ${rec.topic}`); },
+ *   onSubscribe(info) { console.log(`Client ${info.clientId} subscribed to ${info.topic}`); },
+ *   onUnsubscribe(info) { console.log(`Client ${info.clientId} unsubscribed from ${info.topic}`); },
+ * };
+ *
+ * const router = createRouter()
+ *   .plugin(withPubSub({ adapter, observer }));
+ *
+ * // For pre-built routers, tap into observations post-hoc:
+ * if (router.pubsub?.tap) {
+ *   router.pubsub.tap(observer);
+ * }
+ * ```
+ *
+ * @internal
+ */
+export interface PubSubObserver {
+  /**
+   * Fired after a message is successfully published to a topic.
+   * This event is emitted after the adapter returns, not before.
+   */
+  onPublish?: (record: {
+    /** Topic name */
+    topic: string;
+    /** Message type/schema name */
+    type?: string;
+    /** Payload object */
+    payload: unknown;
+    /** Optional metadata from the message */
+    meta: Record<string, unknown> | undefined;
+    /** Timestamp of the publish operation */
+    timestamp: number;
+  }) => void | Promise<void>;
+
+  /**
+   * Fired after a client successfully subscribes to a topic.
+   */
+  onSubscribe?: (info: {
+    /** Client ID */
+    clientId: string;
+    /** Topic name */
+    topic: string;
+    /** Timestamp of the operation */
+    timestamp: number;
+  }) => void | Promise<void>;
+
+  /**
+   * Fired after a client successfully unsubscribes from a topic.
+   */
+  onUnsubscribe?: (info: {
+    /** Client ID */
+    clientId: string;
+    /** Topic name */
+    topic: string;
+    /** Timestamp of the operation */
+    timestamp: number;
+  }) => void | Promise<void>;
+}
+
+/**
+ * Configuration options for withPubSub() plugin.
+ *
+ * Can be used with overloads for backward compatibility:
+ * ```ts
+ * // Old style (still supported)
+ * withPubSub(adapter)
+ * withPubSub(adapter, { observer, limits: { ... } })
+ *
+ * // New style (recommended)
+ * withPubSub({ adapter, observer, limits: { ... } })
+ * ```
+ */
+export interface WithPubSubOptions {
+  /** PubSub adapter (memory, redis, custom, etc.) */
+  adapter: PubSubAdapter;
+
+  /**
+   * Optional observer for pub/sub operations (testing, instrumentation).
+   * Observers are called after operations complete successfully.
+   */
+  observer?: PubSubObserver;
+
+  /**
+   * Per-connection limits and constraints.
+   */
+  limits?: {
+    /** Maximum number of topics a single client can subscribe to (optional). */
+    maxTopicsPerConn?: number;
+  };
+
+  /**
+   * Topic validation and normalization rules.
+   */
+  topic?: {
+    /**
+     * Normalize topic names before use (e.g., lowercase, trim).
+     * Applied before validation and subscription.
+     */
+    normalize?: (topic: string) => string;
+
+    /**
+     * Validate topic names; throw or return void to deny.
+     * Applied after normalization.
+     */
+    validate?: (topic: string) => void;
+  };
+
+  /**
+   * Message delivery behavior and defaults.
+   */
+  delivery?: {
+    /**
+     * Default value for excludeSelf option in publish calls (future).
+     * Currently excludeSelf returns UNSUPPORTED; this will be the default when implemented.
+     */
+    excludeSelfDefault?: boolean;
+  };
+}
 
 /**
  * Policy hooks for pub/sub operations.

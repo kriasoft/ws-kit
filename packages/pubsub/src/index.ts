@@ -15,7 +15,7 @@
  * import { memoryPubSub } from "@ws-kit/memory";
  *
  * const router = createRouter()
- *   .plugin(withPubSub(memoryPubSub()))
+ *   .plugin(withPubSub({ adapter: memoryPubSub() }))
  *   .use(usePubSub({
  *     hooks: {
  *       normalizeTopic: (topic) => topic.toLowerCase(),

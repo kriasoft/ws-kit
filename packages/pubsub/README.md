@@ -21,7 +21,7 @@ type AppData = { userId: string };
 const Notify = message("NOTIFY", { text: z.string() });
 
 const router = createRouter<AppData>()
-  .plugin(withPubSub(memoryPubSub()))
+  .plugin(withPubSub({ adapter: memoryPubSub() }))
   .use(
     usePubSub({
       hooks: {
@@ -69,7 +69,7 @@ src/
 
 ### Components
 
-#### Plugin: `withPubSub(adapter)`
+#### Plugin: `withPubSub({ adapter })`
 
 Adds pub/sub capability to the router.
 
@@ -77,7 +77,7 @@ Adds pub/sub capability to the router.
 import { withPubSub } from "@ws-kit/pubsub";
 import { memoryPubSub } from "@ws-kit/memory";
 
-const router = createRouter().plugin(withPubSub(memoryPubSub()));
+const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 ```
 
 Provides:

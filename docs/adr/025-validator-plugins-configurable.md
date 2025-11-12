@@ -40,7 +40,7 @@ const router = createRouter()
       },
     }),
   )
-  .plugin(withPubSub(redisPubSub()))
+  .plugin(withPubSub({ adapter: redisPubSub() }))
   .on(ChatMessage, (ctx) => {
     // ctx.payload validated and typed
   });

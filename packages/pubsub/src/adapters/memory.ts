@@ -23,7 +23,7 @@ import type { PubSubAdapter } from "@ws-kit/core";
  * import { memoryPubSub } from "@ws-kit/memory";
  *
  * const router = createRouter()
- *   .plugin(withPubSub(memoryPubSub()));
+ *   .plugin(withPubSub({ adapter: memoryPubSub() }));
  * ```
  */
 export function createMemoryAdapter(): PubSubAdapter {

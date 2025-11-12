@@ -23,7 +23,7 @@ import type {
  * import { memoryPubSub } from "@ws-kit/memory";
  *
  * const router = createRouter<AppData>()
- *   .plugin(withPubSub(memoryPubSub()));
+ *   .plugin(withPubSub({ adapter: memoryPubSub() }));
  *
  * router.on(Message, (ctx) => {
  *   const result = await ctx.publish("room:123", MessageSchema, { text: "Hi" });

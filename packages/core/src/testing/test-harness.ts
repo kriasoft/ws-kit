@@ -6,7 +6,6 @@
  * Provides a clean, ergonomic testing API for WS-Kit routers.
  */
 
-import { TestPubSub } from "@ws-kit/pubsub/internal";
 import type { BaseContextData } from "../context/base-context";
 import type { CoreRouter, Router } from "../core/router";
 import { FakeClock, type Clock } from "./fake-clock";
@@ -42,6 +41,13 @@ export interface CreateTestRouterOptions<TContext> {
    * Enable automatic error capture via onError (default: true).
    */
   onErrorCapture?: boolean;
+
+  /**
+   * Capture pub/sub publishes (if pub/sub is enabled).
+   * This automatically taps into the pub/sub observer to capture publish records.
+   * Default: true.
+   */
+  capturePubSub?: boolean;
 }
 
 /**
@@ -82,6 +88,7 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
   return wrapTestRouter(configuredRouter, {
     clock: opts?.clock,
     onErrorCapture: opts?.onErrorCapture !== false,
+    capturePubSub: opts?.capturePubSub !== false,
   });
 }
 
@@ -91,7 +98,7 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
  */
 export function wrapTestRouter<TContext extends BaseContextData = unknown>(
   router: Router<TContext>,
-  opts?: { clock?: Clock; onErrorCapture?: boolean },
+  opts?: { clock?: Clock; onErrorCapture?: boolean; capturePubSub?: boolean },
 ): TestRouter<TContext> {
   // Cast to internal implementation to access registry, lifecycle, etc.
   const impl = router as any as CoreRouter<TContext>;
@@ -101,6 +108,7 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
   const clock = opts?.clock || new FakeClock();
   const capturedErrors: unknown[] = [];
   const connections = new Map<string, TestConnectionImpl<TContext>>();
+  const capturedPublishes: PublishRecord[] = [];
 
   // Optionally enable error capture
   if (opts?.onErrorCapture !== false) {
@@ -109,10 +117,23 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
     });
   }
 
-  // If PubSub is present, wrap it
-  let pubsubAdapter: TestPubSub | undefined;
-  // Note: We can't easily detect if pubsub is enabled at this point.
-  // This will be handled by checking capabilities dynamically.
+  // If PubSub is present and capturePubSub is enabled, register observer
+  if (opts?.capturePubSub !== false) {
+    const pubsub = (router as any).pubsub;
+    if (pubsub && typeof pubsub.tap === "function") {
+      // Register observer to capture publish events
+      pubsub.tap({
+        onPublish: (rec: any) => {
+          capturedPublishes.push({
+            topic: rec.topic,
+            payload: rec.payload,
+            meta: rec.meta,
+            // schema is undefined because we don't have it at the adapter level
+          });
+        },
+      });
+    }
+  }
 
   // Create TestCapture implementation
   const capture: TestCapture<TContext> = {
@@ -120,14 +141,14 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
       return capturedErrors;
     },
     publishes(): readonly PublishRecord[] {
-      return pubsubAdapter?.getPublishedMessages() || [];
+      return capturedPublishes;
     },
     messages(): readonly OutgoingFrame[] {
       return adapter.getAllSentMessages();
     },
     clear(): void {
       capturedErrors.length = 0;
-      pubsubAdapter?.clearPublished();
+      capturedPublishes.length = 0;
       adapter.clearSentMessages();
       for (const [, conn] of connections) {
         conn.clearOutgoing();

@@ -13,10 +13,10 @@
  * All tests directly test the router API without TestRouter infrastructure.
  */
 
-import { describe, it, expect } from "bun:test";
-import { createRouter, message, rpc, withZod, z } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/pubsub";
 import { memoryPubSub } from "@ws-kit/memory";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createRouter, message, rpc, withZod, z } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 
 describe("basic usage patterns (no mocks)", () => {
   describe("router.publish() - broadcasting", () => {
@@ -27,7 +27,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       // Register a simple event handler
       router.on(ChatMessage, async (ctx) => {
@@ -50,7 +50,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       // Test direct publish to multiple topics
       const result1 = await router.publish("topic1", Update, {
@@ -70,7 +70,7 @@ describe("basic usage patterns (no mocks)", () => {
       const TestMessage = message("TEST", { value: z.string() });
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       let handlerCalled = false;
       let receivedPayload: any = null;
@@ -98,7 +98,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()))
+        .plugin(withPubSub({ adapter: memoryPubSub() }))
         .on(Message1, (ctx) => {
           // Handler logic
         })
@@ -122,7 +122,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router.rpc(GetUser, (ctx) => {
         ctx.reply({
@@ -147,7 +147,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()))
+        .plugin(withPubSub({ adapter: memoryPubSub() }))
         .rpc(DoubleValue, (ctx) => {
           ctx.reply({ result: ctx.payload.value * 2 });
         })
@@ -164,7 +164,7 @@ describe("basic usage patterns (no mocks)", () => {
       const Message = message("MSG", { text: z.string() });
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router.on(Message, async (ctx) => {
         // Handler can use pubsub features
@@ -181,7 +181,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router
         .on(Subscribe, async (ctx) => {
@@ -202,7 +202,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router.on(Incoming, (ctx) => {
         // Handler can send messages via ctx.send()
@@ -216,7 +216,7 @@ describe("basic usage patterns (no mocks)", () => {
       const Message = message("MSG", { text: z.string() });
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router.on(Message, async (ctx) => {
         // Handler can publish to topics
@@ -237,7 +237,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router.rpc(GetData, (ctx) => {
         // RPC handlers can reply with responses
@@ -258,7 +258,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()))
+        .plugin(withPubSub({ adapter: memoryPubSub() }))
         .use(Input, async (ctx, next) => {
           // Middleware can intercept and transform
           await next();
@@ -278,7 +278,7 @@ describe("basic usage patterns (no mocks)", () => {
       // Router API supports chaining for fluent composition
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()))
+        .plugin(withPubSub({ adapter: memoryPubSub() }))
         .on(Message1, (ctx) => {
           // Handle Message1
         })
@@ -298,7 +298,7 @@ describe("basic usage patterns (no mocks)", () => {
       const errors: unknown[] = [];
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()))
+        .plugin(withPubSub({ adapter: memoryPubSub() }))
         .on(Message, (ctx) => {
           // Handler
         })
@@ -326,7 +326,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       // Join handler: subscribe and notify others
       router.on(Join, async (ctx) => {
@@ -388,7 +388,7 @@ describe("basic usage patterns (no mocks)", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .plugin(withPubSub(memoryPubSub()));
+        .plugin(withPubSub({ adapter: memoryPubSub() }));
 
       router
         .rpc(GetProduct, (ctx) => {

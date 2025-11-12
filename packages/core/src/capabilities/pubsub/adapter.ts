@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Pub/Sub adapter contract (core-level).
  * Unified interface for subscription index, local fan-out, and optional distributed ingress.
@@ -68,7 +71,7 @@
  *
  * Timeline:
  * 1. Create router and register routes/handlers
- * 2. Apply pubsub plugin: router.plugin(withPubSub(adapter))
+ * 2. Apply pubsub plugin: router.plugin(withPubSub({ adapter }))
  * 3. Call router.pubsub.init() — starts broker consumer if present
  * 4. Accept external connections
  * 5. On shutdown: call router.pubsub.shutdown() — stops consumer and closes adapter
