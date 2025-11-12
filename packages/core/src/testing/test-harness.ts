@@ -8,6 +8,7 @@
 
 import type { BaseContextData } from "../context/base-context";
 import type { CoreRouter, Router } from "../core/router";
+import type { RouterObserver } from "../core/types";
 import { FakeClock, type Clock } from "./fake-clock";
 import { InMemoryPlatformAdapter } from "./test-adapter";
 import type {
@@ -112,40 +113,39 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
     strict?: boolean;
   },
 ): TestRouter<TContext> {
-  // Cast to internal implementation to access registry, lifecycle, etc.
+  // Get router implementation for internal access (needed for test adapter)
+  // This is the only place we cast to internal CoreRouter type for test adapter setup
   const impl = router as any as CoreRouter<TContext>;
 
   // Infrastructure
+  // Note: InMemoryPlatformAdapter needs internal access to CoreRouter
   const adapter = new InMemoryPlatformAdapter<TContext>(impl);
   const clock = opts?.clock || new FakeClock();
   const capturedErrors: unknown[] = [];
   const connections = new Map<string, TestConnectionImpl<TContext>>();
   const capturedPublishes: PublishRecord[] = [];
+  const unsubscribers: Array<() => void> = [];
 
-  // Optionally enable error capture
-  if (opts?.onErrorCapture !== false) {
-    router.onError((err) => {
-      capturedErrors.push(err);
-    });
-  }
+  // Register router observer (no casting required for this API)
+  // This replaces the previous pubsub.tap() approach with a public, composable API
+  const observerConfig: Partial<RouterObserver<TContext>> = {};
 
-  // If PubSub is present and capturePubSub is enabled, register observer
+  // Only capture publishes if enabled
   if (opts?.capturePubSub !== false) {
-    const pubsub = (router as any).pubsub;
-    if (pubsub && typeof pubsub.tap === "function") {
-      // Register observer to capture publish events
-      pubsub.tap({
-        onPublish: (rec: any) => {
-          capturedPublishes.push({
-            topic: rec.topic,
-            payload: rec.payload,
-            meta: rec.meta,
-            // schema is undefined because we don't have it at the adapter level
-          });
-        },
-      });
-    }
+    observerConfig.onPublish = (rec) => {
+      capturedPublishes.push(rec);
+    };
   }
+
+  // Always capture errors (unless disabled)
+  if (opts?.onErrorCapture !== false) {
+    observerConfig.onError = (err) => {
+      capturedErrors.push(err);
+    };
+  }
+
+  const unsubscribe = router.observe(observerConfig);
+  unsubscribers.push(unsubscribe);
 
   // Create TestCapture implementation
   const capture: TestCapture<TContext> = {
@@ -205,7 +205,8 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
       const conn = getOrCreateConnection(clientId, init);
       // Wire the websocket bridge and wait for initialization to complete.
       // This ensures plugins' onConnect hooks fire before any messages are sent.
-      await impl.websocket.open(conn.ws);
+      // Use public router.websocket API (no cast needed)
+      await router.websocket.open(conn.ws);
       return conn;
     },
 
@@ -237,6 +238,11 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
     },
 
     async close(): Promise<void> {
+      // Unsubscribe from observers
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe();
+      }
+
       // Close all connections
       adapter.closeAll();
 

@@ -34,8 +34,10 @@ import type {
   PublishCapability,
   PublishError,
   PublishOptions,
+  PublishRecord,
   PublishResult,
   RouteEntry,
+  RouterObserver,
 } from "./types";
 
 export type { PublishCapability, PublishError, PublishOptions, PublishResult };
@@ -57,6 +59,28 @@ export interface BaseRouter<TContext> {
   onError(
     fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
   ): this;
+
+  /**
+   * Observe key lifecycle events for testing and monitoring plugins.
+   *
+   * Callbacks are called synchronously in registration order. Exceptions are logged
+   * and swallowed to prevent one bad observer from affecting others. Re-entrancy
+   * is safe (observer list is snapshotted at dispatch time).
+   *
+   * @param observer Partial observer with optional hooks
+   * @returns Unsubscribe function for cleanup
+   *
+   * @example
+   * ```typescript
+   * const off = router.observe({
+   *   onPublish: (rec) => console.log(`Published to ${rec.topic}`),
+   *   onError: (err) => console.error(`Error: ${err.message}`),
+   * });
+   * // ... later, unsubscribe:
+   * off();
+   * ```
+   */
+  observe(observer: Partial<RouterObserver<TContext>>): () => void;
 
   /**
    * Platform-agnostic WebSocket handler interface.
@@ -281,6 +305,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   private pluginHost: PluginHost<TContext>;
   private connData = new WeakMap<ServerWebSocket, TContext>();
   private wsToClientId = new WeakMap<ServerWebSocket, string>();
+  private observers: RouterObserver<TContext>[] = [];
   private _wsBridge:
     | {
         open(ws: ServerWebSocket): Promise<void>;
@@ -385,6 +410,41 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   ): this {
     this.lifecycle.onError(fn);
     return this;
+  }
+
+  observe(observer: Partial<RouterObserver<TContext>>): () => void {
+    this.observers.push(observer);
+    return () => {
+      const idx = this.observers.indexOf(observer);
+      if (idx >= 0) this.observers.splice(idx, 1);
+    };
+  }
+
+  /**
+   * Notify all registered observers of an event.
+   * Uses snapshot-based dispatch for safe re-entrancy.
+   * Swallows observer errors to prevent cascades.
+   * @internal
+   */
+  private notifyObservers<K extends keyof RouterObserver<TContext>>(
+    event: K,
+    ...args: Parameters<NonNullable<RouterObserver<TContext>[K]>>
+  ): void {
+    // Snapshot the observer list for safe re-entrancy
+    // (adding/removing observers mid-dispatch affects future calls, not current)
+    const snapshot = this.observers.slice();
+    for (const observer of snapshot) {
+      try {
+        const callback = observer[event];
+        if (callback) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (callback as any)(...args);
+        }
+      } catch (err) {
+        // Log observer error, don't propagate (prevent one bad observer from breaking others)
+        console.error(`[Router] Observer error in ${String(event)}:`, err);
+      }
+    }
   }
 
   /**
@@ -519,6 +579,22 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   }
 
   /**
+   * Notify observers of an error. Called by dispatch and error handlers.
+   * @internal
+   */
+  notifyError(err: unknown, meta?: { clientId?: string; type?: string }): void {
+    this.notifyObservers("onError", err, meta);
+  }
+
+  /**
+   * Notify observers of a published message. Called by pubsub plugin after publishing.
+   * @internal
+   */
+  notifyPublish(record: PublishRecord): void {
+    this.notifyObservers("onPublish", record);
+  }
+
+  /**
    * Create a context from raw dispatch parameters.
    * This is a minimal implementation; validation plugins will extend it.
    * @internal
@@ -564,6 +640,11 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
 
     // Notify plugins (e.g., pubsub for client tracking)
     await this.lifecycle.handleOpen(ws);
+
+    // Notify observers
+    const clientId = this.getOrCreateClientId(ws);
+    const data = this.getOrInitData(ws);
+    this.notifyObservers("onConnectionOpen", clientId, data);
   }
 
   /**
@@ -599,6 +680,9 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
     code?: number,
     reason?: string,
   ): Promise<void> {
+    // Capture clientId before cleaning up
+    const clientId = this.getClientId(ws);
+
     // Explicitly clean up per-connection data and client ID.
     // While WeakMap entries auto-clean when ws is GC'd, explicit deletion ensures
     // timely resource release and allows plugins to react via lifecycle hooks.
@@ -609,5 +693,13 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
     // for per-connection cleanup. This allows plugins to perform cleanup
     // (pub/sub subscriptions, timers, etc.) on connection departure.
     await this.lifecycle.handleClose(ws, code, reason);
+
+    // Notify observers
+    if (clientId) {
+      this.notifyObservers("onConnectionClose", clientId, {
+        code,
+        reason,
+      });
+    }
   }
 }

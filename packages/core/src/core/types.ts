@@ -205,3 +205,80 @@ export function isPublishError<E extends PublishError>(
 ): result is Extract<PublishResult, { ok: false; error: E }> {
   return !result.ok && result.error === error;
 }
+
+/**
+ * Record of a published message (for observation/testing).
+ * Captured by router observers to track pub/sub events.
+ */
+export interface PublishRecord {
+  /**
+   * Topic name (e.g., "chat:room:123")
+   */
+  topic: string;
+
+  /**
+   * Message type from the schema descriptor (if available)
+   */
+  type?: string;
+
+  /**
+   * Message payload (only if observer requested it)
+   */
+  payload?: unknown;
+
+  /**
+   * Optional metadata attached to the message
+   */
+  meta?: Record<string, unknown>;
+
+  /**
+   * Client ID if publish originated from a client (undefined if server-initiated)
+   */
+  clientId?: string;
+}
+
+/**
+ * Router observer: hooks for testing and monitoring plugins.
+ *
+ * Register via router.observe() to receive events about publishes, errors, and connections.
+ * All callbacks are optional; register only the ones you need.
+ *
+ * **Safety**:
+ * - Callbacks are read-only observers (don't mutate router state)
+ * - Called synchronously in registration order
+ * - Exceptions are logged and swallowed; other observers still run
+ * - Re-entrancy is safe (uses snapshot of observer list)
+ *
+ * **Use cases**:
+ * - Testing: capture publishes and errors for assertions
+ * - Monitoring: log events for observability
+ * - Metrics: count publishes, connection churn, errors
+ */
+export interface RouterObserver<TContext = unknown> {
+  /**
+   * Called when a message is published to a topic.
+   * Includes topic, type, payload (if requested), and metadata.
+   */
+  onPublish?(record: PublishRecord): void;
+
+  /**
+   * Called when a client connects.
+   * Provides client ID and immutable connection data.
+   */
+  onConnectionOpen?(clientId: string, data: Readonly<TContext>): void;
+
+  /**
+   * Called when a client disconnects.
+   * Provides client ID and optional close code/reason.
+   */
+  onConnectionClose?(
+    clientId: string,
+    meta?: { code?: number; reason?: string },
+  ): void;
+
+  /**
+   * Called when an error occurs (validation, handler, middleware, etc.).
+   * Provides error and optional context (clientId, message type).
+   */
+  onError?(err: unknown, meta?: { clientId?: string; type?: string }): void;
+}

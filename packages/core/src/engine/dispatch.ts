@@ -76,11 +76,10 @@ export async function dispatchMessage<TContext extends BaseContextData>(
 
     if (!parseResult.ok) {
       // Parse error → funnel to error sink without context
+      const err = new Error(`Invalid JSON: ${parseResult.error}`);
       const lifecycle = impl.getInternalLifecycle();
-      await lifecycle.handleError(
-        new Error(`Invalid JSON: ${parseResult.error}`),
-        null,
-      );
+      await lifecycle.handleError(err, null);
+      impl.notifyError(err);
       return;
     }
 
@@ -92,11 +91,12 @@ export async function dispatchMessage<TContext extends BaseContextData>(
       envelope === null ||
       typeof envelope.type !== "string"
     ) {
-      const lifecycle = impl.getInternalLifecycle();
-      await lifecycle.handleError(
-        new Error("Invalid message envelope: missing or invalid type field"),
-        null,
+      const err = new Error(
+        "Invalid message envelope: missing or invalid type field",
       );
+      const lifecycle = impl.getInternalLifecycle();
+      await lifecycle.handleError(err, null);
+      impl.notifyError(err);
       return;
     }
   }
@@ -114,17 +114,19 @@ export async function dispatchMessage<TContext extends BaseContextData>(
       );
     } catch (err) {
       await lifecycle.handleError(err, null);
+      impl.notifyError(err);
     }
     return;
   }
 
   // 3) Reserved types are blocked from user handlers
   if (isReservedType(envelope.type)) {
-    const lifecycle = impl.getInternalLifecycle();
     const err = new Error(
       `Reserved type cannot be handled by user code: "${envelope.type}"`,
     );
+    const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);
+    impl.notifyError(err);
     return;
   }
 
@@ -132,32 +134,35 @@ export async function dispatchMessage<TContext extends BaseContextData>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractRoutes = (impl as any)[ROUTE_TABLE];
   if (typeof extractRoutes !== "function") {
-    const lifecycle = impl.getInternalLifecycle();
     const err = new Error(
       "Router does not expose internal route table (missing symbol accessor)",
     );
+    const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);
+    impl.notifyError(err);
     return;
   }
   const routeTable = extractRoutes.call(impl);
   const entry = routeTable.get(envelope.type);
   if (!entry) {
-    const lifecycle = impl.getInternalLifecycle();
     const err = new Error(
       `No handler registered for message type: "${envelope.type}"`,
     );
+    const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);
+    impl.notifyError(err);
     return;
   }
 
   // 5) Validate runtime schema shape
   const schema: MessageDescriptor = entry.schema;
   if (!isMessageDescriptor(schema)) {
-    const lifecycle = impl.getInternalLifecycle();
     const err = new Error(
       `Invalid MessageDescriptor for type "${envelope.type}"`,
     );
+    const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);
+    impl.notifyError(err);
     return;
   }
 
@@ -175,6 +180,7 @@ export async function dispatchMessage<TContext extends BaseContextData>(
   } catch (err) {
     const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);
+    impl.notifyError(err);
     return;
   }
 
@@ -188,6 +194,10 @@ export async function dispatchMessage<TContext extends BaseContextData>(
     } catch (err) {
       const lifecycle = impl.getInternalLifecycle();
       await lifecycle.handleError(err, ctx);
+      impl.notifyError(err, {
+        clientId,
+        type: schema.type,
+      });
       return;
     }
   }
@@ -210,6 +220,10 @@ export async function dispatchMessage<TContext extends BaseContextData>(
     // Catch errors from middleware or handler
     const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, ctx);
+    impl.notifyError(err, {
+      clientId,
+      type: schema.type,
+    });
   } finally {
     // 10) Release limits tracking
     release?.();

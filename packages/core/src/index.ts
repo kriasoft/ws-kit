@@ -28,6 +28,9 @@ export type {
 } from "./core/router";
 export type { CreateRouterOptions } from "./core/types";
 
+// Router observer API (testing and monitoring)
+export type { PublishRecord, RouterObserver } from "./core/types";
+
 // Schema runtime shape
 export type { MessageDescriptor } from "./protocol/message-descriptor";
 export {
