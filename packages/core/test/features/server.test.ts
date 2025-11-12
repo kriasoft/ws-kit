@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import { createBunHandler } from "@ws-kit/bun";
+import { memoryPubSub } from "@ws-kit/memory";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createRouter, message, z } from "@ws-kit/zod";
 import {
   afterEach,
   beforeEach,
@@ -10,9 +14,6 @@ import {
   mock,
   spyOn,
 } from "bun:test";
-import { createRouter, message, z } from "@ws-kit/zod";
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { MemoryPubSub } from "../../src/pubsub.js";
 
 // Mock console methods to prevent noise during tests
 const originalConsoleLog = console.log;
@@ -166,11 +167,8 @@ describe("WebSocketServer E2E", () => {
     openHandlerCalls = 0;
     closeHandlerCalls = 0;
 
-    // Create a new router with platform adapter, validator, and pubsub
-    router = createRouter({
-      platform: createBunAdapter(),
-      pubsub: new MemoryPubSub(),
-    });
+    // Create a new router with validator and pubsub
+    router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 
     // Set up message handlers
     router.on(Ping, (ctx) => {

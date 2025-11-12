@@ -191,7 +191,7 @@ router.on(JoinRoomMessage, async (ctx) => {
   if (!user) return;
 
   // Subscribe to room
-  ctx.ws.subscribe(`room:${room}`);
+  await ctx.topics.subscribe(`room:${room}`);
 
   // Track user in room
   user.rooms.add(room);
@@ -263,7 +263,7 @@ router.on(LeaveRoomMessage, async (ctx) => {
   const room = Array.from(user.rooms)[0];
   if (room) {
     user.rooms.delete(room);
-    ctx.ws.unsubscribe(`room:${room}`);
+    await ctx.topics.unsubscribe(`room:${room}`);
 
     const roomUsers = rooms.get(room);
     if (roomUsers) {

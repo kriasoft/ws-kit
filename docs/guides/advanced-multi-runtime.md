@@ -7,7 +7,7 @@ WS-Kit is designed to work across multiple platforms (Bun, Cloudflare Durable Ob
 Unlike other frameworks, WS-Kit uses **platform-specific packages** rather than a single generic `serve()` function. Each platform has its own package:
 
 - **`@ws-kit/bun`** — Bun runtime (with `serve()` convenience)
-- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects (low-level only)
+- **`@ws-kit/cloudflare`** — Cloudflare Durable Objects (low-level only)
 - **Future: `@ws-kit/deno`** — Deno runtime
 
 See [ADR-006](../adr/006-multi-runtime-serve-with-explicit-selection.md) for the design rationale.
@@ -126,7 +126,7 @@ When testing across platforms, account for:
    serve(router, { port: 3000 });
 
    // Cloudflare DO
-   import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+   import { createDurableObjectHandler } from "@ws-kit/cloudflare";
    export default { fetch: createDurableObjectHandler(router).fetch };
    ```
 
@@ -151,15 +151,20 @@ When testing across platforms, account for:
 3. **Pub/Sub**: Platform-specific pub/sub adapters.
 
    ```typescript
+   import { createClient } from "redis";
+   import { redisPubSub } from "@ws-kit/redis";
+
    // Bun with memory pub/sub (default)
    serve(router, { port: 3000 });
 
    // Bun with Redis pub/sub for multi-instance
-   import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-   serve(router, {
-     port: 3000,
-     pubsub: createRedisPubSub({ url: "redis://..." }),
+   const redis = createClient({ url: process.env.REDIS_URL });
+   await redis.connect();
+
+   const router = createRouter({
+     pubsub: redisPubSub(redis),
    });
+   serve(router, { port: 3000 });
    ```
 
 ## CI/CD Pattern: Test All Platforms
@@ -201,7 +206,7 @@ const router = createRouter();
 serve(router, { port: 3000 });
 
 // Production on Cloudflare DO
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
 export default {
   fetch: createDurableObjectHandler(router).fetch,

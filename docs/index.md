@@ -62,7 +62,7 @@ const router = createRouter<AppData>();
 // Handle room joins with pub/sub
 router.on(JoinRoom, async (ctx) => {
   ctx.assignData({ roomId: ctx.payload.roomId });
-  ctx.subscribe(ctx.payload.roomId); // Join topic
+  await ctx.topics.subscribe(ctx.payload.roomId); // Join topic
 
   // Broadcast to all room subscribers (type-safe!)
   await router.publish(ctx.payload.roomId, RoomUpdate, {

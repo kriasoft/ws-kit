@@ -1,0 +1,66 @@
+{
+  "name": "@ws-kit/cloudflare",
+  "version": "0.2.5",
+  "description": "Cloudflare Durable Objects adapter for WS-Kit enabling stateful, globally-distributed WebSocket applications at the edge",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/cloudflare"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "cloudflare",
+    "cloudflare-workers",
+    "durable-objects",
+    "durable-state",
+    "adapter",
+    "websocket",
+    "real-time",
+    "typescript",
+    "edge-computing",
+    "edge-adapter",
+    "serverless",
+    "stateful",
+    "distributed-websocket",
+    "coordination",
+    "globally-distributed",
+    "at-scale"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@ws-kit/core": "workspace:^",
+    "uuid": "^13.0.0"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": ">4.20251111.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "directory": "dist"
+  }
+}

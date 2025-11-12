@@ -3,7 +3,7 @@
 
 /**
  * Client-side error classes for WebSocket operations.
- * See @docs/specs/client.md#error-contract for usage semantics.
+ * See docs/specs/client.md#error-contract for usage semantics.
  */
 
 export class ValidationError extends Error {

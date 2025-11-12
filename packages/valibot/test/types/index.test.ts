@@ -7,9 +7,11 @@ import {
   message,
   createRouter,
   valibotValidator,
-  type InferMessage,
+  type InferType,
   type InferPayload,
   type InferMeta,
+  type InferMessage,
+  type InferResponse,
   type MessageContext,
 } from "../../src/index.js";
 
@@ -379,6 +381,60 @@ describe("@ws-kit/valibot - Type Tests", () => {
       router.onClose((ctx) => {
         expectTypeOf(ctx.ws.data).toHaveProperty("userId");
       });
+    });
+  });
+
+  describe("Type Inference - InferType", () => {
+    it("should extract message type literal", () => {
+      const PingSchema = message("PING");
+      type PingType = InferType<typeof PingSchema>;
+      expectTypeOf<PingType>().toEqualTypeOf<"PING">();
+    });
+
+    it("should work with payload schemas", () => {
+      const JoinSchema = message("JOIN_ROOM", { roomId: v.string() });
+      type JoinType = InferType<typeof JoinSchema>;
+      expectTypeOf<JoinType>().toEqualTypeOf<"JOIN_ROOM">();
+    });
+
+    it("should preserve literal string type for discriminated unions", () => {
+      const A = message("TYPE_A");
+      const B = message("TYPE_B");
+      type TypeA = InferType<typeof A>;
+      type TypeB = InferType<typeof B>;
+      expectTypeOf<TypeA>().toEqualTypeOf<"TYPE_A">();
+      expectTypeOf<TypeB>().toEqualTypeOf<"TYPE_B">();
+    });
+  });
+
+  describe("Type Inference - InferResponse", () => {
+    it("should return never when no response defined", () => {
+      const PingSchema = message("PING");
+      type Response = InferResponse<typeof PingSchema>;
+      expectTypeOf<Response>().toEqualTypeOf<never>();
+    });
+
+    it("should extract response type from RPC schema", () => {
+      const GetUserSchema = message("GET_USER", {
+        id: v.string(),
+      });
+      // Note: message() doesn't support response syntax in this test,
+      // so we construct the type manually to verify InferResponse works
+      type MockRpcSchema = typeof GetUserSchema & {
+        readonly response: {
+          id: string;
+          name: string;
+        };
+      };
+      type Response = InferResponse<MockRpcSchema>;
+      expectTypeOf<Response>().toEqualTypeOf<{ id: string; name: string }>();
+    });
+
+    it("should work with schema union for discriminated response types", () => {
+      const RequestA = message("REQUEST_A");
+      const RequestB = message("REQUEST_B");
+      expectTypeOf<InferResponse<typeof RequestA>>().toEqualTypeOf<never>();
+      expectTypeOf<InferResponse<typeof RequestB>>().toEqualTypeOf<never>();
     });
   });
 });

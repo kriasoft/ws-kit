@@ -4,7 +4,7 @@
 /**
  * Multi-Instance Chat with Redis PubSub
  *
- * This example demonstrates using @ws-kit/redis-pubsub to enable cross-instance
+ * This example demonstrates using @ws-kit/redis to enable cross-instance
  * communication in a Bun cluster deployment.
  *
  * To run multiple instances:
@@ -16,8 +16,9 @@
  * Messages from one instance will be visible to all connected clients across all instances.
  */
 
+import { createClient } from "redis";
 import { createBunHandler } from "@ws-kit/bun";
-import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+import { redisPubSub } from "@ws-kit/redis";
 import { createRouter, message, z } from "@ws-kit/zod";
 
 // Configuration
@@ -82,24 +83,26 @@ const connectedUsers = new Map<
   { username: string; clientId: string }
 >();
 
-// Create router with Redis PubSub for cross-instance communication
-const pubsub = createRedisPubSub({
-  url: REDIS_URL,
-  namespace: `chat:app:${INSTANCE_ID}`,
-});
+// Create Redis client for pub/sub
+const redisClient = createClient({ url: REDIS_URL });
 
-pubsub.on("connect", () => {
+redisClient.on("connect", () => {
   console.log("✅ Connected to Redis");
 });
 
-pubsub.on("error", (err: unknown) => {
+redisClient.on("error", (err: unknown) => {
   const error = err instanceof Error ? err : new Error(String(err));
   console.error("❌ Redis error:", error.message);
 });
 
-pubsub.on("disconnect", () => {
-  console.log("⚠️  Disconnected from Redis (reconnecting...)");
+redisClient.on("reconnecting", () => {
+  console.log("⚠️  Reconnecting to Redis...");
 });
+
+await redisClient.connect();
+
+// Create pub/sub driver
+const pubsub = redisPubSub(redisClient);
 
 const router = createRouter<WebSocketData>({
   pubsub,
@@ -167,27 +170,9 @@ router.on(ChatMessage, async (ctx) => {
   });
 });
 
-// Subscribe to messages from other instances
-pubsub.subscribe("chat:messages", (message: unknown) => {
-  // Messages from other instances are received here
-  // In a real app, you might forward these to all connected clients
-  // For now, just log them (actual forwarding would require client list)
-  const msg = message as Record<string, unknown>;
-  console.log(
-    `📨 From instance #${msg.instance}: ${msg.username}: ${msg.text}`,
-  );
-});
-
-// Subscribe to user presence updates
-pubsub.subscribe("chat:users", (message: unknown) => {
-  const event = message as UserEvent;
-
-  if (event.type === "USER_JOINED") {
-    console.log(`  📢 ${event.username} joined on instance #${event.instance}`);
-  } else if (event.type === "USER_LEFT") {
-    console.log(`  📢 ${event.username} left from instance #${event.instance}`);
-  }
-});
+// Note: In a distributed setup, you'd also need a redisConsumer to listen for
+// messages published from other instances. For this example, the router's
+// pub/sub mechanism handles cross-instance broadcasting via Redis automatically.
 
 // Create handler with authentication for client ID initialization
 const { fetch: handleWebSocket, websocket } = createBunHandler(router, {
@@ -222,7 +207,7 @@ const server = Bun.serve({
           instance: INSTANCE_ID,
           port: PORT,
           users: connectedUsers.size,
-          redis: pubsub.isConnected() ? "connected" : "disconnected",
+          redis: redisClient.isReady ? "connected" : "disconnected",
         }),
         { headers: { "Content-Type": "application/json" } },
       );
@@ -240,7 +225,7 @@ console.log(`   Health: http://localhost:${PORT}/health`);
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down...");
-  await pubsub.close();
+  await redisClient.quit();
   server.stop();
   process.exit(0);
 });

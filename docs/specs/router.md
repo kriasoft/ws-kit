@@ -318,8 +318,10 @@ type MessageContext<Schema, Data> = {
   send: SendFunction; // Type-safe send to current connection (1-to-1, fire-and-forget)
   error: ErrorFunction; // Type-safe error responses (see ADR-009)
   assignData: AssignDataFunction; // Merge partial data into ctx.ws.data
-  subscribe: SubscribeFunction; // Subscribe to a channel
-  unsubscribe: UnsubscribeFunction; // Unsubscribe from a channel
+  topics: {
+    subscribe: (topic: string) => Promise<void>; // Subscribe to a topic
+    unsubscribe: (topic: string) => Promise<void>; // Unsubscribe from a topic
+  };
 
   // RPC handlers only (when message has response schema)
   reply?: (schema: MessageSchema, data: ResponseType) => void; // Terminal reply, one-shot guarded (ADR-015)
@@ -380,8 +382,10 @@ type IngressContext<Data = unknown> = {
   send: SendFunction;
   error: ErrorFunction;
   assignData: AssignDataFunction;
-  subscribe: SubscribeFunction;
-  unsubscribe: UnsubscribeFunction;
+  topics: {
+    subscribe: (topic: string) => Promise<void>;
+    unsubscribe: (topic: string) => Promise<void>;
+  };
 };
 ```
 
@@ -633,13 +637,13 @@ router.on(DeleteMessage, (ctx) => {
 ### Connection Lifecycle
 
 ```typescript
-router.onOpen((ctx) => {
-  // ctx: { ws, send, subscribe, unsubscribe }
+router.onOpen(async (ctx) => {
+  // ctx: { ws, send, topics: { subscribe, unsubscribe } }
   console.log("Client connected:", ctx.ws.data.clientId);
 });
 
-router.onClose((ctx) => {
-  // ctx: { ws, code, reason, send, subscribe, unsubscribe }
+router.onClose(async (ctx) => {
+  // ctx: { ws, code, reason, send, topics: { subscribe, unsubscribe } }
   console.log(
     "Client disconnected:",
     ctx.ws.data.clientId,
@@ -672,6 +676,8 @@ type WebSocketData<T> = {
 
 ### Route Composition
 
+Routers can be merged to combine handlers from multiple modules into a single router. This is the recommended pattern for organizing features in large applications.
+
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 
@@ -686,7 +692,65 @@ chatRouter.on(SendMessage, handleChat);
 const mainRouter = createRouter<AppData>().merge(authRouter).merge(chatRouter);
 ```
 
-**Type System Note**: All routers should define the same `TData` type for composition to work correctly. Type compatibility is enforced at compile time.
+#### merge() Semantics
+
+When merging routers, the following behavior applies:
+
+**Message Handlers**: Last-write-wins. If both routers handle the same message type, the handler from the later-merged router takes precedence:
+
+```typescript
+const router1 = createRouter<AppData>().on(Msg, handler1);
+const router2 = createRouter<AppData>().on(Msg, handler2);
+
+const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+
+// Msg now routes to handler2 (from router2, merged second)
+```
+
+This is **intentional**: merge order is explicit, giving you full control. For feature modules, this is typically not an issue since each module handles distinct message types.
+
+**Lifecycle Hooks** (`onOpen`, `onClose`, `onAuth`, `onError`): Handlers are **appended**, not replaced. All handlers execute in registration order:
+
+```typescript
+const router1 = createRouter<AppData>().onOpen((ctx) => {
+  console.log("router1 onOpen");
+});
+
+const router2 = createRouter<AppData>().onOpen((ctx) => {
+  console.log("router2 onOpen");
+});
+
+const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+
+// Output:
+// router1 onOpen
+// router2 onOpen
+```
+
+**Middleware**: Global middleware is appended; per-route middleware is extended for existing message types:
+
+```typescript
+const router1 = createRouter<AppData>()
+  .use(mw1) // global middleware
+  .on(Msg, handler1);
+
+const router2 = createRouter<AppData>()
+  .use(mw2) // global middleware
+  .on(Msg, handler2)
+  .use(Msg, mwPerRoute); // per-route middleware
+
+const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+
+// Execution order for Msg:
+// 1. mw1 (global from router1)
+// 2. mw2 (global from router2)
+// 3. mwPerRoute (per-route for Msg from router2)
+// 4. handler2 (last-write-wins for Msg handler)
+```
+
+**Type Compatibility**: All merged routers must use the same `TData` type. Type compatibility is enforced at compile time.
+
+**See Also**: [docs/patterns/composition.md](../patterns/composition.md) for composition patterns, [ADR-023](../adr/023-schema-driven-type-inference.md) for type safety through composition.
 
 ### Rate Limiting Middleware
 
@@ -782,25 +846,25 @@ router.on(QueryMessage, (ctx) => {
 
 **RPC Pattern**: For request/response with guaranteed responses and timeouts, define RPC schemas and use `ctx.reply()` instead (see ADR-015 for RPC design).
 
-**Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see @schema.md#Which-timestamp-to-use).
+**Outbound metadata**: `ctx.send()` automatically adds `timestamp` to `meta` (producer time for UI display; **server logic MUST use `ctx.receivedAt`**, not `meta.timestamp` — see docs/specs/schema.md#Which-timestamp-to-use).
 
-**For broadcasting to multiple clients**, see @broadcasting.md for multicast patterns using Bun's native pubsub.
+**For broadcasting to multiple clients**, see docs/specs/pubsub.md for multicast patterns using Bun's native pubsub.
 
 ## Subscriptions & Publishing
 
-For comprehensive pub/sub patterns, examples, and detailed API documentation, see **[@broadcasting.md](./broadcasting.md)**.
+For comprehensive pub/sub API documentation, semantics, and patterns, see [docs/specs/pubsub.md](./pubsub.md).
 
 **Quick API reference:**
 
-- `ctx.subscribe(topic)` — Subscribe connection to a topic
-- `ctx.unsubscribe(topic)` — Unsubscribe connection from a topic
+- `await ctx.topics.subscribe(topic)` — Subscribe connection to a topic
+- `await ctx.topics.unsubscribe(topic)` — Unsubscribe connection from a topic
 - `ctx.publish(topic, schema, payload)` — Type-safe publish from handler context
 - `router.publish(topic, schema, payload)` — Type-safe publish from outside handlers
 
 **Key principles:**
 
 - All publish operations are schema-validated at compile-time and validated at runtime
-- Cleanup on disconnect: always unsubscribe in `onClose()` or via `ctx.unsubscribe()` to prevent memory leaks
+- Cleanup on disconnect: always unsubscribe in `onClose()` or via `await ctx.topics.unsubscribe()` to prevent memory leaks
 - Message ordering is guaranteed within a topic at the time of publish
 - Use naming conventions like `room:123`, `user:456:notifications` for topic clarity
 
@@ -885,7 +949,7 @@ router.on(LoginMessage, (ctx) => {
 });
 ```
 
-For complete error code reference, error handling patterns, and structured logging integration, see **[@error-handling.md](./error-handling.md)** (design rationale in ADR-009).
+For complete error code reference, error handling patterns, and structured logging integration, see [docs/specs/error-handling.md](./error-handling.md) (design rationale in ADR-009).
 
 **Error Propagation**: If a handler throws an unhandled error, the router catches it and calls the `onError` lifecycle hook (if registered). See [Lifecycle Hooks](#lifecycle-hooks) for details.
 
@@ -927,11 +991,11 @@ serve(router, {
     });
   },
 
-  onBroadcast(message, scope) {
+  onBroadcast(message, topic) {
     // Called when router.publish() is invoked
-    console.log(`Broadcast to ${scope}:`, message.type);
+    console.log(`Broadcast to ${topic}:`, message.type);
     // Track broadcast patterns for analytics
-    analytics.track("broadcast", { scope, messageType: message.type });
+    analytics.track("broadcast", { topic, messageType: message.type });
   },
 
   onLimitExceeded(info) {
@@ -1078,7 +1142,7 @@ Bun.serve({ port: 3000, fetch, websocket });
 ### Cloudflare Durable Objects
 
 ```typescript
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
 const handler = createDurableObjectHandler(router, {
   /* ... */
@@ -1104,14 +1168,14 @@ This is the **recommended approach** for all production deployments.
 
 ## Key Constraints
 
-> See @rules.md for complete rules. Critical for routing:
+> See docs/specs/rules.md for complete rules. Critical for routing:
 
-1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see @rules.md#state-layering)
-2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)
+1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see docs/specs/rules.md#state-layering)
+2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see docs/specs/schema.md#Which-timestamp-to-use)
 3. **Payload typing** — `ctx.payload` exists only when schema defines it (see ADR-001)
 4. **Type-safe errors** — Use `ctx.error()` with discriminated union error codes (see ADR-009 for design rationale)
 5. **Connection data updates** — Use `ctx.assignData()` to merge partial updates (write-partial pattern)
 6. **Middleware execution** — Global runs first, then per-route, then handler (see ADR-008)
-7. **Validation flow** — Trust schema validation; never re-validate in handlers (see @rules.md#validation-flow)
-8. **Broadcasting** — For multicast messaging, see @broadcasting.md (not covered in this spec)
-9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare-do`)
+7. **Validation flow** — Trust schema validation; never re-validate in handlers (see docs/specs/rules.md#validation-flow)
+8. **Broadcasting** — For multicast messaging, see docs/specs/pubsub.md (not covered in this spec)
+9. **Runtime selection** — Use platform-specific imports in production (e.g., `@ws-kit/bun`, `@ws-kit/cloudflare`)

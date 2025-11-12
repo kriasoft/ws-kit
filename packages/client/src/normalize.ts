@@ -3,7 +3,7 @@
 
 /**
  * Outbound message normalization for client.
- * See @docs/specs/client.md#client-normalization and @docs/specs/rules.md#client-side-constraints.
+ * See docs/specs/client.md#client-normalization and docs/specs/rules.md#client-side-constraints.
  */
 
 // Reserved server-only meta keys (MUST strip from user input)

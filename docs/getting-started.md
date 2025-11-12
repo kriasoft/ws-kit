@@ -15,7 +15,7 @@ bun add valibot @ws-kit/valibot @ws-kit/bun
 ```
 
 ::: tip
-The router includes a built-in in-memory pub/sub adapter by default. For production multi-instance deployments, add `@ws-kit/redis-pubsub` or configure a Cloudflare Durable Objects adapter. See [Deployment](/deployment) for details.
+The router includes a built-in in-memory pub/sub adapter by default. For production multi-instance deployments, add `@ws-kit/redis` or configure a Cloudflare Durable Objects adapter. See [Deployment](/deployment) for details.
 :::
 
 ### Client (Browser)
@@ -78,12 +78,12 @@ type AppData = {
 
 const router = createRouter<AppData>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to room and store in connection data
   ctx.assignData({ roomId });
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 });
 
 router.on(ChatMessage, async (ctx) => {
@@ -186,7 +186,7 @@ Notice how both server and client have complete TypeScript inference from the sh
 The `serve()` function supports additional lifecycle hooks beyond `onOpen`, `onClose`, and `onError`:
 
 - `onUpgrade(req)` — Customize HTTP upgrade response before WebSocket handshake
-- `onBroadcast(ctx, topic, data)` — Observe or intercept broadcast events
+- `onBroadcast(message, topic)` — Observe broadcast events
 
 See the [API Reference](./api-reference) for details.
 :::

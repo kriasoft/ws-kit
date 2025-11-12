@@ -40,6 +40,7 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
       "default": "./dist/index.js"
     }
   },
@@ -54,6 +55,9 @@
   },
   "peerDependencies": {
     "@types/bun": ">=1.3.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2"
   },
   "engines": {
     "bun": ">=1.3",

@@ -1,0 +1,101 @@
+/**
+ * Test harness exports: createTestRouter, wrapTestRouter, FakeClock, and types.
+ * Usage: import { test } from "@ws-kit/core" or import * from "@ws-kit/core/testing"
+ *
+ * ## Basic Usage
+ *
+ * ```ts
+ * import { test } from "@ws-kit/core";
+ * import { createRouter } from "@ws-kit/zod";
+ *
+ * const tr = test.createTestRouter({ create: () => createRouter() });
+ * const conn = await tr.connect();
+ * conn.send("PING", { text: "hello" });
+ * await tr.flush();
+ * expect(conn.outgoing()).toContainEqual({ type: "PONG", ... });
+ * expect(tr.capture.errors()).toHaveLength(0);
+ * ```
+ *
+ * ## Observing Events with `router.observe()`
+ *
+ * The router provides a public observation API for tests and monitoring plugins
+ * to tap into lifecycle events without accessing internals.
+ *
+ * ```ts
+ * const router = createRouter();
+ *
+ * // Register observer for publish, error, and connection events
+ * const off = router.observe({
+ *   onPublish: (record) => {
+ *     console.log(`Published to ${record.topic}`);
+ *   },
+ *   onError: (err, meta) => {
+ *     console.error(`Error on ${meta?.type}:`, err.message);
+ *   },
+ *   onConnectionOpen: (clientId, data) => {
+ *     console.log(`Client connected: ${clientId}`);
+ *   },
+ *   onConnectionClose: (clientId, meta) => {
+ *     console.log(`Client disconnected: ${clientId}`);
+ *   },
+ * });
+ *
+ * // Later, unsubscribe
+ * off();
+ * ```
+ *
+ * ## Key Semantics
+ *
+ * - **Synchronous dispatch**: Callbacks fire in registration order during event
+ * - **Error isolation**: If an observer throws, the error is logged and other observers still run
+ * - **Re-entrancy safe**: Observers can add/remove other observers without breaking dispatch (snapshot-based)
+ * - **No payload redaction**: Publish records include full payload (don't expose sensitive data in observers)
+ * - **Partial observers**: Only define callbacks for events you care about
+ *
+ * ## Use Cases
+ *
+ * - **Testing**: Capture publishes/errors for assertions (automatically done by test harness)
+ * - **Monitoring**: Log/collect metrics on publishes, errors, and connection churn
+ * - **Debugging**: Trace message flow without modifying handler code
+ * - **Integration**: Plugin into router from monitoring/telemetry libraries
+ */
+
+// Core exports
+export { createTestRouter, wrapTestRouter } from "./test-harness";
+export type { CreateTestRouterOptions } from "./test-harness";
+
+// Clock exports
+export { FakeClock, SystemClock } from "./fake-clock";
+export type { Clock } from "./fake-clock";
+
+// Type exports
+export type {
+  TestRouter,
+  TestConnection,
+  TestCapture,
+  OutgoingFrame,
+  PublishRecord,
+} from "./types";
+
+// Act helpers (optional convenience)
+export { act } from "./act";
+
+// Internal exports (for advanced use)
+export { TestWebSocket, type ConnectionState } from "./test-websocket";
+export { InMemoryPlatformAdapter } from "./test-adapter";
+
+// Namespace re-export for convenience
+import * as testHarness from "./test-harness";
+import * as fakeClock from "./fake-clock";
+import * as actModule from "./act";
+
+export const testing = {
+  createTestRouter: testHarness.createTestRouter,
+  wrapTestRouter: testHarness.wrapTestRouter,
+  FakeClock: fakeClock.FakeClock,
+  SystemClock: fakeClock.SystemClock,
+  act: actModule.act,
+};
+
+// Backward compatibility alias (prefer 'testing' over 'test')
+export const test = testing;

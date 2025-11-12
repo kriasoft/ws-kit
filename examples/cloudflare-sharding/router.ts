@@ -17,8 +17,8 @@
  * class_name = "WebSocketRouter"
  */
 
-import type { DurableObjectNamespace } from "@ws-kit/cloudflare-do";
-import { getShardedStub } from "@ws-kit/cloudflare-do";
+import type { DurableObjectNamespace } from "@ws-kit/cloudflare";
+import { getShardedStub } from "@ws-kit/cloudflare";
 
 interface Env {
   ROUTER: DurableObjectNamespace;

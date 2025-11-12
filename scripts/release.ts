@@ -262,6 +262,20 @@ function sanitizeManifest(pkg: Pkg, versions: Map<string, string>): Pkg {
   // (npm won't look for another subdirectory within the publish directory)
   delete out.publishConfig;
 
+  // Remove development-only export conditions
+  if (out.exports && typeof out.exports === "object") {
+    function stripBunCondition(exportsObj: unknown): void {
+      if (exportsObj && typeof exportsObj === "object") {
+        for (const value of Object.values(exportsObj)) {
+          if (value && typeof value === "object" && "bun" in value) {
+            delete (value as Record<string, unknown>).bun;
+          }
+        }
+      }
+    }
+    stripBunCondition(out.exports);
+  }
+
   return out;
 }
 

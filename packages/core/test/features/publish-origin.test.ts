@@ -10,14 +10,14 @@
  *
  * Tests the public API of router.publish() and ctx.publish()
  *
- * Spec: @docs/specs/broadcasting.md#Origin-Option
- * Related: ADR-019 (ctx.publish), ADR-018 (publish terminology)
+ * Spec: docs/specs/pubsub.md#origin-tracking-include-sender-identity
+ * Related: ADR-022 (pub/sub API design), ADR-019 (ctx.publish), ADR-018 (publish terminology)
  */
 
-import { describe, expect, it } from "bun:test";
+import { memoryPubSub } from "@ws-kit/memory";
 import * as zodModule from "@ws-kit/zod";
-import { MemoryPubSub } from "../../src/pubsub.js";
-import { WebSocketRouter } from "../../src/router.js";
+import { describe, expect, it } from "bun:test";
+import { CoreRouter } from "../../src/core/router.js";
 
 const { z, message } = zodModule;
 
@@ -29,7 +29,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         senderId: z.string(),
       });
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "CHAT",
           safeParse: (schema: any, data: any) => ({
@@ -55,7 +55,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         userId: z.number(),
       });
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "ROOM_UPDATE",
           safeParse: (schema: any, data: any) => ({
@@ -82,7 +82,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         { senderId: z.string().optional() },
       );
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "MSG",
           safeParse: (schema: any, data: any) => ({
@@ -114,7 +114,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         },
       );
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "ROOM",
           safeParse: (schema: any, data: any) => ({
@@ -146,7 +146,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       const Message = message("MSG", { text: z.string() });
       let capturedMessage: any;
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "MSG",
           safeParse: (schema: any, data: any) => {
@@ -168,7 +168,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       const Message = message("MSG", { text: z.string() });
       let capturedMessage: any;
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "MSG",
           safeParse: (schema: any, data: any) => {
@@ -196,7 +196,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
     it("should return 0 on validation failure", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "MSG",
           safeParse: (schema: any, data: any) => ({
@@ -211,13 +211,14 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toBe("validation");
+      expect(result.ok === false && result.error).toBe("VALIDATION");
+      expect(result.ok === false && result.retryable).toBe(false);
     });
 
     it("should handle missing validator gracefully", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: undefined as any,
       });
 
@@ -226,7 +227,9 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toBe("adapter_error");
+      expect(result.ok === false && result.error).toBe("STATE");
+      expect(result.ok === false && result.retryable).toBe(false);
+      expect(result.ok === false && result.cause).toBeInstanceOf(Error);
     });
   });
 
@@ -234,7 +237,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
     it("should work with real MemoryPubSub", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) =>
             schema?.type?.value || schema?.type || "MSG",
@@ -243,7 +246,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
             data,
           }),
         } as any,
-        pubsub: new MemoryPubSub(),
+        pubsub: memoryPubSub(),
       });
 
       // Subscribe to channel first
@@ -272,7 +275,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
     it("should not expose clientId in meta", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new WebSocketRouter({
+      const router = new CoreRouter({
         validator: {
           getMessageType: (schema: any) => schema.type || "MSG",
           safeParse: (schema: any, data: any) => ({
@@ -280,7 +283,7 @@ describe("Publish Sender Tracking (router.publish API)", () => {
             data,
           }),
         } as any,
-        pubsub: new MemoryPubSub(),
+        pubsub: memoryPubSub(),
       });
 
       let receivedMessage: any;

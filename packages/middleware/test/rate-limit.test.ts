@@ -10,7 +10,7 @@ import {
   type ServerWebSocket,
 } from "@ws-kit/zod";
 import { beforeEach, describe, expect, it } from "bun:test";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 interface TestData {
   userId?: string;

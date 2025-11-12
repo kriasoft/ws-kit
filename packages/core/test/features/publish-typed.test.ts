@@ -5,9 +5,9 @@
  * Type-Safe Publish Tests
  *
  * Validates router.publish() and ctx.publish() with schema validation,
- * return value (recipient count), and PublishOptions (excludeSelf, meta).
+ * return value (recipient count), and PublishOptions (excludeSelf, partitionKey, signal).
  *
- * Spec: docs/specs/router.md#Publishing-Typed-Messages
+ * Spec: docs/specs/router.md#subscriptions--publishing
  */
 
 import { describe, expect, it } from "bun:test";
@@ -133,8 +133,8 @@ describe("Type-Safe Publishing", () => {
       expect(result.ok).toBe(true);
     });
 
-    it("should handle PublishOptions.meta", async () => {
-      // Define a message with explicit meta schema to support custom fields
+    it("should include envelope metadata from message schema", async () => {
+      // Message schema includes metadata definition (third parameter)
       const MessageWithMeta = message(
         "MESSAGE_WITH_META",
         { text: z.string() },
@@ -143,13 +143,10 @@ describe("Type-Safe Publishing", () => {
 
       const router = createRouter();
 
-      // Custom meta should be merged with auto-injected timestamp
-      const result = await router.publish(
-        "room:123",
-        MessageWithMeta,
-        { text: "Test" },
-        { meta: { origin: "admin", reason: "sync" } },
-      );
+      // Metadata is part of the envelope when defined in message schema
+      const result = await router.publish("room:123", MessageWithMeta, {
+        text: "Test",
+      });
 
       expect(result.ok).toBe(true);
     });
@@ -165,7 +162,8 @@ describe("Type-Safe Publishing", () => {
       );
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toBe("validation");
+      expect(result.ok === false && result.error).toBe("VALIDATION");
+      expect(result.ok === false && result.retryable).toBe(false);
     });
   });
 

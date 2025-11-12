@@ -1,0 +1,17 @@
+{
+  "name": "@examples/quick-start",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "smoke": "bun test smoke.test.ts"
+  },
+  "dependencies": {
+    "@ws-kit/bun": "workspace:*",
+    "@ws-kit/zod": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.2"
+  }
+}

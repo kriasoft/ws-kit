@@ -27,7 +27,7 @@ npm install @ws-kit/middleware @ws-kit/core
 ```typescript
 import { createRouter, message, z } from "@ws-kit/zod";
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 import { serve } from "@ws-kit/bun";
 
 const router = createRouter();
@@ -64,7 +64,7 @@ serve(router, {
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 // Single Redis connection shared by all rate limiters
@@ -87,7 +87,7 @@ router.use(limiter);
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = rateLimit({
   limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
@@ -307,7 +307,7 @@ router.use((ctx, next) => {
 
 ```typescript
 import { rateLimit, perUserKey } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 1 }),
@@ -361,7 +361,7 @@ This separation means:
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 test("should block requests exceeding rate limit", async () => {
   const fakeTime = { current: Date.now() };
@@ -425,5 +425,6 @@ The router handles this error and sends:
 
 - [ADR-021: Adapter-First Architecture](../../docs/adr/021-adapter-first-architecture.md) — Design rationale
 - [Rate Limiting Proposal](../../docs/proposals/rate-limiting.md) — Full specification
-- [@ws-kit/adapters](../adapters) — Adapter implementations
+- [@ws-kit/redis](../redis) — Redis rate limiter and pub/sub
+- [@ws-kit/memory](../memory) — In-memory pub/sub
 - [@ws-kit/core](../core) — Router and types

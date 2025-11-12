@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2025-10-29
-**Related**: ADR-009 (lifecycle hooks), @patterns.md, @broadcasting.md
+**Related**: ADR-009 (lifecycle hooks), docs/specs/patterns.md
 
 ## Context
 
@@ -150,8 +150,8 @@ router.on(CursorMove, (ctx) => {
 
 ## References
 
-- @patterns.md#Throttled-Broadcast-Pattern — Detailed pattern documentation
-- @broadcasting.md — Broadcasting specification
+- docs/specs/patterns.md#Throttled-Broadcast-Pattern — Detailed pattern documentation
+- docs/specs/pubsub.md — Pub/Sub API specification
 - hyper-lite meeting demo — Real-world inspiration
 - Figma's multiplayer architecture — Production pattern
 

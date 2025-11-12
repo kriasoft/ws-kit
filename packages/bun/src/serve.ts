@@ -49,6 +49,7 @@ export async function serve<TData extends WebSocketData>(
   options: ServeOptions<TData> = {},
 ): Promise<void> {
   const { createBunHandler } = await import("./handler.js");
+  const { BunPubSub } = await import("./pubsub.js");
 
   // Extract the core router if it's wrapped
   // (in case someone passes a typed wrapper)
@@ -79,6 +80,20 @@ export async function serve<TData extends WebSocketData>(
       fetch,
       websocket,
     });
+
+    // Initialize BunPubSub for this server instance if not already configured
+    // This enables router.publish() to broadcast to WebSocket connections
+    // Respects any custom pub/sub backend already configured by the user
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(coreRouter as any).pubsubInstance) {
+      // We set the private pubsubInstance field directly since the property is readonly
+      Object.defineProperty(coreRouter, "pubsubInstance", {
+        value: new BunPubSub(server),
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      });
+    }
 
     console.log(`WebSocket server running on ws://localhost:${server.port}`);
   });

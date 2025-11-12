@@ -199,11 +199,11 @@ router.on(SomeSchema, (ctx) => {
 const JoinRoom = message("JOIN_ROOM", { room: z.string() });
 const RoomUpdate = message("ROOM_UPDATE", { text: z.string() });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { room } = ctx.payload;
 
   // Subscribe to room channel
-  ctx.subscribe(`room:${room}`);
+  await ctx.topics.subscribe(`room:${room}`);
 });
 
 // Broadcast to all subscribers on a channel
@@ -228,14 +228,18 @@ await router.publish("notifications", NotificationMessage, {
 
 ### Multi-Instance Cluster (Load Balanced)
 
-For deployments with multiple Bun processes behind a load balancer, use `@ws-kit/redis-pubsub`:
+For deployments with multiple Bun processes behind a load balancer, use `@ws-kit/redis`:
 
 ```typescript
-import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+import { createClient } from "redis";
+import { redisPubSub } from "@ws-kit/redis";
+import { serve } from "@ws-kit/bun";
+
+const redis = createClient();
+await redis.connect();
 
 const router = createRouter({
-  platform: createBunAdapter(),
-  pubsub: createRedisPubSub({ host: "localhost", port: 6379 }),
+  pubsub: redisPubSub(redis),
 });
 
 // Now publishes across ALL instances
@@ -243,6 +247,8 @@ const NotificationMessage = message("NOTIFICATION", { message: z.string() });
 await router.publish("notifications", NotificationMessage, {
   message: "Hello",
 });
+
+serve(router, { port: 3000 });
 ```
 
 ## Connection Lifecycle
@@ -252,12 +258,12 @@ await router.publish("notifications", NotificationMessage, {
 Called when a WebSocket connection is established:
 
 ```typescript
-router.onOpen((ctx) => {
+router.onOpen(async (ctx) => {
   const { clientId } = ctx.ws.data;
   console.log(`[${clientId}] Connected`);
 
   // Subscribe to channels
-  ctx.subscribe("notifications");
+  await ctx.topics.subscribe("notifications");
 
   // Send welcome message
   ctx.send(WelcomeMessage, { greeting: "Welcome!" });
@@ -355,7 +361,7 @@ router.on(JoinRoomMessage, async (ctx) => {
   const { clientId } = ctx.ws.data;
 
   // Subscribe to room
-  ctx.subscribe(`room:${room}`);
+  await ctx.topics.subscribe(`room:${room}`);
 
   // Track membership
   if (!rooms.has(room)) rooms.set(room, new Set());
@@ -471,9 +477,9 @@ Ensure your fetch handler returns the result of `fetch(req, server)` from `creat
 
 Check that:
 
-1. Sender is subscribed: `ctx.ws.subscribe("channel")`
+1. Sender is subscribed: `await ctx.topics.subscribe("channel")`
 2. Receiver is subscribed to the same channel
-3. For multi-instance: use `@ws-kit/redis-pubsub`
+3. For multi-instance: use `@ws-kit/redis`
 
 ### Memory leaks
 
@@ -484,7 +490,8 @@ Ensure `router.onClose()` cleans up resources (unsubscribe, remove from rooms, e
 - [`@ws-kit/core`](../core/README.md) — Core router and types
 - [`@ws-kit/zod`](../zod/README.md) — Zod validator adapter
 - [`@ws-kit/valibot`](../valibot/README.md) — Valibot validator adapter
-- [`@ws-kit/redis-pubsub`](../redis-pubsub/README.md) — Redis PubSub for multi-instance
+- [`@ws-kit/redis`](../redis/README.md) — Redis rate limiter and pub/sub
+- [`@ws-kit/memory`](../memory/README.md) — In-memory pub/sub
 - [`@ws-kit/client`](../client/README.md) — Browser/Node.js client
 
 ## License

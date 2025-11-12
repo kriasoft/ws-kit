@@ -9,9 +9,9 @@
  * 2. onUnhandled: fires ONLY for structurally valid messages with no schema
  * 3. Dispatch order: schema handlers → onUnhandled (invalid never reaches onUnhandled)
  *
- * See @docs/specs/client.md#Multiple-Handlers
- * See @docs/specs/client.md#message-processing-order
- * See @docs/specs/rules.md#inbound-message-routing
+ * See docs/specs/client.md#multiple-handlers
+ * See docs/specs/client.md#message-processing-order
+ * See docs/specs/rules.md#inbound-message-routing
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -290,7 +290,7 @@ describe("Client: onUnhandled Hook", () => {
       // Send message with WRONG payload structure (id should be number)
       simulateReceive({ type: "TEST", meta: {}, payload: { id: "string" } });
 
-      // Per @docs/specs/client.md#message-processing-order:
+      // Per docs/specs/client.md#message-processing-order:
       // "Invalid messages (parse/validation failures) never reach onUnhandled()"
       //
       // Expected behavior: validation failures should be dropped (neither handler called)

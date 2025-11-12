@@ -47,7 +47,7 @@ export interface BunHandlerOptions<TData = unknown> {
 
   /** Called when router.publish() is invoked (before actual send) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onBroadcast?: (message: any, scope: string) => void;
+  onBroadcast?: (message: any, topic: string) => void;
 
   /** Called during WebSocket upgrade (before authentication) */
   onUpgrade?: (req: Request) => void;

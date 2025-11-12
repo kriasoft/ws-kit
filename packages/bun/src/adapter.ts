@@ -40,12 +40,14 @@ export function createBunAdapter(): PlatformAdapter {
  *
  * **Usage**:
  * ```typescript
- * import { createBunAdapterWithServer } from "@ws-kit/bun";
+ * import { createBunAdapterWithServer, createBunHandler } from "@ws-kit/bun";
  * import { createRouter } from "@ws-kit/zod";
+ * import { withPubSub } from "@ws-kit/pubsub";
  *
  * const server = await Bun.serve({...});
  * const adapter = createBunAdapterWithServer(server);
- * const router = createRouter({ platform: adapter });
+ * const router = createRouter().plugin(withPubSub({ adapter: adapter.pubsub }));
+ * const { fetch, websocket } = createBunHandler(router);
  * ```
  *
  * @param server - Bun Server instance for pub/sub

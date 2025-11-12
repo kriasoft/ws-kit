@@ -7,7 +7,7 @@ Every package owns its tests under `packages/<name>/test`. Use sub-folders consi
 - `runtime/` (behavioral tests, normalization, queue)
 - `types/` (expectTypeOf suites)
 - `features/` (integration-style specs per feature area)
-- Adapter-specific folders (`bun/`, `cloudflare-do/`, etc.) follow the same pattern
+- Adapter-specific folders (`bun/`, `cloudflare/`, etc.) follow the same pattern
 
 ### When Adding Tests
 
@@ -122,7 +122,7 @@ Quick navigation for AI tools:
 - [#Client-Type-Inference](#client-type-inference) — Client handler and request/response tests
 - [#Runtime-Testing](#runtime-testing) — Validation, normalization, and strict schema tests
 - [#Key-Constraints](#key-constraints) — Testing requirements summary
-- **Testing patterns**: See @rules.md for broader testing guidance
+- **Testing patterns**: See docs/specs/rules.md for broader testing guidance
 
 ## Router Testability
 
@@ -217,10 +217,10 @@ expect(mockWs._getMessages().length).toBe(1);
 
 ## Type-Level Testing
 
-Use `expectTypeOf` from `expect-type` for compile-time validation:
+Use `expectTypeOf` from Bun for compile-time validation:
 
 ```typescript
-import { expectTypeOf } from "expect-type";
+import { expectTypeOf } from "bun:test";
 
 // Test conditional payload typing
 const WithPayload = message("WITH", { id: z.number() });
@@ -473,7 +473,7 @@ test("server: inbound normalization strips reserved keys before validation", () 
   expect(normalized.meta).not.toHaveProperty("receivedAt");
 });
 
-// See @validation.md#Strict-Mode-Enforcement for strict validation requirements
+// See docs/specs/validation.md#Strict-Mode-Enforcement for strict validation requirements
 test("strict schema rejects unknown keys", () => {
   const TestMsg = message("TEST", { id: z.number() });
 
@@ -506,7 +506,7 @@ test("strict schema rejects unknown keys", () => {
   ).toBe(false);
 });
 
-// See @validation.md#Strict-Mode-Enforcement for validation behavior table
+// See docs/specs/validation.md#Strict-Mode-Enforcement for validation behavior table
 test("strict schema rejects unexpected payload", () => {
   const NoPayloadMsg = message("NO_PAYLOAD");
   const WithPayloadMsg = message("WITH_PAYLOAD", { id: z.number() });
@@ -984,14 +984,14 @@ test("pending request limit enforced before timeout check", async () => {
 
 ## Key Constraints
 
-> See @rules.md for complete rules. Critical for testing:
+> See docs/specs/rules.md for complete rules. Critical for testing:
 
 1. **Type-level tests** — Use `expectTypeOf` for compile-time validation (positive & negative cases)
 2. **Payload conditional typing** — Test that `ctx.payload` is type error when schema omits it (see ADR-001)
 3. **Client type inference** — Test typed clients provide full inference; generic client uses `unknown` (see ADR-002 and #client-type-inference)
-4. **Discriminated unions** — Verify factory pattern enables union support (see @schema.md#Discriminated-Unions)
-5. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see @schema.md#Strict-Schemas)
+4. **Discriminated unions** — Verify factory pattern enables union support (see docs/specs/schema.md#Discriminated-Unions)
+5. **Strict schema enforcement** — Test rejection of unknown keys and unexpected `payload` (see docs/specs/schema.md#Strict-Schemas)
 6. **Normalization** — Test reserved key stripping before validation (see normalization test above)
-7. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see @client.md#message-processing-order and @rules.md#inbound-message-routing)
-8. **Client multi-handler** — Test registration order, stable iteration, error isolation (see @client.md#Multiple-Handlers)
+7. **Client onUnhandled ordering** — Test schema handlers execute BEFORE `onUnhandled()` hook (see docs/specs/client.md#message-processing-order and docs/specs/rules.md#inbound-message-routing)
+8. **Client multi-handler** — Test registration order, stable iteration, error isolation (see docs/specs/client.md#Multiple-Handlers)
 9. **Extended meta support** — Test required/optional meta fields, timestamp preservation, reserved key stripping (see extended meta tests above)

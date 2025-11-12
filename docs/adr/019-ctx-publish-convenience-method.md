@@ -2,7 +2,7 @@
 
 **Status**: Implemented
 **Date**: 2025-10-30
-**Related**: ADR-018 (Broadcast Method Naming), docs/specs/broadcasting.md
+**Related**: ADR-018 (Broadcast Method Naming), docs/specs/pubsub.md
 
 ## Context
 
@@ -13,7 +13,7 @@ Router now supports type-safe, schema-validated publishing via `router.publish()
 **Two candidate approaches:**
 
 1. **Method on context**: `ctx.publish(channel, schema, payload, options?)`
-   - Pros: Ergonomic in handlers; discoverable via IDE autocomplete; consistent with `ctx.send()`, `ctx.subscribe()`
+   - Pros: Ergonomic in handlers; discoverable via IDE autocomplete; consistent with `ctx.send()`, `ctx.topics.subscribe()`
    - Cons: Adds to context surface area; blurs router-level vs connection-level boundaries
 
 2. **Standalone helper function**: `publish(router, channel, schema, payload, options?)`
@@ -49,7 +49,7 @@ await publish(router, `org:${ctx.payload.orgId}:users`, ...);
 ws-kit's API philosophy:
 
 - **Factories for setup**: `message()`, `rpc()`, `createRouter()`
-- **Methods for operations**: `ctx.send()`, `ctx.reply()`, `ctx.subscribe()`, `ctx.unsubscribe()`
+- **Methods for operations**: `ctx.send()`, `ctx.reply()`, `ctx.topics.subscribe()`, `ctx.topics.unsubscribe()`
 
 Adding `ctx.publish()` completes this natural set, rather than introducing a different convention (standalone function).
 
@@ -64,9 +64,9 @@ Adding `ctx.publish()` completes this natural set, rather than introducing a dif
 `ctx.publish()` sits naturally among context operations:
 
 - `ctx.send()` → unicast to single connection
-- `ctx.subscribe(topic)` → join broadcast group
+- `ctx.topics.subscribe(topic)` → join broadcast group
 - `ctx.publish(topic, ...)` → send to broadcast group
-- `ctx.unsubscribe(topic)` → leave broadcast group
+- `ctx.topics.unsubscribe(topic)` → leave broadcast group
 
 This forms a coherent, understandable API surface.
 
@@ -113,13 +113,12 @@ const publish = async (channel, schema, payload, options) => {
 interface PublishOptions {
   excludeSelf?: boolean; // Raises error if true (not yet implemented)
   partitionKey?: string; // Future: distributed sharding
-  meta?: Record<string, unknown>; // Custom metadata
 }
 ```
 
-- **Current**: Only `meta` is used; validation enforced for all options
 - **excludeSelf**: Reserved and validated (raises error if set to `true`)
 - **partitionKey**: Future feature for distributed pubsub without breaking API
+- **Metadata**: Defined in message schema (third parameter to `message()`), not in options
 
 ## Return Value: Promise&lt;PublishResult&gt;
 
@@ -134,8 +133,11 @@ type PublishResult =
     }
   | {
       ok: false;
-      reason: "validation" | "acl" | "adapter_error";
-      error?: unknown;
+      error: PublishError;
+      retryable: boolean;
+      adapter?: string;
+      details?: Record<string, unknown>;
+      cause?: Error;
     };
 ```
 
@@ -167,7 +169,7 @@ type PublishResult =
 
 - **ADR-018**: `publish()` method naming (vs `broadcast()`)
 - **ADR-007**: Export-with-helpers pattern (factory functions)
-- **docs/specs/broadcasting.md**: Usage patterns and best practices
+- **docs/specs/pubsub.md**: Pub/Sub API specification and patterns
 
 ## Examples
 
@@ -184,10 +186,13 @@ router.on(UserCreated, async (ctx) => {
 
   if (result.ok) {
     ctx.log.debug(
-      `Notified ${result.matched ?? "?"} subscribers (${result.capability})`,
+      `Notified ${result.matchedLocal ?? "?"} local subscribers (${result.capability})`,
     );
   } else {
-    ctx.log.error(`Failed to notify: ${result.reason}`, result.error);
+    ctx.log.error(`Failed to notify: ${result.error}`, {
+      details: result.details,
+      retryable: result.retryable,
+    });
   }
 });
 ```
@@ -203,7 +208,7 @@ const result = await router.publish(
 );
 
 if (result.ok) {
-  console.log(`Published to ${result.matched ?? "subscribers"}`);
+  console.log(`Published to ${result.matchedLocal ?? "0"} local subscribers`);
 } else {
   console.error(`Failed to publish`, result.error);
 }

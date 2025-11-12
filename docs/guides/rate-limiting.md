@@ -47,7 +47,7 @@ This prevents clients from bypassing limits via clock manipulation.
 import { z, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const router = createRouter();
 
@@ -70,7 +70,7 @@ serve(router, { port: 3000 });
 ```typescript
 import { createClient } from "redis";
 import { rateLimit } from "@ws-kit/middleware";
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
 await redisClient.connect();
@@ -95,7 +95,7 @@ When rate limited, clients receive `RESOURCE_EXHAUSTED` error with `retryAfterMs
 **Use when**: Single-instance deployment (dev, single Bun server, Node.js)
 
 ```typescript
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = memoryRateLimiter({
   capacity: 10,
@@ -136,7 +136,7 @@ const result = await limiter.consume("user:1", 1);
 
 ```typescript
 import { createClient } from "redis";
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 
 const client = createClient({ url: process.env.REDIS_URL });
 await client.connect();
@@ -187,7 +187,7 @@ const limiter = redisRateLimiter(
 **Use when**: Cloudflare Workers with persistent coordination needs
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER, {
   capacity: 200,
@@ -390,7 +390,7 @@ Run independent limiters with different policies on the same connection.
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 // Cheap operations: generous limit
 const cheapLimiter = rateLimit({
@@ -415,7 +415,7 @@ When rate limited by either policy, clients get `RESOURCE_EXHAUSTED` with approp
 ### Multi-Pod with Shared Connection
 
 ```typescript
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
 await redisClient.connect();
@@ -445,7 +445,7 @@ Use clock injection for time-travel testing without real delays:
 
 ```typescript
 import { test } from "bun:test";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 test("rate limit refill", async () => {
   const fakeTime = { current: Date.now() };
@@ -483,7 +483,7 @@ Use real middleware with test utilities:
 ```typescript
 import { z, createRouter } from "@ws-kit/zod";
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 test("rate limit integration", async () => {
   const SendMsg = message("SEND", { text: z.string() });

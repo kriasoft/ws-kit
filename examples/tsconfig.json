@@ -5,15 +5,14 @@
     "strict": true
   },
   "references": [
-    { "path": "../packages/adapters" },
     { "path": "../packages/bun" },
     { "path": "../packages/client" },
     { "path": "../packages/client/zod" },
     { "path": "../packages/client/valibot" },
-    { "path": "../packages/cloudflare-do" },
+    { "path": "../packages/cloudflare" },
     { "path": "../packages/core" },
     { "path": "../packages/middleware" },
-    { "path": "../packages/redis-pubsub" },
+    { "path": "../packages/redis" },
     { "path": "../packages/valibot" },
     { "path": "../packages/zod" }
   ],

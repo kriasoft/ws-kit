@@ -307,7 +307,7 @@ router.on(JoinRoom, (ctx) => {
 });
 ```
 
-**Note**: Error messages include a producer `meta.timestamp`; **never** base server actions on it — use `ctx.receivedAt` for server logic (see @schema.md#Which-timestamp-to-use).
+**Note**: Error messages include a producer `meta.timestamp`; **never** base server actions on it — use `ctx.receivedAt` for server logic (see docs/specs/schema.md#Which-timestamp-to-use).
 
 ### Backoff Hints with retryAfterMs
 

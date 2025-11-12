@@ -7,7 +7,7 @@
  * Validates that reserved server-only keys are stripped before validation
  * to prevent client spoofing attacks.
  *
- * Spec: @docs/specs/validation.md#normalization-rules
+ * Spec: docs/specs/validation.md#normalization-rules
  * Implementation: shared/normalize.ts
  */
 

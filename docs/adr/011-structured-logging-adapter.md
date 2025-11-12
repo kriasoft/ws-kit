@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2025-10-29
-**Related**: ADR-009 (error handling), ADR-005 (builder pattern), @router.md
+**Related**: ADR-009 (error handling), ADR-005 (builder pattern), docs/specs/router.md
 
 ## Context
 
@@ -215,7 +215,7 @@ Router logs at these contexts (examples):
 
 ## Documentation
 
-- @router.md — Logger configuration in router options
+- docs/specs/router.md — Logger configuration in router options
 - Patterns guide — Example integrations with popular libraries
 - Type definitions — Clear interface documentation
 

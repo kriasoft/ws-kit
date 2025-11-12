@@ -1,0 +1,55 @@
+{
+  "name": "@ws-kit/memory",
+  "version": "1.0.0",
+  "description": "In-memory rate limiter and pub/sub adapter for WS-Kit",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/memory"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "adapter",
+    "memory",
+    "rate-limiting",
+    "rate-limiter",
+    "token-bucket",
+    "pub-sub",
+    "type-safe",
+    "typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "directory": "dist"
+  }
+}

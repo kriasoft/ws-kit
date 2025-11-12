@@ -6,13 +6,13 @@
  *
  * Handles WebSocket connections for a shard in a sharded pub/sub system.
  * The Worker entry point (`router.ts`) routes incoming requests to the appropriate
- * shard using stable hashing on the room/scope name.
+ * shard using stable hashing on the topic (room).
  *
  * Each DO instance is limited to 100 concurrent connections.
  * Use `router.ts` with `getShardedStub()` to distribute rooms across multiple shards.
  */
 
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 import { createRouter, message, z } from "@ws-kit/zod";
 
 // Message schemas
@@ -36,12 +36,12 @@ interface AppData {
 const router = createRouter<AppData>();
 
 // Join room: subscribe to scoped channel
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId || "anonymous";
 
-  // Subscribe to room-scoped updates (broadcasts only within this DO instance)
-  ctx.subscribe(`room:${roomId}`);
+  // Subscribe to room topic (broadcasts only within this DO instance)
+  await ctx.topics.subscribe(`room:${roomId}`);
   ctx.assignData({ roomId });
 
   // Notify room members of join
@@ -70,10 +70,10 @@ router.on(RoomMessage, (ctx) => {
 });
 
 // Leave room: cleanup subscription
-router.on(LeaveRoom, (ctx) => {
+router.on(LeaveRoom, async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
-    ctx.unsubscribe(`room:${roomId}`);
+    await ctx.topics.unsubscribe(`room:${roomId}`);
   }
 });
 

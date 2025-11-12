@@ -7,14 +7,14 @@
  * Validates that schemas reject unknown keys at all levels (root, meta, payload)
  * and enforce payload presence rules.
  *
- * Spec: @docs/specs/schema.md#Strict-Schemas
- * Spec: @docs/specs/validation.md#Strict-Mode-Enforcement
+ * Spec: docs/specs/schema.md#strict-schemas-required
+ * Spec: docs/specs/validation.md#strict-mode-enforcement
  */
 
 import { describe, expect, it } from "bun:test";
 import { z, message } from "@ws-kit/zod";
 
-describe("Strict Schema Validation", () => {
+describe("Strict Schema Validation (Zod)", () => {
   describe("Unknown Key Rejection - Root Level", () => {
     it("should reject unknown keys at message root", () => {
       const TestMsg = message("TEST", { id: z.number() });
@@ -381,6 +381,77 @@ describe("Strict Schema Validation", () => {
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe("Meta Field Schema Defaults", () => {
+    it("should default meta to empty object when omitted", () => {
+      const TestMsg = message("TEST", { id: z.string() });
+
+      // Parse without meta field at all
+      const result = TestMsg.safeParse({
+        type: "TEST",
+        payload: { id: "123" },
+        // ← no meta field
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.meta).toEqual({});
+      }
+    });
+
+    it("should default meta to empty object for message without payload", () => {
+      const TestMsg = message("PING");
+
+      // Parse without meta field
+      const result = TestMsg.safeParse({
+        type: "PING",
+        // ← no meta field
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.meta).toEqual({});
+      }
+    });
+
+    it("should use provided meta instead of defaulting", () => {
+      const TestMsg = message("TEST", { id: z.string() });
+
+      const result = TestMsg.safeParse({
+        type: "TEST",
+        payload: { id: "456" },
+        meta: { timestamp: 1234567890, correlationId: "abc" },
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.meta).toEqual({
+          timestamp: 1234567890,
+          correlationId: "abc",
+        });
+      }
+    });
+
+    it("should default meta with extended schema when omitted", () => {
+      const TestMsg = message(
+        "TEST",
+        { id: z.string() },
+        { roomId: z.string().optional() }, // Optional extended meta
+      );
+
+      // Parse without meta field
+      const result = TestMsg.safeParse({
+        type: "TEST",
+        payload: { id: "789" },
+        // ← no meta field
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.meta).toEqual({});
+      }
     });
   });
 });

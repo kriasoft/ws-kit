@@ -13,7 +13,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 - `docs/specs/schema.md` — Message structure, type definitions, canonical imports
 - `docs/specs/router.md` — Server router API, handlers, lifecycle hooks
 - `docs/specs/validation.md` — Validation flow, normalization, error handling
-- `docs/specs/broadcasting.md` — Broadcasting patterns, topic subscriptions, multicast messaging
+- `docs/specs/pubsub.md` — Pub/Sub API, topic subscriptions, publishing, patterns
 - `docs/specs/client.md` — Client SDK API, connection states, queueing
 - `docs/specs/adapters.md` — Platform adapter responsibilities, limits, pub/sub guarantees
 - `docs/specs/patterns.md` — Architectural patterns for production applications
@@ -25,10 +25,11 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Architecture
 
 - **Modular Packages**: `@ws-kit/core` router with pluggable validator and platform adapters
+- **Capability Plugins**: `.plugin()` gates features (validation, pub/sub, rate limiters) for both runtime and types
 - **Composition Over Inheritance**: Single `WebSocketRouter<V>` class, any validator + platform combo works
 - **Message-Based Routing**: Routes by message `type` field to registered handlers
 - **Type Safety**: Full TypeScript inference from schema to handler via generics and overloads
-- **Platform Adapters**: `@ws-kit/bun`, `@ws-kit/cloudflare-do`, etc. each with both high-level and low-level APIs
+- **Platform Adapters**: `@ws-kit/bun`, `@ws-kit/cloudflare`, etc. each with both high-level and low-level APIs
 - **Validator Adapters**: `@ws-kit/zod`, `@ws-kit/valibot`, custom validators welcome via `ValidatorAdapter` interface
 
 ## API Design Principles
@@ -41,15 +42,30 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Quick Start
 
 ```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
+import { createClient } from "redis";
+import { createRouter } from "@ws-kit/core";
+import { z, message, withZod } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimiter } from "@ws-kit/rate-limit";
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
 
+const redis = createClient({ url: process.env.REDIS_URL! });
+await redis.connect();
+
+const router = createRouter<AppData>()
+  .plugin(withZod()) // or .plugin(withValibot())
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }))
+  .plugin(
+    withRateLimiter(
+      redisRateLimiter(redis, { capacity: 200, tokensPerSecond: 100 }),
+    ),
+  );
+
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
-
-const router = createRouter<AppData>();
 
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
@@ -69,19 +85,19 @@ All available methods at a glance:
 
 ```typescript
 // Fire-and-forget messaging
-router.on(Message, (ctx) => {
+router.on(Message, async (ctx) => {
   ctx.send(schema, data); // Send to current connection (1-to-1)
   ctx.publish(topic, schema, data); // Broadcast to topic subscribers (1-to-many)
-  ctx.subscribe(topic); // Join topic
-  ctx.unsubscribe(topic); // Leave topic
+  await ctx.topics.subscribe(topic); // Subscribe to topic (async)
+  await ctx.topics.unsubscribe(topic); // Unsubscribe from topic (async)
   ctx.getData(key); // Access typed connection data
   ctx.assignData(partial); // Update connection data
 });
 
 // Request-response pattern (RPC)
 router.rpc(Request, (ctx) => {
-  ctx.reply(schema, data); // Terminal response (one-shot)
-  ctx.progress(data); // Non-terminal progress updates
+  ctx.reply(payload, opts?); // Terminal response (one-shot)
+  ctx.progress(update, opts?); // Non-terminal progress updates
 });
 
 // Client-side
@@ -106,7 +122,7 @@ For detailed pattern documentation, see the specs:
 - **Middleware** — [docs/specs/router.md#middleware](./docs/specs/router.md)
 - **Authentication** — [docs/specs/router.md#authentication](./docs/specs/router.md)
 - **Request-Response (RPC)** — [docs/specs/router.md#rpc](./docs/specs/router.md)
-- **Broadcasting & Pub/Sub** — [docs/specs/broadcasting.md](./docs/specs/broadcasting.md)
+- **Broadcasting & Pub/Sub** — [docs/specs/pubsub.md](./docs/specs/pubsub.md)
 - **Client-Side** — [docs/specs/client.md](./docs/specs/client.md)
 - **Error Handling** — [docs/specs/error-handling.md](./docs/specs/error-handling.md)
 - **Connection Data** — [docs/specs/router.md#connection-data](./docs/specs/router.md)
@@ -173,7 +189,7 @@ packages/
 ├── valibot/test/           # Valibot validator tests + features/
 ├── bun/test/               # Bun adapter tests
 ├── client/test/            # Client tests (runtime/ + types/)
-└── cloudflare-do/test/     # Cloudflare DO adapter tests
+└── cloudflare/test/        # Cloudflare DO adapter tests
 ```
 
 **When adding tests:**

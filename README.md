@@ -47,7 +47,7 @@ WS-Kit is a modular monorepo. Mix any validator with any platform:
 **Platform Adapters:**
 
 - **`@ws-kit/bun`** — Bun platform adapter with `serve()` and `createBunHandler()`
-- **`@ws-kit/cloudflare-do`** — Cloudflare Durable Objects adapter
+- **`@ws-kit/cloudflare`** — Cloudflare Durable Objects, KV adapter
 
 **Client:**
 
@@ -56,8 +56,8 @@ WS-Kit is a modular monorepo. Mix any validator with any platform:
 **Extensions:**
 
 - **`@ws-kit/middleware`** — Production-ready middleware (rate limiting, auth helpers, logging)
-- **`@ws-kit/adapters`** — Pluggable adapters (rate limiters for memory, Redis, Durable Objects)
-- **`@ws-kit/redis-pubsub`** — Optional Redis for multi-server pub/sub deployments
+- **`@ws-kit/memory`** — In-memory pub/sub (local deployments)
+- **`@ws-kit/redis`** — Redis rate limiter and pub/sub (distributed deployments)
 
 ## Patterns & Advanced Use Cases
 
@@ -236,7 +236,7 @@ Benefits:
 **For Cloudflare Durable Objects:**
 
 ```ts
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 import { createRouter } from "@ws-kit/zod";
 
 const router = createRouter();
@@ -459,7 +459,7 @@ router.onOpen((ctx) => {
 });
 
 // Handle specific message types (fully typed!)
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload; // ✅ Fully typed from schema
   const userId = ctx.ws.data?.userId;
 
@@ -467,7 +467,7 @@ router.on(JoinRoom, (ctx) => {
   ctx.assignData({ roomId });
 
   // Subscribe to room broadcasts
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 
   console.log(`User ${userId} joined room: ${roomId}`);
   console.log(`Message received at: ${ctx.receivedAt}`);
@@ -496,7 +496,7 @@ router.onClose(async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
 
   if (roomId) {
-    ctx.unsubscribe(roomId);
+    await ctx.topics.unsubscribe(roomId);
     // Notify others
     await router.publish(roomId, UserLeft, { userId: userId || "anonymous" });
   }
@@ -514,7 +514,7 @@ router.onClose(async (ctx) => {
 - `ctx.send()` — Type-safe send to this client only
 - `ctx.getData()` — Type-safe single field access from connection data
 - `ctx.assignData()` — Type-safe partial data updates
-- `ctx.subscribe()` / `ctx.unsubscribe()` — Topic management
+- `ctx.topics.subscribe()` / `ctx.topics.unsubscribe()` — Topic management (async)
 - `ctx.error(code, message?, details?, options?)` — Send type-safe error with optional retry hints
 
 ## Broadcasting and Subscriptions
@@ -536,7 +536,7 @@ router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to room updates
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
   ctx.assignData({ roomId });
 
   console.log(`User joined: ${roomId}`);
@@ -563,7 +563,7 @@ router.on(SendMessage, async (ctx) => {
 router.onClose(async (ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
-    ctx.unsubscribe(roomId);
+    await ctx.topics.unsubscribe(roomId);
     await router.publish(roomId, RoomUpdate, {
       roomId,
       users: 4,
@@ -577,8 +577,8 @@ router.onClose(async (ctx) => {
 
 - `router.publish(scope, schema, payload, options?)` — Type-safe broadcast to all subscribers on a scope, returns `Promise<PublishResult>` with delivery info
 - `ctx.publish(scope, schema, payload, options?)` — Same as `router.publish()` but available within a handler context
-- `ctx.subscribe(topic)` — Subscribe connection to a topic (adapter-dependent)
-- `ctx.unsubscribe(topic)` — Unsubscribe from a topic
+- `await ctx.topics.subscribe(topic)` — Subscribe connection to a topic (async, adapter-dependent)
+- `await ctx.topics.unsubscribe(topic)` — Unsubscribe from a topic (async)
 
 Optional `options` parameter for `publish()`:
 
@@ -612,13 +612,13 @@ const NewMessage = message("NEW_MESSAGE", {
 });
 const UserLeft = message("USER_LEFT", { userId: z.string() });
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId || "anonymous";
 
   // Store room ID and subscribe to topic
   ctx.assignData({ roomId });
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 
   // Send confirmation back
   ctx.send(UserJoined, { roomId, userId });
@@ -627,7 +627,7 @@ router.on(JoinRoom, (ctx) => {
   await ctx.publish(roomId, UserJoined, { roomId, userId });
 });
 
-router.on(SendMessage, (ctx) => {
+router.on(SendMessage, async (ctx) => {
   const { roomId, message: msg } = ctx.payload;
   const userId = ctx.ws.data?.userId || "anonymous";
 
@@ -637,12 +637,12 @@ router.on(SendMessage, (ctx) => {
   await ctx.publish(roomId, NewMessage, { roomId, userId, message: msg });
 });
 
-router.onClose((ctx) => {
+router.onClose(async (ctx) => {
   const userId = ctx.ws.data?.userId || "anonymous";
   const roomId = ctx.ws.data?.roomId;
 
   if (roomId) {
-    ctx.unsubscribe(roomId);
+    await ctx.topics.unsubscribe(roomId);
     // Notify others in the room
     await router.publish(roomId, UserLeft, { userId });
   }
@@ -680,7 +680,7 @@ router.on(JoinRoom, async (ctx) => {
 
   // Continue with normal flow
   ctx.assignData({ roomId });
-  ctx.subscribe(roomId);
+  await ctx.topics.subscribe(roomId);
 });
 ```
 
@@ -789,7 +789,7 @@ For development or single-instance deployments, use the in-memory adapter:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({
@@ -809,7 +809,7 @@ For distributed deployments, coordinate via Redis:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
@@ -832,7 +832,7 @@ For Cloudflare Workers, use Durable Objects for coordination:
 
 ```ts
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare-do";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = rateLimit({
   limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
@@ -902,9 +902,9 @@ const router = createRouter({
   pubsub: redisPubSub(redisClient),
 });
 
-// Now ctx.publish() and ctx.subscribe() work across all instances
-router.on(JoinRoom, (ctx) => {
-  ctx.subscribe(ctx.payload.roomId);
+// Now ctx.publish() and ctx.topics.subscribe() work across all instances
+router.on(JoinRoom, async (ctx) => {
+  await ctx.topics.subscribe(ctx.payload.roomId);
   ctx.publish(ctx.payload.roomId, UserJoined, { userId: ctx.ws.data?.userId });
 });
 ```

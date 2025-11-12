@@ -1,6 +1,6 @@
 # Cloudflare Durable Objects Sharding
 
-Production-ready example of scaling pub/sub across multiple Durable Object instances by sharding subscriptions based on scope (room/channel).
+Production-ready example of scaling pub/sub across multiple Durable Object instances by sharding subscriptions based on topic (room).
 
 ## Problem
 
@@ -20,7 +20,7 @@ Same room always routes to the same DO instance, ensuring all subscribers for a 
 
 ## Architecture
 
-This example uses the **`getShardedStub()`** helper from `@ws-kit/cloudflare-do/sharding` for clean, production-ready sharding:
+This example uses the **`getShardedStub()`** helper from `@ws-kit/cloudflare/sharding` for clean, production-ready sharding:
 
 - **`router.ts`** — Worker entry point that routes incoming requests to sharded DO instances
 - **`server.ts`** — Durable Object class that handles WebSocket connections and pub/sub for a shard
@@ -74,7 +74,7 @@ The `getShardedStub()` helper computes a stable shard ID and routes the request:
 
 ```typescript
 // router.ts (Worker entry point)
-import { getShardedStub } from "@ws-kit/cloudflare-do/sharding";
+import { getShardedStub } from "@ws-kit/cloudflare/sharding";
 
 const roomId = new URL(req.url).searchParams.get("room") ?? "general";
 
@@ -107,8 +107,8 @@ return stub.fetch(req);
 ## Trade-offs & Considerations
 
 - **Uneven distribution**: If rooms have very different subscriber counts, some shards may reach 100 connections before others
-- **Fixed shard count**: Changing shard count remaps all existing scopes (requires migration period for persistent apps)
-- **Per-shard isolation**: Broadcasts only reach subscribers on the same DO; cross-shard federation requires explicit `federate()` calls (see `@ws-kit/cloudflare-do`)
+- **Fixed shard count**: Changing shard count remaps all existing topics (requires migration period for persistent apps)
+- **Per-shard isolation**: Broadcasts only reach subscribers on the same DO; cross-shard federation requires explicit `federate()` calls (see `@ws-kit/cloudflare`)
 
 ## Files
 

@@ -388,9 +388,9 @@ const router = createRouter({
     // Log to observability system, send alerting, etc.
   },
 
-  onBroadcast(topic, schema, payload, result) {
+  onBroadcast(message, topic) {
     // Called after each broadcast (publish) operation
-    console.log(`Broadcast to ${topic}:`, result.capability);
+    console.log(`Broadcast to ${topic}:`, message);
     // Track broadcast metrics, detect failures
   },
 
@@ -437,13 +437,13 @@ const RoomUpdate = message("ROOM_UPDATE", {
 
 const router = createRouter<AppData>();
 
-router.on(JoinRoom, (ctx) => {
+router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
   const userId = ctx.ws.data?.userId;
 
   // Store room ID and subscribe to topic
   ctx.assignData({ roomId });
-  ctx.subscribe(`room:${roomId}`);
+  await ctx.topics.subscribe(`room:${roomId}`);
 
   // Broadcast to room (type-safe!)
   ctx.publish(`room:${roomId}`, RoomUpdate, {
@@ -476,7 +476,10 @@ const result = await ctx.publish(`room:${roomId}`, RoomUpdate, {
 
 if (result.ok) {
   // Broadcast succeeded
-  console.log(`Delivered to ${result.matched} subscribers`, result.capability);
+  console.log(
+    `Delivered to ${result.matchedLocal} subscribers`,
+    result.capability,
+  );
 } else {
   // Broadcast failed (platform error, ACL rejection, etc.)
   console.error(`Broadcast failed: ${result.error}`);
@@ -869,4 +872,4 @@ router.use((ctx, next) => {
 - [Core Concepts](./core-concepts) — Message routing, lifecycle hooks
 - [Middleware](./adr/008-middleware-support) — Detailed middleware design
 - [Error Handling](./specs/error-handling.md) — Complete error code taxonomy
-- [Broadcasting](./specs/broadcasting.md) — Pub/sub patterns and throttling
+- [Pub/Sub](./specs/pubsub.md) — Publishing, subscriptions, and patterns (see [Patterns](./specs/patterns.md) for throttling)

@@ -49,6 +49,21 @@ export default defineConfig([
     },
   },
   {
+    name: "pubsub-canonical-types",
+    files: ["packages/core/src/capabilities/pubsub/adapter.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'ExportNamedDeclaration[declaration.type="TSTypeAliasDeclaration"][declaration.id.name=/^(PublishResult|PublishError|PublishCapability|PublishOptions)$/]',
+          message:
+            "{{ name }} must be defined in core/types.ts only. Re-export from there instead.",
+        },
+      ],
+    },
+  },
+  {
     name: "prettier-overrides",
     extends: [prettier],
   },

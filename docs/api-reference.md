@@ -59,14 +59,17 @@ import { MemoryPubSub } from "@ws-kit/core";
 import { createBunHandler } from "@ws-kit/bun";
 
 // Cloudflare Durable Objects adapter
-import { createDurableObjectHandler } from "@ws-kit/cloudflare-do";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 ```
 
 **Optional add-ons:**
 
 ```typescript
-// Redis pub/sub for distributed deployments
-import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+// Redis rate limiter and pub/sub for distributed deployments
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+
+// In-memory pub/sub for local deployments
+import { memoryPubSub } from "@ws-kit/memory";
 
 // Middleware helpers for composing adapters and handlers
 import {} from /* middleware utilities */ "@ws-kit/middleware";
@@ -583,13 +586,13 @@ chatRouter.on(MessageMessage, handleMessage);
 const mainRouter = createRouter().merge(authRouter).merge(chatRouter);
 ```
 
-#### `publish(channel, schema, payload, options?)`
+#### `publish(topic, schema, payload, options?)`
 
-Publish a typed message to a channel (broadcasts to all subscribers).
+Publish a typed message to a topic (broadcasts to all subscribers).
 
 ```typescript
 publish(
-  channel: string,
+  topic: string,
   schema: MessageSchemaType,
   payload: unknown,
   options?: PublishOptions
@@ -598,7 +601,7 @@ publish(
 
 **Parameters:**
 
-- `channel` - Channel/topic name (e.g., `"room:123"`, `"user:456"`)
+- `topic` - Topic name (e.g., `"room:123"`, `"user:456"`)
 - `schema` - Message schema for validation
 - `payload` - Message payload (validated against schema)
 - `options` - Publish options (optional)
@@ -609,11 +612,10 @@ publish(
 interface PublishOptions {
   excludeSelf?: boolean; // Throws error if true (not yet implemented)
   partitionKey?: string; // For sharding (future use)
-  meta?: Record<string, unknown>; // Custom metadata
 }
 ```
 
-**Note on `excludeSelf`:** This option will raise an error if set to `true`. The feature is not yet implemented and requires pubsub adapter support. Use workarounds like dedicated channels per connection or checking message origin in subscriber handlers. See the `PublishOptions` type definition for details.
+**Note on `excludeSelf`:** This option will raise an error if set to `true`. The feature is not yet implemented and requires pubsub adapter support. Use workarounds like dedicated topics per connection or checking message origin in subscriber handlers. See the `PublishOptions` type definition for details.
 
 **Returns:** `Promise<PublishResult>` with subscriber match count and capability info
 
@@ -627,8 +629,8 @@ router.on(UserCreated, async (ctx) => {
     UserListInvalidated,
     { orgId: ctx.payload.orgId },
   );
-  if (result.ok && result.matched !== undefined) {
-    console.log(`Notified ${result.matched} subscribers`);
+  if (result.ok && result.matchedLocal !== undefined) {
+    console.log(`Notified ${result.matchedLocal} subscribers`);
   }
 });
 
@@ -687,10 +689,10 @@ interface EventMessageContext<TSchema, TData> {
   assignData(partial: Partial<TData>): void;
 
   // Pub/sub
-  subscribe(channel: string): void;
-  unsubscribe(channel: string): void;
+  subscribe(topic: string): void;
+  unsubscribe(topic: string): void;
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
@@ -736,10 +738,10 @@ interface RpcMessageContext<TSchema, TData> {
   assignData(partial: Partial<TData>): void;
 
   // Pub/sub
-  subscribe(channel: string): void;
-  unsubscribe(channel: string): void;
+  subscribe(topic: string): void;
+  unsubscribe(topic: string): void;
   publish(
-    channel: string,
+    topic: string,
     schema: MessageSchemaType,
     payload: unknown,
     options?: PublishOptions,
@@ -955,34 +957,34 @@ router.rpc(FetchData, async (ctx) => {
 });
 ```
 
-#### `ctx.subscribe(channel)` and `ctx.unsubscribe(channel)`
+#### `ctx.topics.subscribe(topic)` and `ctx.topics.unsubscribe(topic)`
 
-Subscribe/unsubscribe to pub/sub channels.
+Subscribe/unsubscribe to pub/sub topics.
 
 ```typescript
-subscribe(channel: string): void;
-unsubscribe(channel: string): void;
+subscribe(topic: string): Promise<void>;
+unsubscribe(topic: string): Promise<void>;
 ```
 
 **Example:**
 
 ```typescript
-router.on(JoinRoom, (ctx) => {
-  ctx.subscribe(`room:${ctx.payload.roomId}`);
+router.on(JoinRoom, async (ctx) => {
+  await ctx.topics.subscribe(`room:${ctx.payload.roomId}`);
   ctx.ws.data.currentRoom = ctx.payload.roomId;
 });
 
-router.on(LeaveRoom, (ctx) => {
-  ctx.unsubscribe(`room:${ctx.ws.data.currentRoom}`);
+router.on(LeaveRoom, async (ctx) => {
+  await ctx.topics.unsubscribe(`room:${ctx.ws.data.currentRoom}`);
 });
 ```
 
-#### `ctx.publish(channel, schema, payload, options?)`
+#### `ctx.publish(topic, schema, payload, options?)`
 
-Publish a message to a channel (convenience method, delegates to `router.publish()`).
+Publish a message to a topic (convenience method, delegates to `router.publish()`).
 
 ```typescript
-publish(channel: string, schema: MessageSchemaType, payload: unknown, options?: PublishOptions): Promise<PublishResult>;
+publish(topic: string, schema: MessageSchemaType, payload: unknown, options?: PublishOptions): Promise<PublishResult>;
 ```
 
 **Example:**
@@ -994,7 +996,7 @@ router.on(SendMessage, async (ctx) => {
     roomId: ctx.payload.roomId,
   });
   if (result.ok) {
-    console.log(`Published to ${result.matched ?? "?"} subscribers`);
+    console.log(`Published to ${result.matchedLocal ?? "?"} subscribers`);
   }
 });
 ```
@@ -1401,7 +1403,7 @@ interface ServeOptions<TData> {
     req: Request,
   ) => TData | Promise<TData> | undefined | Promise<undefined>;
   onError?: (error: Error, ctx: MessageContext) => void;
-  onBroadcast?: (channel: string, message: unknown) => void;
+  onBroadcast?: (message: unknown, topic: string) => void;
   onUpgrade?: (req: Request, ws: ServerWebSocket<TData>) => void;
   onOpen?: (ws: ServerWebSocket<TData>) => void;
   onClose?: (ws: ServerWebSocket<TData>, code: number, reason: string) => void;

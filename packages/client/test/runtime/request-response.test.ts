@@ -10,8 +10,8 @@
  * 3. Wrong type → reject with ValidationError
  * 4. Malformed reply → reject with ValidationError
  *
- * See @docs/specs/client.md#Correlation
- * See @docs/specs/test-requirements.md#Runtime-Testing
+ * See docs/specs/client.md#correlation
+ * See docs/specs/test-requirements.md#runtime-testing
  */
 
 import {

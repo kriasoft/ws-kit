@@ -9,7 +9,7 @@
  * - drop-oldest: Queue up to limit, evict oldest on overflow
  * - off: Drop immediately (no queue)
  *
- * See @docs/specs/client.md#queue-behavior
+ * See docs/specs/client.md#queue-behavior
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";

@@ -7,8 +7,8 @@
  * Validates that excludeSelf option is properly rejected with clear error message.
  * This is a breaking change: excludeSelf is not yet supported pending pubsub layer changes.
  *
- * Spec: docs/specs/broadcasting.md#excludeSelf-Option
- * Related: ADR-019 (publish API design)
+ * Spec: docs/specs/pubsub.md#publish-options--result
+ * Related: ADR-022 (pub/sub API design), ADR-019 (publish API convenience)
  */
 
 import { createRouter, message, z } from "@ws-kit/zod";
@@ -71,8 +71,10 @@ describe("publish() excludeSelf Error Handling", () => {
 
       expect(result.ok).toBe(false);
       if (result.ok === false) {
-        expect(result.reason).toBe("adapter_error");
-        expect(result.error).toBeDefined();
+        expect(result.error).toBe("UNSUPPORTED");
+        expect(result.retryable).toBe(false);
+        expect(result.cause).toBeDefined();
+        expect(result.details?.feature).toBe("excludeSelf");
       }
     });
 
@@ -89,9 +91,9 @@ describe("publish() excludeSelf Error Handling", () => {
       expect(result.ok).toBe(false);
       if (result.ok === false) {
         const errorMsg =
-          result.error instanceof Error
-            ? result.error.message
-            : String(result.error);
+          result.cause instanceof Error
+            ? result.cause.message
+            : String(result.cause);
         expect(errorMsg).toContain("excludeSelf");
         expect(errorMsg).toContain("not yet supported");
       }

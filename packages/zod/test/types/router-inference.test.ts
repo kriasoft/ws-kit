@@ -17,7 +17,7 @@
  */
 
 import { createRouter, message, z } from "@ws-kit/zod";
-import { expectTypeOf } from "expect-type";
+import { describe, expectTypeOf, it } from "bun:test";
 
 describe("Type inference in createRouter handlers", () => {
   // ==================================================================================
@@ -393,6 +393,7 @@ describe("Type inference in createRouter handlers", () => {
   describe("WebSocket connection data typing", () => {
     it("should support custom connection data types", () => {
       interface UserData {
+        clientId: string;
         userId: string;
         roles: string[];
       }

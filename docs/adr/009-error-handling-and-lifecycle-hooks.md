@@ -77,10 +77,10 @@ interface ServeOptions<TData> {
   onError?: (error: Error, ctx?: { type: string; userId?: string }) => void;
 
   /**
-   * Called when router.publish() is invoked (before actual send).
+   * Called after a publish() operation succeeds (after send to subscribers).
    * Hook should not throw; errors are logged and swallowed.
    */
-  onBroadcast?: (message: any, scope: string) => void;
+  onBroadcast?: (message: any, topic: string) => void;
 
   /**
    * Called during WebSocket upgrade (before authentication).
@@ -240,11 +240,11 @@ interface ServeOptions<TData> {
   onError?(error: Error, ctx?: { type: string; userId?: string }): void;
 
   /**
-   * Called when router.publish() is invoked (before send).
-   * Use for broadcast analytics, message filtering, metrics.
+   * Called after a publish() operation succeeds (after send to subscribers).
+   * Use for broadcast analytics, observability, metrics.
    * Should not throw; errors are logged and swallowed.
    */
-  onBroadcast?(message: any, scope: string): void;
+  onBroadcast?(message: any, topic: string): void;
 }
 ```
 
@@ -268,10 +268,10 @@ serve(router, {
     });
   },
 
-  onBroadcast(message, scope) {
-    console.log(`Broadcast to ${scope}:`, message.type);
+  onBroadcast(message, topic) {
+    console.log(`Broadcast to ${topic}:`, message.type);
     // Track broadcast patterns for analytics
-    analytics.track("broadcast", { scope, messageType: message.type });
+    analytics.track("broadcast", { topic, messageType: message.type });
   },
 
   onUpgrade(req) {
@@ -325,7 +325,7 @@ serve(router, {
 
     // Subscribe to user's updates
     if (userId) {
-      ctx.subscribe(`user:${userId}`);
+      await ctx.topics.subscribe(`user:${userId}`);
     }
   },
 });
@@ -374,12 +374,12 @@ serve(router, {
 
 ```typescript
 serve(router, {
-  onBroadcast(message, scope) {
-    console.log(`[BROADCAST] ${scope} <- ${message.type}`);
+  onBroadcast(message, topic) {
+    console.log(`[BROADCAST] ${topic} <- ${message.type}`);
 
     // Track broadcast patterns
     analytics.track("broadcast", {
-      scope,
+      topic,
       messageType: message.type,
       payloadSize: JSON.stringify(message).length,
     });

@@ -83,7 +83,7 @@ All message schemas **MUST** reject unknown keys at **root**, **meta**, and **pa
 
 **Enforcement:**
 
-Adapters MUST configure validators to operate in strict mode. See @validation.md#Strict-Mode-Enforcement for implementation requirements and validation behavior.
+Adapters MUST configure validators to operate in strict mode. See docs/specs/validation.md#Strict-Mode-Enforcement for implementation requirements and validation behavior.
 
 ## Message Structure
 
@@ -156,14 +156,14 @@ This is the **canonical table** for timestamp usage across all specs. All other 
 - Avoids wire bloat (no need to send UUID in every message)
 - Eliminates spoofing vectors (client cannot set connection identity)
 - Preserves client-side validation (clients can validate messages they send)
-- See @broadcasting.md#Origin-Option for application-level sender tracking
+- See docs/specs/pubsub.md#9.6-Origin-Tracking for application-level sender tracking
 
 **Reserved Server-Only Meta Keys**: {#Reserved-Server-Only-Meta-Keys}
 
 - `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
 - `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
-These keys are stripped during normalization before validation (security boundary). Extended meta schemas MUST NOT define these keys (schema creation will throw an error). See @validation.md#normalization-rules for complete implementation details.
+These keys are stripped during normalization before validation (security boundary). Extended meta schemas MUST NOT define these keys (schema creation will throw an error). See docs/specs/validation.md#normalization-rules for complete implementation details.
 
 **Critical**:
 
@@ -309,16 +309,34 @@ Progress updates are sent as internal control messages (reserved type `$ws:rpc-p
 
 ## Type Inference
 
+Schemas are fully type-inferrable at compile time. Use type extractors to work with individual components:
+
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import type { MessageContext } from "@ws-kit/zod";
+import type {
+  InferType, // Message type literal
+  InferPayload, // Payload type (or never)
+  InferMeta, // Extended meta fields
+  InferMessage, // Full message type
+  InferResponse, // RPC response type (or never)
+} from "@ws-kit/zod";
 
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const GetUser = message(
+  "GET_USER",
+  { id: z.string() },
+  { response: { name: z.string() } },
+);
 
-// Schema type
-type JoinRoomType = z.infer<typeof JoinRoom>;
+// Extract individual parts
+type JoinType = InferType<typeof JoinRoom>; // "JOIN_ROOM"
+type JoinPayload = InferPayload<typeof JoinRoom>; // { roomId: string }
+type JoinMeta = InferMeta<typeof JoinRoom>; // Record<string, never>
+type JoinMsg = InferMessage<typeof JoinRoom>; // Full message type
 
-// Handler context type (automatically inferred)
+type GetUserResponse = InferResponse<typeof GetUser>; // { name: string }
+
+// Handler context type (automatically inferred from schema)
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
@@ -338,6 +356,31 @@ router.on(JoinRoom, (ctx) => {
   // }
 });
 ```
+
+**Type Extractors**:
+
+- `InferType<TSchema>` — Message type literal (e.g., `"JOIN_ROOM"`)
+- `InferPayload<TSchema>` — Payload shape, or `never` if undefined
+- `InferMeta<TSchema>` — Extended meta fields (excluding reserved `timestamp` and `correlationId`)
+- `InferMessage<TSchema>` — Full message type (equivalent to `z.infer<TSchema>`)
+- `InferResponse<TSchema>` — RPC response type, or `never` if undefined
+
+### Internal Implementation Details
+
+Schemas are created with type-level markers (`SchemaTag` in Zod) for compile-time inference. These symbols are **internal** and not part of the public API. Always use the `Infer*` helpers:
+
+```typescript
+const MyMessage = message("MSG", { id: z.number() });
+
+// ✅ Use public helpers
+type Payload = InferPayload<typeof MyMessage>; // { id: number }
+type Type = InferType<typeof MyMessage>; // "MSG"
+
+// ❌ Don't reference internal markers directly
+type BadType = (typeof MyMessage)[SchemaTag]; // Not accessible
+```
+
+When hovering over schemas in your IDE, you may see internal structure (e.g., `[SchemaTag]: ...`). This is an implementation artifact and does not affect schema usage. The public `Infer*` helpers provide the clean, stable API.
 
 ## Conditional Payload Typing
 
@@ -390,7 +433,7 @@ if (result.success) {
 }
 ```
 
-**Client-side validation works**: Schemas MUST remain client-validatable; no server-only fields required. See @rules.md#messaging for enforcement.
+**Client-side validation works**: Schemas MUST remain client-validatable; no server-only fields required. See docs/specs/rules.md#messaging for enforcement.
 
 ## Standard Error Schema
 
@@ -428,16 +471,16 @@ router.on(SomeMessage, (ctx) => {
 });
 ```
 
-**Direction**: Server-to-client only. Clients MUST NOT send `ERROR` messages (see @error-handling.md#Error-Message-Direction for alternatives).
+**Direction**: Server-to-client only. Clients MUST NOT send `ERROR` messages (see docs/specs/error-handling.md#Error-Message-Direction for alternatives).
 
-**Error Codes**: See @error-handling.md#error-code-enum for the canonical ErrorCode enum definition and usage guidelines.
+**Error Codes**: See docs/specs/error-handling.md#error-code-enum for the canonical ErrorCode enum definition and usage guidelines.
 
 ## Key Constraints
 
-> See @rules.md for complete rules. Critical for message schemas:
+> See docs/specs/rules.md for complete rules. Critical for message schemas:
 
-1. **Export-with-helpers pattern** — Use `message()` helper from `@ws-kit/zod` or `@ws-kit/valibot` (see ADR-007, @rules.md#import-patterns)
-2. **Client-side validation** — Schemas MUST NOT require server-only fields (see @rules.md#messaging)
-3. **Strict schemas** — Reject unknown keys at all levels (see @schema.md#Strict-Schemas)
-4. **Connection identity** — Access via `ctx.ws.data.clientId`, not `ctx.meta` (see @rules.md#state-layering)
-5. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see @schema.md#Which-timestamp-to-use)
+1. **Export-with-helpers pattern** — Use `message()` helper from `@ws-kit/zod` or `@ws-kit/valibot` (see ADR-007, docs/specs/rules.md#import-patterns)
+2. **Client-side validation** — Schemas MUST NOT require server-only fields (see docs/specs/rules.md#messaging)
+3. **Strict schemas** — Reject unknown keys at all levels (see docs/specs/schema.md#Strict-Schemas)
+4. **Connection identity** — Access via `ctx.ws.data.clientId`, not `ctx.meta` (see docs/specs/rules.md#state-layering)
+5. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see docs/specs/schema.md#Which-timestamp-to-use)
