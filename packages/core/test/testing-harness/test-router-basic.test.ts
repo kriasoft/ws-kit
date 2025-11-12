@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
+import type { MessageDescriptor } from "../../src";
 import { createRouter } from "../../src";
 import { test } from "../../src/testing";
-import type { MessageDescriptor } from "../../src";
 
 describe("Test Router - Basic", () => {
   describe("Connection management", () => {
@@ -255,17 +255,13 @@ describe("Test Router - Basic", () => {
         kind: "event",
       };
 
-      let replyTo: ((payload: unknown) => void) | undefined;
-
       tr.on(TestMessage, (ctx) => {
-        if (replyTo) {
-          // Manually send a response (since we don't have validation plugin)
-          const responseFrame = {
-            type: "RESPONSE",
-            payload: { ok: true },
-          };
-          ctx.ws.send(JSON.stringify(responseFrame));
-        }
+        // Manually send a response (since we don't have validation plugin)
+        const responseFrame = {
+          type: "RESPONSE",
+          payload: { ok: true },
+        };
+        ctx.ws.send(JSON.stringify(responseFrame));
       });
 
       const conn = tr.connect();

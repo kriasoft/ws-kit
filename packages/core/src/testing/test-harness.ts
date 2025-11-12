@@ -1,37 +1,37 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Test harness: createTestRouter and wrapTestRouter implementations.
  * Provides a clean, ergonomic testing API for WS-Kit routers.
  */
 
-import type { Router } from "../core/router";
-import type { MinimalContext, BaseContextData } from "../context/base-context";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
+import { TestPubSub } from "@ws-kit/pubsub/internal";
+import type { BaseContextData } from "../context/base-context";
+import type { CoreRouter, Router } from "../core/router";
 import { FakeClock, type Clock } from "./fake-clock";
 import { InMemoryPlatformAdapter } from "./test-adapter";
-import { TestPubSub } from "@ws-kit/pubsub/internal";
 import type {
-  TestRouter,
-  TestConnection,
   OutgoingFrame,
   PublishRecord,
   TestCapture,
+  TestConnection,
+  TestRouter,
 } from "./types";
-import { dispatch, dispatchMessage } from "../engine/dispatch";
-import type { CoreRouter } from "../core/router";
 
 /**
  * Test harness options.
  */
-export interface CreateTestRouterOptions<TConn> {
+export interface CreateTestRouterOptions<TContext> {
   /**
    * Router factory (default: createRouter with no options).
    */
-  create?: () => Router<TConn>;
+  create?: () => Router<TContext>;
 
   /**
    * Plugins to apply after creating the router.
    */
-  plugins?: ((router: Router<TConn, any>) => Router<TConn, any>)[];
+  plugins?: ((router: Router<TContext, any>) => Router<TContext, any>)[];
 
   /**
    * Clock implementation (default: FakeClock for determinism).
@@ -59,9 +59,9 @@ export interface CreateTestRouterOptions<TConn> {
  * expect(conn.outgoing()).toContainEqual({ type: "PONG", ... });
  * ```
  */
-export function createTestRouter<TConn extends BaseContextData = unknown>(
-  opts?: CreateTestRouterOptions<TConn>,
-): TestRouter<TConn> {
+export function createTestRouter<TContext extends BaseContextData = unknown>(
+  opts?: CreateTestRouterOptions<TContext>,
+): TestRouter<TContext> {
   // Create the router
   if (!opts?.create) {
     throw new Error(
@@ -89,18 +89,18 @@ export function createTestRouter<TConn extends BaseContextData = unknown>(
  * Wrap an existing router with test infrastructure.
  * Useful for testing production routers in black-box mode.
  */
-export function wrapTestRouter<TConn extends BaseContextData = unknown>(
-  router: Router<TConn>,
+export function wrapTestRouter<TContext extends BaseContextData = unknown>(
+  router: Router<TContext>,
   opts?: { clock?: Clock; onErrorCapture?: boolean },
-): TestRouter<TConn> {
+): TestRouter<TContext> {
   // Cast to internal implementation to access registry, lifecycle, etc.
-  const impl = router as any as CoreRouter<TConn>;
+  const impl = router as any as CoreRouter<TContext>;
 
   // Infrastructure
-  const adapter = new InMemoryPlatformAdapter<TConn>();
+  const adapter = new InMemoryPlatformAdapter<TContext>(impl);
   const clock = opts?.clock || new FakeClock();
   const capturedErrors: unknown[] = [];
-  const connections = new Map<string, TestConnectionImpl<TConn>>();
+  const connections = new Map<string, TestConnectionImpl<TContext>>();
 
   // Optionally enable error capture
   if (opts?.onErrorCapture !== false) {
@@ -115,7 +115,7 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
   // This will be handled by checking capabilities dynamically.
 
   // Create TestCapture implementation
-  const capture: TestCapture<TConn> = {
+  const capture: TestCapture<TContext> = {
     errors(): readonly unknown[] {
       return capturedErrors;
     },
@@ -138,8 +138,8 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
   // Helper to get/create a TestConnection
   function getOrCreateConnection(
     clientId: string,
-    init?: { data?: Partial<TConn>; headers?: Record<string, string> },
-  ): TestConnectionImpl<TConn> {
+    init?: { data?: Partial<TContext>; headers?: Record<string, string> },
+  ): TestConnectionImpl<TContext> {
     let conn = connections.get(clientId);
     if (conn) {
       return conn;
@@ -148,6 +148,19 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
     const ws = adapter.getOrCreateConnection(init) as any;
     const actualClientId = ws.clientId;
     const state = adapter.getConnection(actualClientId)!;
+
+    // Initialize router's data store with the adapter's initial data.
+    // This ensures context.data contains the connection data passed to connect().
+    if (state.data && Object.keys(state.data).length > 0) {
+      // Use cast to access private method (testing-only)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const routerData = (impl as any).getOrInitData(ws);
+      Object.assign(routerData, state.data);
+    }
+
+    // Wire the websocket bridge to exercise the same lifecycle as real adapters.
+    // This ensures plugins' onConnect hooks fire and initialization happens.
+    void impl.websocket.open(ws);
 
     conn = new TestConnectionImpl(
       actualClientId,
@@ -164,9 +177,9 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
   // Build the TestRouter by mixing router + test methods
   const testRouter = Object.assign(router, {
     connect(init?: {
-      data?: Partial<TConn>;
+      data?: Partial<TContext>;
       headers?: Record<string, string>;
-    }): TestConnection<TConn> {
+    }): TestConnection<TContext> {
       // Generate a unique client ID
       const clientId = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return getOrCreateConnection(clientId, init);
@@ -182,7 +195,12 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
     },
 
     async flush(): Promise<void> {
-      await clock.now(); // Ensure clock has method
+      // Wait for all pending messages to complete
+      for (const [, conn] of connections) {
+        await conn.waitForPendingMessages();
+      }
+      // Then wait for microtasks and clock
+      await clock.now();
       await new Promise((resolve) => setImmediate(resolve));
     },
 
@@ -201,7 +219,7 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
         }
       }
     },
-  }) as any as TestRouter<TConn>;
+  }) as any as TestRouter<TContext>;
 
   return testRouter;
 }
@@ -209,31 +227,50 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
 /**
  * Implementation of TestConnection.
  */
-class TestConnectionImpl<TConn extends BaseContextData = unknown>
-  implements TestConnection<TConn>
+class TestConnectionImpl<TContext extends BaseContextData = unknown>
+  implements TestConnection<TContext>
 {
-  private outgoingFrames: OutboundFrame[] = [];
+  private outgoingFrames: OutgoingFrame[] = [];
+  private pendingMessages: Promise<void>[] = [];
 
   constructor(
     readonly clientId: string,
     readonly ws: any, // MockWebSocket
-    readonly state: any, // ConnectionState<TConn>
-    readonly routerImpl: any, // CoreRouter<TConn>
-    readonly adapter: MockPlatformAdapter<TConn>,
+    readonly state: any, // ConnectionState<TContext>
+    readonly routerImpl: any, // CoreRouter<TContext>
+    readonly adapter: InMemoryPlatformAdapter<TContext>,
     readonly clock: Clock,
   ) {}
 
   send(type: string, payload?: unknown, meta?: Record<string, unknown>): void {
-    // Create a JSON frame and dispatch it through the full pipeline
-    const frame = JSON.stringify({ type, payload, meta });
-    // Get or create clientId for this connection
-    const clientId =
-      this.routerImpl.getClientId?.(this.ws) ||
-      `test-client-${Math.random().toString(36).substring(2)}`;
-    void dispatchMessage(frame, clientId, this.ws, this.routerImpl);
+    // Route through adapter to exercise the websocket bridge.
+    // This ensures messages flow through router.websocket.message(),
+    // same as production adapters.
+    // Fire-and-forget; track pending operation for flush().
+    const pending = this.adapter.receiveMessage(
+      this.clientId,
+      type,
+      payload,
+      meta,
+    );
+    this.pendingMessages.push(pending);
+    // Clean up when done
+    void pending.then(() => {
+      const idx = this.pendingMessages.indexOf(pending);
+      if (idx >= 0) this.pendingMessages.splice(idx, 1);
+    });
   }
 
-  outgoing(): readonly OutboundFrame[] {
+  /**
+   * Wait for all pending message operations to complete.
+   */
+  async waitForPendingMessages(): Promise<void> {
+    while (this.pendingMessages.length > 0) {
+      await Promise.all(this.pendingMessages);
+    }
+  }
+
+  outgoing(): readonly OutgoingFrame[] {
     // Combine frames sent directly to this WS with those captured by the adapter
     return this.ws.getSentMessages();
   }
@@ -250,15 +287,18 @@ class TestConnectionImpl<TConn extends BaseContextData = unknown>
     return Array.from(this.state.subscriptions);
   }
 
-  getData(): Readonly<TConn> {
+  getData(): Readonly<TContext> {
     return Object.freeze({ ...this.state.data });
   }
 
-  setData(patch: Partial<TConn>): void {
+  setData(patch: Partial<TContext>): void {
     Object.assign(this.state.data, patch);
   }
 
   async close(): Promise<void> {
-    this.adapter.close(this.clientId);
+    // Route through websocket bridge to ensure cleanup hooks fire.
+    // This invokes router.websocket.close(), which notifies lifecycle
+    // handlers and plugins about connection termination.
+    await this.routerImpl.websocket.close(this.ws);
   }
 }

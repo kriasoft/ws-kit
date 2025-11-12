@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Mock WebSocket implementation for testing.
  * Captures all messages sent and tracks connection state.
@@ -71,8 +74,8 @@ export class TestWebSocket implements ServerWebSocket {
 /**
  * Connection state for test adapter.
  */
-export interface ConnectionState<TConn = unknown> {
-  ws: MockWebSocket;
-  data: TConn;
+export interface ConnectionState<TContext = unknown> {
+  ws: TestWebSocket;
+  data: TContext;
   subscriptions: Set<string>;
 }

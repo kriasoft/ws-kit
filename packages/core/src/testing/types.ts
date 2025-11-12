@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
@@ -31,9 +34,11 @@ export interface PublishRecord {
 /**
  * Test connection: models a single in-memory WebSocket connection.
  */
-export interface TestConnection<TConn = unknown> {
+export interface TestConnection<TContext = unknown> {
   /**
    * Send inbound message to router (as if from client).
+   * Routes through the websocket bridge to exercise the same code paths as production adapters.
+   * Returns immediately; use tr.flush() to wait for message processing to complete.
    */
   send(type: string, payload?: unknown, meta?: Record<string, unknown>): void;
 
@@ -56,12 +61,12 @@ export interface TestConnection<TConn = unknown> {
   /**
    * Get current connection data.
    */
-  getData(): Readonly<TConn>;
+  getData(): Readonly<TContext>;
 
   /**
    * Update connection data (partial merge).
    */
-  setData(patch: Partial<TConn>): void;
+  setData(patch: Partial<TContext>): void;
 
   /**
    * Close this connection.
@@ -72,7 +77,7 @@ export interface TestConnection<TConn = unknown> {
 /**
  * Capture helpers for assertions.
  */
-export interface TestCapture<TConn = unknown> {
+export interface TestCapture<TContext = unknown> {
   /**
    * Get all errors caught by router.onError().
    */
@@ -99,19 +104,19 @@ export interface TestCapture<TConn = unknown> {
  * Test router: wraps a real router with testing utilities.
  * Includes clock control, connection management, and capture helpers.
  */
-export interface TestRouter<TConn = unknown> extends Router<TConn, any> {
+export interface TestRouter<TContext = unknown> extends Router<TContext, any> {
   /**
    * Create a new mock connection.
    */
   connect(init?: {
-    data?: Partial<TConn>;
+    data?: Partial<TContext>;
     headers?: Record<string, string>;
-  }): TestConnection<TConn>;
+  }): TestConnection<TContext>;
 
   /**
    * Capture helpers for assertions.
    */
-  capture: TestCapture<TConn>;
+  capture: TestCapture<TContext>;
 
   /**
    * Fake clock for deterministic time control.

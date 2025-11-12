@@ -1,37 +1,46 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Mock platform adapter for testing.
  * Manages in-memory WebSocket connections and coordinates with the router.
  */
 
+import type { BaseContextData } from "../context/base-context";
+import type { CoreRouter } from "../core/router";
 import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
-import type { Middleware, EventHandler, RouteEntry } from "../core/types";
-import type { MinimalContext, BaseContextData } from "../context/base-context";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { TestWebSocket, type ConnectionState } from "./test-websocket";
-import { dispatch } from "../engine/dispatch";
 import type { OutgoingFrame } from "./types";
 
 /**
  * In-memory platform adapter that manages in-memory WebSocket connections.
  * Used by the test harness to coordinate message routing.
+ *
+ * Integrates with router's websocket bridge to exercise the same code paths
+ * as production adapters (Bun, Cloudflare, etc.).
  */
-export class InMemoryPlatformAdapter<TConn extends BaseContextData = unknown>
+export class InMemoryPlatformAdapter<TContext extends BaseContextData = unknown>
   implements PlatformAdapter
 {
-  private connections = new Map<string, ConnectionState<TConn>>();
+  private connections = new Map<string, ConnectionState<TContext>>();
   private nextClientId = 0;
   private globalMessages: OutgoingFrame[] = [];
+  private router: CoreRouter<TContext>;
+
+  constructor(router: CoreRouter<TContext>) {
+    this.router = router;
+  }
 
   /**
    * Get or create a connection.
    */
   getOrCreateConnection(init?: {
-    data?: Partial<TConn>;
+    data?: Partial<TContext>;
     headers?: Record<string, string>;
   }): TestWebSocket {
     const clientId = String(this.nextClientId++);
     const ws = new TestWebSocket(clientId);
-    const data = init?.data || ({} as TConn);
+    const data = init?.data || ({} as TContext);
 
     this.connections.set(clientId, {
       ws,
@@ -45,14 +54,14 @@ export class InMemoryPlatformAdapter<TConn extends BaseContextData = unknown>
   /**
    * Get a connection by ID.
    */
-  getConnection(clientId: string): ConnectionState<TConn> | undefined {
+  getConnection(clientId: string): ConnectionState<TContext> | undefined {
     return this.connections.get(clientId);
   }
 
   /**
    * Get all active connections.
    */
-  getAllConnections(): Map<string, ConnectionState<TConn>> {
+  getAllConnections(): Map<string, ConnectionState<TContext>> {
     return new Map(this.connections);
   }
 
@@ -88,7 +97,8 @@ export class InMemoryPlatformAdapter<TConn extends BaseContextData = unknown>
 
   /**
    * Send a message to router from a client.
-   * This simulates router.websocket.message() being called.
+   * Routes through router.websocket.message() to exercise the same bridge
+   * as production adapters (Bun, Cloudflare, etc.).
    */
   async receiveMessage(
     clientId: string,
@@ -101,8 +111,10 @@ export class InMemoryPlatformAdapter<TConn extends BaseContextData = unknown>
       throw new Error(`Connection not found: ${clientId}`);
     }
 
-    // This will be called by the test harness after wiring up dispatch logic
-    // For now, we just store the message for later processing
+    // Build the message frame and route through the websocket bridge.
+    // This ensures tests exercise the same entry point as real adapters.
+    const frame = JSON.stringify({ type, payload, meta });
+    await this.router.websocket.message(state.ws, frame);
   }
 
   /**
