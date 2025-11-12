@@ -44,7 +44,10 @@ export type { TopicValidator } from "./core/topics";
 export { PubSubError, AbortError } from "./core/error";
 export type { PubSubErrorCode, PubSubAclDetails } from "./core/error";
 
-export { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./core/constants";
+export {
+  DEFAULT_TOPIC_PATTERN,
+  DEFAULT_TOPIC_MAX_LENGTH,
+} from "./core/constants";
 
 // Legacy adapters (for backward compatibility)
 export { MemoryPubSub } from "./adapters/legacy";

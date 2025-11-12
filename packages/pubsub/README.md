@@ -50,7 +50,7 @@ src/
 ├─ core/                    # Core pub/sub primitives (internal)
 │  ├─ topics.ts            # TopicsImpl: per-connection subscription state
 │  ├─ error.ts             # PubSubError, AbortError, error codes
-│  └─ constants.ts         # DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH
+│  └─ constants.ts         # DEFAULT_TOPIC_PATTERN, DEFAULT_TOPIC_MAX_LENGTH
 ├─ adapters/
 │  └─ memory.ts            # createMemoryAdapter() implementation
 ├─ index.ts                # Public exports (plugin, adapters, middleware, types)

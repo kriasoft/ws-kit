@@ -3,7 +3,7 @@
 
 import { AbortError, PubSubError } from "./error";
 import type { ServerWebSocket, Topics } from "@ws-kit/core";
-import { DEFAULT_TOPIC_PATTERN, MAX_TOPIC_LENGTH } from "./constants";
+import { DEFAULT_TOPIC_PATTERN, DEFAULT_TOPIC_MAX_LENGTH } from "./constants";
 
 // ============================================================================
 // Helper Utilities for Confirmation and Timeout Handling
@@ -1338,11 +1338,15 @@ export class TopicsImpl<
       );
     }
 
-    if (topic.length > MAX_TOPIC_LENGTH) {
+    if (topic.length > DEFAULT_TOPIC_MAX_LENGTH) {
       throw new PubSubError(
         "INVALID_TOPIC",
-        `Topic exceeds ${MAX_TOPIC_LENGTH} characters`,
-        { reason: "length", length: topic.length, max: MAX_TOPIC_LENGTH },
+        `Topic exceeds ${DEFAULT_TOPIC_MAX_LENGTH} characters`,
+        {
+          reason: "length",
+          length: topic.length,
+          max: DEFAULT_TOPIC_MAX_LENGTH,
+        },
       );
     }
 
@@ -1379,7 +1383,7 @@ export function createTopicValidator(
 
   // Use provided values or defaults
   const finalPattern = pattern ?? DEFAULT_TOPIC_PATTERN;
-  const finalMaxLength = maxTopicLength ?? MAX_TOPIC_LENGTH;
+  const finalMaxLength = maxTopicLength ?? DEFAULT_TOPIC_MAX_LENGTH;
 
   return (topic: string) => {
     // Basic type check (always enforced)

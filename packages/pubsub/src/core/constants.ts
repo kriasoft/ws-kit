@@ -23,4 +23,4 @@ export const DEFAULT_TOPIC_PATTERN = /^[a-z0-9:_./-]{1,128}$/i;
  *
  * This is the default; apps can override via router.limits.maxTopicLength
  */
-export const MAX_TOPIC_LENGTH = 128;
+export const DEFAULT_TOPIC_MAX_LENGTH = 128;
