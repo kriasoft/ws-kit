@@ -6,12 +6,12 @@ This guide covers best practices for deploying WS-Kit applications to production
 
 WS-Kit's pub/sub layer is pluggable, allowing you to choose the right adapter for your deployment scenario:
 
-| Scenario                     | Adapter             | Package                | Notes                                                                                 |
-| ---------------------------- | ------------------- | ---------------------- | ------------------------------------------------------------------------------------- |
-| Single-instance server       | In-memory (default) | `@ws-kit/core`         | Perfect for development and small deployments                                         |
-| Multi-instance load-balanced | Redis               | `@ws-kit/redis-pubsub` | Automatic cross-instance broadcasting with atomic token bucket rate limiting          |
-| Cloudflare Workers           | Durable Objects     | `@ws-kit/cloudflare`   | Serverless with stateful compute; 100 connections per DO, sharding required for scale |
-| Custom backend               | Your implementation | Custom                 | Implement the `PubSub` interface                                                      |
+| Scenario                     | Adapter             | Package              | Notes                                                                                 |
+| ---------------------------- | ------------------- | -------------------- | ------------------------------------------------------------------------------------- |
+| Single-instance server       | In-memory (default) | `@ws-kit/memory`     | Perfect for development and small deployments                                         |
+| Multi-instance load-balanced | Redis               | `@ws-kit/redis`      | Automatic cross-instance broadcasting with atomic token bucket rate limiting          |
+| Cloudflare Workers           | Durable Objects     | `@ws-kit/cloudflare` | Serverless with stateful compute; 100 connections per DO, sharding required for scale |
+| Custom backend               | Your implementation | Custom               | Implement the `PubSubDriver` interface                                                |
 
 For detailed adapter specifications, limits, and guarantees, see [Adapter Responsibilities](/specs/adapters).
 
@@ -472,24 +472,25 @@ app.get("/metrics", (c) => {
 
 ### 1. Horizontal Scaling with Redis
 
-For multi-instance deployments, use the Redis PubSub adapter for automatic cross-instance broadcasting:
+For multi-instance deployments, use the Redis adapter for automatic cross-instance broadcasting:
 
 ```typescript
+import { createClient } from "redis";
 import { z, message, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
-import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+import { redisPubSub } from "@ws-kit/redis";
 
 type AppData = { userId?: string };
 
-// Create Redis PubSub instance
-const pubsub = createRedisPubSub({
+// Create Redis client
+const redis = createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
-  namespace: "myapp:prod", // Optional: isolate channels per environment
 });
+await redis.connect();
 
-// Create router with Redis PubSub for cross-instance broadcasting
+// Create router with Redis adapter for cross-instance broadcasting
 const router = createRouter<AppData>({
-  pubsub,
+  pubsub: redisPubSub(redis, { channelPrefix: "myapp:prod:" }),
 });
 
 const ChatMessage = message("CHAT", {

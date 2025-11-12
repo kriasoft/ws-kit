@@ -691,17 +691,23 @@ export interface PubSub {
 
 **Adapters:**
 
-- **Bun/Deno**: In-memory implementation (fast, request-scoped)
-- **Cloudflare DO**: Request-scoped within DO instance (distributed via DO routing)
-- **Redis PubSub** (optional): `@ws-kit/redis-pubsub` for multi-server scaling
+- **In-Memory** (`@ws-kit/memory`): Request-scoped, fast (development and single-instance)
+- **Cloudflare Durable Objects** (`@ws-kit/cloudflare`): Request-scoped within DO instance (distributed via DO routing)
+- **Redis** (`@ws-kit/redis`) (optional): For multi-server scaling and distributed rate limiting
 
-When `@ws-kit/redis-pubsub` is installed, adapters can delegate to Redis for cross-instance broadcasts:
+When `@ws-kit/redis` is installed, use it for cross-instance broadcasts:
 
 ```typescript
-import { createRedisAdapter } from "@ws-kit/redis-pubsub";
+import { createClient } from "redis";
+import { redisPubSub } from "@ws-kit/redis";
 
-const pubsub = createRedisAdapter({ redis: redisClient });
-serve(router, { pubsub }); // Use Redis instead of in-memory
+const redis = createClient();
+await redis.connect();
+
+const router = createRouter({
+  pubsub: redisPubSub(redis),
+});
+serve(router); // Use Redis for cross-instance broadcasting
 ```
 
 ## Future Considerations

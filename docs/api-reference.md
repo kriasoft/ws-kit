@@ -65,8 +65,11 @@ import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 **Optional add-ons:**
 
 ```typescript
-// Redis pub/sub for distributed deployments
-import { createRedisPubSub } from "@ws-kit/redis-pubsub";
+// Redis rate limiter and pub/sub for distributed deployments
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+
+// In-memory pub/sub for local deployments
+import { memoryPubSub } from "@ws-kit/memory";
 
 // Middleware helpers for composing adapters and handlers
 import {} from /* middleware utilities */ "@ws-kit/middleware";

@@ -15,7 +15,7 @@ bun add valibot @ws-kit/valibot @ws-kit/bun
 ```
 
 ::: tip
-The router includes a built-in in-memory pub/sub adapter by default. For production multi-instance deployments, add `@ws-kit/redis-pubsub` or configure a Cloudflare Durable Objects adapter. See [Deployment](/deployment) for details.
+The router includes a built-in in-memory pub/sub adapter by default. For production multi-instance deployments, add `@ws-kit/redis` or configure a Cloudflare Durable Objects adapter. See [Deployment](/deployment) for details.
 :::
 
 ### Client (Browser)

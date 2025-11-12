@@ -151,15 +151,20 @@ When testing across platforms, account for:
 3. **Pub/Sub**: Platform-specific pub/sub adapters.
 
    ```typescript
+   import { createClient } from "redis";
+   import { redisPubSub } from "@ws-kit/redis";
+
    // Bun with memory pub/sub (default)
    serve(router, { port: 3000 });
 
    // Bun with Redis pub/sub for multi-instance
-   import { createRedisPubSub } from "@ws-kit/redis-pubsub";
-   serve(router, {
-     port: 3000,
-     pubsub: createRedisPubSub({ url: "redis://..." }),
+   const redis = createClient({ url: process.env.REDIS_URL });
+   await redis.connect();
+
+   const router = createRouter({
+     pubsub: redisPubSub(redis),
    });
+   serve(router, { port: 3000 });
    ```
 
 ## CI/CD Pattern: Test All Platforms
