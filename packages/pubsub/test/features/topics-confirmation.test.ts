@@ -339,8 +339,8 @@ describe("TopicsImpl - Confirmation Semantics", () => {
     });
   });
 
-  describe("flush() with timeout and signal options", () => {
-    it("should flush with timeout", async () => {
+  describe("settle() with timeout and signal options", () => {
+    it("should settle with timeout", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(async () => {
@@ -354,15 +354,15 @@ describe("TopicsImpl - Confirmation Semantics", () => {
       // Start subscribe (will be in-flight)
       const promise = topics.subscribe("room:1");
 
-      // Flush with timeout (should succeed)
-      await topics.flush("room:1", { timeoutMs: 200 });
+      // Settle with timeout (should succeed)
+      await topics.settle("room:1", { timeoutMs: 200 });
 
       // Wait for subscribe to complete
       await promise;
       expect(topics.has("room:1")).toBe(true);
     });
 
-    it("should flush a completed operation successfully", async () => {
+    it("should settle a completed operation successfully", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
@@ -374,13 +374,13 @@ describe("TopicsImpl - Confirmation Semantics", () => {
       // Subscribe
       await topics.subscribe("room:1");
 
-      // Flush should complete immediately (operation already settled)
-      await topics.flush("room:1", { timeoutMs: 5000 });
+      // Settle should complete immediately (operation already settled)
+      await topics.settle("room:1", { timeoutMs: 5000 });
 
       expect(topics.has("room:1")).toBe(true);
     });
 
-    it("should respect pre-aborted signal in flush", async () => {
+    it("should respect pre-aborted signal in settle", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
@@ -393,7 +393,7 @@ describe("TopicsImpl - Confirmation Semantics", () => {
       ac.abort(); // Pre-abort
 
       try {
-        await topics.flush("room:1", { signal: ac.signal });
+        await topics.settle("room:1", { signal: ac.signal });
         expect.unreachable("Should have thrown AbortError");
       } catch (err) {
         // Check for either our custom AbortError or native DOMException AbortError
@@ -404,7 +404,7 @@ describe("TopicsImpl - Confirmation Semantics", () => {
       }
     });
 
-    it("should flush all in-flight operations with timeout", async () => {
+    it("should settle all in-flight operations with timeout", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(async () => {
@@ -421,8 +421,8 @@ describe("TopicsImpl - Confirmation Semantics", () => {
       const sub1 = topics.subscribe("room:1");
       const sub2 = topics.subscribe("room:2");
 
-      // Flush all with timeout
-      await topics.flush(undefined, { timeoutMs: 200 });
+      // Settle all with timeout
+      await topics.settle(undefined, { timeoutMs: 200 });
 
       // All should be settled
       await Promise.all([sub1, sub2]);

@@ -511,8 +511,8 @@ describe("TopicsImpl - status() Method", () => {
     });
   });
 
-  describe("Pairing status() with flush()", () => {
-    it("should support deterministic flows: check status, then flush if pending", async () => {
+  describe("Pairing status() with settle()", () => {
+    it("should support deterministic flows: check status, then settle if pending", async () => {
       let resolveSubscribe: () => void;
       const subscribePromise = new Promise<void>((resolve) => {
         resolveSubscribe = resolve;
@@ -534,20 +534,20 @@ describe("TopicsImpl - status() Method", () => {
       // Check status
       if (topics.status("room:1") === "pending-subscribe") {
         // Wait for settlement
-        const flushPromise = topics.flush("room:1", { timeoutMs: 5000 });
+        const settlePromise = topics.settle("room:1", { timeoutMs: 5000 });
 
-        // Resolve subscribe while flush is waiting
+        // Resolve subscribe while settle is waiting
         resolveSubscribe!();
 
         // Both should complete
-        await Promise.all([subPromise, flushPromise]);
+        await Promise.all([subPromise, settlePromise]);
       }
 
-      // After flush, status is guaranteed settled or error thrown
+      // After settle, status is guaranteed settled or error thrown
       expect(topics.status("room:1")).toBe("settled");
     });
 
-    it("should skip flush if already settled", async () => {
+    it("should skip settle if already settled", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
@@ -562,9 +562,9 @@ describe("TopicsImpl - status() Method", () => {
       // Status is settled
       expect(topics.status("room:1")).toBe("settled");
 
-      // Flush should return immediately (no-op)
+      // Settle should return immediately (no-op)
       const startTime = Date.now();
-      await topics.flush("room:1", { timeoutMs: 5000 });
+      await topics.settle("room:1", { timeoutMs: 5000 });
       const elapsed = Date.now() - startTime;
 
       expect(elapsed).toBeLessThan(100); // Very fast

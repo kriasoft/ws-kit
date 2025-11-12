@@ -863,7 +863,7 @@ export class TopicsImpl<
    * Useful for tests and determinism: ensures all pending subscribe/unsubscribe/set/update calls
    * have completed before you assert state.
    *
-   * **Note**: `has()` returns optimistic state; `flush()` ensures that state is confirmed
+   * **Note**: `has()` returns optimistic state; `settle()` ensures that state is confirmed
    * by the adapter (or rejected, in which case your error handler caught it).
    *
    * @param topic - Optional: wait for a specific topic's operations. If omitted, wait for all.
@@ -873,12 +873,12 @@ export class TopicsImpl<
    * @example
    * ```typescript
    * await ctx.topics.subscribe("room:123");
-   * // Maybe still in-flight; assert after flush:
-   * await ctx.topics.flush("room:123", { timeoutMs: 5000 });
+   * // Maybe still in-flight; assert after settle:
+   * await ctx.topics.settle("room:123", { timeoutMs: 5000 });
    * assert(ctx.topics.has("room:123"));
    * ```
    */
-  async flush(
+  async settle(
     topic?: string,
     options?: { timeoutMs?: number; signal?: AbortSignal },
   ): Promise<void> {

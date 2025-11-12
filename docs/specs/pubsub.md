@@ -251,7 +251,7 @@ interface Topics extends ReadonlySet<string> {
    * @param options - Optional: `timeoutMs` for timeout, `signal` for cancellation
    * @returns Promise that resolves when settlement is complete
    */
-  flush(
+  settle(
     topic?: string,
     options?: { timeoutMs?: number; signal?: AbortSignal },
   ): Promise<void>;
@@ -1059,7 +1059,7 @@ const status = ctx.topics.status("room:1");
 
 if (status === "pending-subscribe") {
   // Still in-flight; adapter may reject it
-  await ctx.topics.flush("room:1", { timeoutMs: 5000 });
+  await ctx.topics.settle("room:1", { timeoutMs: 5000 });
 }
 if (status === "settled") {
   // Operation completed locally; subscription may be valid
@@ -1110,12 +1110,12 @@ await ctx.topics.update((draft) => {
 
 Both are atomic; choose based on readability for your use case.
 
-### 6.6.3 Await In-Flight Operations (`flush()`)
+### 6.6.3 Await In-Flight Operations (`settle()`)
 
 Block until all in-flight subscription operations settle:
 
 ```typescript
-flush(
+settle(
   topic?: string,
   options?: { timeoutMs?: number; signal?: AbortSignal }
 ): Promise<void>
@@ -1130,7 +1130,7 @@ flush(
 **Use cases:**
 
 - **Tests:** Ensure all pending operations complete before assertions
-- **Correctness:** Distinguish optimistic state (`.has()`) from settled state (post-`flush()`)
+- **Correctness:** Distinguish optimistic state (`.has()`) from settled state (post-`settle()`)
 - **Debugging:** Monitor operation settlement across the connection
 
 **Example:**
@@ -1141,15 +1141,15 @@ await ctx.topics.subscribe("room:1");
 console.log(ctx.topics.has("room:1")); // true (optimistic)
 
 // Wait for settlement
-await ctx.topics.flush("room:1", { timeoutMs: 5000 });
+await ctx.topics.settle("room:1", { timeoutMs: 5000 });
 console.log(ctx.topics.status("room:1")); // "settled" (settled)
 ```
 
 **Guarantees:**
 
-- If `flush()` completes, all in-flight operations have settled (success or error)
-- Error handling: If any in-flight operation failed before `flush()` was called, that error was already thrown by the operation itself
-- Idempotent: Calling `flush()` multiple times is safe
+- If `settle()` completes, all in-flight operations have settled (success or error)
+- Error handling: If any in-flight operation failed before `settle()` was called, that error was already thrown by the operation itself
+- Idempotent: Calling `settle()` multiple times is safe
 
 ### 6.6.4 Verify Adapter Truth (`verify()`)
 
