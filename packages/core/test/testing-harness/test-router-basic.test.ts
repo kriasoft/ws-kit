@@ -8,33 +8,33 @@ import { test } from "../../src/testing";
 
 describe("Test Router - Basic", () => {
   describe("Connection management", () => {
-    it("should create connections with unique IDs", () => {
+    it("should create connections with unique IDs", async () => {
       const tr = test.createTestRouter<unknown>({
         create: () => createRouter(),
       });
 
-      const conn1 = tr.connect();
-      const conn2 = tr.connect();
+      const conn1 = await tr.connect();
+      const conn2 = await tr.connect();
 
       expect(conn1.getData()).toEqual({});
       expect(conn2.getData()).toEqual({});
     });
 
-    it("should initialize connection with data", () => {
+    it("should initialize connection with data", async () => {
       const tr = test.createTestRouter<{ userId: string }>({
         create: () => createRouter(),
       });
 
-      const conn = tr.connect({ data: { userId: "user-123" } });
+      const conn = await tr.connect({ data: { userId: "user-123" } });
       expect(conn.getData()).toEqual({ userId: "user-123" });
     });
 
-    it("should support setData to update connection data", () => {
+    it("should support setData to update connection data", async () => {
       const tr = test.createTestRouter<{ userId: string; role?: string }>({
         create: () => createRouter(),
       });
 
-      const conn = tr.connect({ data: { userId: "user-123" } });
+      const conn = await tr.connect({ data: { userId: "user-123" } });
       expect(conn.getData().userId).toBe("user-123");
 
       conn.setData({ role: "admin" });
@@ -56,7 +56,7 @@ describe("Test Router - Basic", () => {
         calls.push("handler");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -81,7 +81,7 @@ describe("Test Router - Basic", () => {
         capturedUserId = ctx.data.userId;
       });
 
-      const conn = tr.connect({ data: { userId: "user-123" } });
+      const conn = await tr.connect({ data: { userId: "user-123" } });
       conn.send("TEST");
       await tr.flush();
 
@@ -92,7 +92,7 @@ describe("Test Router - Basic", () => {
     it("should error when no handler is registered", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("UNKNOWN");
       await tr.flush();
 
@@ -123,7 +123,7 @@ describe("Test Router - Basic", () => {
         calls.push("handler");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -153,7 +153,7 @@ describe("Test Router - Basic", () => {
         calls.push("handler");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -174,7 +174,7 @@ describe("Test Router - Basic", () => {
         throw new Error("Handler error");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -199,7 +199,7 @@ describe("Test Router - Basic", () => {
         // Handler won't be called
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -220,7 +220,7 @@ describe("Test Router - Basic", () => {
         throw new Error("Test error");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -264,7 +264,7 @@ describe("Test Router - Basic", () => {
         ctx.ws.send(JSON.stringify(responseFrame));
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -278,8 +278,8 @@ describe("Test Router - Basic", () => {
     it("should close all connections on close()", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const conn1 = tr.connect();
-      const conn2 = tr.connect();
+      const conn1 = await tr.connect();
+      const conn2 = await tr.connect();
 
       expect(conn1.ws.readyState).toBe("OPEN");
       expect(conn2.ws.readyState).toBe("OPEN");

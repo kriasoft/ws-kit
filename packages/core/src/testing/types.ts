@@ -110,12 +110,13 @@ export interface TestCapture<TContext = unknown> {
  */
 export interface TestRouter<TContext = unknown> extends Router<TContext, any> {
   /**
-   * Create a new mock connection.
+   * Establish a connection and wait for all `onConnect` hooks to settle.
+   * Always await this method before sending messages.
    */
   connect(init?: {
     data?: Partial<TContext>;
     headers?: Record<string, string>;
-  }): TestConnection<TContext>;
+  }): Promise<TestConnection<TContext>>;
 
   /**
    * Capture helpers for assertions.

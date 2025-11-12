@@ -93,7 +93,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
           ),
       });
 
-      const conn = tr.connect({ data: { userId: "user1" } });
+      const conn = await tr.connect({ data: { userId: "user1" } });
 
       // Register handler that publishes
       (tr as any).on(ChatMessage, async (ctx: any) => {
@@ -123,7 +123,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
           ),
       });
 
-      const conn = tr.connect({ data: { userId: "user1" } });
+      const conn = await tr.connect({ data: { userId: "user1" } });
 
       (tr as any).on(ChatMessage, async (ctx: any) => {
         await ctx.publish("notifications", Notification, {
@@ -153,7 +153,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
           ),
       });
 
-      const conn = tr.connect({ data: { userId: "user1" } });
+      const conn = await tr.connect({ data: { userId: "user1" } });
 
       (tr as any).on(ChatMessage, async (ctx: any) => {
         await ctx.publish("chat", ChatMessage, { text: "msg1" });
@@ -200,7 +200,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
           ),
       });
 
-      const conn = tr.connect({ data: { userId: "user1" } });
+      const conn = await tr.connect({ data: { userId: "user1" } });
 
       (tr as any).on(ChatMessage, async (ctx: any) => {
         await ctx.publish(
@@ -242,7 +242,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
         create: () => router,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
 
@@ -272,7 +272,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
         create: () => router,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("CHAT_MESSAGE", { text: "trigger1" });
       await tr.flush();
       expect(observed).toHaveLength(1);
@@ -311,7 +311,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
           ),
       });
 
-      const conn = tr.connect({ data: { userId: "user1" } });
+      const conn = await tr.connect({ data: { userId: "user1" } });
 
       let publishResult: any;
       (tr as any).on(ChatMessage, async (ctx: any) => {
@@ -342,7 +342,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
         capturePubSub: false, // Explicitly disable capture
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       (tr as any).on(ChatMessage, async (ctx: any) => {
         await ctx.publish("chat", ChatMessage, { text: "msg" });
       });
@@ -366,7 +366,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
           ),
       });
 
-      const conn = tr.connect({ data: { userId: "user1" } });
+      const conn = await tr.connect({ data: { userId: "user1" } });
 
       // First handler publishes one message
       (tr as any).on(ChatMessage, async (ctx: any) => {

@@ -31,7 +31,7 @@ describe("messaging patterns integration", () => {
         handlerExecuted = true;
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("MSG", { text: "Hello" });
       await tr.flush();
 
@@ -51,7 +51,7 @@ describe("messaging patterns integration", () => {
         executedMessages.push(ctx.payload);
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
 
       // Send multiple messages
       for (let i = 0; i < 5; i++) {
@@ -81,7 +81,7 @@ describe("messaging patterns integration", () => {
         notifyCount++;
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
 
       conn.send("CHAT", { text: "Hello" });
       conn.send("NOTIFY", { msg: "Alert" });
@@ -107,8 +107,8 @@ describe("messaging patterns integration", () => {
         messageCount++;
       });
 
-      const conn1 = tr.connect();
-      const conn2 = tr.connect();
+      const conn1 = await tr.connect();
+      const conn2 = await tr.connect();
 
       conn1.send("MSG");
       conn2.send("MSG");
@@ -131,7 +131,7 @@ describe("messaging patterns integration", () => {
         throw new Error("Test error");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("MSG");
       await tr.flush();
 

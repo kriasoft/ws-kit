@@ -179,10 +179,6 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
       Object.assign(routerData, state.data);
     }
 
-    // Wire the websocket bridge to exercise the same lifecycle as real adapters.
-    // This ensures plugins' onConnect hooks fire and initialization happens.
-    void impl.websocket.open(ws);
-
     conn = new TestConnectionImpl(
       actualClientId,
       ws,
@@ -197,13 +193,17 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
 
   // Build the TestRouter by mixing router + test methods
   const testRouter = Object.assign(router, {
-    connect(init?: {
+    async connect(init?: {
       data?: Partial<TContext>;
       headers?: Record<string, string>;
-    }): TestConnection<TContext> {
+    }): Promise<TestConnection<TContext>> {
       // Generate a unique client ID
       const clientId = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      return getOrCreateConnection(clientId, init);
+      const conn = getOrCreateConnection(clientId, init);
+      // Wire the websocket bridge and wait for initialization to complete.
+      // This ensures plugins' onConnect hooks fire before any messages are sent.
+      await impl.websocket.open(conn.ws);
+      return conn;
     },
 
     capture,
@@ -216,7 +216,8 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
     },
 
     async flush(): Promise<void> {
-      // Wait for all pending messages to complete
+      // Wait for all pending messages to complete.
+      // Note: connect() already awaits open(), so no need to wait for that here.
       for (const [, conn] of connections) {
         await conn.waitForPendingMessages();
       }

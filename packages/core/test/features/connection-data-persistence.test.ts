@@ -24,7 +24,7 @@ describe("Connection data persistence", () => {
     });
 
     // Create a test connection
-    const conn = router.connect();
+    const conn = await router.connect();
 
     // Simulate first message handler that sets data
     const route1Called: boolean[] = [];
@@ -86,8 +86,8 @@ describe("Connection data persistence", () => {
     });
 
     // Create two connections
-    const conn1 = router.connect();
-    const conn2 = router.connect();
+    const conn1 = await router.connect();
+    const conn2 = await router.connect();
 
     const dataLog: any[] = [];
 
@@ -148,7 +148,7 @@ describe("Connection data persistence", () => {
       create: () => createRouter<TestAppData>(),
     });
 
-    const conn = router.connect();
+    const conn = await router.connect();
     const dataSnapshots: any[] = [];
 
     router.on({ type: "CHECK", kind: "event" } as any, (ctx) => {

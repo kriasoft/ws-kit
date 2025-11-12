@@ -31,7 +31,7 @@ describe("Handler routing integration", () => {
         handlerExecuted = true;
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -57,7 +57,7 @@ describe("Handler routing integration", () => {
         msg2Count++;
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
 
       conn.send("MSG1");
       conn.send("MSG2");
@@ -81,7 +81,7 @@ describe("Handler routing integration", () => {
         callCount++;
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
 
       // Send multiple requests
       for (let i = 0; i < 5; i++) {
@@ -105,7 +105,7 @@ describe("Handler routing integration", () => {
         throw new Error("Handler failed");
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await tr.flush();
 
@@ -119,7 +119,7 @@ describe("Handler routing integration", () => {
         create: () => createRouter(),
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("UNKNOWN");
       await tr.flush();
 
@@ -142,7 +142,7 @@ describe("Handler routing integration", () => {
         capturedType = ctx.type;
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("MY_MSG");
       await tr.flush();
 

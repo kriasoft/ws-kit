@@ -58,7 +58,7 @@ describe("dispatch pipeline", () => {
         create: () => router,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await conn.drain();
 
@@ -103,7 +103,7 @@ describe("dispatch pipeline", () => {
         onErrorCapture: false,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await conn.drain();
 
@@ -129,7 +129,7 @@ describe("dispatch pipeline", () => {
         create: () => router,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("__heartbeat");
       await conn.drain();
 
@@ -153,7 +153,7 @@ describe("dispatch pipeline", () => {
         create: () => router,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("__heartbeat");
       await conn.drain();
 
@@ -180,7 +180,7 @@ describe("dispatch pipeline", () => {
         onErrorCapture: false,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("__custom");
       await conn.drain();
 
@@ -208,7 +208,7 @@ describe("dispatch pipeline", () => {
         onErrorCapture: false,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("UNKNOWN_TYPE");
       await conn.drain();
 
@@ -239,7 +239,7 @@ describe("dispatch pipeline", () => {
         onErrorCapture: false,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("THROW");
       await conn.drain();
 
@@ -272,7 +272,7 @@ describe("dispatch pipeline", () => {
         onErrorCapture: false,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("TEST");
       await conn.drain();
 
@@ -302,7 +302,7 @@ describe("dispatch pipeline", () => {
         create: () => router,
       });
 
-      const conn = tr.connect();
+      const conn = await tr.connect();
       conn.send("MSG");
       await conn.drain();
 
@@ -332,7 +332,7 @@ describe("dispatch pipeline", () => {
         create: () => router,
       });
 
-      const conn = tr.connect<AppData>();
+      const conn = await tr.connect<AppData>();
       conn.send("UPDATE");
       await conn.drain();
 
