@@ -6,6 +6,7 @@
  * Captures all messages sent and tracks connection state.
  */
 
+import type { BaseContextData } from "../context/base-context";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import type { OutgoingFrame } from "./types";
 
@@ -90,7 +91,7 @@ export class TestWebSocket implements ServerWebSocket {
 /**
  * Connection state for test adapter.
  */
-export interface ConnectionState<TContext = unknown> {
+export interface ConnectionState<TContext extends BaseContextData = {}> {
   ws: TestWebSocket;
   data: TContext;
   headers?: Record<string, string>;

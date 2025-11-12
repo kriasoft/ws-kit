@@ -6,7 +6,7 @@
  * These types exist at the base level (no validation plugin dependency).
  */
 
-import type { MinimalContext } from "../context/base-context";
+import type { BaseContextData, MinimalContext } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 
 /**
@@ -18,7 +18,7 @@ import type { MessageDescriptor } from "../protocol/message-descriptor";
  *
  * TContext — the per-connection data available on ctx.data.
  */
-export type Middleware<TContext = unknown> = (
+export type Middleware<TContext extends BaseContextData = {}> = (
   ctx: MinimalContext<TContext>,
   next: () => Promise<void>,
 ) => Promise<void>;
@@ -30,7 +30,7 @@ export type Middleware<TContext = unknown> = (
  *
  * TContext — the per-connection data available on ctx.data.
  */
-export type EventHandler<TContext = unknown> = (
+export type EventHandler<TContext extends BaseContextData = {}> = (
   ctx: any, // MinimalContext<TContext> + payload (from validation)
 ) => Promise<void> | void;
 
@@ -254,7 +254,7 @@ export interface PublishRecord {
  * - Monitoring: log events for observability
  * - Metrics: count publishes, connection churn, errors
  */
-export interface RouterObserver<TContext = unknown> {
+export interface RouterObserver<TContext extends BaseContextData = {}> {
   /**
    * Called when a message is published to a topic.
    * Includes topic, type, payload (if requested), and metadata.

@@ -19,7 +19,9 @@ export class WsKitError<E extends ErrorCode = ErrorCode> extends Error {
   constructor(code: E, message: string, details?: Record<string, unknown>) {
     super(message);
     this.code = code;
-    this.details = details;
+    if (details !== undefined) {
+      this.details = details;
+    }
     this.retryable = getErrorMetadata(code).retryable;
   }
 

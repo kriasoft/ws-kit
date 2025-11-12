@@ -39,7 +39,7 @@ export interface PublishRecord {
 /**
  * Test connection: models a single in-memory WebSocket connection.
  */
-export interface TestConnection<TContext = unknown> {
+export interface TestConnection<TContext extends BaseContextData = {}> {
   /**
    * Unique client ID for this connection.
    */
@@ -93,7 +93,7 @@ export interface TestConnection<TContext = unknown> {
 /**
  * Capture helpers for assertions.
  */
-export interface TestCapture<TContext = unknown> {
+export interface TestCapture<TContext extends BaseContextData = {}> {
   /**
    * Get all errors caught by router.onError().
    */

@@ -42,7 +42,7 @@ import type {
 
 export type { PublishCapability, PublishError, PublishOptions, PublishResult };
 
-export interface BaseRouter<TContext> {
+export interface BaseRouter<TContext extends BaseContextData = {}> {
   use(mw: Middleware<TContext>): this;
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
   route(schema: MessageDescriptor): RouteBuilder<TContext>;
@@ -107,7 +107,7 @@ export interface BaseRouter<TContext> {
  * Caps is merged from plugins; unknown plugins don't widen the type.
  */
 export type Router<
-  TContext = unknown,
+  TContext extends BaseContextData = {},
   Caps = Record<string, never>,
 > = BaseRouter<TContext> &
   (Caps extends { validation: true }
@@ -295,7 +295,7 @@ export class CoreRouteBuilder<TContext> implements RouteBuilder<TContext> {
  * CoreRouter implementation.
  * Stores global middleware, per-route handlers (via registry), and error hooks.
  */
-export class CoreRouter<TContext extends BaseContextData = unknown>
+export class CoreRouter<TContext extends BaseContextData = {}>
   implements BaseRouter<TContext>
 {
   private globalMiddlewares: Middleware<TContext>[] = [];

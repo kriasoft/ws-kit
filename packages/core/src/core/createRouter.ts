@@ -11,6 +11,7 @@
  * No capability options here; validators/pubsub/telemetry are plugins.
  */
 
+import type { BaseContextData } from "../context/base-context";
 import type { Router } from "./router";
 import { CoreRouter } from "./router";
 import type { CreateRouterOptions } from "./types";
@@ -31,7 +32,7 @@ import type { CreateRouterOptions } from "./types";
  * });
  * ```
  */
-export function createRouter<TContext = unknown>(
+export function createRouter<TContext extends BaseContextData = {}>(
   opts?: CreateRouterOptions,
 ): Router<TContext> {
   const router = new CoreRouter<TContext>(opts?.limits);
