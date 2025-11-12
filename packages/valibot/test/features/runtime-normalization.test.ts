@@ -11,7 +11,7 @@
  * @ws-kit/valibot validation is never broken.
  *
  * Spec: docs/specs/validation.md#normalization-rules
- * See also: @ws-kit/core/test/features/normalization.test.ts
+ * See also: @ws-kit/core/testing (check normalization tests)
  */
 
 import { describe, expect, it } from "bun:test";

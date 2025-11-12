@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "bun:test";
-import { FakeClock } from "../../src/test/fake-clock";
+import { FakeClock } from "../../src/testing";
 
 describe("FakeClock", () => {
   describe("Basic time control", () => {
@@ -163,8 +163,12 @@ describe("FakeClock", () => {
 
       const pending = clock.pendingTimers();
       expect(pending.length).toBe(2);
-      expect(pending.some((t) => t.isInterval === false && t.dueAt === 100)).toBe(true);
-      expect(pending.some((t) => t.isInterval === true && t.dueAt === 200)).toBe(true);
+      expect(
+        pending.some((t) => t.isInterval === false && t.dueAt === 100),
+      ).toBe(true);
+      expect(
+        pending.some((t) => t.isInterval === true && t.dueAt === 200),
+      ).toBe(true);
     });
 
     it("should report zero pending timers after all run", async () => {

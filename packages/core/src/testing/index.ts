@@ -1,6 +1,6 @@
 /**
  * Test harness exports: createTestRouter, wrapTestRouter, FakeClock, and types.
- * Usage: import { test } from "@ws-kit/core" or import * from "@ws-kit/core/test"
+ * Usage: import { test } from "@ws-kit/core" or import * from "@ws-kit/core/testing"
  *
  * Example:
  * ```ts

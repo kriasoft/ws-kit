@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import { createTestRouter } from "../../src/test/test-harness";
+import { createTestRouter } from "../../src/testing";
 import type { MessageDescriptor } from "../../src/core/types";
 
 describe("dispatch pipeline", () => {

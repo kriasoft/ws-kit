@@ -25,9 +25,10 @@ export class MockPlatformAdapter<TConn extends BaseContextData = unknown>
   /**
    * Get or create a connection.
    */
-  getOrCreateConnection(
-    init?: { data?: Partial<TConn>; headers?: Record<string, string> },
-  ): MockWebSocket {
+  getOrCreateConnection(init?: {
+    data?: Partial<TConn>;
+    headers?: Record<string, string>;
+  }): MockWebSocket {
     const clientId = String(this.nextClientId++);
     const ws = new MockWebSocket(clientId);
     const data = init?.data || ({} as TConn);

@@ -79,4 +79,4 @@ export {
 export type { ThrottledBroadcastConfig } from "./utils/throttle";
 
 // Test harness (opt-in)
-export * as test from "./test";
+export * as test from "./testing";

@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { createRouter } from "../../src";
-import { test } from "../../src/test";
+import { test } from "../../src/testing";
 import type { MessageDescriptor } from "../../src";
 
 describe("Test Router - Basic", () => {
@@ -99,7 +99,7 @@ describe("Test Router - Basic", () => {
       const errors = tr.capture.errors();
       expect(errors.length).toBeGreaterThan(0);
       expect((errors[0] as Error).message).toContain(
-        "No handler registered for message type"
+        "No handler registered for message type",
       );
     });
   });

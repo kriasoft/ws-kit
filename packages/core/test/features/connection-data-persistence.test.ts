@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import { createTestRouter } from "../../src/test";
+import { createTestRouter } from "../../src/testing";
 import type { Router } from "../../src/core/types";
 
 interface TestAppData {

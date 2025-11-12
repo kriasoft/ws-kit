@@ -23,7 +23,9 @@ export class MockWebSocket implements ServerWebSocket {
    */
   send(data: string | ArrayBuffer): void {
     if (this.readyState !== "OPEN") {
-      throw new Error(`Cannot send on closed connection (state: ${this.readyState})`);
+      throw new Error(
+        `Cannot send on closed connection (state: ${this.readyState})`,
+      );
     }
 
     try {
