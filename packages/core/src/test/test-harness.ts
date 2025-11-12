@@ -3,7 +3,7 @@
  * Provides a clean, ergonomic testing API for WS-Kit routers.
  */
 
-import type { Router } from "../core/types";
+import type { Router } from "../core/router";
 import type { MinimalContext, BaseContextData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { FakeClock, type Clock } from "./fake-clock";

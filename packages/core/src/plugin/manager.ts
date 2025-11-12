@@ -7,12 +7,12 @@
  * Internal; called by router.plugin().
  */
 
-import type { Plugin, Capabilities } from "./types";
+import type { Plugin, CapabilityMap } from "./types";
 import type { Router } from "../core/router";
 
 export class PluginHost<TConn> {
   private readonly applied = new WeakSet<Function>();
-  private capabilities: Capabilities = {};
+  private capabilities: CapabilityMap = {};
 
   constructor(private readonly router: Router<TConn, any>) {}
 
@@ -35,7 +35,7 @@ export class PluginHost<TConn> {
     const result = plugin(this.router);
 
     // Merge capabilities from result (plugins attach __caps to the result)
-    const caps = (result as any).__caps as Capabilities | undefined;
+    const caps = (result as any).__caps as CapabilityMap | undefined;
     if (caps) {
       Object.assign(this.capabilities, caps);
     }
@@ -48,7 +48,7 @@ export class PluginHost<TConn> {
   /**
    * Get readonly view of merged capabilities.
    */
-  getCapabilities(): Readonly<Capabilities> {
+  getCapabilities(): Readonly<CapabilityMap> {
     return { ...this.capabilities };
   }
 }

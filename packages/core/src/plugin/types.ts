@@ -22,8 +22,9 @@ export type Plugin<TConn = unknown, CAdd = unknown> = (
 /**
  * Capability bit-flags (internal union).
  * Plugins merge their capabilities into this type.
+ * @internal
  */
-export interface Capabilities {
+export interface CapabilityMap {
   validation?: boolean;
   pubsub?: boolean;
   telemetry?: boolean;
@@ -32,7 +33,7 @@ export interface Capabilities {
 /**
  * Merge capabilities (used by Router type narrowing).
  */
-export type MergeCaps<T = unknown> = T extends Capabilities ? T : {};
+export type MergeCaps<T = unknown> = T extends CapabilityMap ? T : {};
 
 /**
  * Example: Memory PubSub Plugin

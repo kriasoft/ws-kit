@@ -14,7 +14,7 @@
  * Capability-gated: rpc(), publish(), subscribe() exist only when plugins add them.
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { MinimalContext, BaseContextData } from "../context/base-context";
 import type {
   Middleware,

@@ -39,9 +39,11 @@ export type { WithValibotOptions } from "./plugin.js";
 
 // Type inference utilities (type-level only)
 export type {
-  InferPayload,
-  InferResponse,
   InferType,
+  InferPayload,
+  InferMeta,
+  InferMessage,
+  InferResponse,
   MessageSchema,
   RpcSchema,
   AnySchema,

@@ -46,9 +46,36 @@ serve(router, { port: 3000 });
 
 ### Type Inference
 
-- **`InferPayload<T>`** — Extract payload type from a schema
-- **`InferResponse<T>`** — Extract response type from an RPC schema
-- **`InferType<T>`** — Extract message type from a schema
+Extract individual components from schemas with zero runtime cost:
+
+- **`InferType<T>`** — Extract message type literal (e.g., `"JOIN"`)
+- **`InferPayload<T>`** — Extract payload shape, or `never` if undefined
+- **`InferMeta<T>`** — Extract extended meta fields (excluding reserved keys)
+- **`InferMessage<T>`** — Full message type (equivalent to `z.infer<T>`)
+- **`InferResponse<T>`** — Extract response type from an RPC schema, or `never` if undefined
+
+**Example**:
+
+```typescript
+import { z, message } from "@ws-kit/zod";
+import type {
+  InferType,
+  InferPayload,
+  InferMeta,
+  InferResponse,
+} from "@ws-kit/zod";
+
+const Join = message("JOIN", { roomId: z.string() });
+const GetUser = message(
+  "GET_USER",
+  { id: z.string() },
+  { response: { name: z.string() } },
+);
+
+type JoinType = InferType<typeof Join>; // "JOIN"
+type JoinPayload = InferPayload<typeof Join>; // { roomId: string }
+type GetUserResponse = InferResponse<typeof GetUser>; // { name: string }
+```
 
 ### Re-exports
 

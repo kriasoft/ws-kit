@@ -6,13 +6,11 @@
  * - send(schema, payload): broadcast to clients
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { MinimalContext } from "./base-context";
 
-export interface EventContext<
-  TConn = unknown,
-  TPayload = unknown,
-> extends MinimalContext<TConn> {
+export interface EventContext<TConn = unknown, TPayload = unknown>
+  extends MinimalContext<TConn> {
   /**
    * Parsed + validated message payload.
    */

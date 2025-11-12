@@ -19,3 +19,9 @@ export const SYSTEM_MESSAGE_TYPES = {
   HEARTBEAT_ACK: "__heartbeat_ack",
   CLOSE: "__close",
 } as const;
+
+// Reserved meta keys (set by server, cannot be overridden by client)
+export const RESERVED_META_KEYS = new Set([
+  "timestamp",
+  "correlationId",
+]) as ReadonlySet<string>;

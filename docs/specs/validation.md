@@ -345,19 +345,21 @@ Validators are plugged in via `withZod()` or `withValibot()` with optional confi
 
 ```typescript
 const router = createRouter()
-  .plugin(withZod({
-    validateOutgoing: true,    // Default: true; validate ctx.send(), ctx.reply(), ctx.publish()
-    coerce: false,             // Zod-only; default: false
-    onValidationError: async (err, ctx) => {
-      // Optional: custom error hook instead of router.onError()
-      logger.warn("Validation failed", {
-        type: ctx.type,
-        direction: ctx.direction, // "inbound" | "outbound"
-        code: err.code, // "VALIDATION_ERROR" | "OUTBOUND_VALIDATION_ERROR"
-        details: err.details, // Schema error details
-      });
-    },
-  }))
+  .plugin(
+    withZod({
+      validateOutgoing: true, // Default: true; validate ctx.send(), ctx.reply(), ctx.publish()
+      coerce: false, // Zod-only; default: false
+      onValidationError: async (err, ctx) => {
+        // Optional: custom error hook instead of router.onError()
+        logger.warn("Validation failed", {
+          type: ctx.type,
+          direction: ctx.direction, // "inbound" | "outbound"
+          code: err.code, // "VALIDATION_ERROR" | "OUTBOUND_VALIDATION_ERROR"
+          details: err.details, // Schema error details
+        });
+      },
+    }),
+  )
   .on(ChatMessage, (ctx) => {
     // ctx.payload validated and typed
     ctx.send(ReplyMessage, { text: ctx.payload.text });
@@ -366,11 +368,11 @@ const router = createRouter()
 
 **Options**:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `validateOutgoing` | boolean | `true` | Validate payloads in `ctx.send()`, `ctx.reply()`, `ctx.publish()` (performance knob) |
-| `coerce` | boolean | `false` | Zod-only; enable schema coercion (e.g., string → number) |
-| `onValidationError` | function | undefined | Custom error hook; if omitted, routes to `router.onError()` |
+| Option              | Type     | Default   | Description                                                                          |
+| ------------------- | -------- | --------- | ------------------------------------------------------------------------------------ |
+| `validateOutgoing`  | boolean  | `true`    | Validate payloads in `ctx.send()`, `ctx.reply()`, `ctx.publish()` (performance knob) |
+| `coerce`            | boolean  | `false`   | Zod-only; enable schema coercion (e.g., string → number)                             |
+| `onValidationError` | function | undefined | Custom error hook; if omitted, routes to `router.onError()`                          |
 
 **Inbound vs Outbound Validation**:
 
@@ -378,6 +380,34 @@ const router = createRouter()
 - **Outbound**: Configurable via `validateOutgoing` flag; validates data sent by handler (performance optimization)
 
 Set `validateOutgoing: false` for ultra-hot paths where you trust handler data. Runtime cost: one safeParse call per outbound message when enabled.
+
+## Validator Portability Contract
+
+All validator adapters (Zod, Valibot, custom) must represent the same message envelope at the wire level:
+
+```
+{
+  type: string,
+  meta: { timestamp?, correlationId?, ...extended },
+  payload?: T
+}
+```
+
+**Contract Requirements**:
+
+- The `message()` and `rpc()` helpers in each validator MUST produce schemas that validate this envelope shape
+- Custom validators or future adapters MUST normalize incoming messages to this shape before validation
+- The type extraction utilities (`InferType`, `InferPayload`, etc.) MUST work consistently across all validators
+- Wire-level validation MUST be identical: reject unknown keys, require `type`, enforce payload presence/absence
+
+**Future Validator Support**:
+
+If adding a new validator (e.g., TypeBox, io-ts), ensure:
+
+1. Schemas created by `message()` and `rpc()` match the WS-Kit envelope shape
+2. If the validator has its own envelope format, provide a normalization adapter before validation
+3. Type inference utilities extract the same types as Zod/Valibot counterparts
+4. Add tests verifying wire-level compatibility with existing adapters (see docs/specs/test-requirements.md)
 
 ## Key Constraints
 

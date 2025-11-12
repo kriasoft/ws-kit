@@ -309,16 +309,34 @@ Progress updates are sent as internal control messages (reserved type `$ws:rpc-p
 
 ## Type Inference
 
+Schemas are fully type-inferrable at compile time. Use type extractors to work with individual components:
+
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import type { MessageContext } from "@ws-kit/zod";
+import type {
+  InferType, // Message type literal
+  InferPayload, // Payload type (or never)
+  InferMeta, // Extended meta fields
+  InferMessage, // Full message type
+  InferResponse, // RPC response type (or never)
+} from "@ws-kit/zod";
 
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
+const GetUser = message(
+  "GET_USER",
+  { id: z.string() },
+  { response: { name: z.string() } },
+);
 
-// Schema type
-type JoinRoomType = z.infer<typeof JoinRoom>;
+// Extract individual parts
+type JoinType = InferType<typeof JoinRoom>; // "JOIN_ROOM"
+type JoinPayload = InferPayload<typeof JoinRoom>; // { roomId: string }
+type JoinMeta = InferMeta<typeof JoinRoom>; // Record<string, never>
+type JoinMsg = InferMessage<typeof JoinRoom>; // Full message type
 
-// Handler context type (automatically inferred)
+type GetUserResponse = InferResponse<typeof GetUser>; // { name: string }
+
+// Handler context type (automatically inferred from schema)
 type AppData = { userId?: string };
 const router = createRouter<AppData>();
 
@@ -338,6 +356,31 @@ router.on(JoinRoom, (ctx) => {
   // }
 });
 ```
+
+**Type Extractors**:
+
+- `InferType<TSchema>` — Message type literal (e.g., `"JOIN_ROOM"`)
+- `InferPayload<TSchema>` — Payload shape, or `never` if undefined
+- `InferMeta<TSchema>` — Extended meta fields (excluding reserved `timestamp` and `correlationId`)
+- `InferMessage<TSchema>` — Full message type (equivalent to `z.infer<TSchema>`)
+- `InferResponse<TSchema>` — RPC response type, or `never` if undefined
+
+### Internal Implementation Details
+
+Schemas are created with type-level markers (`SchemaTag` in Zod) for compile-time inference. These symbols are **internal** and not part of the public API. Always use the `Infer*` helpers:
+
+```typescript
+const MyMessage = message("MSG", { id: z.number() });
+
+// ✅ Use public helpers
+type Payload = InferPayload<typeof MyMessage>; // { id: number }
+type Type = InferType<typeof MyMessage>; // "MSG"
+
+// ❌ Don't reference internal markers directly
+type BadType = (typeof MyMessage)[SchemaTag]; // Not accessible
+```
+
+When hovering over schemas in your IDE, you may see internal structure (e.g., `[SchemaTag]: ...`). This is an implementation artifact and does not affect schema usage. The public `Infer*` helpers provide the clean, stable API.
 
 ## Conditional Payload Typing
 

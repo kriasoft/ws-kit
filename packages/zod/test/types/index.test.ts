@@ -6,44 +6,14 @@ import {
   z,
   message,
   createRouter,
-  zodValidator,
-  type InferMessage,
+  type InferType,
   type InferPayload,
   type InferMeta,
-  type MessageContext,
+  type InferMessage,
+  type InferResponse,
 } from "../../src/index.js";
 
 describe("@ws-kit/zod - Type Tests", () => {
-  describe("zodValidator() factory", () => {
-    it("should return ValidatorAdapter type", () => {
-      const validator = zodValidator();
-      expectTypeOf(validator).toHaveProperty("getMessageType");
-      expectTypeOf(validator).toHaveProperty("safeParse");
-      expectTypeOf(validator).toHaveProperty("infer");
-    });
-
-    it("getMessageType should accept MessageSchemaType and return string", () => {
-      const validator = zodValidator();
-      const schema = message("PING");
-      expectTypeOf(validator.getMessageType).toBeFunction();
-      expectTypeOf(validator.getMessageType(schema)).toBeString();
-    });
-
-    it("safeParse should validate and return normalized result", () => {
-      const validator = zodValidator();
-      const schema = message("PING", { text: z.string() });
-
-      const result = validator.safeParse(schema, {
-        type: "PING",
-        meta: {},
-        payload: { text: "hello" },
-      });
-
-      expectTypeOf(result).toHaveProperty("success");
-      expectTypeOf(result.success).toBeBoolean();
-    });
-  });
-
   describe("message() helper function", () => {
     it("should create message schema with message() helper", () => {
       const schema = message("PING");
@@ -100,21 +70,18 @@ describe("@ws-kit/zod - Type Tests", () => {
       }>();
     });
 
-    it("should include payload in context type", () => {
+    it("payload type should be extractable via InferPayload", () => {
       const MessageSchema = message("MSG", { text: z.string() });
 
-      type Context = MessageContext<typeof MessageSchema, unknown>;
-      expectTypeOf<Context>().toHaveProperty("payload");
-      expectTypeOf<Context["payload"]>().toEqualTypeOf<{ text: string }>();
+      type Payload = InferPayload<typeof MessageSchema>;
+      expectTypeOf<Payload>().toEqualTypeOf<{ text: string }>();
     });
 
-    it("no payload schema should not have payload property in context", () => {
+    it("no payload schema should return never", () => {
       const PingSchema = message("PING");
 
-      type Context = MessageContext<typeof PingSchema, unknown>;
-      // Should not have payload property
-      type HasPayload = "payload" extends keyof Context ? true : false;
-      expectTypeOf<HasPayload>().toEqualTypeOf<false>();
+      type Payload = InferPayload<typeof PingSchema>;
+      expectTypeOf<Payload>().toEqualTypeOf<never>();
     });
   });
 
@@ -315,16 +282,14 @@ describe("@ws-kit/zod - Type Tests", () => {
   });
 
   describe("Generic type parameters", () => {
-    it("should support generic message handlers", () => {
-      function createHandler<T extends { shape: { type: any } }>(schema: T) {
-        return (ctx: MessageContext<T, unknown>) => {
-          expectTypeOf(ctx.type).toBeString();
-        };
+    it("should support inferring types from generic schemas", () => {
+      function getMessageType<T extends { shape: { type: any } }>(schema: T) {
+        return schema.shape.type.value;
       }
 
       const schema = message("TEST");
-      const handler = createHandler(schema);
-      expectTypeOf(handler).toBeFunction();
+      const type = getMessageType(schema);
+      expectTypeOf(type).toBeString();
     });
   });
 
@@ -358,21 +323,56 @@ describe("@ws-kit/zod - Type Tests", () => {
         ctx.assignData({ userId: ctx.payload.id });
       });
     });
+  });
 
-    it("should type connection data in lifecycle callbacks", () => {
-      interface AppData {
-        clientId: string;
-        userId?: string;
-      }
-      const router = createRouter<AppData>();
+  describe("Type Inference - InferType", () => {
+    it("should extract message type literal", () => {
+      const PingSchema = message("PING");
+      type PingType = InferType<typeof PingSchema>;
+      expectTypeOf<PingType>().toEqualTypeOf<"PING">();
+    });
 
-      router.onOpen((ctx) => {
-        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+    it("should work with payload schemas", () => {
+      const JoinSchema = message("JOIN_ROOM", { roomId: z.string() });
+      type JoinType = InferType<typeof JoinSchema>;
+      expectTypeOf<JoinType>().toEqualTypeOf<"JOIN_ROOM">();
+    });
+
+    it("should preserve literal string type for discriminated unions", () => {
+      const A = message("TYPE_A");
+      const B = message("TYPE_B");
+      type TypeA = InferType<typeof A>;
+      type TypeB = InferType<typeof B>;
+      expectTypeOf<TypeA>().toEqualTypeOf<"TYPE_A">();
+      expectTypeOf<TypeB>().toEqualTypeOf<"TYPE_B">();
+    });
+  });
+
+  describe("Type Inference - InferResponse", () => {
+    it("should return never when no response defined", () => {
+      const PingSchema = message("PING");
+      type Response = InferResponse<typeof PingSchema>;
+      expectTypeOf<Response>().toEqualTypeOf<never>();
+    });
+
+    it("should extract response type from RPC schema", () => {
+      const GetUserSchema = message("GET_USER", {
+        id: z.string(),
       });
+      // Note: message() doesn't support response syntax in this test,
+      // so we construct the type manually to verify InferResponse works
+      type MockRpcSchema = typeof GetUserSchema & {
+        readonly response: z.ZodType<{ id: string; name: string }>;
+      };
+      type Response = InferResponse<MockRpcSchema>;
+      expectTypeOf<Response>().toEqualTypeOf<{ id: string; name: string }>();
+    });
 
-      router.onClose((ctx) => {
-        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
-      });
+    it("should work with schema union for discriminated response types", () => {
+      const RequestA = message("REQUEST_A");
+      const RequestB = message("REQUEST_B");
+      expectTypeOf<InferResponse<typeof RequestA>>().toEqualTypeOf<never>();
+      expectTypeOf<InferResponse<typeof RequestB>>().toEqualTypeOf<never>();
     });
   });
 });

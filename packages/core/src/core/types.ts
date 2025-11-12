@@ -3,7 +3,7 @@
  * These types exist at the base level (no validation plugin dependency).
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { MinimalContext } from "../context/base-context";
 
 /**

@@ -3,7 +3,7 @@
  * Used by router to discriminate event handlers from RPC handlers.
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 
 export function isMessageDescriptor(obj: unknown): obj is MessageDescriptor {
   return (

@@ -2,7 +2,7 @@
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
 
-import type { Router } from "../core/types";
+import type { Router } from "../core/router";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
 

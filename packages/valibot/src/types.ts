@@ -183,6 +183,25 @@ export interface MessageHandlerEntry<
  */
 
 /**
+ * Extract message type literal from schema.
+ *
+ * @example
+ * ```typescript
+ * const HelloOk = message("HELLO_OK", { text: v.string() });
+ * type Type = InferType<typeof HelloOk>; // "HELLO_OK"
+ * ```
+ */
+export type InferType<S extends MessageSchemaType> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  S extends ObjectSchema<infer TEntries, any>
+    ? TEntries extends Record<string, unknown>
+      ? "type" extends keyof TEntries
+        ? InferOutput<TEntries["type"]>
+        : never
+      : never
+    : never;
+
+/**
  * Infer full inbound message type (as received by handlers).
  *
  * Includes optional timestamp/correlationId (may be present from client),
@@ -190,7 +209,7 @@ export interface MessageHandlerEntry<
  *
  * @example
  * ```typescript
- * const HelloOk = messageSchema("HELLO_OK", { text: v.string() });
+ * const HelloOk = message("HELLO_OK", { text: v.string() });
  * type Msg = InferMessage<typeof HelloOk>;
  * // { type: "HELLO_OK", meta: { timestamp?: number, correlationId?: string }, payload: { text: string } }
  *
@@ -211,8 +230,8 @@ export type InferMessage<S extends MessageSchemaType> = InferOutput<S>;
  *
  * @example
  * ```typescript
- * const WithPayload = messageSchema("MSG", { id: v.number() });
- * const NoPayload = messageSchema("PING");
+ * const WithPayload = message("MSG", { id: v.number() });
+ * const NoPayload = message("PING");
  *
  * type P1 = InferPayload<typeof WithPayload>; // { id: number }
  * type P2 = InferPayload<typeof NoPayload>;   // never
@@ -238,7 +257,7 @@ export type InferPayload<S extends MessageSchemaType> =
  *
  * @example
  * ```typescript
- * const RoomMsg = messageSchema("CHAT", { text: v.string() }, { roomId: v.string() });
+ * const RoomMsg = message("CHAT", { text: v.string() }, { roomId: v.string() });
  * type Meta = InferMeta<typeof RoomMsg>; // { roomId: string }
  * // timestamp and correlationId are omitted (auto-injected by client)
  *
@@ -254,6 +273,24 @@ export type InferMeta<S extends MessageSchemaType> =
         : Record<string, never>
       : Record<string, never>
     : Record<string, never>;
+
+/**
+ * Extract response type from an RPC schema.
+ * Returns never if no response is defined.
+ *
+ * @example
+ * ```typescript
+ * const GetUser = rpc("GET_USER", { id: v.string() }, "USER", { id: v.string(), name: v.string() });
+ * type Response = InferResponse<typeof GetUser>; // { id: string, name: string }
+ * ```
+ */
+export type InferResponse<S extends MessageSchemaType> = S extends {
+  readonly response: infer R;
+}
+  ? R extends GenericSchema
+    ? InferOutput<R>
+    : never
+  : never;
 
 /**
  * Event message schema: a Valibot schema with message type hint.

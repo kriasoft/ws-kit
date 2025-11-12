@@ -3,7 +3,7 @@
  * Full message processing from raw frame to handler execution.
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { MinimalContext, BaseContextData } from "../context/base-context";
 import type { Middleware, EventHandler } from "../core/types";
 import type { CoreRouter } from "../core/router";
@@ -11,7 +11,11 @@ import type { MessageEnvelope } from "./types";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import { composePipeline } from "./middleware";
 import { safeJsonParse } from "../utils/json";
-import { isMessageDescriptor, isEventDescriptor, isRpcDescriptor } from "../schema/guards";
+import {
+  isMessageDescriptor,
+  isEventDescriptor,
+  isRpcDescriptor,
+} from "../schema/guards";
 import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved";
 
 export interface DispatchOptions<TConn> {
@@ -59,15 +63,21 @@ export async function dispatchMessage<TConn extends BaseContextData>(
   // 1) Parse JSON safely
   let envelope: MessageEnvelope;
   {
-    const text = typeof raw === "string" ? raw : new TextDecoder().decode(new Uint8Array(raw));
-    const parseResult = safeJsonParse(text, impl.getLimitsConfig()?.maxPayloadBytes);
+    const text =
+      typeof raw === "string"
+        ? raw
+        : new TextDecoder().decode(new Uint8Array(raw));
+    const parseResult = safeJsonParse(
+      text,
+      impl.getLimitsConfig()?.maxPayloadBytes,
+    );
 
     if (!parseResult.ok) {
       // Parse error → funnel to error sink without context
       const lifecycle = impl.getInternalLifecycle();
       await lifecycle.handleError(
         new Error(`Invalid JSON: ${parseResult.error}`),
-        null
+        null,
       );
       return;
     }
@@ -75,11 +85,15 @@ export async function dispatchMessage<TConn extends BaseContextData>(
     envelope = parseResult.value as MessageEnvelope;
 
     // Validate envelope shape
-    if (typeof envelope !== "object" || envelope === null || typeof envelope.type !== "string") {
+    if (
+      typeof envelope !== "object" ||
+      envelope === null ||
+      typeof envelope.type !== "string"
+    ) {
       const lifecycle = impl.getInternalLifecycle();
       await lifecycle.handleError(
         new Error("Invalid message envelope: missing or invalid type field"),
-        null
+        null,
       );
       return;
     }
@@ -90,7 +104,12 @@ export async function dispatchMessage<TConn extends BaseContextData>(
     const lifecycle = impl.getInternalLifecycle();
     lifecycle.markActivity(ws, now);
     try {
-      ws.send(JSON.stringify({ type: SYSTEM_MESSAGES.HEARTBEAT_ACK, meta: { ts: now } }));
+      ws.send(
+        JSON.stringify({
+          type: SYSTEM_MESSAGES.HEARTBEAT_ACK,
+          meta: { ts: now },
+        }),
+      );
     } catch (err) {
       await lifecycle.handleError(err, null);
     }
@@ -100,7 +119,9 @@ export async function dispatchMessage<TConn extends BaseContextData>(
   // 3) Reserved types are blocked from user handlers
   if (isReservedType(envelope.type)) {
     const lifecycle = impl.getInternalLifecycle();
-    const err = new Error(`Reserved type cannot be handled by user code: "${envelope.type}"`);
+    const err = new Error(
+      `Reserved type cannot be handled by user code: "${envelope.type}"`,
+    );
     await lifecycle.handleError(err, null);
     return;
   }
@@ -110,7 +131,9 @@ export async function dispatchMessage<TConn extends BaseContextData>(
   const entry = routeTable.get(envelope.type);
   if (!entry) {
     const lifecycle = impl.getInternalLifecycle();
-    const err = new Error(`No handler registered for message type: "${envelope.type}"`);
+    const err = new Error(
+      `No handler registered for message type: "${envelope.type}"`,
+    );
     await lifecycle.handleError(err, null);
     return;
   }
@@ -119,7 +142,9 @@ export async function dispatchMessage<TConn extends BaseContextData>(
   const schema: MessageDescriptor = entry.schema;
   if (!isMessageDescriptor(schema)) {
     const lifecycle = impl.getInternalLifecycle();
-    const err = new Error(`Invalid MessageDescriptor for type "${envelope.type}"`);
+    const err = new Error(
+      `Invalid MessageDescriptor for type "${envelope.type}"`,
+    );
     await lifecycle.handleError(err, null);
     return;
   }
