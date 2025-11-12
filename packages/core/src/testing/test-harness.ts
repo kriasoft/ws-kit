@@ -199,9 +199,12 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
       for (const [, conn] of connections) {
         await conn.waitForPendingMessages();
       }
-      // Then wait for microtasks and clock
-      await clock.now();
-      await new Promise((resolve) => setImmediate(resolve));
+      // Flush microtasks through the clock API
+      if (clock instanceof FakeClock) {
+        await clock.flush();
+      } else {
+        await Promise.resolve();
+      }
     },
 
     async close(): Promise<void> {
@@ -280,7 +283,12 @@ class TestConnectionImpl<TContext extends BaseContextData = unknown>
   }
 
   async drain(): Promise<void> {
-    await new Promise((resolve) => setImmediate(resolve));
+    // Flush microtasks through the clock API
+    if (this.clock instanceof FakeClock) {
+      await this.clock.flush();
+    } else {
+      await Promise.resolve();
+    }
   }
 
   subscriptions(): readonly string[] {
