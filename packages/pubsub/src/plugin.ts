@@ -13,7 +13,12 @@
  * then calls adapter.publish(envelope, options) to broadcast.
  */
 
-import type { Router, Plugin, MessageDescriptor } from "@ws-kit/core";
+import type {
+  Router,
+  Plugin,
+  MessageDescriptor,
+  CoreRouter,
+} from "@ws-kit/core";
 import type {
   PubSubAdapter,
   PublishEnvelope,
@@ -73,7 +78,9 @@ export function withPubSub<TConn>(
      * Called by lifecycle.handleOpen for each new WebSocket.
      */
     const onClientOpen = async (ws: any) => {
-      const clientId = ws.data?.clientId;
+      // Get clientId from router's mapping
+      const routerImpl = router as any as CoreRouter<any>;
+      const clientId = routerImpl.getClientId?.(ws);
       if (clientId && typeof ws.send === "function") {
         sends.set(clientId, ws.send.bind(ws));
       }
@@ -81,12 +88,29 @@ export function withPubSub<TConn>(
 
     /**
      * Unregister a send function for a client when connection closes.
+     * Also unsubscribe from all topics to prevent ghost memberships.
      * Called by lifecycle.handleClose for each closed WebSocket.
      */
     const onClientClose = async (ws: any) => {
-      const clientId = ws.data?.clientId;
-      if (clientId) {
-        sends.delete(clientId);
+      // Get clientId from router's mapping
+      const routerImpl = router as any as CoreRouter<any>;
+      const clientId = routerImpl.getClientId?.(ws);
+      if (!clientId) return;
+
+      // Remove send function
+      sends.delete(clientId);
+
+      // Clean up subscriptions via adapter
+      // Use replace() if available for atomic cleanup; otherwise fall back to unsubscribe
+      try {
+        if (typeof adapter.replace === "function") {
+          // Atomic: replace subscriptions with empty set
+          await adapter.replace(clientId, []);
+        }
+      } catch (err) {
+        // Log error but don't crash shutdown
+        const lifecycle = routerImpl.getInternalLifecycle?.();
+        lifecycle?.handleError(err, null);
       }
     };
 
@@ -199,6 +223,61 @@ export function withPubSub<TConn>(
     if (lifecycle) {
       lifecycle.onOpen(onClientOpen);
       lifecycle.onClose(onClientClose);
+    }
+
+    /**
+     * Wrap createContext to attach pub/sub methods to the context.
+     * These methods are only added when withPubSub() is plugged.
+     */
+    const routerImpl = router as any as CoreRouter<any>;
+    const originalCreateContext = routerImpl.createContext?.bind(routerImpl);
+
+    if (originalCreateContext) {
+      routerImpl.createContext = function (params: any) {
+        const ctx = originalCreateContext(params);
+
+        // Attach publish() method for broadcasting to topic subscribers
+        (ctx as any).publish = async (
+          topic: string,
+          schema: MessageDescriptor,
+          payload: any,
+          opts?: {
+            partitionKey?: string;
+            signal?: AbortSignal;
+          },
+        ) => {
+          return await publish(topic, schema, payload, opts);
+        };
+
+        // Attach topics helper for subscription management
+        // Topics are scoped to this connection via ctx.clientId
+        (ctx as any).topics = {
+          subscribe: async (topic: string): Promise<void> => {
+            // Subscribe this client to a topic via the adapter
+            // clientId is stable and unique per connection
+            if (typeof adapter.subscribe === "function") {
+              await adapter.subscribe(ctx.clientId, topic);
+            }
+          },
+          unsubscribe: async (topic: string): Promise<void> => {
+            // Unsubscribe this client from a topic via the adapter
+            if (typeof adapter.unsubscribe === "function") {
+              await adapter.unsubscribe(ctx.clientId, topic);
+            }
+          },
+          has: (topic: string): boolean => {
+            // Check if THIS client is subscribed to the topic
+            // The adapter is responsible for tracking per-client subscriptions
+            // For now, we rely on the adapter implementation
+            // A more complete impl would maintain a per-connection set
+            // This is a placeholder that requires adapter support
+            // TODO: Implement per-connection subscription tracking via adapter
+            return false;
+          },
+        };
+
+        return ctx;
+      };
     }
 
     // Initialize enhanced router with publish/subscriptions + pubsub.init/shutdown

@@ -523,37 +523,6 @@ export function withZod(
         // TODO: Emit "data changed" event for adapters to persist if needed
       };
 
-      // Attach publish() method - broadcast to topic subscribers
-      // Implemented by withPubSub plugin; stub here for IDE support
-      (ctx as any).publish = async (
-        topic: string,
-        schema: AnySchema | MessageDescriptor,
-        payload: any,
-      ): Promise<void> => {
-        throw new Error(
-          "ctx.publish() requires withPubSub plugin to be installed",
-        );
-      };
-
-      // Attach topics helper for subscriptions
-      (ctx as any).topics = {
-        subscribe: async (topic: string): Promise<void> => {
-          throw new Error(
-            "ctx.topics.subscribe() requires withPubSub plugin to be installed",
-          );
-        },
-        unsubscribe: async (topic: string): Promise<void> => {
-          throw new Error(
-            "ctx.topics.unsubscribe() requires withPubSub plugin to be installed",
-          );
-        },
-        has: (topic: string): boolean => {
-          throw new Error(
-            "ctx.topics.has() requires withPubSub plugin to be installed",
-          );
-        },
-      };
-
       return ctx;
     };
 

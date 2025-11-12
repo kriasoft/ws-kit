@@ -133,6 +133,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   private limitsManager: LimitsManager;
   private pluginHost: PluginHost<TConn>;
   private connData = new WeakMap<ServerWebSocket, TConn>();
+  private wsToClientId = new WeakMap<ServerWebSocket, string>();
 
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
@@ -292,11 +293,40 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   }
 
   /**
+   * Get or create a stable client ID for a WebSocket.
+   * Assigns UUID on first call, then returns the same ID for subsequent calls.
+   * @internal
+   */
+  private getOrCreateClientId(ws: ServerWebSocket): string {
+    let id = this.wsToClientId.get(ws);
+    if (!id) {
+      // Use crypto.randomUUID() if available (Node 15.7+, Bun, browsers)
+      // Fallback to Math.random for older Node versions (though this is a beta feature)
+      id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Math.random().toString(36).substring(2)}-${Date.now()}`;
+      this.wsToClientId.set(ws, id);
+    }
+    return id;
+  }
+
+  /**
+   * Get the client ID for a WebSocket (if assigned).
+   * Used by plugins to map ws ↔ clientId.
+   * @internal
+   */
+  getClientId(ws: ServerWebSocket): string | undefined {
+    return this.wsToClientId.get(ws);
+  }
+
+  /**
    * Create a context from raw dispatch parameters.
    * This is a minimal implementation; validation plugins will extend it.
    * @internal
    */
   createContext(params: {
+    clientId: string;
     ws: ServerWebSocket;
     type: string;
     payload?: unknown;
@@ -305,6 +335,7 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
   }): MinimalContext<TConn> {
     const data = this.getOrInitData(params.ws);
     return {
+      clientId: params.clientId,
       ws: params.ws,
       type: params.type,
       data,
@@ -343,7 +374,8 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     ws: ServerWebSocket,
     rawFrame: string | ArrayBuffer,
   ): Promise<void> {
-    await dispatchMessage(rawFrame, ws, this);
+    const clientId = this.getOrCreateClientId(ws);
+    await dispatchMessage(rawFrame, clientId, ws, this);
   }
 
   /**
@@ -361,10 +393,11 @@ export class CoreRouter<TConn extends BaseContextData = unknown>
     code?: number,
     reason?: string,
   ): Promise<void> {
-    // Explicitly clean up per-connection data from WeakMap.
+    // Explicitly clean up per-connection data and client ID.
     // While WeakMap entries auto-clean when ws is GC'd, explicit deletion ensures
     // timely resource release and allows plugins to react via lifecycle hooks.
     this.connData.delete(ws);
+    this.wsToClientId.delete(ws);
 
     // Notify lifecycle handlers (plugins, heartbeat monitor, etc.)
     // for per-connection cleanup. This allows plugins to perform cleanup

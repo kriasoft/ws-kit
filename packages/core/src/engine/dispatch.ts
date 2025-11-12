@@ -50,11 +50,13 @@ export async function dispatch<TConn>(
  * Handles: parse → guard → lookup → context → limits → middleware → handler → errors.
  *
  * @param raw Raw message data (string or ArrayBuffer)
+ * @param clientId Stable client identifier (assigned at accept time)
  * @param ws WebSocket connection
  * @param impl Router implementation (provides registry, lifecycle, context factory, etc.)
  */
 export async function dispatchMessage<TConn extends BaseContextData>(
   raw: string | ArrayBuffer,
+  clientId: string,
   ws: ServerWebSocket,
   impl: CoreRouter<TConn>,
 ): Promise<void> {
@@ -153,6 +155,7 @@ export async function dispatchMessage<TConn extends BaseContextData>(
   let ctx: MinimalContext<TConn> | null = null;
   try {
     ctx = impl.createContext({
+      clientId,
       ws,
       type: schema.type,
       payload: envelope.payload,

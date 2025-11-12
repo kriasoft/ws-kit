@@ -226,7 +226,11 @@ class TestConnectionImpl<TConn extends BaseContextData = unknown>
   send(type: string, payload?: unknown, meta?: Record<string, unknown>): void {
     // Create a JSON frame and dispatch it through the full pipeline
     const frame = JSON.stringify({ type, payload, meta });
-    void dispatchMessage(frame, this.ws, this.routerImpl);
+    // Get or create clientId for this connection
+    const clientId =
+      this.routerImpl.getClientId?.(this.ws) ||
+      `test-client-${Math.random().toString(36).substring(2)}`;
+    void dispatchMessage(frame, clientId, this.ws, this.routerImpl);
   }
 
   outgoing(): readonly OutboundFrame[] {

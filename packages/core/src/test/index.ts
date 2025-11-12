@@ -38,3 +38,16 @@ export { act } from "./act";
 // Internal exports (for advanced use)
 export { MockWebSocket, type ConnectionState } from "./test-websocket";
 export { MockPlatformAdapter } from "./test-adapter";
+
+// Namespace re-export for convenience
+import * as testHarness from "./test-harness";
+import * as fakeClock from "./fake-clock";
+import * as actModule from "./act";
+
+export const test = {
+  createTestRouter: testHarness.createTestRouter,
+  wrapTestRouter: testHarness.wrapTestRouter,
+  FakeClock: fakeClock.FakeClock,
+  RealClock: fakeClock.RealClock,
+  act: actModule.act,
+};

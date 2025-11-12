@@ -5,7 +5,7 @@
  * - createRouter() → Factory with only heartbeat/limits options
  * - Router → BaseRouter (use/on/route/merge/mount/plugin/onError)
  * - MessageDescriptor → Stable runtime shape for all validators
- * - MinimalContext → Base context (ws, type, data, setData)
+ * - MinimalContext → Base context (clientId, ws, type, data, setData)
  *
  * Plugins add:
  * - withZod/withValibot → ValidationAPI (rpc method, payload/reply context)
@@ -59,8 +59,8 @@ export type {
 // Platform adapter contract
 export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 
-// Useful type utilities
-export type { EventContext, RpcContext } from "./context/types";
+// Useful type utilities (capability-gated context types)
+export type { EventContext, RpcContext, PubSubContext } from "./context/types";
 
 // Pub/Sub utilities
 export {

@@ -55,6 +55,42 @@ This spec defines a **minimal, portable, and hard-to-misuse topic-based pub/sub 
 - Multi-process global fan-out (covered by separate adapters like Redis pub/sub).
 - Complex middleware chains (lightweight hooks only).
 
+### Capability Gating & Identity
+
+Pub/Sub is a **capability-gated** feature: `ctx.publish()` and `ctx.topics` exist **only** when `withPubSub(adapter)` is plugged into the router.
+
+**Router identity:**
+
+- Each connection is assigned a stable **`clientId`** at accept time (available as `ctx.clientId` in all handlers).
+- `clientId` is a string (typically a UUID or random identifier) that uniquely identifies a WebSocket connection.
+- Used internally by the adapter to track per-connection subscriptions and to implement cleanup on disconnect.
+
+**Type Safety:**
+
+- Without `withPubSub()`, `ctx.publish()` and `ctx.topics` don't exist at compile time; TypeScript prevents usage.
+- With `withPubSub()`, both are guaranteed to be present (gated at the type level by capability plugins).
+- Middleware can safely assume `ctx.clientId` is always present (no null checks needed).
+
+**Example:**
+
+```typescript
+// With withPubSub:
+const router = createRouter().plugin(withZod()).plugin(withPubSub(adapter));
+
+router.on(Message, async (ctx) => {
+  await ctx.topics.subscribe("room:123"); // ✅ Allowed; passes ctx.clientId to adapter
+  const result = await ctx.publish("topic", Msg, payload); // ✅ Allowed
+});
+
+// Without withPubSub:
+const router2 = createRouter().plugin(withZod());
+
+router2.on(Message, async (ctx) => {
+  await ctx.topics.subscribe("room:123"); // ❌ TS error: ctx.topics doesn't exist
+  const result = await ctx.publish("topic", Msg, payload); // ❌ TS error: ctx.publish doesn't exist
+});
+```
+
 ---
 
 ## 2. Terminology
@@ -63,6 +99,7 @@ This spec defines a **minimal, portable, and hard-to-misuse topic-based pub/sub 
 - **Subscription** — A connection's membership in a topic; persists for connection lifetime or until explicitly removed.
 - **Payload** — Data published to a topic: `string | ArrayBuffer | ArrayBufferView`. JSON is app-level.
 - **Broadcast** — Publishing a message to all subscribers of a topic.
+- **clientId** — Stable, unique identifier assigned to each WebSocket connection at accept time. Available as `ctx.clientId` in all handlers. Used internally by pub/sub adapter to track per-connection subscriptions.
 
 ---
 
@@ -221,12 +258,12 @@ interface PublishOptions {
    * // Publisher
    * await ctx.publish(topic, Msg, {
    *   ...payload,
-   *   _senderId: ctx.ws.data.clientId
+   *   _senderId: ctx.clientId
    * });
    *
    * // Subscriber
    * router.on(Msg, (ctx) => {
-   *   if (ctx.payload._senderId === ctx.ws.data.clientId) return; // Skip self
+   *   if (ctx.payload._senderId === ctx.clientId) return; // Skip self
    * });
    * ```
    *
