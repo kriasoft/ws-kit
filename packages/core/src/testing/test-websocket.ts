@@ -4,15 +4,15 @@
  */
 
 import type { ServerWebSocket } from "../ws/platform-adapter";
-import type { OutboundFrame } from "./types";
+import type { OutgoingFrame } from "./types";
 
 /**
  * In-memory ServerWebSocket that records all sent messages.
  */
-export class MockWebSocket implements ServerWebSocket {
+export class TestWebSocket implements ServerWebSocket {
   readonly clientId: string;
   readyState: "CONNECTING" | "OPEN" | "CLOSING" | "CLOSED" = "OPEN";
-  private sentMessages: OutboundFrame[] = [];
+  private sentMessages: OutgoingFrame[] = [];
 
   constructor(clientId: string) {
     this.clientId = clientId;
@@ -30,11 +30,11 @@ export class MockWebSocket implements ServerWebSocket {
 
     try {
       const text = typeof data === "string" ? data : this.decode(data);
-      const frame = JSON.parse(text) as OutboundFrame;
+      const frame = JSON.parse(text) as OutgoingFrame;
       this.sentMessages.push(frame);
     } catch (err) {
       // If parsing fails, store raw message for debugging
-      console.error(`[MockWebSocket] Failed to parse sent message:`, err);
+      console.error(`[TestWebSocket] Failed to parse sent message:`, err);
     }
   }
 
@@ -48,7 +48,7 @@ export class MockWebSocket implements ServerWebSocket {
   /**
    * Get all messages sent to this connection.
    */
-  getSentMessages(): readonly OutboundFrame[] {
+  getSentMessages(): readonly OutgoingFrame[] {
     return this.sentMessages;
   }
 

@@ -60,7 +60,7 @@ export type { PubSub, PubSubPublishOptions } from "./adapters/legacy";
 
 // Test utilities
 export { TestPubSub } from "./test-utils";
-export type { PublishedFrame } from "./test-utils";
+export type { PublishRecord } from "./test-utils";
 
 /**
  * Symbol for accessing internal adapter state in tests.

@@ -194,10 +194,10 @@ export class FakeClock implements Clock {
 }
 
 /**
- * Real clock: passthrough to native timers.
+ * System clock: passthrough to native timers.
  * Use for production or when you don't need deterministic testing.
  */
-export class RealClock implements Clock {
+export class SystemClock implements Clock {
   setTimeout(fn: () => void, ms: number): unknown {
     return globalThis.setTimeout(fn, ms);
   }

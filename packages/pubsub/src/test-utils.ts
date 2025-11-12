@@ -14,9 +14,9 @@ import type {
 } from "@ws-kit/core/pubsub";
 
 /**
- * Published message frame captured for testing.
+ * Publish record: captured published message for testing.
  */
-export interface PublishedFrame {
+export interface PublishRecord {
   topic: string;
   payload: unknown;
   type?: string;
@@ -42,7 +42,7 @@ export interface PublishedFrame {
  * ```
  */
 export class TestPubSub implements PubSubAdapter {
-  private publishedMessages: PublishedFrame[] = [];
+  private publishedMessages: PublishRecord[] = [];
 
   constructor(private wrapped: PubSubAdapter) {}
 
@@ -121,7 +121,7 @@ export class TestPubSub implements PubSubAdapter {
   /**
    * Get all published messages.
    */
-  getPublishedMessages(): readonly PublishedFrame[] {
+  getPublishedMessages(): readonly PublishRecord[] {
     return this.publishedMessages;
   }
 

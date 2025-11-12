@@ -20,7 +20,7 @@ export { createTestRouter, wrapTestRouter } from "./test-harness";
 export type { CreateTestRouterOptions } from "./test-harness";
 
 // Clock exports
-export { FakeClock, RealClock } from "./fake-clock";
+export { FakeClock, SystemClock } from "./fake-clock";
 export type { Clock } from "./fake-clock";
 
 // Type exports
@@ -28,26 +28,29 @@ export type {
   TestRouter,
   TestConnection,
   TestCapture,
-  OutboundFrame,
-  PublishedFrame,
+  OutgoingFrame,
+  PublishRecord,
 } from "./types";
 
 // Act helpers (optional convenience)
 export { act } from "./act";
 
 // Internal exports (for advanced use)
-export { MockWebSocket, type ConnectionState } from "./test-websocket";
-export { MockPlatformAdapter } from "./test-adapter";
+export { TestWebSocket, type ConnectionState } from "./test-websocket";
+export { InMemoryPlatformAdapter } from "./test-adapter";
 
 // Namespace re-export for convenience
 import * as testHarness from "./test-harness";
 import * as fakeClock from "./fake-clock";
 import * as actModule from "./act";
 
-export const test = {
+export const testing = {
   createTestRouter: testHarness.createTestRouter,
   wrapTestRouter: testHarness.wrapTestRouter,
   FakeClock: fakeClock.FakeClock,
-  RealClock: fakeClock.RealClock,
+  SystemClock: fakeClock.SystemClock,
   act: actModule.act,
 };
+
+// Backward compatibility alias (prefer 'testing' over 'test')
+export const test = testing;

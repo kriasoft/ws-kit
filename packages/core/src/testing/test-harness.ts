@@ -7,13 +7,13 @@ import type { Router } from "../core/router";
 import type { MinimalContext, BaseContextData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { FakeClock, type Clock } from "./fake-clock";
-import { MockPlatformAdapter } from "./test-adapter";
+import { InMemoryPlatformAdapter } from "./test-adapter";
 import { TestPubSub } from "@ws-kit/pubsub/internal";
 import type {
   TestRouter,
   TestConnection,
-  OutboundFrame,
-  PublishedFrame,
+  OutgoingFrame,
+  PublishRecord,
   TestCapture,
 } from "./types";
 import { dispatch, dispatchMessage } from "../engine/dispatch";
@@ -97,7 +97,7 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
   const impl = router as any as CoreRouter<TConn>;
 
   // Infrastructure
-  const adapter = new MockPlatformAdapter<TConn>();
+  const adapter = new InMemoryPlatformAdapter<TConn>();
   const clock = opts?.clock || new FakeClock();
   const capturedErrors: unknown[] = [];
   const connections = new Map<string, TestConnectionImpl<TConn>>();
@@ -119,10 +119,10 @@ export function wrapTestRouter<TConn extends BaseContextData = unknown>(
     errors(): readonly unknown[] {
       return capturedErrors;
     },
-    publishes(): readonly PublishedFrame[] {
+    publishes(): readonly PublishRecord[] {
       return pubsubAdapter?.getPublishedMessages() || [];
     },
-    messages(): readonly OutboundFrame[] {
+    messages(): readonly OutgoingFrame[] {
       return adapter.getAllSentMessages();
     },
     clear(): void {

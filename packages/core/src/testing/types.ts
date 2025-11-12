@@ -7,9 +7,9 @@ import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
 
 /**
- * Outbound frame: message sent from server to client via ctx.send() or publish.
+ * Outgoing frame: message sent from server to client via ctx.send() or publish.
  */
-export interface OutboundFrame {
+export interface OutgoingFrame {
   type: string;
   payload?: unknown;
   meta?: Record<string, unknown>;
@@ -19,9 +19,9 @@ export interface OutboundFrame {
 }
 
 /**
- * Published frame: message broadcast via router.publish().
+ * Publish record: message broadcast via router.publish().
  */
-export interface PublishedFrame {
+export interface PublishRecord {
   topic: string;
   schema: MessageDescriptor;
   payload: unknown;
@@ -40,7 +40,7 @@ export interface TestConnection<TConn = unknown> {
   /**
    * Get all messages sent to this connection.
    */
-  outgoing(): readonly OutboundFrame[];
+  outgoing(): readonly OutgoingFrame[];
 
   /**
    * Wait for pending microtasks to settle on this connection.
@@ -82,12 +82,12 @@ export interface TestCapture<TConn = unknown> {
    * Get all messages published via router.publish() (if pubsub enabled).
    * Returns empty array if pubsub not present.
    */
-  publishes(): readonly PublishedFrame[];
+  publishes(): readonly PublishRecord[];
 
   /**
    * Get all messages sent across all connections.
    */
-  messages(): readonly OutboundFrame[];
+  messages(): readonly OutgoingFrame[];
 
   /**
    * Clear all captured data.

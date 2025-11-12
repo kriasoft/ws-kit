@@ -7,20 +7,20 @@ import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
 import type { Middleware, EventHandler, RouteEntry } from "../core/types";
 import type { MinimalContext, BaseContextData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { MockWebSocket, type ConnectionState } from "./test-websocket";
+import { TestWebSocket, type ConnectionState } from "./test-websocket";
 import { dispatch } from "../engine/dispatch";
-import type { OutboundFrame } from "./types";
+import type { OutgoingFrame } from "./types";
 
 /**
- * Mock platform adapter that manages in-memory WebSocket connections.
+ * In-memory platform adapter that manages in-memory WebSocket connections.
  * Used by the test harness to coordinate message routing.
  */
-export class MockPlatformAdapter<TConn extends BaseContextData = unknown>
+export class InMemoryPlatformAdapter<TConn extends BaseContextData = unknown>
   implements PlatformAdapter
 {
   private connections = new Map<string, ConnectionState<TConn>>();
   private nextClientId = 0;
-  private globalMessages: OutboundFrame[] = [];
+  private globalMessages: OutgoingFrame[] = [];
 
   /**
    * Get or create a connection.
@@ -28,9 +28,9 @@ export class MockPlatformAdapter<TConn extends BaseContextData = unknown>
   getOrCreateConnection(init?: {
     data?: Partial<TConn>;
     headers?: Record<string, string>;
-  }): MockWebSocket {
+  }): TestWebSocket {
     const clientId = String(this.nextClientId++);
-    const ws = new MockWebSocket(clientId);
+    const ws = new TestWebSocket(clientId);
     const data = init?.data || ({} as TConn);
 
     this.connections.set(clientId, {
@@ -76,10 +76,10 @@ export class MockPlatformAdapter<TConn extends BaseContextData = unknown>
       // Record globally
       try {
         const text = typeof data === "string" ? data : this.decode(data);
-        const frame = JSON.parse(text) as OutboundFrame;
+        const frame = JSON.parse(text) as OutgoingFrame;
         this.globalMessages.push(frame);
       } catch (err) {
-        // Parsing errors are logged by MockWebSocket
+        // Parsing errors are logged by TestWebSocket
       }
     }
   }
@@ -108,7 +108,7 @@ export class MockPlatformAdapter<TConn extends BaseContextData = unknown>
   /**
    * Get all globally sent messages.
    */
-  getAllSentMessages(): readonly OutboundFrame[] {
+  getAllSentMessages(): readonly OutgoingFrame[] {
     return this.globalMessages;
   }
 
