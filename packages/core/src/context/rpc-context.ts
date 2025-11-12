@@ -10,10 +10,10 @@
  * - progress(payload): non-terminal update
  */
 
-import type { MinimalContext } from "./base-context";
+import type { BaseContextData, MinimalContext } from "./base-context";
 
 export interface RpcContext<
-  TContext = unknown,
+  TContext extends BaseContextData = {},
   TPayload = unknown,
   TResponse = unknown,
 > extends MinimalContext<TContext> {

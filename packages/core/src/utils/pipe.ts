@@ -16,6 +16,8 @@ export function pipeMiddleware<TContext>(
   return async function executeNext() {
     if (index >= middlewares.length) return;
     const middleware = middlewares[index++];
-    return middleware({} as any, executeNext);
+    if (middleware) {
+      return middleware({} as any, executeNext);
+    }
   };
 }

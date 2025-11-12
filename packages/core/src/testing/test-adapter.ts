@@ -19,7 +19,7 @@ import type { OutgoingFrame } from "./types";
  * Integrates with router's websocket bridge to exercise the same code paths
  * as production adapters (Bun, Cloudflare, etc.).
  */
-export class InMemoryPlatformAdapter<TContext extends BaseContextData = unknown>
+export class InMemoryPlatformAdapter<TContext extends BaseContextData = {}>
   implements PlatformAdapter
 {
   private connections = new Map<string, ConnectionState<TContext>>();

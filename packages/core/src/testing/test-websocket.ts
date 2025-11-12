@@ -21,7 +21,9 @@ export class TestWebSocket implements ServerWebSocket {
 
   constructor(clientId: string, initialData?: Record<string, unknown>) {
     this.clientId = clientId;
-    this.initialData = initialData;
+    if (initialData !== undefined) {
+      this.initialData = initialData;
+    }
   }
 
   /**

@@ -10,10 +10,12 @@
  */
 
 import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { MinimalContext } from "./base-context";
+import type { BaseContextData, MinimalContext } from "./base-context";
 
-export interface EventContext<TContext = unknown, TPayload = unknown>
-  extends MinimalContext<TContext> {
+export interface EventContext<
+  TContext extends BaseContextData = {},
+  TPayload = unknown,
+> extends MinimalContext<TContext> {
   /**
    * Parsed + validated message payload.
    */

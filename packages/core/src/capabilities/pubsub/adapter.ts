@@ -434,7 +434,9 @@ export function ensurePublishSuccess(
       details?: Record<string, unknown>;
     };
     err.retryable = result.retryable;
-    err.details = result.details;
+    if (result.details !== undefined) {
+      err.details = result.details;
+    }
     throw err;
   }
 }

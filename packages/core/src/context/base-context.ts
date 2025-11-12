@@ -17,7 +17,7 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
 
 export type BaseContextData = Record<string, unknown>;
 
-export interface MinimalContext<TContext extends BaseContextData = unknown> {
+export interface MinimalContext<TContext extends BaseContextData = {}> {
   /**
    * Stable client identifier (assigned at accept-time, unique per connection).
    * Used for pub/sub membership, middleware authorization, and logging.

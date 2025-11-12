@@ -169,14 +169,26 @@ export async function dispatchMessage<TContext extends BaseContextData>(
   // 6) Build minimal context
   let ctx: MinimalContext<TContext> | null = null;
   try {
-    ctx = impl.createContext({
+    const contextData: {
+      clientId: string;
+      ws: ServerWebSocket;
+      type: string;
+      payload?: unknown;
+      meta?: Record<string, unknown>;
+      receivedAt: number;
+    } = {
       clientId,
       ws,
       type: schema.type,
-      payload: envelope.payload,
-      meta: envelope.meta,
       receivedAt: now,
-    });
+    };
+    if (envelope.payload !== undefined) {
+      contextData.payload = envelope.payload;
+    }
+    if (envelope.meta !== undefined) {
+      contextData.meta = envelope.meta;
+    }
+    ctx = impl.createContext(contextData);
   } catch (err) {
     const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);

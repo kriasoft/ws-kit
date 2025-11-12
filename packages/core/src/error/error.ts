@@ -16,11 +16,7 @@ export class WsKitError<E extends ErrorCode = ErrorCode> extends Error {
   readonly details?: Record<string, unknown>;
   readonly retryable: boolean;
 
-  constructor(
-    code: E,
-    message: string,
-    details?: Record<string, unknown>,
-  ) {
+  constructor(code: E, message: string, details?: Record<string, unknown>) {
     super(message);
     this.code = code;
     this.details = details;
@@ -49,9 +45,10 @@ export class WsKitError<E extends ErrorCode = ErrorCode> extends Error {
   /**
    * Clone with new code (never mutate).
    */
-  with<E2 extends ErrorCode>(
-    opts: { code?: E2; details?: Record<string, unknown> },
-  ): WsKitError<E2 | E> {
+  with<E2 extends ErrorCode>(opts: {
+    code?: E2;
+    details?: Record<string, unknown>;
+  }): WsKitError<E2 | E> {
     return new WsKitError(
       opts.code ?? this.code,
       this.message,
@@ -60,11 +57,14 @@ export class WsKitError<E extends ErrorCode = ErrorCode> extends Error {
   }
 
   toJSON(): WsKitErrorData {
-    return {
+    const result: WsKitErrorData = {
       code: this.code,
       message: this.message,
-      details: this.details,
       retryable: this.retryable,
     };
+    if (this.details !== undefined) {
+      result.details = this.details;
+    }
+    return result;
   }
 }

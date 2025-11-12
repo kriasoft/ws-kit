@@ -6,6 +6,7 @@
  */
 
 import type { Router } from "../core/router";
+import type { BaseContextData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
 
@@ -119,7 +120,8 @@ export interface TestCapture<TContext = unknown> {
  * Test router: wraps a real router with testing utilities.
  * Includes clock control, connection management, and capture helpers.
  */
-export interface TestRouter<TContext = unknown> extends Router<TContext, any> {
+export interface TestRouter<TContext extends BaseContextData = {}>
+  extends Router<TContext, any> {
   /**
    * Establish a connection and wait for all `onConnect` hooks to settle.
    * Always await this method before sending messages.

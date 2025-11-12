@@ -696,10 +696,14 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
 
     // Notify observers
     if (clientId) {
-      this.notifyObservers("onConnectionClose", clientId, {
-        code,
-        reason,
-      });
+      const closeInfo: { code?: number; reason?: string } = {};
+      if (code !== undefined) {
+        closeInfo.code = code;
+      }
+      if (reason !== undefined) {
+        closeInfo.reason = reason;
+      }
+      this.notifyObservers("onConnectionClose", clientId, closeInfo);
     }
   }
 }

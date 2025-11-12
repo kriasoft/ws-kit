@@ -72,7 +72,7 @@ export interface CreateTestRouterOptions<TContext> {
  * expect(conn.outgoing()).toContainEqual({ type: "PONG", ... });
  * ```
  */
-export function createTestRouter<TContext extends BaseContextData = unknown>(
+export function createTestRouter<TContext extends BaseContextData = {}>(
   opts?: CreateTestRouterOptions<TContext>,
 ): TestRouter<TContext> {
   // Create the router
@@ -92,19 +92,29 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
   }
 
   // Wrap with test infrastructure
-  return wrapTestRouter(configuredRouter, {
-    clock: opts?.clock,
+  const testOpts: {
+    clock?: Clock;
+    onErrorCapture?: boolean;
+    capturePubSub?: boolean;
+    strict?: boolean;
+  } = {
     onErrorCapture: opts?.onErrorCapture !== false,
     capturePubSub: opts?.capturePubSub !== false,
-    strict: opts?.strict,
-  });
+  };
+  if (opts?.clock !== undefined) {
+    testOpts.clock = opts.clock;
+  }
+  if (opts?.strict !== undefined) {
+    testOpts.strict = opts.strict;
+  }
+  return wrapTestRouter(configuredRouter, testOpts);
 }
 
 /**
  * Wrap an existing router with test infrastructure.
  * Useful for testing production routers in black-box mode.
  */
-export function wrapTestRouter<TContext extends BaseContextData = unknown>(
+export function wrapTestRouter<TContext extends BaseContextData = {}>(
   router: Router<TContext>,
   opts?: {
     clock?: Clock;
