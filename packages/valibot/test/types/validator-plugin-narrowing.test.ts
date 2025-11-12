@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Type-level tests: Valibot validator plugin narrowing and capability gating
  *
@@ -13,9 +16,9 @@
  * Run with: `bun tsc --noEmit` or `bun test`
  */
 
-import { describe, it, expectTypeOf } from "bun:test";
-import type { Router, MessageDescriptor } from "@ws-kit/core";
-import { v, message, withValibot, createRouter } from "../../src/index";
+import type { MessageDescriptor, Router } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
+import { createRouter, message, v, withValibot } from "../../src/index";
 
 describe("validator plugin narrowing - Valibot (types)", () => {
   // Test 1: Router without plugin has NO rpc() method
@@ -71,7 +74,9 @@ describe("validator plugin narrowing - Valibot (types)", () => {
     expectTypeOf(LoginMessage).toHaveProperty("__valibot_payload");
 
     // Can extract payload type
-    type PayloadType = typeof LoginMessage extends { __valibot_payload: infer P }
+    type PayloadType = typeof LoginMessage extends {
+      __valibot_payload: infer P;
+    }
       ? P
       : never;
 
@@ -117,8 +122,15 @@ describe("validator plugin narrowing - Valibot (types)", () => {
     // Mock pubsub plugin for testing capability merging
     const withMockPubSub = (r: Router<any>) => {
       const enhanced = Object.assign(r, {
-        publish: async (topic: string, schema: MessageDescriptor, payload: unknown) => {},
-        subscriptions: { list: () => [] as string[], has: (t: string) => false },
+        publish: async (
+          topic: string,
+          schema: MessageDescriptor,
+          payload: unknown,
+        ) => {},
+        subscriptions: {
+          list: () => [] as string[],
+          has: (t: string) => false,
+        },
       }) as Router<any, { pubsub: true }>;
       (enhanced as any).__caps = { pubsub: true };
       return enhanced;
@@ -163,7 +175,7 @@ describe("validator plugin narrowing - Valibot (types)", () => {
       },
     });
 
-    // All return same Router<TConn, { validation: true }> type
+    // All return same Router<TContext, { validation: true }> type
     const r1 = createRouter().plugin(withoutValidation);
     const r2 = createRouter().plugin(withValidation);
     const r3 = createRouter().plugin(withHook);
@@ -197,9 +209,7 @@ describe("validator plugin narrowing - Valibot (types)", () => {
     // Apply same plugin twice - should be idempotent
     const plugin = withValibot();
 
-    const router = createRouter()
-      .plugin(plugin)
-      .plugin(plugin); // Second application is safe
+    const router = createRouter().plugin(plugin).plugin(plugin); // Second application is safe
 
     // Should still have rpc (not duplicated or broken)
     expectTypeOf(router).toHaveProperty("rpc");

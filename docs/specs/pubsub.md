@@ -505,7 +505,7 @@ Apps configure pub/sub in **exactly one place**: `usePubSub()` middleware. Route
 For applications that need custom authorization or topic normalization, use the `usePubSub()` middleware:
 
 ```typescript
-interface PubSubPolicyHooks<TConn = unknown> {
+interface PubSubPolicyHooks<TContext = unknown> {
   /**
    * Normalize a topic string (e.g., lowercasing, trimming, namespace checks).
    * Runs before validation. Apps should normalize consistently with their
@@ -514,7 +514,7 @@ interface PubSubPolicyHooks<TConn = unknown> {
    */
   normalizeTopic?: (
     topic: string,
-    ctx: { clientId: string; data: TConn },
+    ctx: { clientId: string; data: TContext },
   ) => string;
 
   /**
@@ -526,20 +526,20 @@ interface PubSubPolicyHooks<TConn = unknown> {
   authorize?: (
     action: "subscribe" | "unsubscribe" | "publish",
     topic: string,
-    ctx: { clientId: string; data: TConn },
+    ctx: { clientId: string; data: TContext },
   ) => Promise<void> | void;
 }
 
-interface UsePubSubOptions<TConn = unknown> {
+interface UsePubSubOptions<TContext = unknown> {
   /**
    * Policy hooks for normalization and authorization.
    */
-  hooks?: PubSubPolicyHooks<TConn>;
+  hooks?: PubSubPolicyHooks<TContext>;
 }
 
-export function usePubSub<TConn = unknown>(
-  options?: UsePubSubOptions<TConn>,
-): Middleware<TConn>;
+export function usePubSub<TContext = unknown>(
+  options?: UsePubSubOptions<TContext>,
+): Middleware<TContext>;
 ```
 
 **Example: Custom Authorization**

@@ -11,11 +11,11 @@ import type { PubSubPolicyHooks, Topics } from "./types";
 /**
  * Options for usePubSub middleware.
  */
-export interface UsePubSubOptions<TConn = unknown> {
+export interface UsePubSubOptions<TContext = unknown> {
   /**
    * Policy hooks for normalization and authorization.
    */
-  hooks?: PubSubPolicyHooks<TConn>;
+  hooks?: PubSubPolicyHooks<TContext>;
 }
 
 /**
@@ -40,9 +40,9 @@ export interface UsePubSubOptions<TConn = unknown> {
  *   }));
  * ```
  */
-export function usePubSub<TConn = unknown>(
-  options?: UsePubSubOptions<TConn>,
-): Middleware<TConn> {
+export function usePubSub<TContext = unknown>(
+  options?: UsePubSubOptions<TContext>,
+): Middleware<TContext> {
   const { hooks } = options ?? {};
 
   return async (ctx, next) => {
@@ -56,7 +56,7 @@ export function usePubSub<TConn = unknown>(
         topics,
         hooks,
         clientId,
-        ctx.data as TConn,
+        ctx.data as TContext,
       );
       contextWithPubSub.topics = wrappedTopics;
     }
@@ -73,13 +73,13 @@ export function usePubSub<TConn = unknown>(
         if (hooks?.normalizeTopic) {
           topic = hooks.normalizeTopic(topic, {
             clientId,
-            data: ctx.data as TConn,
+            data: ctx.data as TContext,
           });
         }
         if (hooks?.authorize) {
           await hooks.authorize("publish", topic, {
             clientId,
-            data: ctx.data as TConn,
+            data: ctx.data as TContext,
           });
         }
         return originalPublish(topic, schema, payload, opts);
@@ -93,11 +93,11 @@ export function usePubSub<TConn = unknown>(
 /**
  * Wrap Topics methods with policy enforcement.
  */
-function wrapTopicsWithPolicies<TConn>(
+function wrapTopicsWithPolicies<TContext>(
   topics: Topics,
-  hooks: PubSubPolicyHooks<TConn> | undefined,
+  hooks: PubSubPolicyHooks<TContext> | undefined,
   clientId: string,
-  data: TConn,
+  data: TContext,
 ): Topics {
   const wrapped = {
     ...topics,
@@ -194,11 +194,11 @@ function wrapTopicsWithPolicies<TConn>(
 /**
  * Apply topic normalization if configured.
  */
-function normalizeTopic<TConn>(
+function normalizeTopic<TContext>(
   topic: string,
-  hooks: PubSubPolicyHooks<TConn> | undefined,
+  hooks: PubSubPolicyHooks<TContext> | undefined,
   clientId: string,
-  data: TConn,
+  data: TContext,
 ): string {
   if (!hooks?.normalizeTopic) {
     return topic;
@@ -212,12 +212,12 @@ function normalizeTopic<TConn>(
 /**
  * Check authorization if configured.
  */
-async function authorizeOperation<TConn>(
+async function authorizeOperation<TContext>(
   action: "subscribe" | "unsubscribe" | "publish",
   topic: string,
-  hooks: PubSubPolicyHooks<TConn> | undefined,
+  hooks: PubSubPolicyHooks<TContext> | undefined,
   clientId: string,
-  data: TConn,
+  data: TContext,
 ): Promise<void> {
   if (!hooks?.authorize) {
     return;

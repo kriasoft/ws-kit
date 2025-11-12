@@ -214,10 +214,10 @@ export function memoryPubSub(): PubSubAdapter {
 ### Router Plugin (packages/pubsub/src/plugin.ts)
 
 ```typescript
-export function withPubSub<TConn>(
+export function withPubSub<TContext>(
   adapter: PubSubAdapter,
-): Plugin<TConn, { pubsub: true }> {
-  return (router: Router<TConn, any>) => {
+): Plugin<TContext, { pubsub: true }> {
+  return (router: Router<TContext, any>) => {
     // ... publish() and subscriptions helpers ...
 
     // Initialize distributed ingress if adapter provides it

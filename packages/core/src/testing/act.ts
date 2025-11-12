@@ -24,8 +24,8 @@ export const act = {
    * Emit an event message (kind === "event").
    * Throws if schema kind is not "event".
    */
-  emit<TConn = unknown>(
-    conn: TestConnection<TConn>,
+  emit<TContext = unknown>(
+    conn: TestConnection<TContext>,
     schema: MessageDescriptor & { kind?: "event" },
     payload?: unknown,
     meta?: Record<string, unknown>,
@@ -56,8 +56,8 @@ export const act = {
    * console.log("User:", user);
    * ```
    */
-  call<TConn = unknown, TResponse = unknown>(
-    conn: TestConnection<TConn>,
+  call<TContext = unknown, TResponse = unknown>(
+    conn: TestConnection<TContext>,
     schema: MessageDescriptor & { kind?: "rpc"; response?: MessageDescriptor },
     payload?: unknown,
     meta?: Record<string, unknown>,

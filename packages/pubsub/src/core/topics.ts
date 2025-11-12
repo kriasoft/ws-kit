@@ -166,7 +166,7 @@ export function isSubscribed(
 /**
  * Create a Topics instance for managing a connection's subscriptions.
  *
- * @template TConn - Connection data type
+ * @template TContext - Connection data type
  * @param ws - Platform adapter WebSocket instance for this connection
  * @param options - Optional configuration
  * @param options.maxTopicsPerConnection - Maximum number of topics per connection (default: Infinity)
@@ -183,9 +183,9 @@ export function isSubscribed(
  * ```
  */
 export function createTopics<
-  TConn extends { clientId: string } = { clientId: string },
+  TContext extends { clientId: string } = { clientId: string },
 >(
-  ws: ServerWebSocket<TConn>,
+  ws: ServerWebSocket<TContext>,
   options?: {
     maxTopicsPerConnection?: number;
     validator?: TopicValidator;
@@ -226,14 +226,14 @@ export function createTopics<
  * **Error semantics**: Throws PubSubError on validation, authorization, or adapter failure.
  * No rollback: if adapter call fails, local state remains unchanged.
  *
- * @template TConn - Connection data type
+ * @template TContext - Connection data type
  */
 export class OptimisticTopics<
-  TConn extends { clientId: string } = { clientId: string },
+  TContext extends { clientId: string } = { clientId: string },
 > implements Topics
 {
   private readonly subscriptions = new Set<string>();
-  private readonly ws: ServerWebSocket<TConn>;
+  private readonly ws: ServerWebSocket<TContext>;
   private readonly maxTopicsPerConnection: number;
   private readonly customValidator: TopicValidator | undefined;
   private readonly inflight = new Map<string, Promise<void>>();
@@ -253,7 +253,7 @@ export class OptimisticTopics<
    * for context-aware authorization, normalization, and lifecycle tracking.
    */
   constructor(
-    ws: ServerWebSocket<TConn>,
+    ws: ServerWebSocket<TContext>,
     maxTopicsPerConnection = Infinity,
     customValidator?: TopicValidator,
   ) {
