@@ -271,17 +271,6 @@ if (GetUser.response.safeParse(response).success) {
 }
 ```
 
-## Why Valibot?
-
-Choose Valibot if you prioritize **bundle size and performance**:
-
-| Aspect      | Valibot              | Zod                        |
-| ----------- | -------------------- | -------------------------- |
-| Bundle Size | ~1-2 kB              | ~5-6 kB                    |
-| Performance | ~2x faster           | Baseline                   |
-| API Style   | Functional pipelines | Method chaining            |
-| Best for    | Client-side, mobile  | Server-side, familiar APIs |
-
 ## Platform Support
 
 This adapter works with any ws-kit platform:

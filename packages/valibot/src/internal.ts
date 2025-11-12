@@ -8,17 +8,21 @@
  */
 
 import type { GenericSchema } from "valibot";
+import { getValibotPayload as getValibotPayloadFromMetadata } from "./metadata.js";
 
 /**
  * Helper to extract Valibot payload schema from a message schema.
+ * Re-exports from metadata.ts for backward compatibility.
  * @internal
  */
 export function getValibotPayload(schema: any): GenericSchema | undefined {
-  return schema.__valibot_payload;
+  return getValibotPayloadFromMetadata(schema);
 }
 
 /**
  * Helper to validate payload against Valibot schema.
+ * Always uses safeParse for consistent error handling.
+ * Coercion is controlled by schema design, not runtime flags.
  * Returns { success: true, data } or { success: false, error }.
  * @internal
  */
@@ -31,12 +35,12 @@ export function validatePayload(
     return { success: true };
   }
 
-  try {
-    // Dynamic import to avoid circular dependency on valibot
-    // In a real implementation, valibot would be passed as a parameter
-    const parsed = (payloadSchema as any).parse?.(payload);
-    return { success: true, data: parsed };
-  } catch (error) {
-    return { success: false, error };
+  // Use safeParse for consistent error handling
+  const result = (payloadSchema as any).safeParse?.(payload);
+
+  if (result?.success) {
+    return { success: true, data: result.data };
   }
+
+  return { success: false, error: result?.error };
 }

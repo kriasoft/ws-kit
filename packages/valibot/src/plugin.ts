@@ -19,6 +19,7 @@ import type {
   CoreRouter,
 } from "@ws-kit/core";
 import { getValibotPayload, validatePayload } from "./internal.js";
+import { getSchemaOpts, typeOf, type SchemaOpts } from "./metadata.js";
 import type { AnySchema } from "./types.js";
 
 interface WsContext {
@@ -29,9 +30,10 @@ interface WsContext {
 
 export interface WithValibotOptions {
   /**
-   * Whether to validate outgoing payloads (send, reply, publish).
+   * Validate outgoing payloads (send, reply, publish).
    * Default: true
    * Set to false for ultra-hot paths where performance is critical.
+   * Per-schema override: message({..., options: { validateOutgoing: false }})
    */
   validateOutgoing?: boolean;
 
@@ -47,6 +49,14 @@ export interface WithValibotOptions {
       payload: unknown;
     },
   ) => void | Promise<void>;
+}
+
+/**
+ * Resolved effective options combining plugin defaults and per-schema overrides.
+ * @internal
+ */
+interface ResolvedOptions {
+  validateOutgoing: boolean;
 }
 
 export interface ReplyOptions {
@@ -68,9 +78,9 @@ export interface ReplyOptions {
  * Adds validation capability and RPC support to the router.
  *
  * Inserts a validation middleware that:
- * 1. Parses and validates inbound payload from schema
+ * 1. Validates inbound payload from schema (always using safeParse)
  * 2. Enriches context with payload and methods (send, reply, progress)
- * 3. Optionally validates outbound payloads
+ * 3. Optionally validates outgoing payloads
  * 4. Routes validation errors to router.onError() or custom onValidationError hook
  *
  * @example
@@ -96,10 +106,24 @@ export interface ReplyOptions {
  *   });
  * ```
  */
+/**
+ * Helper to resolve effective options, preferring per-schema over plugin defaults.
+ * @internal
+ */
+function resolveOptions(
+  schemaOpts: SchemaOpts | undefined,
+  pluginOpts: Required<Omit<WithValibotOptions, "onValidationError">>,
+): ResolvedOptions {
+  return {
+    validateOutgoing:
+      schemaOpts?.validateOutgoing ?? pluginOpts.validateOutgoing ?? true,
+  };
+}
+
 export function withValibot(
   options?: WithValibotOptions,
 ): Plugin<any, { validation: true }> {
-  const opts: Required<WithValibotOptions> = {
+  const pluginOpts = {
     validateOutgoing: options?.validateOutgoing ?? true,
     onValidationError: options?.onValidationError,
   };
@@ -130,6 +154,8 @@ export function withValibot(
           };
 
           // Validate against root schema (enforces strict type, meta, payload)
+          // Always use safeParse for consistent error handling.
+          // Coercion is controlled by schema design, not runtime flags.
           const result = schema.safeParse(inboundMessage);
           if (!result.success) {
             // Create validation error and route to error sink
@@ -140,8 +166,8 @@ export function withValibot(
             (validationError as any).details = result.error;
 
             // Call custom hook if provided, otherwise route to error handler
-            if (opts.onValidationError) {
-              await opts.onValidationError(validationError, {
+            if (pluginOpts.onValidationError) {
+              await pluginOpts.onValidationError(validationError, {
                 type: ctx.type,
                 direction: "inbound",
                 payload: ctx.payload,
@@ -214,7 +240,12 @@ export function withValibot(
         schema: AnySchema | MessageDescriptor,
         payload: any,
       ): Promise<any> => {
-        if (!opts.validateOutgoing) {
+        // Get per-schema options and resolve effective options for this schema
+        const schemaOpts =
+          typeof schema === "object" ? getSchemaOpts(schema) : undefined;
+        const eff = resolveOptions(schemaOpts, pluginOpts);
+
+        if (!eff.validateOutgoing) {
           return payload;
         }
 
@@ -224,7 +255,7 @@ export function withValibot(
         if (typeof schemaObj?.safeParse === "function") {
           // Construct outbound message
           const outboundMessage = {
-            type: schemaObj.__descriptor?.type || (schema as any).type,
+            type: typeOf(schemaObj, schema),
             meta: {},
             ...(payload !== undefined ? { payload } : {}),
           };
@@ -237,8 +268,8 @@ export function withValibot(
             (validationError as any).code = "OUTBOUND_VALIDATION_ERROR";
             (validationError as any).details = result.error;
 
-            if (opts.onValidationError) {
-              await opts.onValidationError(validationError, {
+            if (pluginOpts.onValidationError) {
+              await pluginOpts.onValidationError(validationError, {
                 type: schema.type,
                 direction: "outbound",
                 payload,
@@ -267,8 +298,8 @@ export function withValibot(
           (validationError as any).code = "OUTBOUND_VALIDATION_ERROR";
           (validationError as any).details = result.error;
 
-          if (opts.onValidationError) {
-            await opts.onValidationError(validationError, {
+          if (pluginOpts.onValidationError) {
+            await pluginOpts.onValidationError(validationError, {
               type: schema.type,
               direction: "outbound",
               payload,
@@ -330,9 +361,11 @@ export function withValibot(
         responseSchema: AnySchema,
         progressPayload: any,
       ): Promise<any> => {
-        const shouldValidate = opts.validateOutgoing;
+        // Get per-schema options and resolve effective options
+        const schemaOpts = getSchemaOpts(responseSchema);
+        const eff = resolveOptions(schemaOpts, pluginOpts);
 
-        if (!shouldValidate) {
+        if (!eff.validateOutgoing) {
           return progressPayload;
         }
 
@@ -342,10 +375,7 @@ export function withValibot(
         if (typeof schemaObj?.safeParse === "function") {
           // Construct a temporary message to validate the payload shape
           const tempMessage = {
-            type:
-              schemaObj.responseType ||
-              schemaObj.__descriptor?.type ||
-              schemaObj.type,
+            type: schemaObj.responseType || typeOf(schemaObj),
             meta: {},
             ...(progressPayload !== undefined
               ? { payload: progressPayload }
@@ -360,8 +390,8 @@ export function withValibot(
             (validationError as any).code = "PROGRESS_VALIDATION_ERROR";
             (validationError as any).details = result.error;
 
-            if (opts.onValidationError) {
-              await opts.onValidationError(validationError, {
+            if (pluginOpts.onValidationError) {
+              await pluginOpts.onValidationError(validationError, {
                 type: "$ws:rpc-progress",
                 direction: "outbound",
                 payload: progressPayload,
@@ -387,15 +417,14 @@ export function withValibot(
         const wskit = guardRpc();
         const responseSchema = wskit.response as any;
 
-        // Determine if validation is enabled for this call
-        const shouldValidate = replyOpts?.validate ?? opts.validateOutgoing;
+        // Get per-schema options and determine if validation is enabled
+        const schemaOpts = getSchemaOpts(responseSchema);
+        const eff = resolveOptions(schemaOpts, pluginOpts);
+        const shouldValidate = replyOpts?.validate ?? eff.validateOutgoing;
 
         // Construct response message with sanitized meta
         const responseMessage = {
-          type:
-            responseSchema.responseType ||
-            responseSchema.__descriptor?.type ||
-            responseSchema.type,
+          type: responseSchema.responseType || typeOf(responseSchema),
           meta: {
             ...baseMeta(ctx),
             ...sanitizeMeta(replyOpts?.meta),
@@ -413,8 +442,8 @@ export function withValibot(
             (validationError as any).code = "REPLY_VALIDATION_ERROR";
             (validationError as any).details = result.error;
 
-            if (opts.onValidationError) {
-              await opts.onValidationError(validationError, {
+            if (pluginOpts.onValidationError) {
+              await pluginOpts.onValidationError(validationError, {
                 type: responseMessage.type,
                 direction: "outbound",
                 payload,
