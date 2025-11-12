@@ -11,9 +11,9 @@ npm install @ws-kit/pubsub
 ## Quick Start
 
 ```typescript
-import { createRouter } from "@ws-kit/core";
-import { withPubSub, createMemoryAdapter, usePubSub } from "@ws-kit/pubsub";
-import { message } from "@ws-kit/zod";
+import { createRouter, message } from "@ws-kit/zod";
+import { withPubSub, usePubSub } from "@ws-kit/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 import { z } from "zod";
 
 type AppData = { userId: string };
@@ -21,7 +21,7 @@ type AppData = { userId: string };
 const Notify = message("NOTIFY", { text: z.string() });
 
 const router = createRouter<AppData>()
-  .plugin(withPubSub(createMemoryAdapter()))
+  .plugin(withPubSub(memoryPubSub()))
   .use(
     usePubSub({
       hooks: {
@@ -52,7 +52,7 @@ src/
 │  ├─ error.ts             # PubSubError, AbortError, error codes
 │  └─ constants.ts         # DEFAULT_TOPIC_PATTERN, DEFAULT_TOPIC_MAX_LENGTH
 ├─ adapters/
-│  └─ memory.ts            # createMemoryAdapter() implementation
+│  └─ memory.ts            # In-memory adapter implementation (use via @ws-kit/memory)
 ├─ index.ts                # Public exports (plugin, adapters, middleware, types)
 ├─ plugin.ts               # withPubSub() plugin factory
 ├─ middleware.ts           # usePubSub() policy enforcement middleware
@@ -74,9 +74,10 @@ src/
 Adds pub/sub capability to the router.
 
 ```typescript
-import { withPubSub, createMemoryAdapter } from "@ws-kit/pubsub";
+import { withPubSub } from "@ws-kit/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 
-const router = createRouter().plugin(withPubSub(createMemoryAdapter()));
+const router = createRouter().plugin(withPubSub(memoryPubSub()));
 ```
 
 Provides:
@@ -109,9 +110,17 @@ Optional middleware for topic normalization and authorization.
 
 Supported actions: `"subscribe"`, `"unsubscribe"`, `"publish"`
 
-#### Adapter: `createMemoryAdapter()`
+#### Adapter: In-Memory (via `@ws-kit/memory`)
 
 In-memory implementation using `Map<topic, Set<clientId>>`.
+
+Use the canonical `memoryPubSub()` from `@ws-kit/memory`:
+
+```typescript
+import { memoryPubSub } from "@ws-kit/memory";
+
+const adapter = memoryPubSub();
+```
 
 Implements `PubSubAdapter` interface:
 

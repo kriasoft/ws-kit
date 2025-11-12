@@ -15,12 +15,15 @@ import type { PubSubAdapter } from "@ws-kit/core";
  * Applications responsible for delivering messages to subscribers
  * (this adapter only manages subscription state).
  *
+ * **Note**: The canonical way to use this is via `memoryPubSub()` from `@ws-kit/memory`.
+ *
  * Usage:
  * ```ts
- * import { withPubSub, createMemoryAdapter } from "@ws-kit/pubsub";
+ * import { withPubSub } from "@ws-kit/pubsub";
+ * import { memoryPubSub } from "@ws-kit/memory";
  *
  * const router = createRouter()
- *   .plugin(withPubSub(createMemoryAdapter()));
+ *   .plugin(withPubSub(memoryPubSub()));
  * ```
  */
 export function createMemoryAdapter(): PubSubAdapter {

@@ -545,8 +545,10 @@ export function usePubSub<TConn = unknown>(
 **Example: Custom Authorization**
 
 ```typescript
+import { memoryPubSub } from "@ws-kit/memory";
+
 const router = createRouter<AppData>()
-  .plugin(withPubSub(createMemoryAdapter()))
+  .plugin(withPubSub(memoryPubSub()))
   .use(
     usePubSub({
       hooks: {

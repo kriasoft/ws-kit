@@ -10,20 +10,20 @@
  * Reference: docs/specs/test-requirements.md
  */
 
-import { describe, it, expectTypeOf } from "bun:test";
 import type {
-  ServerWebSocket,
-  WebSocketData,
+  ErrorCode,
   MessageContext,
-  ValidatorAdapter,
   PlatformAdapter,
   PubSub,
   RouterHooks,
+  ServerWebSocket,
+  ValidatorAdapter,
+  WebSocketData,
   WebSocketRouterOptions,
 } from "@ws-kit/core";
 import { WsKitError } from "@ws-kit/core";
-import type { ErrorCode } from "@ws-kit/core";
-import { MemoryPubSub } from "@ws-kit/pubsub/internal";
+import { memoryPubSub } from "@ws-kit/memory";
+import { describe, expectTypeOf, it } from "bun:test";
 
 // ============================================================================
 // ServerWebSocket Interface Tests
@@ -188,26 +188,26 @@ describe("PubSub", () => {
 
 describe("MemoryPubSub", () => {
   it("should implement PubSub interface", () => {
-    const pubsub = new MemoryPubSub();
+    const pubsub = memoryPubSub();
 
     expectTypeOf<typeof pubsub>().toMatchTypeOf<PubSub>();
   });
 
   it("should have publish method that returns Promise<void>", () => {
-    const pubsub = new MemoryPubSub();
+    const pubsub = memoryPubSub();
     const result = pubsub.publish("test", {});
 
     expectTypeOf(result).resolves.toBeVoid();
   });
 
   it("should have subscribe method with handler", () => {
-    const pubsub = new MemoryPubSub();
+    const pubsub = memoryPubSub();
 
     expectTypeOf<typeof pubsub.subscribe>().toBeFunction();
   });
 
   it("should have additional methods for testing", () => {
-    const pubsub = new MemoryPubSub();
+    const pubsub = memoryPubSub();
 
     expectTypeOf<typeof pubsub>().toHaveProperty("clear");
     expectTypeOf<typeof pubsub>().toHaveProperty("subscriberCount");

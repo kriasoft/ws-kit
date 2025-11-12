@@ -10,11 +10,12 @@
  * ## Quick Start
  *
  * ```ts
- * import { createRouter } from "@ws-kit/core";
- * import { withPubSub, createMemoryAdapter, usePubSub } from "@ws-kit/pubsub";
+ * import { createRouter } from "@ws-kit/zod";
+ * import { withPubSub, usePubSub } from "@ws-kit/pubsub";
+ * import { memoryPubSub } from "@ws-kit/memory";
  *
  * const router = createRouter()
- *   .plugin(withPubSub(createMemoryAdapter()))
+ *   .plugin(withPubSub(memoryPubSub()))
  *   .use(usePubSub({
  *     hooks: {
  *       normalizeTopic: (topic) => topic.toLowerCase(),
@@ -45,14 +46,14 @@ export { usePubSub, type UsePubSubOptions } from "./middleware";
 
 // Types
 export type {
-  PubSubAdapter,
-  PublishEnvelope,
-  PublishResult,
   MinimalContext,
-  Topics,
-  TopicMutateOptions,
+  PublishEnvelope,
   PublishOptions,
+  PublishResult,
+  PubSubAdapter,
   PubSubPolicyHooks,
+  TopicMutateOptions,
+  Topics,
   VerifyResult,
 } from "./types";
 

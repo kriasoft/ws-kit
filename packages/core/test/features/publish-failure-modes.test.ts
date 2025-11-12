@@ -1,14 +1,17 @@
-import { describe, it, expect } from "bun:test";
-import { z, message, createRouter } from "@ws-kit/zod";
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
+import { memoryPubSub } from "@ws-kit/memory";
 import { withPubSub } from "@ws-kit/pubsub";
-import { MemoryPubSub } from "@ws-kit/pubsub/internal";
+import { createRouter, message, z } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 
 const TestMessage = message("TEST", { text: z.string() });
 
 describe("publish() failure modes", () => {
   describe("never rejects", () => {
     it("publish() never rejects for any failure reason", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       // Invalid payload (validation failure)
       const r1 = await router.publish("topic", TestMessage, { text: 123 });
@@ -33,7 +36,7 @@ describe("publish() failure modes", () => {
 
   describe("validation failure", () => {
     it('returns { ok: false, error: "VALIDATION" } for invalid payload', async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       // @ts-expect-error - intentional invalid payload
       const result = await router.publish("topic", TestMessage, { text: 123 });
@@ -49,7 +52,7 @@ describe("publish() failure modes", () => {
 
   describe("unsupported feature", () => {
     it('returns { ok: false, error: "UNSUPPORTED" } for excludeSelf:true', async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish(
         "topic",
@@ -70,7 +73,7 @@ describe("publish() failure modes", () => {
 
   describe("success cases", () => {
     it("returns { ok: true } with capability and matched count", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish("topic", TestMessage, {
         text: "hello",
@@ -85,7 +88,7 @@ describe("publish() failure modes", () => {
 
   describe("result exhaustiveness", () => {
     it("covers all PublishError values with never type", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish("topic", TestMessage, {
         text: "test",
@@ -117,7 +120,7 @@ describe("publish() failure modes", () => {
 
   describe("error field and retryable", () => {
     it("provides both 'error' code and 'retryable' flag for failures", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish("topic", TestMessage, {
         text: 123 as any,
@@ -134,7 +137,7 @@ describe("publish() failure modes", () => {
 
   describe("capability semantics", () => {
     it("always includes matched in success result", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish("topic", TestMessage, {
         text: "test",
@@ -147,7 +150,7 @@ describe("publish() failure modes", () => {
     });
 
     it("MemoryPubSub provides exact capability", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish("topic", TestMessage, {
         text: "test",
@@ -162,7 +165,7 @@ describe("publish() failure modes", () => {
 
   describe("error code semantics", () => {
     it("maps UNSUPPORTED error for excludeSelf:true", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish(
         "topic",
@@ -180,7 +183,7 @@ describe("publish() failure modes", () => {
 
   describe("optional adapter and details fields", () => {
     it("may include adapter name and details context in failure response", async () => {
-      const router = createRouter().plugin(withPubSub(new MemoryPubSub()));
+      const router = createRouter().plugin(withPubSub(memoryPubSub()));
 
       const result = await router.publish("topic", TestMessage, {
         text: "test",

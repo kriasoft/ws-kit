@@ -29,7 +29,9 @@ export interface PublishedFrame {
  *
  * @example
  * ```ts
- * const adapter = createMemoryAdapter();
+ * import { memoryPubSub } from "@ws-kit/memory";
+ *
+ * const adapter = memoryPubSub();
  * const testAdapter = new TestPubSub(adapter);
  *
  * await testAdapter.publish({ topic: "chat", schema: ChatMessage, payload: { text: "hello" } });
