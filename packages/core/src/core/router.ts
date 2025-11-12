@@ -39,35 +39,61 @@ export interface BaseRouter<TContext> {
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
   route(schema: MessageDescriptor): RouteBuilder<TContext>;
   merge(
-    other: Router<any>,
+    other: Router<unknown>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
   mount(
     prefix: string,
-    other: Router<any>,
+    other: Router<unknown>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
   plugin<P extends Plugin<TContext>>(plugin: P): ReturnType<P>;
   onError(
     fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
   ): this;
+
+  /**
+   * Platform-agnostic WebSocket handler interface.
+   *
+   * Provides the contract for platform adapters (Bun, Cloudflare, Node.js, etc.)
+   * to delegate WebSocket lifecycle events to the router.
+   *
+   * @example
+   * ```typescript
+   * // In adapter handler
+   * const { fetch, websocket } = createBunHandler(router);
+   * // Internally calls: router.websocket.open(ws), router.websocket.message(ws, data), etc.
+   * ```
+   */
+  readonly websocket: {
+    open(ws: ServerWebSocket): Promise<void>;
+    message(ws: ServerWebSocket, data: string | ArrayBuffer): Promise<void>;
+    close(ws: ServerWebSocket, code?: number, reason?: string): Promise<void>;
+  };
 }
 
 /**
  * Router<TContext, Caps> = BaseRouter + capability-gated APIs
  * Caps is merged from plugins; unknown plugins don't widen the type.
  */
-export type Router<TContext = unknown, Caps = {}> = BaseRouter<TContext> &
-  (Caps extends { validation: true } ? ValidationAPI<TContext> : {}) &
-  (Caps extends { pubsub: true } ? PubSubAPI<TContext> : {});
+export type Router<
+  TContext = unknown,
+  Caps = Record<string, never>,
+> = BaseRouter<TContext> &
+  (Caps extends { validation: true }
+    ? ValidationAPI<TContext>
+    : Record<string, never>) &
+  (Caps extends { pubsub: true } ? PubSubAPI<TContext> : Record<string, never>);
 
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
  * Only addition: rpc() method (on() already exists in base).
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface ValidationAPI<TContext> {
   rpc(
     schema: MessageDescriptor & { response: MessageDescriptor },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handler: any, // RpcHandler<TContext> (inferred by validation plugin)
   ): this;
 }
@@ -75,6 +101,7 @@ export interface ValidationAPI<TContext> {
 /**
  * Pub/Sub API appears when withPubSub() is plugged.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface PubSubAPI<TContext> {
   publish(
     topic: string,
@@ -139,11 +166,53 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   private pluginHost: PluginHost<TContext>;
   private connData = new WeakMap<ServerWebSocket, TContext>();
   private wsToClientId = new WeakMap<ServerWebSocket, string>();
+  private _wsBridge:
+    | {
+        open(ws: ServerWebSocket): Promise<void>;
+        message(ws: ServerWebSocket, data: string | ArrayBuffer): Promise<void>;
+        close(
+          ws: ServerWebSocket,
+          code?: number,
+          reason?: string,
+        ): Promise<void>;
+      }
+    | undefined;
 
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
     // Initialize plugin host with self reference (cast to bypass recursive type)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);
+  }
+
+  /**
+   * Platform-agnostic WebSocket handler interface.
+   *
+   * Used by adapters (Bun, Cloudflare, Node.js) to delegate connection
+   * lifecycle events to the router. This decouples the router from
+   * specific platform APIs while providing a consistent contract.
+   *
+   * **Usage** (in adapter handlers):
+   * ```ts
+   * const handler = {
+   *   async open(ws) { await router.websocket.open(ws); },
+   *   async message(ws, data) { await router.websocket.message(ws, data); },
+   *   async close(ws, code, reason) { await router.websocket.close(ws, code, reason); }
+   * };
+   * ```
+   *
+   * Memoized for zero-overhead access (bridge created once per router instance).
+   *
+   * @internal
+   */
+  get websocket() {
+    return (this._wsBridge ??= {
+      open: (ws: ServerWebSocket) => this.handleOpen(ws),
+      message: (ws: ServerWebSocket, data: string | ArrayBuffer) =>
+        this.handleMessage(ws, data),
+      close: (ws: ServerWebSocket, code?: number, reason?: string) =>
+        this.handleClose(ws, code, reason),
+    });
   }
 
   use(mw: Middleware<TContext>): this {
@@ -174,7 +243,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   }
 
   merge(
-    other: Router<any>,
+    other: Router<unknown>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this {
     const otherRouteTable = this.getRouteTable(other);
@@ -184,7 +253,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
 
   mount(
     prefix: string,
-    other: Router<any>,
+    other: Router<unknown>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this {
     const otherRouteTable = this.getRouteTable(other);
@@ -217,7 +286,8 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    * Works across multiple bundle copies (monorepo, playgrounds, etc.).
    * @internal
    */
-  private extractRouteTable(other: Router<any>): RouteTable<TContext> {
+  private extractRouteTable(other: Router<unknown>): RouteTable<TContext> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extractor = (other as any)[INTERNAL_ROUTES];
     if (typeof extractor === "function") {
       return extractor.call(other);
@@ -232,7 +302,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    * Delegates to extractRouteTable() for symbol-based access.
    * @internal
    */
-  private getRouteTable(other: Router<any>): RouteTable<TContext> {
+  private getRouteTable(other: Router<unknown>): RouteTable<TContext> {
     return this.extractRouteTable(other);
   }
 
@@ -250,6 +320,14 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    */
   getInternalLifecycle(): LifecycleManager<TContext> {
     return this.lifecycle;
+  }
+
+  /**
+   * Get internal route registry (used by validation plugin to lookup schemas).
+   * @internal
+   */
+  getInternalRegistry(): RouteTable<TContext> {
+    return this.routes;
   }
 
   /**
