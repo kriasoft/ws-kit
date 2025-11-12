@@ -257,14 +257,16 @@ const router = createRouter<{ userId?: string }>({
 })
   .plugin(withZod())
   .plugin(withRedisPubSub({ url: process.env.REDIS_URL! }))
-  .plugin(withTelemetry({
-    onMessage(meta) {
-      console.log("message:", meta.type, meta.size);
-    },
-    onPublish(meta) {
-      console.log("published to:", meta.topic);
-    },
-  }));
+  .plugin(
+    withTelemetry({
+      onMessage(meta) {
+        console.log("message:", meta.type, meta.size);
+      },
+      onPublish(meta) {
+        console.log("published to:", meta.topic);
+      },
+    }),
+  );
 
 // Universal error sink (all errors flow here: validation, middleware, handler, pubsub)
 // withTelemetry subscribes to this internally for observability
@@ -340,13 +342,9 @@ if (process.env.REDIS_URL) {
 ## 5.3 Deterministic `merge()` with conflicts
 
 ```ts
-const auth = createRouter()
-  .plugin(withZod())
-  .on(Auth.Login, loginHandler);
+const auth = createRouter().plugin(withZod()).on(Auth.Login, loginHandler);
 
-const chat = createRouter()
-  .plugin(withZod())
-  .on(Join, joinHandler);
+const chat = createRouter().plugin(withZod()).on(Join, joinHandler);
 
 const app = createRouter()
   .plugin(withZod())
@@ -371,12 +369,13 @@ const chat = createRouter()
 
 const app = createRouter()
   .plugin(withZod())
-  .mount("auth.", auth)      // Login → "auth.LOGIN", Register → "auth.REGISTER"
-  .mount("chat.", chat)      // Join → "chat.JOIN", Send → "chat.SEND"
+  .mount("auth.", auth) // Login → "auth.LOGIN", Register → "auth.REGISTER"
+  .mount("chat.", chat) // Join → "chat.JOIN", Send → "chat.SEND"
   .mount("admin.", adminRouter, { onConflict: "error" });
 ```
 
 **Key difference from `merge()`:**
+
 - `merge()`: combines routers as-is; types must not collide (or explicit conflict resolution).
 - `mount()`: prefixes all types; always namespace-safe. Invaluable for organizing large feature areas.
 
@@ -449,6 +448,7 @@ static wrap<E extends string>(
 ```
 
 This ensures:
+
 - Error codes are never narrowed or mis-reported.
 - If an error is already a `WsKitError`, wrapping with a different code creates a new instance, not a mutation.
 
@@ -466,25 +466,28 @@ This ensures:
 `createTestRouter()` helper provides a minimal, ergonomic testing API:
 
 ```ts
-import { createTestRouter } from "@ws-kit/core/test";
+import { createTestRouter } from "@ws-kit/core/testing";
 
 const testRouter = createTestRouter(router);
 
 // Fake clock integration for heartbeats, timeouts, intervals
 testRouter.clock.advance(30_000); // Advance by 30s
-testRouter.clock.reset();         // Reset to t=0
+testRouter.clock.reset(); // Reset to t=0
 
 // Capture helpers for assertions
-testRouter.capture.sentEvents();     // All events sent via ctx.send()
+testRouter.capture.sentEvents(); // All events sent via ctx.send()
 testRouter.capture.publishedTopics(); // All published topics
-testRouter.capture.errors();         // All errors caught by onError
+testRouter.capture.errors(); // All errors caught by onError
 
 // Example: verify heartbeat timeout behavior
 testRouter.clock.advance(40_000); // Heartbeat sends, client doesn't respond
-assert(testRouter.capture.errors().some(err => err.code === "STALE_CONNECTION"));
+assert(
+  testRouter.capture.errors().some((err) => err.code === "STALE_CONNECTION"),
+);
 ```
 
 Features:
+
 - **In-memory transport** replaces WebSocket; no real network calls.
 - **Fake clock** lets you deterministically test timeouts, heartbeats, and intervals without waiting.
 - **Capture helpers** record `sentEvents()`, `publishedTopics()`, and `errors()` for easy assertions.

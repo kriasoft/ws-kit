@@ -117,7 +117,7 @@ router.onError((err, ctx) => {
 `createTestRouter()` provides in-memory transport + fake clock:
 
 ```typescript
-import { createTestRouter } from "@ws-kit/core/test";
+import { createTestRouter } from "@ws-kit/core/testing";
 
 const testRouter = createTestRouter(router);
 testRouter.clock.advance(30_000); // Fast-forward heartbeat
