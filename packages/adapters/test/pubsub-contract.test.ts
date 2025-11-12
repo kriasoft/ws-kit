@@ -133,10 +133,10 @@ export function createPubSubContractTests(
       const result = await driver.publish(envelope);
 
       assert.equal(result.ok, true);
-      // matchedLocal is optional; if present, must be number >= 0
-      if (result.matchedLocal !== undefined) {
-        assert.equal(typeof result.matchedLocal, "number");
-        assert(result.matchedLocal >= 0);
+      // matched is optional; if present, must be number >= 0
+      if (result.matched !== undefined) {
+        assert.equal(typeof result.matched, "number");
+        assert(result.matched >= 0);
       }
     });
 
@@ -151,7 +151,7 @@ export function createPubSubContractTests(
       const result = await driver.publish(envelope);
 
       assert.equal(result.ok, true);
-      assert.equal(result.matchedLocal, 0);
+      assert.equal(result.matched, 0);
     });
 
     test("publish: memory adapter returns exact capability", async () => {
@@ -172,7 +172,7 @@ export function createPubSubContractTests(
       assert.equal(result.ok, true);
       // Memory adapter should return exact count
       if (result.capability === "exact") {
-        assert.equal(result.matchedLocal, 2);
+        assert.equal(result.matched, 2);
       }
     });
 

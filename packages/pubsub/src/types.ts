@@ -6,25 +6,30 @@
  */
 
 import type {
-  AdapterPublishError,
   BrokerConsumer,
   PubSubAdapter,
   PubSubDriver,
-  PublishCapability,
   PublishEnvelope,
+  StopFn,
+} from "@ws-kit/core/pubsub";
+import {
+  ensurePublishSuccess,
+  isPublishSuccess,
+  wasDeliveredLocally,
+} from "@ws-kit/core/pubsub";
+import type {
+  PublishCapability,
   PublishError,
   PublishOptions,
   PublishResult,
-  RouterPublishError,
-  StopFn,
-} from "@ws-kit/core/pubsub";
+} from "@ws-kit/core";
+import { isPublishError } from "@ws-kit/core";
 import type { VerifyMode, VerifyResult } from "./core/topics";
 
 /**
- * Re-export core types for convenience.
+ * Re-export core types and utilities for convenience.
  */
 export type {
-  AdapterPublishError,
   BrokerConsumer,
   PubSubAdapter,
   PubSubDriver,
@@ -33,10 +38,19 @@ export type {
   PublishError,
   PublishOptions,
   PublishResult,
-  RouterPublishError,
   StopFn,
   VerifyMode,
   VerifyResult,
+};
+
+/**
+ * Type guards and assertion helpers for PublishResult.
+ */
+export {
+  ensurePublishSuccess,
+  isPublishError,
+  isPublishSuccess,
+  wasDeliveredLocally,
 };
 
 /**

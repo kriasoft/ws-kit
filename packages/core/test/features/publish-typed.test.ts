@@ -71,7 +71,7 @@ describe("Type-Safe Publishing", () => {
       expect(result.ok === true && result.capability).toBeDefined();
     });
 
-    it("should return PublishResult with capability and matchedLocal count", async () => {
+    it("should return PublishResult with capability and matched count", async () => {
       const router = createRouter();
       router.on(UserUpdated, () => {});
 
@@ -82,9 +82,9 @@ describe("Type-Safe Publishing", () => {
 
       expect(result.ok).toBe(true);
       expect(result.ok === true && result.capability).toBe("exact");
-      expect(
-        typeof (result.ok === true ? result.matchedLocal : undefined),
-      ).toBe("number");
+      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
+        "number",
+      );
     });
 
     it("should return Promise<PublishResult>", async () => {
@@ -114,9 +114,9 @@ describe("Type-Safe Publishing", () => {
 
       expect(result.ok).toBe(true);
       expect(result.ok === true && result.capability).toBe("exact");
-      expect(
-        typeof (result.ok === true ? result.matchedLocal : undefined),
-      ).toBe("number");
+      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
+        "number",
+      );
     });
 
     it("should handle PublishOptions.partitionKey", async () => {
@@ -229,9 +229,9 @@ describe("Type-Safe Publishing", () => {
 
       expect(result.ok).toBe(true);
       expect(result.ok === true && result.capability).toBe("exact");
-      expect(
-        typeof (result.ok === true ? result.matchedLocal : undefined),
-      ).toBe("number");
+      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
+        "number",
+      );
     });
   });
 });

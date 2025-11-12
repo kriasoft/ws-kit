@@ -27,7 +27,7 @@ import type {
  *
  * router.on(Message, (ctx) => {
  *   const result = await ctx.publish("room:123", MessageSchema, { text: "Hi" });
- *   console.log(`Matched ${result.matchedLocal} local subscribers`);
+ *   console.log(`Matched ${result.matched} local subscribers`);
  * });
  * ```
  */
@@ -45,7 +45,7 @@ export function memoryPubSub(): PubSubAdapter {
       _opts?: PublishOptions,
     ): Promise<PublishResult> {
       const subscribers = topics.get(envelope.topic);
-      const matchedLocal = subscribers?.size ?? 0;
+      const matched = subscribers?.size ?? 0;
 
       // Router/platform layer handles actual delivery to websockets.
       // Adapter just returns metrics.
@@ -54,25 +54,33 @@ export function memoryPubSub(): PubSubAdapter {
 
       return {
         ok: true,
-        matchedLocal, // 0 if no subscribers, otherwise > 0
+        capability: "exact",
+        matched, // 0 if no subscribers, otherwise > 0
       };
     },
 
     async subscribe(clientId: string, topic: string): Promise<void> {
       // Get or create subscriber set for this topic
-      if (!topics.has(topic)) {
-        topics.set(topic, new Set());
-      }
-      const subscribers = topics.get(topic)!;
+      const subscribers =
+        topics.get(topic) ??
+        (() => {
+          const set = new Set<string>();
+          topics.set(topic, set);
+          return set;
+        })();
 
       // Add to topic subscribers (idempotent)
       subscribers.add(clientId);
 
       // Track client's subscriptions for cleanup
-      if (!clientTopics.has(clientId)) {
-        clientTopics.set(clientId, new Set());
-      }
-      clientTopics.get(clientId)!.add(topic);
+      const clientSubs =
+        clientTopics.get(clientId) ??
+        (() => {
+          const set = new Set<string>();
+          clientTopics.set(clientId, set);
+          return set;
+        })();
+      clientSubs.add(topic);
     },
 
     async unsubscribe(clientId: string, topic: string): Promise<void> {
@@ -150,10 +158,14 @@ export function memoryPubSub(): PubSubAdapter {
       // Add to topics not in currentTopics
       for (const topic of newTopicsSet) {
         if (!currentTopics.has(topic)) {
-          if (!topics.has(topic)) {
-            topics.set(topic, new Set());
-          }
-          topics.get(topic)!.add(clientId);
+          const subs =
+            topics.get(topic) ??
+            (() => {
+              const set = new Set<string>();
+              topics.set(topic, set);
+              return set;
+            })();
+          subs.add(clientId);
           added++;
         }
       }

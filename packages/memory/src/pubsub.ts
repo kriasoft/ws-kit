@@ -27,7 +27,9 @@ import type {
  *
  * router.on(Message, (ctx) => {
  *   const result = await ctx.publish("room:123", MessageSchema, { text: "Hi" });
- *   console.log(`Matched ${result.matchedLocal} local subscribers`);
+ *   if (result.ok) {
+ *     console.log(`Matched ${result.matched} subscribers (${result.capability})`);
+ *   }
  * });
  * ```
  */
@@ -45,7 +47,7 @@ export function memoryPubSub(): PubSubAdapter {
       _opts?: PublishOptions,
     ): Promise<PublishResult> {
       const subscribers = topics.get(envelope.topic);
-      const matchedLocal = subscribers?.size ?? 0;
+      const matched = subscribers?.size ?? 0;
 
       // Router/platform layer handles actual delivery to websockets.
       // Adapter just returns metrics.
@@ -54,7 +56,8 @@ export function memoryPubSub(): PubSubAdapter {
 
       return {
         ok: true,
-        matchedLocal, // 0 if no subscribers, otherwise > 0
+        capability: "exact", // Memory adapter has exact subscriber count
+        matched, // 0 if no subscribers, otherwise > 0
       };
     },
 

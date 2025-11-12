@@ -107,132 +107,31 @@ export interface PublishEnvelope {
   meta?: Record<string, unknown>;
 }
 
-/**
- * Publication options: how to broadcast and handle delivery.
- *
- * Controls distribution logic only. Message metadata (observability, routing hints)
- * belongs in the envelope, not here.
- */
-export interface PublishOptions {
-  /**
-   * Sharding/routing hint (advisory; adapters may ignore).
-   * Useful for Redis Cluster, DynamoDB Streams, consistent hashing, etc.
-   */
-  partitionKey?: string;
-
-  /**
-   * Cancellation signal for the publish operation.
-   * If aborted before transmission, operation may be cancelled.
-   * Adapter behavior is best-effort; no guarantee on partial state.
-   */
-  signal?: AbortSignal;
-}
+// Import canonical types from router layer (single source of truth)
+export type {
+  PublishCapability,
+  PublishError,
+  PublishOptions,
+  PublishResult,
+} from "../../core/types";
 
 /**
- * Indicates how reliable the matched subscriber count is.
+ * For adapter implementations that need to store intermediate state or map
+ * internal errors to canonical PublishError codes.
  *
- * - `"exact"` — Exact local subscriber count (e.g., MemoryPubSub)
- * - `"estimate"` — Lower-bound estimate (e.g., Node/uWS polyfill)
- * - `"unknown"` — Subscriber count not tracked (e.g., Redis multi-process)
+ * @internal Use only in adapter implementations; never export publicly.
  */
-export type PublishCapability = "exact" | "estimate" | "unknown";
-
-/**
- * Adapter-level publish errors.
- *
- * UPPERCASE canonical codes for pattern matching and exhaustive switches.
- * Adapters must only return these error codes; router-level errors are the router's responsibility.
- *
- * - BACKPRESSURE: Adapter's send queue full
- * - BROKER_UNAVAILABLE: Destination unreachable (distributed adapters)
- * - RATE_LIMITED: Quota exceeded (distributed/brokered adapters)
- * - UNSUPPORTED: Option/feature not supported by this adapter
- * - ADAPTER_ERROR: Unexpected adapter failure (fallback)
- */
-export type AdapterPublishError =
-  | "BACKPRESSURE" // Adapter's send queue full
-  | "BROKER_UNAVAILABLE" // Destination unreachable
-  | "RATE_LIMITED" // Quota exceeded
-  | "UNSUPPORTED" // Feature/option not supported by adapter
-  | "ADAPTER_ERROR"; // Unexpected adapter failure
-
-/**
- * Router-level publish errors (checked before calling adapter.publish).
- *
- * - VALIDATION: Payload doesn't match schema
- * - ACL: authorizePublish hook denied
- * - STATE: Illegal in current router/connection state
- * - CONNECTION_CLOSED: Connection/router disposed
- */
-export type RouterPublishError =
-  | "VALIDATION" // Schema validation failed
-  | "ACL" // authorizePublish hook denied
-  | "STATE" // Illegal in current router/connection state
-  | "CONNECTION_CLOSED"; // Connection/router disposed
-
-/**
- * All publish error codes (union of router and adapter errors).
- * Router produces both; adapters must only return AdapterPublishError.
- */
-export type PublishError = AdapterPublishError | RouterPublishError;
-
-/**
- * Retryability mapping for publish errors.
- *
- * Each error code has a canonical retryability flag. Applications can use this
- * to decide retry strategy without manual mapping.
- *
- * @internal Reference for router implementation
- */
-export const PUBLISH_ERROR_RETRYABLE: Record<PublishError, boolean> = {
-  // Adapter-level errors
-  BACKPRESSURE: true, // Queue might clear
-  BROKER_UNAVAILABLE: true, // Infrastructure might recover
-  RATE_LIMITED: true, // Quota might reset
-  UNSUPPORTED: false, // Feature won't appear
-  ADAPTER_ERROR: true, // Infrastructure might recover
-  // Router-level errors
+export const PUBLISH_ERROR_RETRYABLE: Record<string, boolean> = {
+  // Canonical error codes from core/types.ts
   VALIDATION: false, // Won't succeed on retry
-  ACL: false, // Authorization won't change
+  ACL_PUBLISH: false, // Authorization won't change
   STATE: false, // Router/adapter not ready
+  BACKPRESSURE: true, // Queue might clear
+  PAYLOAD_TOO_LARGE: false, // Size limit won't change
+  UNSUPPORTED: false, // Feature won't appear
   CONNECTION_CLOSED: true, // Retryable after reconnection
+  ADAPTER_ERROR: true, // Infrastructure might recover
 };
-
-/**
- * Result of publishing a message to a channel/topic.
- *
- * **publish() never throws for runtime conditions**. All expected failures return
- * `{ok: false}` with an error code. This allows predictable, result-based error handling.
- *
- * **Success semantics**:
- * - `ok: true; matchedLocal?: number` — Message was broadcast to subscribers.
- *   - `matchedLocal` is present and > 0: ≥1 subscriber matched (e.g., MemoryPubSub)
- *   - `matchedLocal` is 0: No subscribers matched or count unavailable (e.g., distributed)
- *   - `matchedLocal` is absent/undefined: Subscriber count not tracked (check via capability logic if needed)
- *
- * **Failure semantics**:
- * - `ok: false` — Broadcast failed; use `error` code and `retryable` flag to decide next action
- * - `retryable: true` — Safe to retry after backoff (e.g., BACKPRESSURE, BROKER_UNAVAILABLE)
- * - `retryable: false` — Retrying won't help (e.g., VALIDATION, ACL, UNSUPPORTED)
- * - `details`: Structured context from the router/adapter (limits, features, diagnostics)
- */
-export type PublishResult =
-  | {
-      ok: true;
-      /** Matched local subscriber count. Absent/undefined means "unknown/not tracked". */
-      matchedLocal?: number;
-      /** Adapter-specific telemetry (e.g., shard, partition, cluster node, timings). */
-      details?: Record<string, unknown>;
-    }
-  | {
-      ok: false;
-      /** Canonical error code (UPPERCASE) for pattern matching and switches */
-      error: PublishError;
-      /** Whether safe to retry after backoff (true for transient, false for permanent) */
-      retryable: boolean;
-      /** Structured context from adapter (limits, features, diagnostics) */
-      details?: Record<string, unknown>;
-    };
 
 /**
  * Type alias for split driver implementations.
@@ -275,7 +174,7 @@ export type StopFn = () => void | Promise<void>;
  * **Responsibility (Local)**:
  * - Manage per-client topic subscriptions
  * - Broadcast router-materialized messages to matching subscribers
- * - Return structured results (success with matchedLocal, or failure with error code)
+ * - Return structured results: success with capability + matched (if knowable), or failure with error code
  * - Optional: atomically replace subscriptions, enumerate topics, cleanup resources
  *
  * **Router's Responsibility (Integration)**:
@@ -288,17 +187,26 @@ export interface PubSubAdapter {
    * Broadcast a message to subscribers of a topic.
    *
    * **Never throws for runtime conditions** (backpressure, unavailability, etc).
-   * Returns discriminated union result: `{ok: true, matchedLocal?, details?}`
+   * Returns discriminated union result: `{ok: true, capability, matched?, details?}`
    * on success, or `{ok: false, error, retryable, details?}` on failure.
    *
-   * **Adapters must only return AdapterPublishError codes; router-level errors are
-   * the router's responsibility.**
+   * **Success (`ok: true`):**
+   * - `capability`: "exact", "estimate", or "unknown" (trustworthiness of `matched` field)
+   * - `matched`: Subscriber count (present only if capability is not "unknown")
+   * - `details`: Adapter-specific telemetry (shard ID, partition, timings, etc.)
+   *
+   * **Failure (`ok: false`):**
+   * - `error`: Canonical error code from PublishError enum
+   * - `retryable`: true if safe to retry with backoff, false if permanent
+   * - `adapter`: Adapter name (for diagnostics)
+   * - `details`: Context (limits, features, diagnostics)
+   * - `cause`: Underlying error cause (if applicable)
    *
    * Throw only for invariant violations (adapter not initialized, internal crashes).
-   * If topic has no subscribers, return `{ok: true, matchedLocal: 0}`.
+   * If topic has no subscribers, return `{ok: true, capability: "exact", matched: 0}`.
    *
    * @param envelope - Router-materialized: { topic, payload, type?, meta? }
-   * @param opts - Publication options (partitionKey, signal, etc.)
+   * @param opts - Publication options (partitionKey, excludeSelf, etc.)
    * @returns PublishResult: success or failure with structured semantics and retry hints
    * @throws Only on invariant/adapter-internal violations
    */
@@ -494,7 +402,7 @@ export interface BrokerConsumer {
  * @example
  * const result = await adapter.publish(...);
  * if (isPublishSuccess(result)) {
- *   console.log(`Matched ${result.matchedLocal} subscribers`);
+ *   console.log(`Capability: ${result.capability}, Matched: ${result.matched ?? "unknown"}`);
  * }
  */
 export function isPublishSuccess(
@@ -504,47 +412,31 @@ export function isPublishSuccess(
 }
 
 /**
- * Type guard: narrows PublishResult to failure type.
- *
- * @example
- * const result = await adapter.publish(...);
- * if (isPublishError(result)) {
- *   if (result.retryable) {
- *     // retry with backoff
- *   } else {
- *     // log and move on
- *   }
- * }
- */
-export function isPublishError(
-  result: PublishResult,
-): result is Extract<PublishResult, { ok: false }> {
-  return result.ok === false;
-}
-
-/**
  * Assertion helper: throws if publish failed.
  * Converts result-based error handling to thrown exceptions (useful for strict error handling).
  *
  * @example
  * const result = await adapter.publish(...);
  * ensurePublishSuccess(result); // throws if !ok
- * console.log(`Delivered to ${result.matchedLocal} subscribers`);
+ * console.log(`Capability: ${result.capability}`);
  */
 export function ensurePublishSuccess(
   result: PublishResult,
 ): asserts result is Extract<PublishResult, { ok: true }> {
   if (!isPublishSuccess(result)) {
-    const err = new Error(`[pubsub] ${result.error}`);
-    (err as any).retryable = result.retryable;
-    (err as any).details = result.details;
+    const err = new Error(`[pubsub] ${result.error}`) as Error & {
+      retryable: boolean;
+      details?: Record<string, unknown>;
+    };
+    err.retryable = result.retryable;
+    err.details = result.details;
     throw err;
   }
 }
 
 /**
  * Convenience: checks if message was delivered to at least one local subscriber.
- * Returns true only if matchedLocal is present and > 0 (i.e., confirmed delivery).
+ * Returns true only if matched is present and > 0 (i.e., confirmed delivery to at least one subscriber).
  *
  * @example
  * const result = await adapter.publish(...);
@@ -553,5 +445,5 @@ export function ensurePublishSuccess(
  * }
  */
 export function wasDeliveredLocally(result: PublishResult): boolean {
-  return isPublishSuccess(result) && (result.matchedLocal ?? 0) > 0;
+  return isPublishSuccess(result) && (result.matched ?? 0) > 0;
 }

@@ -46,8 +46,8 @@ export interface RedisPubSubOptions {
  * Maintains a local subscription index and broadcasts messages to Redis.
  * Router/platform is responsible for consuming inbound broker messages via BrokerConsumer.
  *
- * **Local stats only**: `matchedLocal` reflects process-local subscribers.
- * For distributed systems, use `capability: "unknown"` (we can't know global count).
+ * **Capability**: Returns `capability: "unknown"` since Redis Pub/Sub cannot
+ * reliably count global subscribers across all instances.
  *
  * Usage:
  * ```ts
@@ -93,16 +93,10 @@ export function redisPubSub(
         console.error(`[redisPubSub] publish to ${channel} failed:`, err);
       }
 
-      // Return local stats only
-      let matchedLocal = 0;
-      for await (const _id of local.getLocalSubscribers(envelope.topic)) {
-        matchedLocal++;
-      }
-
+      // Return capability only (Redis can't reliably count global subscribers)
       return {
         ok: true,
         capability: "unknown", // Distributed adapter: can't know global count
-        matchedLocal, // Local-only: process subscribers only
       };
     },
 

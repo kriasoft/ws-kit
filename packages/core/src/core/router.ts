@@ -31,8 +31,14 @@ import type {
   CreateRouterOptions,
   EventHandler,
   Middleware,
+  PublishCapability,
+  PublishError,
+  PublishOptions,
+  PublishResult,
   RouteEntry,
 } from "./types";
+
+export type { PublishCapability, PublishError, PublishOptions, PublishResult };
 
 export interface BaseRouter<TContext> {
   use(mw: Middleware<TContext>): this;
@@ -100,18 +106,87 @@ export interface ValidationAPI<TContext> {
 
 /**
  * Pub/Sub API appears when withPubSub() is plugged.
+ *
+ * Enables publish-subscribe messaging with the following contract:
+ * - `publish()` returns a `PublishResult` discriminated union (never throws for runtime errors)
+ * - `topics` provides introspection and subscription management
+ *
+ * @see {@link PublishResult} for detailed success/failure semantics
+ * @see {@link PublishOptions} for publish configuration options
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface PubSubAPI<TContext> {
+  /**
+   * Publish a message to a topic, optionally to multiple subscribers.
+   *
+   * **Never throws for runtime conditions.** All expected failures (validation, ACL denial,
+   * backpressure, connection closed) return `{ok: false}` with an error code and `retryable` hint,
+   * enabling predictable result-based error handling. Only programmer errors at startup throw.
+   *
+   * **Success** returns a discriminated union with `ok: true`:
+   * - `capability`: Trust level of the subscriber count ("exact", "estimate", or "unknown")
+   * - `matched?`: Subscriber count (omitted if capability is "unknown")
+   *
+   * **Failure** returns a discriminated union with `ok: false`:
+   * - `error`: Canonical error code ("VALIDATION", "ACL_PUBLISH", "BACKPRESSURE", etc.)
+   * - `retryable`: Whether safe to retry with backoff (true for BACKPRESSURE, CONNECTION_CLOSED, etc.)
+   * - `adapter?`: Name of adapter that rejected (e.g., "redis", "inmemory")
+   * - `details?`: Structured context (e.g., `{ feature: "excludeSelf" }` for UNSUPPORTED)
+   * - `cause?`: Underlying error cause, following Error.cause conventions
+   *
+   * **Error Remediation:**
+   * - Non-retryable (VALIDATION, ACL_PUBLISH, PAYLOAD_TOO_LARGE, UNSUPPORTED, STATE):
+   *   Log and skip; fix the code/config before retrying.
+   * - Retryable (BACKPRESSURE, CONNECTION_CLOSED, ADAPTER_ERROR):
+   *   Queue for retry with exponential backoff; check `details.transient` for hints.
+   *
+   * @param topic — Topic name (e.g., "chat:room:123"). Must exist in topics.list() or be created via topics.subscribe().
+   * @param schema — Message descriptor for type inference and validation.
+   * @param payload — Message payload. Will be validated against schema if validation plugin is active.
+   * @param opts — Optional publish configuration (partitionKey for sharding, excludeSelf, meta).
+   *
+   * @returns `PublishResult` discriminated union describing success or failure.
+   *
+   * @example
+   * ```ts
+   * const result = await ctx.publish("chat:room:1", ChatMessage, { text: "hello" });
+   *
+   * if (result.ok) {
+   *   console.log(`Delivered to ${result.matched ?? "?"} subscribers (${result.capability})`);
+   * } else if (result.retryable) {
+   *   // Transient: queue for retry
+   *   retryQueue.push({ topic: "chat:room:1", payload: { text: "hello" } });
+   * } else {
+   *   // Permanent: log and skip
+   *   logger.error(`Publish failed: ${result.error}`, result.details);
+   * }
+   * ```
+   *
+   * @see {@link PublishOptions} for configuration details
+   * @see {@link PublishError} for error codes and remediation
+   * @see {@link PublishCapability} for subscriber count trust levels
+   */
   publish(
     topic: string,
     schema: MessageDescriptor,
     payload: unknown,
-    opts?: { partitionKey?: string; meta?: Record<string, unknown> },
-  ): Promise<void>;
+    opts?: PublishOptions,
+  ): Promise<PublishResult>;
 
+  /**
+   * Topic introspection and subscription management.
+   *
+   * Allows handlers to inspect active topics, subscribe to new ones, and unsubscribe.
+   */
   topics: {
+    /**
+     * Get all active topic names for this connection.
+     */
     list(): readonly string[];
+
+    /**
+     * Check if this connection is subscribed to a topic.
+     */
     has(topic: string): boolean;
   };
 }

@@ -11,19 +11,18 @@
  *
  * Router constructs PublishEnvelope (topic, payload, type) and PublishOptions,
  * then calls adapter.publish(envelope, options) to broadcast.
+ * Adapter returns PublishResult with capability + matched (if knowable).
  */
 
 import type {
   CoreRouter,
   MessageDescriptor,
   Plugin,
+  PublishOptions,
+  PublishResult,
   Router,
 } from "@ws-kit/core";
-import type {
-  PubSubAdapter,
-  PublishEnvelope,
-  PublishOptions,
-} from "@ws-kit/core/pubsub";
+import type { PubSubAdapter, PublishEnvelope } from "@ws-kit/core/pubsub";
 
 /**
  * Pub/Sub plugin factory.
@@ -37,10 +36,11 @@ import type {
  * - Track connected clients (onOpen/onClose hooks)
  * - Deliver messages to local subscribers (deliverLocally)
  * - Manage adapter lifecycle (init/shutdown)
+ * - Fast-fail excludeSelf: true with UNSUPPORTED error
  *
  * **Adapter Responsibilities**:
  * - Maintain per-client subscriptions
- * - Fan-out metrics (matchedLocal count)
+ * - Return publish metrics (capability + matched count if knowable)
  * - Optional: broker ingestion (start/stop)
  *
  * **Timing Contract**:
@@ -55,7 +55,7 @@ import type {
  * router.on(Message, (ctx) => {
  *   const result = await ctx.publish("topic", schema, payload);
  *   if (result.ok) {
- *     console.log(`Matched ${result.matchedLocal} local subscribers`);
+ *     console.log(`Capability: ${result.capability}, Matched: ${result.matched ?? "unknown"} subscribers`);
  *   }
  *   await ctx.topics.subscribe("room:123");
  * });
@@ -155,33 +155,53 @@ export function withPubSub<TContext>(
      * Publish message to a topic.
      * Router materializes the message; adapter broadcasts.
      *
+     * **Never throws for runtime conditions.** All expected failures return
+     * a result object with ok:false and an error code.
+     *
+     * **Special handling:**
+     * - `excludeSelf: true` returns UNSUPPORTED (not yet implemented) immediately
+     *   without invoking the adapter. This prevents unnecessary work while the
+     *   end-to-end path is being developed.
+     *
      * @param topic - Topic name (validation is middleware responsibility)
      * @param schema - Message schema (for router observability and type name)
      * @param payload - Validated payload (may include meta from message schema)
-     * @param opts - Optional: partitionKey (sharding hint), signal (cancellation)
-     * @returns PublishResult with optional matched/deliveredLocal counts
-     * @throws On adapter failure
+     * @param opts - Optional: partitionKey (sharding hint), excludeSelf, meta
+     * @returns PublishResult with capability + matched (if knowable) or error
      */
     const publish = async (
       topic: string,
       schema: MessageDescriptor,
       payload: unknown,
-      opts?: {
-        partitionKey?: string;
-        signal?: AbortSignal;
-      },
-    ) => {
+      opts?: PublishOptions,
+    ): Promise<PublishResult> => {
+      // Fast-fail on excludeSelf (not yet supported end-to-end)
+      if (opts?.excludeSelf === true) {
+        return {
+          ok: false,
+          error: "UNSUPPORTED",
+          retryable: false,
+          details: {
+            feature: "excludeSelf",
+            reason:
+              "Not yet implemented end-to-end; use meta to filter on client side",
+          },
+        };
+      }
+
       // Construct envelope: the message itself
       const envelope: PublishEnvelope = {
         topic,
         payload,
         type: schema.type || schema.name, // Schema name for observability
+        meta: opts?.meta, // Pass through optional metadata
       };
 
-      // Construct options: distribution logic only (meta belongs in envelope)
+      // Construct adapter options (partitionKey, signal; excludeSelf handled above)
       const publishOpts: PublishOptions | undefined = opts
         ? {
             partitionKey: opts.partitionKey,
+            meta: opts.meta,
             signal: opts.signal,
           }
         : undefined;
@@ -241,11 +261,8 @@ export function withPubSub<TContext>(
           topic: string,
           schema: MessageDescriptor,
           payload: any,
-          opts?: {
-            partitionKey?: string;
-            signal?: AbortSignal;
-          },
-        ) => {
+          opts?: PublishOptions,
+        ): Promise<PublishResult> => {
           return await publish(topic, schema, payload, opts);
         };
 

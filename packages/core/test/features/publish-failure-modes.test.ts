@@ -68,7 +68,7 @@ describe("publish() failure modes", () => {
   });
 
   describe("success cases", () => {
-    it("returns { ok: true } with capability and matchedLocal count", async () => {
+    it("returns { ok: true } with capability and matched count", async () => {
       const router = createRouter({ pubsub: new MemoryPubSub() });
 
       const result = await router.publish("topic", TestMessage, {
@@ -77,8 +77,8 @@ describe("publish() failure modes", () => {
 
       expect(result.ok).toBe(true);
       expect(result.capability).toMatch(/^(exact|estimate|unknown)$/);
-      expect(typeof result.matchedLocal).toBe("number");
-      expect(result.matchedLocal).toBeGreaterThanOrEqual(0);
+      expect(typeof result.matched).toBe("number");
+      expect(result.matched).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -132,7 +132,7 @@ describe("publish() failure modes", () => {
   });
 
   describe("capability semantics", () => {
-    it("always includes matchedLocal in success result", async () => {
+    it("always includes matched in success result", async () => {
       const router = createRouter({ pubsub: new MemoryPubSub() });
 
       const result = await router.publish("topic", TestMessage, {
@@ -140,8 +140,8 @@ describe("publish() failure modes", () => {
       });
 
       if (result.ok) {
-        expect(typeof result.matchedLocal).toBe("number");
-        expect(result.matchedLocal).toBeGreaterThanOrEqual(0);
+        expect(typeof result.matched).toBe("number");
+        expect(result.matched).toBeGreaterThanOrEqual(0);
       }
     });
 
@@ -154,7 +154,7 @@ describe("publish() failure modes", () => {
 
       if (result.ok) {
         expect(result.capability).toBe("exact");
-        expect(typeof result.matchedLocal).toBe("number");
+        expect(typeof result.matched).toBe("number");
       }
     });
   });

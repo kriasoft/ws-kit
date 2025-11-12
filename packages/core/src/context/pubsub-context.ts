@@ -9,26 +9,30 @@
  */
 
 import type { MessageDescriptor } from "../protocol/message-descriptor";
+import type { PublishOptions, PublishResult } from "../core/types";
 
-export interface PubSubContext<TContext = unknown> {
+export interface PubSubContext {
   /**
    * Publish message to a topic (broadcast to all subscribers).
    * Only available when withPubSub() plugin is installed.
    *
+   * **Never throws for runtime conditions** (backpressure, validation failure, etc).
+   * Returns a discriminated union result:
+   * - Success: `{ok: true, capability, matched?}` — Message delivered
+   * - Failure: `{ok: false, error, retryable}` — Delivery failed with recoverable info
+   *
    * @param topic - Topic name
    * @param schema - Message schema for type name and validation
    * @param payload - Message payload (should match schema)
-   * @param opts - Optional: partitionKey for sharding, signal for cancellation
+   * @param opts - Optional publication options (partitionKey, excludeSelf, meta)
+   * @returns PublishResult: discriminated union of success or failure
    */
   publish(
     topic: string,
     schema: MessageDescriptor,
-    payload: any,
-    opts?: {
-      partitionKey?: string;
-      signal?: AbortSignal;
-    },
-  ): Promise<void>;
+    payload: unknown,
+    opts?: PublishOptions,
+  ): Promise<PublishResult>;
 
   /**
    * Topic subscription utilities.

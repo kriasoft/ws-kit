@@ -1495,7 +1495,9 @@ try {
 const result = await ctx.publish(topic, Schema, payload);
 
 if (result.ok) {
-  logger.info(`Published to ${result.matchedLocal ?? "?"} subscribers`);
+  logger.info(
+    `Published to ${result.matched ?? "?"} subscribers (${result.capability})`,
+  );
 } else if (result.retryable) {
   scheduleRetry(topic, payload, { backoff: exponentialBackoff() });
 } else {

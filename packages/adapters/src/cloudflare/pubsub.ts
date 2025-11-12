@@ -55,8 +55,8 @@ export interface CloudflareDOPubSubOptions {
  * instance (via `idFromName(topic)`). Publishing sends an HTTP request to the DO,
  * which handles broadcasting to other instances.
  *
- * **Local stats only**: `matchedLocal` reflects process-local subscribers.
- * For distributed systems, use `capability: "unknown"` (we can't know global count).
+ * **Capability**: Returns `capability: "unknown"` since Durable Objects cannot
+ * reliably count global subscribers across all instances.
  *
  * Usage:
  * ```ts
@@ -116,16 +116,10 @@ export function durableObjectsPubSub(
         );
       }
 
-      // Return local stats only
-      let matchedLocal = 0;
-      for await (const _id of local.getLocalSubscribers(envelope.topic)) {
-        matchedLocal++;
-      }
-
+      // Return capability only (Durable Objects can't reliably count global subscribers)
       return {
         ok: true,
         capability: "unknown", // Distributed adapter: can't know global count
-        matchedLocal, // Local-only: process subscribers only
       };
     },
 

@@ -52,10 +52,16 @@ export { WsKitError } from "./error/error";
 // Capability contracts (core only; validators add validation, adapters add transport)
 export type {
   PublishEnvelope,
-  PublishOptions,
-  PublishResult,
   PubSubAdapter,
 } from "./capabilities/pubsub/adapter";
+// Router-level Pub/Sub API (user-facing)
+export type {
+  PublishCapability,
+  PublishError,
+  PublishOptions,
+  PublishResult,
+} from "./core/router";
+export { isPublishError } from "./core/types";
 export type {
   Observer,
   TelemetryHooks,
