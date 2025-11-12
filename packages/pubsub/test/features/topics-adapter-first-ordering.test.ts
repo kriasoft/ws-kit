@@ -3,9 +3,9 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
+describe("OptimisticTopics - Adapter-First Ordering (No Ghost State)", () => {
   describe("subscribe() - adapter-first ordering", () => {
     it("should not mutate local state if adapter call fails", async () => {
       const mockWs = {
@@ -16,7 +16,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe, adapter fails
       try {
@@ -42,7 +42,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Manually verify ordering by checking when state changes
       // (can't directly observe due to closure, but we can verify state)
@@ -60,7 +60,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // After successful subscribe, immediate check should show it
       await topics.subscribe("room:1");
@@ -77,7 +77,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // After failed subscribe, state should be unchanged
       try {
@@ -101,7 +101,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First subscribe successfully
       await topics.subscribe("room:1");
@@ -128,7 +128,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -152,7 +152,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Fire two concurrent subscribe calls to the same topic
       const [result1, result2] = await Promise.all([
@@ -179,7 +179,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Fire FIVE concurrent subscribe calls to the same topic
       const promises = Array.from({ length: 5 }, () =>
@@ -207,7 +207,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Fire concurrent subscribe calls to DIFFERENT topics
       await Promise.all([
@@ -235,7 +235,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Fire two concurrent subscribe calls to the same topic
       // Both should fail with the same error
@@ -271,7 +271,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First, subscribe to room:1
       await topics.subscribe("room:1");
@@ -318,7 +318,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Fire subscribe and unsubscribe concurrently on a fresh topic
       // Both should succeed without error
@@ -347,7 +347,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Rapid-fire operations: subscribe → unsubscribe → subscribe
       await topics.subscribe("room:1");
@@ -373,7 +373,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe once
       await topics.subscribe("room:1");
@@ -395,7 +395,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe sequentially (not concurrent)
       await topics.subscribe("room:1");
@@ -416,7 +416,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // subscribeMany uses: validate → adapter → mutate
       // subscribe should use same order
@@ -445,7 +445,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // subscribeMany should fail atomically if any topic fails
       try {
@@ -473,7 +473,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe, but adapter fails
       try {
@@ -499,7 +499,7 @@ describe("TopicsImpl - Adapter-First Ordering (No Ghost State)", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe successfully
       await topics.subscribe("room:1");

@@ -12,41 +12,46 @@
  */
 
 export type {
-  PubSubAdapter,
+  BrokerConsumer,
   PublishEnvelope,
   PublishOptions,
+  PubSubAdapter,
   PubSubDriver,
-  BrokerConsumer,
 } from "@ws-kit/core/pubsub";
 
 export type {
   MessageDescriptor,
-  MinimalContext,
   Middleware,
+  MinimalContext,
   ServerWebSocket,
 } from "@ws-kit/core";
 
 export type {
-  Topics,
-  TopicMutateOptions,
   PublishOptions,
   PublishResult,
+  TopicMutateOptions,
+  Topics,
 } from "./types";
 
 // Composition utilities for adapter authors
-export { withBroker, combineBrokers } from "./compose";
+export { combineBrokers, withBroker } from "./compose";
 export type { BrokerStartMode } from "./compose";
 
 // Core pub/sub primitives (internal implementation details)
-export { TopicsImpl, createTopicValidator } from "./core/topics";
+export {
+  createTopics,
+  createTopicValidator,
+  OptimisticTopics,
+} from "./core/topics";
+// Backward compatibility alias (deprecated, use OptimisticTopics instead)
 export type { TopicValidator } from "./core/topics";
 
-export { PubSubError, AbortError } from "./core/error";
-export type { PubSubErrorCode, PubSubAclDetails } from "./core/error";
+export { AbortError, PubSubError } from "./core/error";
+export type { PubSubAclDetails, PubSubErrorCode } from "./core/error";
 
 export {
-  DEFAULT_TOPIC_PATTERN,
   DEFAULT_TOPIC_MAX_LENGTH,
+  DEFAULT_TOPIC_PATTERN,
 } from "./core/constants";
 
 // Legacy adapters (for backward compatibility)

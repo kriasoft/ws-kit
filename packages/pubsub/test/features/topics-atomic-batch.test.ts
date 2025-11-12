@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - Atomic Batch Operations", () => {
+describe("OptimisticTopics - Atomic Batch Operations", () => {
   describe("subscribeMany - atomicity", () => {
     it("should maintain atomicity when adapter fails mid-batch", async () => {
       // Mock WebSocket that fails on 3rd subscribe call
@@ -21,7 +21,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe to 3 topics; adapter will fail on the 3rd
       try {
@@ -48,7 +48,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
@@ -68,7 +68,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First batch
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -103,7 +103,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First, subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -133,7 +133,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock((topic: string) => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe first
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -162,7 +162,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock((topic: string) => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to room:1 and room:2 only
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -194,7 +194,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -223,7 +223,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock((topic: string) => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -249,7 +249,7 @@ describe("TopicsImpl - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe with invalid topic in the middle
       try {

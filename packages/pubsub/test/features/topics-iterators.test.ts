@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it, mock } from "bun:test";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
+describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
   describe("Iteration happy path", () => {
     it("should support for..of iteration in subscription order", async () => {
       const mockWs = {
@@ -13,7 +13,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe in specific order
       await topics.subscribe("room:a");
@@ -37,7 +37,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:a");
       await topics.subscribe("room:b");
@@ -56,7 +56,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:x");
       await topics.subscribe("room:y");
@@ -73,7 +73,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:a");
       await topics.subscribe("room:b");
@@ -95,7 +95,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
       await topics.subscribe("b");
@@ -114,7 +114,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("x");
       await topics.subscribe("y");
@@ -133,7 +133,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
       await topics.subscribe("room:2");
@@ -155,7 +155,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
       await topics.subscribe("b");
@@ -188,7 +188,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
       await topics.subscribe("b");
@@ -226,7 +226,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
       await topics.subscribe("room:2");
@@ -258,7 +258,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
 
@@ -283,7 +283,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
       await topics.subscribe("room:2");
@@ -311,7 +311,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
       await topics.subscribe("x");
 
       const context = { collected: [] as string[] };
@@ -330,7 +330,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe in specific order
       await topics.subscribe("first");
@@ -354,7 +354,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       const topics_to_add = ["room:lobby", "room:chat", "room:notifications"];
 
@@ -373,7 +373,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe: a, b, c
       await topics.subscribe("a");
@@ -400,7 +400,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("1st");
       await topics.subscribe("2nd");
@@ -422,7 +422,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       const arr = [...topics];
       expect(arr).toEqual([]);
@@ -441,7 +441,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       expect([...topics.values()]).toEqual([]);
       expect([...topics.keys()]).toEqual([]);
@@ -457,7 +457,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
       await topics.subscribe("b");
@@ -486,7 +486,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
       await topics.subscribe("room:2");
@@ -515,7 +515,7 @@ describe("TopicsImpl - ReadonlySet Iterators (Snapshot-Based)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
       await topics.subscribe("b");

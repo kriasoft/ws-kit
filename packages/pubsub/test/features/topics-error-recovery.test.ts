@@ -3,9 +3,9 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - Error Recovery & Rollback", () => {
+describe("OptimisticTopics - Error Recovery & Rollback", () => {
   describe("Error isolation - rejection handling", () => {
     it("should allow unsubscribe after failed subscribe (soft no-op semantics)", async () => {
       const mockWs = {
@@ -16,7 +16,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe fails with adapter error
       try {
@@ -49,7 +49,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First subscribe fails
       try {
@@ -77,7 +77,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Fire subscribe and unsubscribe concurrently
       // subscribe fails, unsubscribe returns void (soft no-op because not subscribed)
@@ -110,7 +110,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe to 3 topics, second fails
       let errorThrown = false;
@@ -153,7 +153,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe to multiple topics
       let errorThrown = false;
@@ -178,7 +178,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
@@ -207,7 +207,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -247,7 +247,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -288,7 +288,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with 3 topics (calls 1, 2, 3)
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -327,7 +327,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -357,7 +357,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -396,7 +396,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.subscribeMany(["room:1", "room:2"]);
@@ -435,7 +435,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First subscribe to topics (subscribeCount: 2)
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -471,7 +471,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.subscribeMany(["room:1", "room:2"]);
@@ -494,7 +494,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3); // Limit is 3
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 }); // Limit is 3
 
       // Subscribe to 3 topics (at limit)
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -526,7 +526,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -553,7 +553,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -587,7 +587,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -619,11 +619,14 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 5); // limit to 5 topics
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 5 }); // limit to 5 topics
       const validator = () => {
         throw new PubSubError("INVALID_TOPIC", "Invalid");
       };
-      const topicsWithValidator = new TopicsImpl(mockWs, 5, validator);
+      const topicsWithValidator = createTopics(mockWs, {
+        maxTopicsPerConnection: 5,
+        validator: validator,
+      });
 
       // Try to subscribe with invalid topic
       try {
@@ -643,7 +646,7 @@ describe("TopicsImpl - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 2); // limit to 2 topics
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 }); // limit to 2 topics
 
       // Subscribe to 2 topics (should succeed)
       await topics.subscribeMany(["room:1", "room:2"]);

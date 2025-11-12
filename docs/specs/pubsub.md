@@ -491,98 +491,88 @@ router.on(JoinRoom, async (ctx, { roomId }) => {
 
 Apps configure pub/sub in **exactly one place**: `usePubSub()` middleware. Router constructor is **structural shape only**.
 
-| Responsibility           | Where                    | Examples                                                                              |
-| ------------------------ | ------------------------ | ------------------------------------------------------------------------------------- |
-| **Structural shape**     | `router.limits`          | `topicPattern` (regex), `maxTopicLength`, `maxTopicsPerConnection`                    |
-| **Context-aware policy** | `usePubSub()` middleware | `authorizeSubscribe`, `authorizePublish`, `normalize`, `onSubscribe`, `onUnsubscribe` |
+| Responsibility           | Where                    | Examples                                                                  |
+| ------------------------ | ------------------------ | ------------------------------------------------------------------------- |
+| **Structural shape**     | `router.limits`          | `topicPattern` (regex), `maxTopicLength`, `maxTopicsPerConnection`        |
+| **Context-aware policy** | `usePubSub()` middleware | `normalizeTopic`, `authorize` (unified for subscribe/unsubscribe/publish) |
 
-**Rule**: All pub/sub authorization, normalization, and lifecycle hooks go in `usePubSub()` middleware. Constructor is for structural validation only. No ACL, no hooks in `new WebSocketRouter({...})`.
+**Rule**: All pub/sub authorization and normalization go in `usePubSub()` middleware. Constructor is for structural validation only. No ACL, no hooks in router constructor.
 
 **Why**: Eliminates confusion about "where do I put authorization?" Answer is always `usePubSub()` middleware. Separates deploy-time shape from runtime policy; makes testing easier.
 
 ---
 
-For applications that need custom authorization or lifecycle tracking, use lightweight middleware hooks:
+For applications that need custom authorization or topic normalization, use the `usePubSub()` middleware:
 
 ```typescript
-interface UsePubSubOptions {
+interface PubSubPolicyHooks<TConn = unknown> {
   /**
    * Normalize a topic string (e.g., lowercasing, trimming, namespace checks).
    * Runs before validation. Apps should normalize consistently with their
    * router.limits.topicPattern config.
    * Default: identity (no change).
    */
-  normalize?: (topic: string) => string;
+  normalizeTopic?: (
+    topic: string,
+    ctx: { clientId: string; data: TConn },
+  ) => string;
 
   /**
-   * Authorize subscription to a topic.
-   * Called when a state change would occur (after idempotency check).
-   * Denies by returning false or throwing.
+   * Authorize an operation on a topic.
+   * Called for subscribe, unsubscribe, and publish operations.
+   * Throw an error to deny the operation.
    * Default: allow all.
    */
-  authorizeSubscribe?: (
-    ctx: Context,
+  authorize?: (
+    action: "subscribe" | "unsubscribe" | "publish",
     topic: string,
-  ) => boolean | Promise<boolean>;
-
-  /**
-   * Authorize publishing to a topic.
-   * Called per publish() call.
-   * Default: allow all.
-   */
-  authorizePublish?: (
-    ctx: Context,
-    topic: string,
-  ) => boolean | Promise<boolean>;
-
-  /**
-   * Lifecycle hook: called after successful subscription (actual state change).
-   * Useful for logging, analytics, per-topic state initialization.
-   * Not called on idempotent no-ops.
-   */
-  onSubscribe?: (ctx: Context, topic: string) => void | Promise<void>;
-
-  /**
-   * Lifecycle hook: called after successful unsubscription (actual state change).
-   * Not called on idempotent no-ops.
-   */
-  onUnsubscribe?: (ctx: Context, topic: string) => void | Promise<void>;
-
-  /**
-   * Optional: method for apps to invalidate cached ACL decisions on role change.
-   * Example: user granted new permission mid-session.
-   */
-  invalidateAuth?: (ctx: Context) => void;
+    ctx: { clientId: string; data: TConn },
+  ) => Promise<void> | void;
 }
 
-export function usePubSub(options?: UsePubSubOptions): Middleware;
+interface UsePubSubOptions<TConn = unknown> {
+  /**
+   * Policy hooks for normalization and authorization.
+   */
+  hooks?: PubSubPolicyHooks<TConn>;
+}
+
+export function usePubSub<TConn = unknown>(
+  options?: UsePubSubOptions<TConn>,
+): Middleware<TConn>;
 ```
 
-**Example: Custom Authorization & Lifecycle**
+**Example: Custom Authorization**
 
 ```typescript
-const router = new WebSocketRouter({
-  limits: {
-    // All format/length/quota validation goes here
-    topicPattern: /^[a-z0-9:_./-]{1,128}$/i, // Default from @ws-kit/core
-    maxTopicLength: 128,
-    maxTopicsPerConnection: 1000,
-  },
-});
-
-router.use(
-  usePubSub({
-    // Context-aware authorization and lifecycle hooks only
-    normalize: (t) => t.toLowerCase(),
-    authorizeSubscribe: (ctx, topic) => {
-      // Access control based on user/role
-      return ctx.user?.canAccessTopic(topic) ?? false;
-    },
-    onSubscribe: (ctx, topic) => {
-      logger.info(`User ${ctx.user?.id} subscribed to ${topic}`);
-    },
-  }),
-);
+const router = createRouter<AppData>()
+  .plugin(withPubSub(createMemoryAdapter()))
+  .use(
+    usePubSub({
+      hooks: {
+        normalizeTopic: (topic) => topic.toLowerCase(),
+        authorize: async (action, topic, ctx) => {
+          // Users can only subscribe to their own notifications
+          if (
+            action === "subscribe" &&
+            topic.startsWith("user:notifications:")
+          ) {
+            const userId = topic.split(":").pop();
+            if (ctx.data.userId !== userId) {
+              throw new Error("Access denied");
+            }
+          }
+          // Public rooms anyone can subscribe to
+          if (
+            !topic.startsWith("room:") &&
+            !topic.startsWith("user:notifications:")
+          ) {
+            throw new Error("Invalid topic");
+          }
+        },
+      },
+    }),
+  );
 ```
 
 ### 5.1 Topic Policy (Normative)
@@ -603,15 +593,14 @@ const router = new WebSocketRouter({
 
 Per §6.1, after idempotency check, operations proceed in this order (before adapter calls):
 
-1. **Normalize** — Apply `normalize(topic)` if provided via `usePubSub()` (e.g., trim, lowercase).
+1. **Normalize** — Apply `normalizeTopic(topic)` if provided via `usePubSub()` (e.g., trim, lowercase).
 2. **Format & length validation** — Check normalized topic against `router.limits.topicPattern` and `router.limits.maxTopicLength`:
    - Length check: Throw `PubSubError("INVALID_TOPIC", …, { reason: "length", length, max })`
    - Pattern check: Throw `PubSubError("INVALID_TOPIC", …, { reason: "pattern", topic })`
-3. **Authorization** — Call `authorizeSubscribe(ctx, normalized)` hook via `usePubSub()`.
+3. **Authorization** — Call `authorize(action, normalized, ctx)` hook via `usePubSub()`.
 4. **Limit check** — Verify `subscriptions.size < maxTopicsPerConnection`.
 5. **Adapter call** — Delegate to platform.
 6. **Mutate** — Add/remove topic from set.
-7. **Lifecycle** — Call `onSubscribe()` / `onUnsubscribe()` hook.
 
 **Error Details Contract:**
 
@@ -731,11 +720,7 @@ Input: subscribe(topic) or unsubscribe(topic)
                                    ↓
                                    [8] Mutate local state (add/remove topic)
                                    ↓
-                                   [9] Lifecycle hook (onSubscribe/onUnsubscribe)
-                                       ├─ FAIL → Throw (state already changed)
-                                       └─ PASS
-                                          ↓
-                                          Return void
+                                   Return void
 ```
 
 **🔴 CRITICAL INVARIANT: Idempotency-First (Step 3)**
@@ -776,10 +761,6 @@ Idempotency-first means apps don't need defensive checks or race condition guard
 - **Error cleanup**: `unsubscribe()` in error paths or finally blocks works unconditionally, even with unvalidated topic strings (soft no-op if not subscribed). No pre-checks needed.
 - **No defensive code**: No need for `if (!has(topic))` before unsubscribing or `if (!has(topic) && isValidTopic(topic))` before subscribing.
 
-**Hook behavior**: `onSubscribe()` and `onUnsubscribe()` hooks are **not called** on idempotent no-ops (already subscribed/unsubscribed). Only called on actual state changes.
-
-**Hook exception semantics**: If a hook throws, the exception propagates to the caller (middleware/handler), **but state remains changed**—there is no automatic rollback. Adapters may catch and log hook exceptions, but mutation is not reversed. Applications that require rollback on hook failure should implement custom try/catch logic at the handler level or in middleware before calling subscribe/unsubscribe.
-
 ### 6.3 Batch Atomicity
 
 `subscribeMany()` and `unsubscribeMany()` are **atomic**: all-or-nothing, no partial success.
@@ -788,7 +769,7 @@ Idempotency-first means apps don't need defensive checks or race condition guard
 
 **Key Behaviors:**
 
-- **Idempotency per-topic**: Already-subscribed topics are skipped (no validation, no auth, no adapter call, no hook). Batch processes only topics requiring state change.
+- **Idempotency per-topic**: Already-subscribed topics are skipped (no validation, no auth, no adapter call). Batch processes only topics requiring state change.
 - **Validation first**: All topics requiring state change validated before ANY adapter calls. If any fails, entire batch fails (no mutations, no adapter calls).
 - **Sequential adapter calls**: Topics called sequentially; tracked for rollback.
 - **Atomic mutation**: Local state changed only after ALL adapter calls succeed.
@@ -1379,7 +1360,6 @@ const r7 = await ctx.publish("topic", Schema, data);
 
 - On connection close, all subscriptions are **automatically removed** by the adapter.
 - No subscriptions leak or persist.
-- `onUnsubscribe()` hook is **not** called on connection close (only on explicit `unsubscribe()`).
 - Apps may proactively `ctx.topics.clear()` before closing if needed for cleanup.
 
 ---

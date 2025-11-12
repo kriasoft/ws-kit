@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - set()", () => {
+describe("OptimisticTopics - set()", () => {
   describe("basic replace semantics", () => {
     it("should replace topics: add and remove in one operation", async () => {
       const mockWs = {
@@ -14,7 +14,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Initially subscribe to room:1 and room:2
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -39,7 +39,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to some topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -61,7 +61,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start empty
       expect(topics.size).toBe(0);
@@ -89,7 +89,7 @@ describe("TopicsImpl - set()", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to some topics
       adapterCalls.subscribe = 0;
@@ -128,7 +128,7 @@ describe("TopicsImpl - set()", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to topics first (setup phase)
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -154,7 +154,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Replace with duplicates
       adapterCalls.length = 0;
@@ -181,7 +181,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to replace with an invalid topic in the middle
       try {
@@ -204,7 +204,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.set(["topic with spaces"]);
@@ -232,7 +232,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1"]);
@@ -268,7 +268,7 @@ describe("TopicsImpl - set()", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -297,7 +297,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2", "room:3", "room:4"]);
@@ -358,7 +358,7 @@ describe("TopicsImpl - set()", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Initial state: subscribed to room:1, room:2, room:3 (at capacity)
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -410,7 +410,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Create a large initial set
       const initial = Array.from({ length: 100 }, (_, i) => `room:${i}`);
@@ -439,7 +439,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to rooms 1-5
       await topics.subscribeMany([
@@ -479,7 +479,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with some topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -500,7 +500,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Maximum length topic (128 chars)
       const maxLengthTopic = "a".repeat(128);
@@ -520,7 +520,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with some topics
       await topics.subscribeMany(["keep:1", "keep:2", "remove:1", "remove:2"]);
@@ -546,7 +546,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with 5 topics
       await topics.subscribeMany([
@@ -580,7 +580,7 @@ describe("TopicsImpl - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Replace with some topics
       await topics.set(["room:1", "room:2", "room:3"]);
@@ -611,7 +611,7 @@ describe("forEach security", () => {
       unsubscribe: () => {},
     };
 
-    const topics = new TopicsImpl(mockWs);
+    const topics = createTopics(mockWs);
 
     // Subscribe to some topics
     await topics.subscribeMany(["room:1", "room:2"]);
@@ -626,7 +626,7 @@ describe("forEach security", () => {
     // Should have been called twice (once per topic)
     expect(calls.length).toBe(2);
 
-    // Each call should pass the TopicsImpl instance as the facade
+    // Each call should pass the OptimisticTopics instance as the facade
     // (typed as ReadonlySet at the API boundary)
     for (const call of calls) {
       expect(call.value).toMatch(/^room:/);

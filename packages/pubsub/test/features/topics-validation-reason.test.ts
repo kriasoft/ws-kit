@@ -3,9 +3,9 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
-import { TopicsImpl, createTopicValidator } from "../../src/core/topics.js";
+import { createTopics, createTopicValidator } from "../../src/core/topics.js";
 
-describe("TopicsImpl - Validation Reason Field", () => {
+describe("OptimisticTopics - Validation Reason Field", () => {
   describe("Default validation - reason field", () => {
     it("should include reason: pattern for empty topic", async () => {
       const mockWs = {
@@ -14,7 +14,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.subscribe("");
@@ -35,7 +35,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       const longTopic = "a".repeat(129);
 
@@ -61,7 +61,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.subscribe("room@invalid!topic");
@@ -84,7 +84,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Topic that is both too long AND has invalid characters
       const badTopic = "!".repeat(200);
@@ -112,7 +112,10 @@ describe("TopicsImpl - Validation Reason Field", () => {
 
       const customPattern = /^[A-Z0-9]+$/; // Only uppercase and digits
       const validator = createTopicValidator(customPattern, 128);
-      const topics = new TopicsImpl(mockWs, Infinity, validator);
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+        validator: validator,
+      });
 
       // Valid according to custom pattern
       await expect(topics.subscribe("ROOM123")).resolves.toBeUndefined();
@@ -141,7 +144,10 @@ describe("TopicsImpl - Validation Reason Field", () => {
         /^[a-z0-9:_./-]{1,128}$/i,
         customMaxLength,
       );
-      const topics = new TopicsImpl(mockWs, Infinity, validator);
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+        validator: validator,
+      });
 
       // Valid: within custom limit
       await expect(topics.subscribe("a".repeat(64))).resolves.toBeUndefined();
@@ -175,7 +181,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to subscribe to multiple topics, with one invalid due to length
       const longTopic = "a".repeat(129);
@@ -201,7 +207,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.subscribeMany(["room:1", "bad@topic!", "room:2"]);
@@ -224,7 +230,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       const longTopic = "a".repeat(129);
 
@@ -243,7 +249,7 @@ describe("TopicsImpl - Validation Reason Field", () => {
     });
   });
 
-  describe("Custom validator in TopicsImpl constructor", () => {
+  describe("Custom validator in createTopics factory", () => {
     it("should use custom validator when injected", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
@@ -261,7 +267,10 @@ describe("TopicsImpl - Validation Reason Field", () => {
         }
       };
 
-      const topics = new TopicsImpl(mockWs, Infinity, customValidator);
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+        validator: customValidator,
+      });
 
       // Valid topic
       await expect(topics.subscribe("allowed")).resolves.toBeUndefined();
@@ -297,7 +306,10 @@ describe("TopicsImpl - Validation Reason Field", () => {
         }
       };
 
-      const topics = new TopicsImpl(mockWs, Infinity, customValidator);
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+        validator: customValidator,
+      });
 
       // Soft no-op: unsubscribe from non-subscribed topic skips validation
       // (safe to call from error paths with potentially invalid topics)
@@ -322,7 +334,10 @@ describe("TopicsImpl - Validation Reason Field", () => {
         }
       };
 
-      const topics = new TopicsImpl(mockWs, Infinity, customValidator);
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+        validator: customValidator,
+      });
 
       // Subscribe to a good topic
       await expect(topics.subscribe("good-topic")).resolves.toBeUndefined();

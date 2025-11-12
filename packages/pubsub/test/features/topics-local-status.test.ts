@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - localStatus() Method", () => {
+describe("OptimisticTopics - localStatus() Method", () => {
   describe("Four-State Semantics", () => {
     it("should return 'absent' for unsubscribed topics", () => {
       const mockWs = {
@@ -14,7 +14,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       expect(topics.localStatus("room:1")).toBe("absent");
       expect(topics.localStatus("room:2")).toBe("absent");
@@ -27,7 +27,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe
       await topics.subscribe("room:1");
@@ -50,7 +50,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start subscribe (will be pending)
       const subPromise = topics.subscribe("room:1");
@@ -81,7 +81,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -118,7 +118,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start subscribe (pending)
       const subPromise = topics.subscribe("room:1");
@@ -150,7 +150,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -187,7 +187,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Initial: absent
       expect(topics.localStatus("room:1")).toBe("absent");
@@ -220,7 +220,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -256,7 +256,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start first subscribe
       const sub1 = topics.subscribe("room:1");
@@ -300,7 +300,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         }),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start subscribe
       const subPromise = topics.subscribe("room:1");
@@ -355,7 +355,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start subscribes to different topics (parallel, no serialization between topics)
       const sub1 = topics.subscribe("room:1");
@@ -397,7 +397,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       try {
         await topics.subscribe("room:1");
@@ -420,7 +420,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // subscribeMany completes (batch operation)
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -440,7 +440,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe first
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -467,7 +467,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Initial subscription
       await topics.subscribe("room:1");
@@ -490,7 +490,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Initial subscriptions
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -526,7 +526,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start subscribe
       const subPromise = topics.subscribe("room:1");
@@ -554,7 +554,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe (synchronous adapter)
       await topics.subscribe("room:1");
@@ -579,7 +579,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe, then clear
       await topics.subscribe("room:1");
@@ -596,7 +596,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Multiple calls should always return absent
       expect(topics.localStatus("unknown:1")).toBe("absent");
@@ -611,7 +611,7 @@ describe("TopicsImpl - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to multiple topics
       await topics.subscribe("room:1");

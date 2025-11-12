@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { describe, expect, it, mock } from "bun:test";
 import { AbortError, PubSubError } from "../../src/core/error.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - Abort Signal Semantics", () => {
+describe("OptimisticTopics - Abort Signal Semantics", () => {
   describe("Pre-commit cancellation", () => {
     describe("subscribe()", () => {
       it("should reject with AbortError if signal is already aborted", async () => {
@@ -15,7 +15,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         const ctrl = new AbortController();
         ctrl.abort();
 
@@ -40,7 +40,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
 
         // Subscribe first
         await topics.subscribe("room:1");
@@ -65,7 +65,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribe("room:1");
 
         const ctrl = new AbortController();
@@ -89,7 +89,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
 
         const ctrl = new AbortController();
         ctrl.abort();
@@ -110,7 +110,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         const ctrl = new AbortController();
         ctrl.abort();
 
@@ -135,7 +135,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         const ctrl = new AbortController();
 
         // Abort the operation
@@ -166,7 +166,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribeMany(["room:1", "room:2"]);
 
         const ctrl = new AbortController();
@@ -194,7 +194,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
         const ctrl = new AbortController();
@@ -225,7 +225,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribeMany(["room:1", "room:2"]);
 
         const ctrl = new AbortController();
@@ -249,7 +249,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
         const ctrl = new AbortController();
@@ -275,7 +275,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribeMany(["room:1", "room:2"]);
 
         const ctrl = new AbortController();
@@ -301,7 +301,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
           unsubscribe: mock(() => {}),
         };
 
-        const topics = new TopicsImpl(mockWs);
+        const topics = createTopics(mockWs);
         await topics.subscribeMany(["room:1", "room:2"]);
 
         const ctrl = new AbortController();
@@ -339,7 +339,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
       const ctrl = new AbortController();
 
       // Start the operation
@@ -381,7 +381,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
       const ctrl = new AbortController();
 
       // Start the operation
@@ -419,7 +419,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
       const ctrl = new AbortController();
       ctrl.abort();
 
@@ -444,7 +444,7 @@ describe("TopicsImpl - Abort Signal Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 2); // Max 2 topics
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 }); // Max 2 topics
 
       // Subscribe to 2 topics first
       await topics.subscribeMany(["room:1", "room:2"]);

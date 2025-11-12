@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import { WebSocketRouter } from "@ws-kit/core";
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
-import { WebSocketRouter } from "@ws-kit/core";
 
-describe("TopicsImpl - Router Integration (Topic Policy)", () => {
+describe("OptimisticTopics - Router Integration (Topic Policy)", () => {
   describe("Custom topic pattern via router limits", () => {
-    it("should inject custom pattern validator into TopicsImpl via router", async () => {
+    it("should inject custom pattern validator into OptimisticTopics via router", async () => {
       const customPattern = /^[A-Z0-9:]+$/; // Only uppercase, digits, colons
       const router = new WebSocketRouter({
         limits: {

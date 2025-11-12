@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { AbortError, PubSubError } from "./error";
 import type { ServerWebSocket, Topics } from "@ws-kit/core";
-import { DEFAULT_TOPIC_PATTERN, DEFAULT_TOPIC_MAX_LENGTH } from "./constants";
+import { DEFAULT_TOPIC_MAX_LENGTH, DEFAULT_TOPIC_PATTERN } from "./constants";
+import { AbortError, PubSubError } from "./error";
 
 // ============================================================================
 // Helper Utilities for Confirmation and Timeout Handling
@@ -164,9 +164,44 @@ export function isSubscribed(
 }
 
 /**
+ * Create a Topics instance for managing a connection's subscriptions.
+ *
+ * @template TConn - Connection data type
+ * @param ws - Platform adapter WebSocket instance for this connection
+ * @param options - Optional configuration
+ * @param options.maxTopicsPerConnection - Maximum number of topics per connection (default: Infinity)
+ * @param options.validator - Optional custom topic validator function
+ * @returns Topics interface for subscription management
+ *
+ * @example
+ * ```typescript
+ * const topics = createTopics(ws, {
+ *   maxTopicsPerConnection: 100,
+ *   validator: customValidator,
+ * });
+ * await topics.subscribe("room:123");
+ * ```
+ */
+export function createTopics<
+  TConn extends { clientId: string } = { clientId: string },
+>(
+  ws: ServerWebSocket<TConn>,
+  options?: {
+    maxTopicsPerConnection?: number;
+    validator?: TopicValidator;
+  },
+): Topics {
+  return new OptimisticTopics(
+    ws,
+    options?.maxTopicsPerConnection,
+    options?.validator,
+  );
+}
+
+/**
  * Default implementation of the Topics interface.
  *
- * Provides per-connection topic subscription state and operations.
+ * Provides per-connection topic subscription state and operations with optimistic local updates.
  * Wraps the platform adapter's WebSocket.subscribe/unsubscribe methods.
  *
  * **Adapter-first ordering** (all operations follow the same pattern):
@@ -193,7 +228,7 @@ export function isSubscribed(
  *
  * @template TConn - Connection data type
  */
-export class TopicsImpl<
+export class OptimisticTopics<
   TConn extends { clientId: string } = { clientId: string },
 > implements Topics
 {
@@ -1312,7 +1347,7 @@ export class TopicsImpl<
    * - Max 128 characters
    *
    * Custom validators are configured via router options (limits.topicPattern, limits.maxTopicLength)
-   * and injected at TopicsImpl construction time.
+   * and injected at OptimisticTopics construction time.
    *
    * Validation errors MUST include `details.reason` field to classify the failure:
    * - "pattern": Topic format invalid (doesn't match pattern)
@@ -1363,14 +1398,14 @@ export class TopicsImpl<
 /**
  * Create a topic validator from pattern and maxTopicLength options.
  *
- * Used by the router to inject custom validation into TopicsImpl instances.
+ * Used by the router to inject custom validation into OptimisticTopics instances.
  * The validator checks length first, then pattern, to ensure consistent error reporting.
  *
  * @param pattern - Regular expression to validate topic format
  * @param maxTopicLength - Maximum allowed topic length in characters
  * @returns Validator function that throws PubSubError on invalid topics
  *
- * @internal Used by router to create injected validators for TopicsImpl
+ * @internal Used by router to create injected validators for OptimisticTopics
  */
 export function createTopicValidator(
   pattern?: RegExp,

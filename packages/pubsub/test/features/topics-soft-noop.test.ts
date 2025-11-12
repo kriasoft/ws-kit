@@ -3,9 +3,9 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
+describe("OptimisticTopics - Soft No-Op Semantics (unsubscribe)", () => {
   describe("unsubscribe() - single-op soft no-op", () => {
     it("should not throw when topic is not subscribed (valid format)", async () => {
       const mockWs = {
@@ -14,7 +14,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Unsubscribe from a topic we never subscribed to (should be soft no-op)
       await expect(topics.unsubscribe("room:123")).resolves.toBeUndefined();
@@ -28,7 +28,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Unsubscribe from invalid topic string that we never subscribed to
       // Per docs/specs/pubsub.md#idempotency: soft no-op if not subscribed, even if invalid
@@ -45,7 +45,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First subscribe to a VALID topic string, then manually mark it as subscribed
       // (We can't actually subscribe to invalid topics due to validation)
@@ -71,7 +71,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Simulate an operation that may or may not have subscribed
       const maybeTopicString = "potentially-invalid!@#"; // Invalid format
@@ -105,7 +105,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // First unsubscribe call (topic not subscribed, soft no-op)
       await topics.unsubscribe("room:123");
@@ -125,7 +125,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Unsubscribe from multiple topics, none of which are subscribed
       // Should not throw even if format is invalid
@@ -147,7 +147,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to one valid topic
       await topics.subscribe("room:1");
@@ -181,8 +181,8 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics1 = new TopicsImpl(mockWs1);
-      const topics2 = new TopicsImpl(mockWs2);
+      const topics1 = createTopics(mockWs1);
+      const topics2 = createTopics(mockWs2);
 
       const invalidTopic = "!invalid@format#";
 
@@ -205,7 +205,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Unsubscribe from non-existent topic (soft no-op)
       await topics.unsubscribe("room:123");
@@ -226,7 +226,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with some subscriptions
       await topics.subscribe("room:1");
@@ -253,7 +253,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Try to replace with invalid topic in desired set
       try {
@@ -277,7 +277,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Start with room:1 and room:2 subscribed
       await topics.subscribe("room:1");
@@ -313,7 +313,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to some topics
       await topics.subscribe("room:1");
@@ -347,7 +347,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to room:1 first
       await topics.subscribe("room:1");
@@ -375,7 +375,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Replace with duplicates in desired set
       const result = await topics.set([
@@ -403,7 +403,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe in order: room:1, room:2, room:3
       await topics.subscribe("room:1");
@@ -436,7 +436,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Empty string is invalid format, but since not subscribed, soft no-op
       await expect(topics.unsubscribe("")).resolves.toBeUndefined();
@@ -450,7 +450,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Very long string (exceeds 128 char limit), invalid, not subscribed
       const longInvalid = "x".repeat(200);
@@ -465,7 +465,7 @@ describe("TopicsImpl - Soft No-Op Semantics (unsubscribe)", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Unicode, emoji, nulls - all invalid but not subscribed, so soft no-op
       await expect(

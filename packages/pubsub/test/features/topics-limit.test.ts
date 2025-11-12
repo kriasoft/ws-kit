@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { TopicsImpl } from "../../src/core/topics.js";
+import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
+import { createTopics } from "../../src/core/topics.js";
 
-describe("TopicsImpl - maxTopicsPerConnection limit", () => {
+describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
   describe("subscribe() with limit enforcement", () => {
     it("should allow subscriptions up to the limit", async () => {
       const mockWs = {
@@ -14,7 +14,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Should succeed for topics within limit
       await topics.subscribe("topic:1");
@@ -34,7 +34,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 2);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 });
 
       // Subscribe to 2 topics (at limit)
       await topics.subscribe("topic:1");
@@ -66,7 +66,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 2);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 });
 
       await topics.subscribe("topic:1");
       await topics.subscribe("topic:2");
@@ -84,7 +84,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 1);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 1 });
 
       await topics.subscribe("topic:1");
       expect(topics.size).toBe(1);
@@ -106,7 +106,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 5);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 5 });
 
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
@@ -122,7 +122,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // First batch: subscribe to 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -156,7 +156,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 5);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 5 });
 
       // First batch: subscribe to 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -177,7 +177,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe with duplicates in the input
       const result = await topics.subscribeMany([
@@ -201,7 +201,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe to 2 topics first
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -225,7 +225,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 4);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 4 });
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -245,7 +245,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe to 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -286,16 +286,16 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe to 5 topics (pretend limit was higher initially)
       // Start with a fresh instance with higher limit, then reduce
-      const topicsLarge = new TopicsImpl(mockWs, 10);
+      const topicsLarge = createTopics(mockWs, { maxTopicsPerConnection: 10 });
       await topicsLarge.subscribeMany(["a", "b", "c", "d", "e"]);
       expect(topicsLarge.size).toBe(5);
 
       // Now create new instance with limit 3
-      const topicsLimited = new TopicsImpl(mockWs, 3);
+      const topicsLimited = createTopics(mockWs, { maxTopicsPerConnection: 3 });
       // Manually set up state for testing (simulating old subscriptions)
       // Instead, let's test a valid scenario:
 
@@ -317,7 +317,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Start with 2 topics
       await topics.subscribeMany(["a", "b"]);
@@ -337,7 +337,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 3);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Start with 2 topics
       await topics.subscribeMany(["a", "b"]);
@@ -364,7 +364,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
       };
 
       // Default: Infinity (no limit)
-      const topics = new TopicsImpl(mockWs);
+      const topics = createTopics(mockWs);
 
       // Subscribe to many topics
       for (let i = 0; i < 1000; i++) {
@@ -381,7 +381,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, Infinity);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: Infinity });
 
       const topicArray = Array.from({ length: 500 }, (_, i) => `topic:${i}`);
       const result = await topics.subscribeMany(topicArray);
@@ -397,7 +397,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, Infinity);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: Infinity });
 
       const topicArray = Array.from({ length: 1000 }, (_, i) => `topic:${i}`);
       const result = await topics.set(topicArray);
@@ -418,7 +418,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 2);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 });
 
       adapterCalls.length = 0;
       await topics.subscribe("topic:1");
@@ -449,7 +449,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 4);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 4 });
 
       // Use subscribe() to add 2 topics
       await topics.subscribe("a");
@@ -483,7 +483,7 @@ describe("TopicsImpl - maxTopicsPerConnection limit", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = new TopicsImpl(mockWs, 10);
+      const topics = createTopics(mockWs, { maxTopicsPerConnection: 10 });
 
       // Subscribe to 7 topics
       await topics.subscribeMany(Array.from({ length: 7 }, (_, i) => `t:${i}`));

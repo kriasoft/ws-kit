@@ -47,8 +47,8 @@ router.on(Notify, async (ctx) => {
 
 ```bash
 src/
-├─ core/                    # Core pub/sub primitives (internal)
-│  ├─ topics.ts            # TopicsImpl: per-connection subscription state
+├─ core/                   # Core pub/sub primitives (internal)
+│  ├─ topics.ts            # OptimisticTopics, createTopics(): per-connection subscription state
 │  ├─ error.ts             # PubSubError, AbortError, error codes
 │  └─ constants.ts         # DEFAULT_TOPIC_PATTERN, DEFAULT_TOPIC_MAX_LENGTH
 ├─ adapters/
@@ -57,7 +57,7 @@ src/
 ├─ plugin.ts               # withPubSub() plugin factory
 ├─ middleware.ts           # usePubSub() policy enforcement middleware
 ├─ types.ts                # Type definitions (Topics, PublishOptions, hooks)
-└─ internal.ts             # Internal re-exports (TopicsImpl, etc. for core)
+└─ internal.ts             # Internal re-exports (OptimisticTopics, createTopics, etc. for core)
 ```
 
 ### Design Principles
@@ -151,8 +151,14 @@ await ctx.topics.unsubscribe(topic, options?);
 // Batch operations
 await ctx.topics.subscribeMany(topics, options?);
 await ctx.topics.unsubscribeMany(topics, options?);
-await ctx.topics.replace(topics, options?);
+await ctx.topics.set(topics, options?);
+await ctx.topics.update(mutator, options?);
 await ctx.topics.clear(options?);
+
+// Lifecycle and verification
+ctx.topics.localStatus(topic);  // Check settlement status
+await ctx.topics.settle(topic?, options?);  // Wait for operations to settle
+await ctx.topics.verify(topic, options?);   // Verify adapter truth
 
 // Query subscriptions (ReadonlySet<string>)
 ctx.topics.has(topic);
