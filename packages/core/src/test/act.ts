@@ -98,15 +98,18 @@ export const act = {
       const outgoing = conn.outgoing();
 
       for (const frame of outgoing) {
-        if (frame.type === responseType && (frame as any)._rpcId === rpcId) {
-          if ((frame as any)._isProgress) {
-            progressFrames.push(frame.payload as TResponse);
-          } else {
-            // Terminal response
-            resultPromiseResolve(frame.payload as TResponse);
-            progressResolved = true;
-            return;
-          }
+        const correlationId =
+          (frame as any)._rpcId || frame.meta?.correlationId;
+
+        // Check for progress control messages
+        if (frame.type === "$ws:rpc-progress" && correlationId === rpcId) {
+          progressFrames.push(frame.payload as TResponse);
+        }
+        // Check for terminal response
+        else if (frame.type === responseType && correlationId === rpcId) {
+          resultPromiseResolve(frame.payload as TResponse);
+          progressResolved = true;
+          return;
         }
       }
 

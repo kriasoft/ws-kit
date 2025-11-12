@@ -58,7 +58,7 @@ export interface ReplyOptions {
 
   /**
    * Additional metadata to merge into response meta.
-   * Reserved keys (type, correlationId, progress) are immutable and cannot be overridden.
+   * Reserved keys (type, correlationId) are immutable and cannot be overridden.
    */
   meta?: Record<string, unknown>;
 }
@@ -206,7 +206,6 @@ export function withValibot(
         // Strip reserved keys that cannot be overridden
         delete sanitized.type;
         delete sanitized.correlationId;
-        delete sanitized.progress;
         return sanitized;
       }
 
@@ -326,10 +325,63 @@ export function withValibot(
         sendMessage(messageType, validatedPayload, {});
       };
 
-      // Helper: send outbound message (terminal or progress)
+      // Helper: validate payload against RPC response schema
+      const validateProgressPayload = async (
+        responseSchema: AnySchema,
+        progressPayload: any,
+      ): Promise<any> => {
+        const shouldValidate = opts.validateOutgoing;
+
+        if (!shouldValidate) {
+          return progressPayload;
+        }
+
+        // Get the payload schema from the response message schema
+        const schemaObj = responseSchema as any;
+
+        if (typeof schemaObj?.safeParse === "function") {
+          // Construct a temporary message to validate the payload shape
+          const tempMessage = {
+            type:
+              schemaObj.responseType ||
+              schemaObj.__descriptor?.type ||
+              schemaObj.type,
+            meta: {},
+            ...(progressPayload !== undefined
+              ? { payload: progressPayload }
+              : {}),
+          };
+
+          const result = schemaObj.safeParse(tempMessage);
+          if (!result.success) {
+            const validationError = new Error(
+              `Progress validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
+            );
+            (validationError as any).code = "PROGRESS_VALIDATION_ERROR";
+            (validationError as any).details = result.error;
+
+            if (opts.onValidationError) {
+              await opts.onValidationError(validationError, {
+                type: "$ws:rpc-progress",
+                direction: "outbound",
+                payload: progressPayload,
+              });
+            } else {
+              const lifecycle = routerImpl.getInternalLifecycle();
+              await lifecycle.handleError(validationError, ctx);
+            }
+            throw validationError;
+          }
+
+          return result.data.payload ?? progressPayload;
+        }
+
+        return progressPayload;
+      };
+
+      // Helper: send outbound message (terminal reply only)
       const sendOutbound = async (
         payload: any,
-        isProgress: boolean,
         replyOpts?: ReplyOptions,
       ): Promise<void> => {
         const wskit = guardRpc();
@@ -347,7 +399,6 @@ export function withValibot(
           meta: {
             ...baseMeta(ctx),
             ...sanitizeMeta(replyOpts?.meta),
-            ...(isProgress ? { progress: true } : null),
           },
           ...(payload !== undefined ? { payload } : {}),
         };
@@ -356,13 +407,10 @@ export function withValibot(
         if (shouldValidate && typeof responseSchema?.safeParse === "function") {
           const result = responseSchema.safeParse(responseMessage);
           if (!result.success) {
-            const errorCode = isProgress
-              ? "PROGRESS_VALIDATION_ERROR"
-              : "REPLY_VALIDATION_ERROR";
             const validationError = new Error(
-              `${isProgress ? "Progress" : "Reply"} validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
+              `Reply validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
             );
-            (validationError as any).code = errorCode;
+            (validationError as any).code = "REPLY_VALIDATION_ERROR";
             (validationError as any).details = result.error;
 
             if (opts.onValidationError) {
@@ -379,10 +427,8 @@ export function withValibot(
           }
         }
 
-        // Mark as replied (unless this is a progress update)
-        if (!isProgress) {
-          replied = true;
-        }
+        // Mark as replied
+        replied = true;
 
         // Send the message via WebSocket
         sendMessage(
@@ -396,14 +442,39 @@ export function withValibot(
       (ctx as any).reply = async (payload: any, opts?: ReplyOptions) => {
         guardRpc();
         if (replied) return; // Idempotent: silently ignore if already replied
-        await sendOutbound(payload, false, opts);
+        await sendOutbound(payload, opts);
       };
 
       // Attach progress() method for RPC handlers
+      // Emits a dedicated $ws:rpc-progress control message (non-terminal)
       (ctx as any).progress = async (payload: any, opts?: ReplyOptions) => {
-        guardRpc();
-        // Progress can be called multiple times; doesn't set replied flag
-        await sendOutbound(payload, true, opts);
+        const wskit = guardRpc();
+        const responseSchema = wskit.response as any;
+
+        // Validate progress payload against RPC response schema
+        const validatedPayload = await validateProgressPayload(
+          responseSchema,
+          payload,
+        );
+
+        // Build control message with correlation ID preserved
+        const progressMessage = {
+          type: "$ws:rpc-progress",
+          meta: {
+            ...baseMeta(ctx),
+            ...sanitizeMeta(opts?.meta),
+          },
+          ...(validatedPayload !== undefined
+            ? { payload: validatedPayload }
+            : {}),
+        };
+
+        // Send control message without marking as replied
+        sendMessage(
+          progressMessage.type,
+          progressMessage.payload,
+          progressMessage.meta,
+        );
       };
 
       // Attach getData() method - retrieve connection data

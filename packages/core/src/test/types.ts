@@ -14,9 +14,8 @@ export interface OutboundFrame {
   payload?: unknown;
   meta?: Record<string, unknown>;
   // Correlation ID for RPC responses (if present)
+  // For control messages like $ws:rpc-progress, the correlation ID is in meta.correlationId
   _rpcId?: string;
-  // Progress indicator for RPC (true = progress, false/undefined = terminal)
-  _isProgress?: boolean;
 }
 
 /**
