@@ -48,6 +48,12 @@ export interface CreateTestRouterOptions<TContext> {
    * Default: true.
    */
   capturePubSub?: boolean;
+
+  /**
+   * Strict mode: fail on timer leaks instead of warn (default: false).
+   * Useful in CI to catch unclosed RPCs and other timer-based bugs.
+   */
+  strict?: boolean;
 }
 
 /**
@@ -89,6 +95,7 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
     clock: opts?.clock,
     onErrorCapture: opts?.onErrorCapture !== false,
     capturePubSub: opts?.capturePubSub !== false,
+    strict: opts?.strict,
   });
 }
 
@@ -98,7 +105,12 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
  */
 export function wrapTestRouter<TContext extends BaseContextData = unknown>(
   router: Router<TContext>,
-  opts?: { clock?: Clock; onErrorCapture?: boolean; capturePubSub?: boolean },
+  opts?: {
+    clock?: Clock;
+    onErrorCapture?: boolean;
+    capturePubSub?: boolean;
+    strict?: boolean;
+  },
 ): TestRouter<TContext> {
   // Cast to internal implementation to access registry, lifecycle, etc.
   const impl = router as any as CoreRouter<TContext>;
@@ -199,6 +211,10 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
 
     capture,
     clock,
+    // Internal: expose adapter for testing auth/headers flows
+    get adapter() {
+      return adapter;
+    },
 
     async tick(ms: number): Promise<void> {
       if (clock instanceof FakeClock) {
@@ -228,10 +244,12 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
       if (clock instanceof FakeClock) {
         const pending = clock.pendingTimers();
         if (pending.length > 0) {
-          console.warn(
-            `[Test] Leaked ${pending.length} timers after close:`,
-            pending,
-          );
+          const msg = `Leaked ${pending.length} timers after close: ${JSON.stringify(pending)}`;
+          if (opts?.strict) {
+            throw new Error(`[Test] Timer leaks detected: ${msg}`);
+          } else {
+            console.warn(`[Test] ${msg}`);
+          }
         }
       }
     },

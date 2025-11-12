@@ -45,6 +45,7 @@ export class InMemoryPlatformAdapter<TContext extends BaseContextData = unknown>
     this.connections.set(clientId, {
       ws,
       data,
+      headers: init?.headers,
       subscriptions: new Set(),
     });
 
@@ -91,6 +92,12 @@ export class InMemoryPlatformAdapter<TContext extends BaseContextData = unknown>
         // Parsing errors are logged by TestWebSocket
       }
     }
+  }
+
+  getConnectionInfo(clientId: string): Record<string, unknown> {
+    const st = this.connections.get(clientId);
+    if (!st) return {};
+    return st.headers ? { headers: { ...st.headers } } : {};
   }
 
   // Test-specific helpers

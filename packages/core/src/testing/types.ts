@@ -40,6 +40,17 @@ export interface PublishRecord {
  */
 export interface TestConnection<TContext = unknown> {
   /**
+   * Unique client ID for this connection.
+   */
+  readonly clientId: string;
+
+  /**
+   * Internal: access to the underlying TestWebSocket for debugging.
+   * Typically used to inspect raw messages or test binary frames.
+   */
+  readonly ws: any;
+
+  /**
    * Send inbound message to router (as if from client).
    * Routes through the websocket bridge to exercise the same code paths as production adapters.
    * Returns immediately; use tr.flush() to wait for message processing to complete.

@@ -290,4 +290,138 @@ describe("Test Router - Basic", () => {
       expect(conn2.ws.readyState).toBe("CLOSED");
     });
   });
+
+  describe("Headers and authentication", () => {
+    it("should persist headers and expose via getConnectionInfo", async () => {
+      const tr = test.createTestRouter({ create: () => createRouter() });
+      const adapter = (tr as any).adapter;
+
+      const conn = await tr.connect({
+        headers: { authorization: "Bearer xyz123", "x-user-id": "user-42" },
+      });
+
+      const info = adapter.getConnectionInfo(conn.clientId);
+      expect(info.headers?.authorization).toBe("Bearer xyz123");
+      expect(info.headers?.["x-user-id"]).toBe("user-42");
+    });
+
+    it("should return empty headers if not provided", async () => {
+      const tr = test.createTestRouter({ create: () => createRouter() });
+      const adapter = (tr as any).adapter;
+
+      const conn = await tr.connect();
+      const info = adapter.getConnectionInfo(conn.clientId);
+      expect(info.headers).toBeUndefined();
+    });
+
+    it("should prevent mutation of headers returned from getConnectionInfo", async () => {
+      const tr = test.createTestRouter({ create: () => createRouter() });
+      const adapter = (tr as any).adapter;
+
+      const conn = await tr.connect({
+        headers: { authorization: "Bearer xyz" },
+      });
+
+      const info = adapter.getConnectionInfo(conn.clientId);
+      if (info.headers) {
+        info.headers.authorization = "Bearer mutated";
+      }
+
+      // Original headers should be unchanged
+      const info2 = adapter.getConnectionInfo(conn.clientId);
+      expect(info2.headers?.authorization).toBe("Bearer xyz");
+    });
+  });
+
+  describe("Binary frames and raw message capture", () => {
+    it("should keep raw messages when JSON parse fails", async () => {
+      const tr = test.createTestRouter({ create: () => createRouter() });
+      const conn = await tr.connect();
+
+      // Directly access the WebSocket to send malformed data
+      const malformed = "{bad json}";
+      conn.ws.send(malformed);
+
+      const parsed = conn.outgoing();
+      expect(parsed).toHaveLength(0);
+
+      const raw = conn.ws.getSentMessagesRaw();
+      expect(raw).toHaveLength(1);
+      expect(String(raw[0])).toBe(malformed);
+    });
+
+    it("should capture both parsed and raw messages", async () => {
+      const tr = test.createTestRouter({ create: () => createRouter() });
+
+      const TestMessage: MessageDescriptor = {
+        type: "TEST",
+        kind: "event",
+      };
+
+      tr.on(TestMessage, (ctx) => {
+        ctx.ws.send(
+          JSON.stringify({ type: "RESPONSE", payload: { ok: true } }),
+        );
+      });
+
+      const conn = await tr.connect();
+      conn.send("TEST");
+      await tr.flush();
+
+      const parsed = conn.outgoing();
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].type).toBe("RESPONSE");
+
+      const raw = conn.ws.getSentMessagesRaw();
+      expect(raw).toHaveLength(1);
+      expect(typeof raw[0]).toBe("string");
+    });
+  });
+
+  describe("Strict mode for timer leaks", () => {
+    it("should warn by default when timers leak", async () => {
+      const tr = test.createTestRouter({ create: () => createRouter() });
+      const messages: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (msg: string) => {
+        messages.push(msg);
+      };
+
+      try {
+        // Schedule a timer that won't fire before close
+        tr.clock.setTimeout(() => {}, 10000);
+        await tr.close();
+
+        expect(messages.some((m) => m.includes("Leaked"))).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    });
+
+    it("should throw when timers leak in strict mode", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter(),
+        strict: true,
+      });
+
+      // Schedule a timer that won't fire before close
+      tr.clock.setTimeout(() => {}, 10000);
+
+      await expect(tr.close()).rejects.toThrow(/Timer leaks detected/);
+    });
+
+    it("should not throw when no timers leak in strict mode", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter(),
+        strict: true,
+      });
+
+      // Schedule and then clear a timer
+      const timerId = tr.clock.setTimeout(() => {}, 10000);
+      tr.clock.clearTimeout(timerId);
+
+      // Should not throw
+      await expect(tr.close()).resolves.toBeUndefined();
+    });
+  });
 });

@@ -17,6 +17,7 @@ export class TestWebSocket implements ServerWebSocket {
   readyState: "CONNECTING" | "OPEN" | "CLOSING" | "CLOSED" = "OPEN";
   readonly initialData?: Record<string, unknown>;
   private sentMessages: OutgoingFrame[] = [];
+  private sentRaw: (string | ArrayBuffer)[] = [];
 
   constructor(clientId: string, initialData?: Record<string, unknown>) {
     this.clientId = clientId;
@@ -33,12 +34,15 @@ export class TestWebSocket implements ServerWebSocket {
       );
     }
 
+    // Always capture raw payload for postmortem inspection
+    this.sentRaw.push(data);
+
     try {
       const text = typeof data === "string" ? data : this.decode(data);
       const frame = JSON.parse(text) as OutgoingFrame;
       this.sentMessages.push(frame);
     } catch (err) {
-      // If parsing fails, store raw message for debugging
+      // If parsing fails, raw message is preserved above; swallow parse error
       console.error(`[TestWebSocket] Failed to parse sent message:`, err);
     }
   }
@@ -58,10 +62,18 @@ export class TestWebSocket implements ServerWebSocket {
   }
 
   /**
+   * Get all raw sent messages (for debugging malformed/binary frames).
+   */
+  getSentMessagesRaw(): readonly (string | ArrayBuffer)[] {
+    return this.sentRaw;
+  }
+
+  /**
    * Clear sent messages (for testing).
    */
   clearSentMessages(): void {
     this.sentMessages = [];
+    this.sentRaw = [];
   }
 
   // Private helpers
@@ -79,5 +91,6 @@ export class TestWebSocket implements ServerWebSocket {
 export interface ConnectionState<TContext = unknown> {
   ws: TestWebSocket;
   data: TContext;
+  headers?: Record<string, string>;
   subscriptions: Set<string>;
 }
