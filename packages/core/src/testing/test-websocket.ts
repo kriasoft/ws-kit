@@ -15,10 +15,12 @@ import type { OutgoingFrame } from "./types";
 export class TestWebSocket implements ServerWebSocket {
   readonly clientId: string;
   readyState: "CONNECTING" | "OPEN" | "CLOSING" | "CLOSED" = "OPEN";
+  readonly initialData?: Record<string, unknown>;
   private sentMessages: OutgoingFrame[] = [];
 
-  constructor(clientId: string) {
+  constructor(clientId: string, initialData?: Record<string, unknown>) {
     this.clientId = clientId;
+    this.initialData = initialData;
   }
 
   /**

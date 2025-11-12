@@ -39,7 +39,7 @@ export class InMemoryPlatformAdapter<TContext extends BaseContextData = unknown>
     headers?: Record<string, string>;
   }): TestWebSocket {
     const clientId = String(this.nextClientId++);
-    const ws = new TestWebSocket(clientId);
+    const ws = new TestWebSocket(clientId, init?.data);
     const data = init?.data || ({} as TContext);
 
     this.connections.set(clientId, {

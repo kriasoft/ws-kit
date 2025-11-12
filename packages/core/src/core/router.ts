@@ -554,6 +554,14 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   async handleOpen(ws: ServerWebSocket): Promise<void> {
     const now = Date.now();
     this.lifecycle.markActivity(ws, now);
+
+    // Merge initial context data provided by the adapter (e.g., from headers, auth).
+    // This runs before lifecycle.handleOpen, so onOpen handlers and plugins see seeded data.
+    if (ws.initialData) {
+      const ctx = this.getOrInitData(ws);
+      Object.assign(ctx, ws.initialData);
+    }
+
     // Notify plugins (e.g., pubsub for client tracking)
     await this.lifecycle.handleOpen(ws);
   }

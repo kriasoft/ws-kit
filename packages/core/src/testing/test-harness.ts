@@ -170,15 +170,6 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
     const actualClientId = ws.clientId;
     const state = adapter.getConnection(actualClientId)!;
 
-    // Initialize router's data store with the adapter's initial data.
-    // This ensures context.data contains the connection data passed to connect().
-    if (state.data && Object.keys(state.data).length > 0) {
-      // Use cast to access private method (testing-only)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const routerData = (impl as any).getOrInitData(ws);
-      Object.assign(routerData, state.data);
-    }
-
     conn = new TestConnectionImpl(
       actualClientId,
       ws,
