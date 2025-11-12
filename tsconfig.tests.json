@@ -6,6 +6,7 @@
     { "path": "./packages/client/tsconfig.test.json" },
     { "path": "./packages/cloudflare/tsconfig.test.json" },
     { "path": "./packages/core/tsconfig.test.json" },
+    { "path": "./packages/memory/tsconfig.test.json" },
     { "path": "./packages/middleware/tsconfig.test.json" },
     { "path": "./packages/valibot/tsconfig.test.json" },
     { "path": "./packages/zod/tsconfig.test.json" }

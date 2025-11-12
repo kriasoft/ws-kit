@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { IngressContext, WebSocketData } from "@ws-kit/core";
+import type { BaseContextData, MinimalContext } from "@ws-kit/core";
+
+// Type aliases for clarity
+type IngressContext<T extends BaseContextData = BaseContextData> =
+  MinimalContext<T>;
+type WebSocketData = BaseContextData;
 
 /**
  * Common rate limiting context fields (suggested app data structure).

@@ -43,6 +43,7 @@
   ],
   "peerDependencies": {
     "@ws-kit/core": "workspace:^",
+    "@ws-kit/rate-limit": "workspace:^",
     "redis": ">=5.0.0"
   },
   "dependencies": {
