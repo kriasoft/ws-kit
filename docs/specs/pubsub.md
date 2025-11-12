@@ -225,7 +225,7 @@ interface Topics extends ReadonlySet<string> {
    *          'pending-unsubscribe' (unsubscribe in-flight),
    *          'absent' (not subscribed)
    */
-  status(
+  localStatus(
     topic: string,
   ): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent";
 
@@ -1018,12 +1018,12 @@ try {
 }
 ```
 
-### 6.6.1 Topic Status & Introspection (`status()`)
+### 6.6.1 Topic Local Status & Introspection (`localStatus()`)
 
 Query the detailed subscription status of a topic:
 
 ```typescript
-status(topic: string): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent"
+localStatus(topic: string): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent"
 ```
 
 **States:**
@@ -1035,7 +1035,7 @@ status(topic: string): "settled" | "pending-subscribe" | "pending-unsubscribe" |
 
 **Optimistic vs Settled Semantics (Quick Reference):**
 
-| Scenario                         | `has(topic)` | `status(topic)`         | Notes                                          |
+| Scenario                         | `has(topic)` | `localStatus(topic)`    | Notes                                          |
 | -------------------------------- | ------------ | ----------------------- | ---------------------------------------------- |
 | Not subscribed, no in-flight ops | `false`      | `"absent"`              | Initial state                                  |
 | Subscribe in-flight              | `true`       | `"pending-subscribe"`   | Optimistic: local mutation happens immediately |
@@ -1043,7 +1043,7 @@ status(topic: string): "settled" | "pending-subscribe" | "pending-unsubscribe" |
 | Unsubscribe in-flight            | `false`      | `"pending-unsubscribe"` | Optimistic: local state already changed        |
 | Unsubscribe completed            | `false`      | `"absent"`              | Operation completed locally after adapter call |
 
-**Key insight:** `has()` returns the _optimistic_ local state (includes in-flight mutations), while `status()` reveals the precise state of each operation. Use `has()` for fast checks; use `status()` when you need to distinguish pending from settled. Note: "settled" is local completion, not adapter truth. Use `verify()` for adapter-side checks.
+**Key insight:** `has()` returns the _optimistic_ local state (includes in-flight mutations), while `localStatus()` reveals the precise state of each operation. Use `has()` for fast checks; use `localStatus()` when you need to distinguish pending from settled. Note: "settled" is local completion, not adapter truth. Use `verify()` for adapter-side checks.
 
 **Use cases:**
 
@@ -1055,7 +1055,7 @@ status(topic: string): "settled" | "pending-subscribe" | "pending-unsubscribe" |
 
 ```typescript
 await ctx.topics.subscribe("room:1");
-const status = ctx.topics.status("room:1");
+const status = ctx.topics.localStatus("room:1");
 
 if (status === "pending-subscribe") {
   // Still in-flight; adapter may reject it
@@ -1142,7 +1142,7 @@ console.log(ctx.topics.has("room:1")); // true (optimistic)
 
 // Wait for settlement
 await ctx.topics.settle("room:1", { timeoutMs: 5000 });
-console.log(ctx.topics.status("room:1")); // "settled" (settled)
+console.log(ctx.topics.localStatus("room:1")); // "settled" (settled)
 ```
 
 **Guarantees:**
@@ -1179,9 +1179,9 @@ verify(
 - **`{ kind: "error"; cause }`** — Transient error from adapter (may retry)
 - **`{ kind: "timeout" }`** — Verification operation timed out
 
-**Key difference from `status()`:**
+**Key difference from `localStatus()`:**
 
-- **`status(topic)`** — Reflects local settlement state (did the last mutation complete locally?)
+- **`localStatus(topic)`** — Reflects local settlement state (did the last mutation complete locally?)
 - **`verify(topic)`** — Checks adapter truth (is this connection actually subscribed according to the adapter?)
 
 **Use cases:**
@@ -1196,7 +1196,7 @@ verify(
 ```typescript
 // Subscribe locally
 await ctx.topics.subscribe("room:1", { waitFor: "settled" });
-console.log(ctx.topics.status("room:1")); // "settled"
+console.log(ctx.topics.localStatus("room:1")); // "settled"
 
 // Check adapter truth (strict: errors on unsupported)
 const result = await ctx.topics.verify("room:1", { mode: "strict" });

@@ -330,7 +330,7 @@ export class TopicsImpl<
       // If waitFor==="settled" and already settled, idempotency shortcut (fast path)
       if (
         options?.waitFor === "settled" &&
-        this.status(normalizedTopic) === "settled"
+        this.localStatus(normalizedTopic) === "settled"
       ) {
         return; // Already settled; return immediately
       }
@@ -913,7 +913,7 @@ export class TopicsImpl<
   }
 
   /**
-   * Get detailed subscription status (settled, pending, or absent).
+   * Get detailed local subscription status (settled, pending, or absent).
    * Use when you need to distinguish in-flight operations from settled state.
    *
    * **Important**: "settled" means the operation completed locally after a successful adapter call.
@@ -925,7 +925,7 @@ export class TopicsImpl<
    *          'pending-unsubscribe' (unsubscribe in-flight),
    *          'absent' (not subscribed)
    */
-  status(
+  localStatus(
     topic: string,
   ): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent" {
     const inFlight = this.inflight.has(topic);

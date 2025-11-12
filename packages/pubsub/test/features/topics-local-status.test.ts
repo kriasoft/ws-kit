@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { TopicsImpl } from "../../src/core/topics.js";
 import { PubSubError } from "../../src/core/error.js";
 
-describe("TopicsImpl - status() Method", () => {
+describe("TopicsImpl - localStatus() Method", () => {
   describe("Four-State Semantics", () => {
     it("should return 'absent' for unsubscribed topics", () => {
       const mockWs = {
@@ -16,8 +16,8 @@ describe("TopicsImpl - status() Method", () => {
 
       const topics = new TopicsImpl(mockWs);
 
-      expect(topics.status("room:1")).toBe("absent");
-      expect(topics.status("room:2")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
+      expect(topics.localStatus("room:2")).toBe("absent");
     });
 
     it("should return 'settled' after successful subscribe", async () => {
@@ -33,7 +33,7 @@ describe("TopicsImpl - status() Method", () => {
       await topics.subscribe("room:1");
 
       // Should be settled (adapter called and completed)
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
     });
 
     it("should return 'pending-subscribe' while subscribe is in-flight", async () => {
@@ -56,7 +56,7 @@ describe("TopicsImpl - status() Method", () => {
       const subPromise = topics.subscribe("room:1");
 
       // Check status while in-flight
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
       expect(topics.has("room:1")).toBe(true); // Optimistic
 
       // Resolve the in-flight operation
@@ -64,7 +64,7 @@ describe("TopicsImpl - status() Method", () => {
       await subPromise;
 
       // Now should be settled
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
     });
 
     it("should return 'pending-unsubscribe' while unsubscribe is in-flight", async () => {
@@ -85,13 +85,13 @@ describe("TopicsImpl - status() Method", () => {
 
       // Subscribe first
       await topics.subscribe("room:1");
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
 
       // Start unsubscribe (will be pending)
       const unsubPromise = topics.unsubscribe("room:1");
 
       // Check status while in-flight
-      expect(topics.status("room:1")).toBe("pending-unsubscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-unsubscribe");
       expect(topics.has("room:1")).toBe(false); // Optimistic local state changed
 
       // Resolve the in-flight operation
@@ -99,12 +99,12 @@ describe("TopicsImpl - status() Method", () => {
       await unsubPromise;
 
       // Now should be absent
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
     });
   });
 
   describe("Optimistic vs Confirmed Semantics", () => {
-    it("has() shows optimistic state; status() shows precise state", async () => {
+    it("has() shows optimistic state; localStatus() shows precise state", async () => {
       let resolveSubscribe: () => void;
       const subscribePromise = new Promise<void>((resolve) => {
         resolveSubscribe = resolve;
@@ -123,9 +123,9 @@ describe("TopicsImpl - status() Method", () => {
       // Start subscribe (pending)
       const subPromise = topics.subscribe("room:1");
 
-      // has() returns optimistic (true), status() shows pending
+      // has() returns optimistic (true), localStatus() shows pending
       expect(topics.has("room:1")).toBe(true);
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
 
       // Resolve
       resolveSubscribe!();
@@ -133,10 +133,10 @@ describe("TopicsImpl - status() Method", () => {
 
       // Both now show settled state
       expect(topics.has("room:1")).toBe(true);
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
     });
 
-    it("has() returns false during pending-unsubscribe, status() shows pending-unsubscribe", async () => {
+    it("has() returns false during pending-unsubscribe, localStatus() shows pending-unsubscribe", async () => {
       let resolveUnsubscribe: () => void;
       const unsubscribePromise = new Promise<void>((resolve) => {
         resolveUnsubscribe = resolve;
@@ -158,9 +158,9 @@ describe("TopicsImpl - status() Method", () => {
       // Start unsubscribe (pending)
       const unsubPromise = topics.unsubscribe("room:1");
 
-      // has() shows optimistic (false), status() shows pending
+      // has() shows optimistic (false), localStatus() shows pending
       expect(topics.has("room:1")).toBe(false);
-      expect(topics.status("room:1")).toBe("pending-unsubscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-unsubscribe");
 
       // Resolve
       resolveUnsubscribe!();
@@ -168,7 +168,7 @@ describe("TopicsImpl - status() Method", () => {
 
       // Both now show absent
       expect(topics.has("room:1")).toBe(false);
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
     });
   });
 
@@ -190,20 +190,20 @@ describe("TopicsImpl - status() Method", () => {
       const topics = new TopicsImpl(mockWs);
 
       // Initial: absent
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
 
       // Start subscribe
       const subPromise = topics.subscribe("room:1");
 
       // In-flight: pending-subscribe
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
 
       // Resolve
       resolveSubscribe!();
       await subPromise;
 
       // Settled: settled
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
     });
 
     it("should transition: settled → pending-unsubscribe → absent", async () => {
@@ -224,20 +224,20 @@ describe("TopicsImpl - status() Method", () => {
 
       // Subscribe first
       await topics.subscribe("room:1");
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
 
       // Start unsubscribe
       const unsubPromise = topics.unsubscribe("room:1");
 
       // In-flight: pending-unsubscribe
-      expect(topics.status("room:1")).toBe("pending-unsubscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-unsubscribe");
 
       // Resolve
       resolveUnsubscribe!();
       await unsubPromise;
 
       // Settled: absent
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
     });
   });
 
@@ -261,18 +261,18 @@ describe("TopicsImpl - status() Method", () => {
       // Start first subscribe
       const sub1 = topics.subscribe("room:1");
 
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
 
       // Second subscribe to same topic (idempotent, waits for first)
       const sub2 = topics.subscribe("room:1");
 
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
 
       // Resolve
       resolveSubscribe!();
       await Promise.all([sub1, sub2]);
 
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
     });
 
     it("should show correct status when subscribe and unsubscribe interleave", async () => {
@@ -304,14 +304,14 @@ describe("TopicsImpl - status() Method", () => {
 
       // Start subscribe
       const subPromise = topics.subscribe("room:1");
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
 
       // Try to unsubscribe while subscribe is in-flight
       // (subscribe is serialized first, so unsubscribe waits)
       const unsubPromise = topics.unsubscribe("room:1");
 
       // While subscribe is in-flight, status shows pending-subscribe
-      expect(topics.status("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
 
       // Resolve subscribe
       resolveSubscribe!();
@@ -319,7 +319,7 @@ describe("TopicsImpl - status() Method", () => {
 
       // Now subscribe is settled; unsubscribe may still be in progress
       // The status depends on timing: if unsubscribe hasn't started yet, confirmed; if started, pending-remove
-      const statusAfterSub = topics.status("room:1");
+      const statusAfterSub = topics.localStatus("room:1");
       expect(["settled", "pending-unsubscribe"]).toContain(statusAfterSub);
 
       // Resolve unsubscribe
@@ -327,7 +327,7 @@ describe("TopicsImpl - status() Method", () => {
       await unsubPromise;
 
       // Now should be absent
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
 
       // Verify operations completed
       expect(callOrder).toContain("subscribe-start");
@@ -362,8 +362,8 @@ describe("TopicsImpl - status() Method", () => {
       const sub2 = topics.subscribe("room:2");
 
       // Both should be pending-subscribe
-      expect(topics.status("room:1")).toBe("pending-subscribe");
-      expect(topics.status("room:2")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:1")).toBe("pending-subscribe");
+      expect(topics.localStatus("room:2")).toBe("pending-subscribe");
 
       // Resolve room:1 first
       resolveRoom1!();
@@ -371,9 +371,9 @@ describe("TopicsImpl - status() Method", () => {
       await new Promise((r) => setTimeout(r, 10));
 
       // room:1 should be settled; room:2 may still be pending
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
       // room:2 status depends on timing
-      const room2Status = topics.status("room:2");
+      const room2Status = topics.localStatus("room:2");
       expect(["pending-subscribe", "settled"]).toContain(room2Status);
 
       // Resolve room:2
@@ -381,8 +381,8 @@ describe("TopicsImpl - status() Method", () => {
       await Promise.all([sub1, sub2]);
 
       // Both settled
-      expect(topics.status("room:1")).toBe("settled");
-      expect(topics.status("room:2")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
+      expect(topics.localStatus("room:2")).toBe("settled");
     });
   });
 
@@ -407,7 +407,7 @@ describe("TopicsImpl - status() Method", () => {
       }
 
       // State unchanged; status should be absent
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
       expect(topics.has("room:1")).toBe(false);
     });
   });
@@ -428,9 +428,9 @@ describe("TopicsImpl - status() Method", () => {
       expect(result.added).toBe(3);
 
       // All should be settled
-      expect(topics.status("room:1")).toBe("settled");
-      expect(topics.status("room:2")).toBe("settled");
-      expect(topics.status("room:3")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
+      expect(topics.localStatus("room:2")).toBe("settled");
+      expect(topics.localStatus("room:3")).toBe("settled");
     });
 
     it("should show absent for all topics in unsubscribeMany after completion", async () => {
@@ -455,9 +455,9 @@ describe("TopicsImpl - status() Method", () => {
       expect(result.removed).toBe(3);
 
       // All should be absent
-      expect(topics.status("room:1")).toBe("absent");
-      expect(topics.status("room:2")).toBe("absent");
-      expect(topics.status("room:3")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
+      expect(topics.localStatus("room:2")).toBe("absent");
+      expect(topics.localStatus("room:3")).toBe("absent");
     });
 
     it("should show final state after set() operation", async () => {
@@ -471,7 +471,7 @@ describe("TopicsImpl - status() Method", () => {
 
       // Initial subscription
       await topics.subscribe("room:1");
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
 
       // set() that removes room:1 and adds room:2
       const result = await topics.set(["room:2"]);
@@ -479,8 +479,8 @@ describe("TopicsImpl - status() Method", () => {
       expect(result.removed).toBe(1);
 
       // Final state
-      expect(topics.status("room:1")).toBe("absent");
-      expect(topics.status("room:2")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("absent");
+      expect(topics.localStatus("room:2")).toBe("settled");
     });
 
     it("should handle update() and show final status", async () => {
@@ -505,14 +505,14 @@ describe("TopicsImpl - status() Method", () => {
       expect(result.removed).toBe(1);
 
       // Final states
-      expect(topics.status("room:1")).toBe("absent");
-      expect(topics.status("room:2")).toBe("settled");
-      expect(topics.status("room:3")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("absent");
+      expect(topics.localStatus("room:2")).toBe("settled");
+      expect(topics.localStatus("room:3")).toBe("settled");
     });
   });
 
-  describe("Pairing status() with settle()", () => {
-    it("should support deterministic flows: check status, then settle if pending", async () => {
+  describe("Pairing localStatus() with settle()", () => {
+    it("should support deterministic flows: check localStatus, then settle if pending", async () => {
       let resolveSubscribe: () => void;
       const subscribePromise = new Promise<void>((resolve) => {
         resolveSubscribe = resolve;
@@ -532,7 +532,7 @@ describe("TopicsImpl - status() Method", () => {
       const subPromise = topics.subscribe("room:1");
 
       // Check status
-      if (topics.status("room:1") === "pending-subscribe") {
+      if (topics.localStatus("room:1") === "pending-subscribe") {
         // Wait for settlement
         const settlePromise = topics.settle("room:1", { timeoutMs: 5000 });
 
@@ -544,7 +544,7 @@ describe("TopicsImpl - status() Method", () => {
       }
 
       // After settle, status is guaranteed settled or error thrown
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
     });
 
     it("should skip settle if already settled", async () => {
@@ -559,8 +559,8 @@ describe("TopicsImpl - status() Method", () => {
       // Subscribe (synchronous adapter)
       await topics.subscribe("room:1");
 
-      // Status is settled
-      expect(topics.status("room:1")).toBe("settled");
+      // Local status is settled
+      expect(topics.localStatus("room:1")).toBe("settled");
 
       // Settle should return immediately (no-op)
       const startTime = Date.now();
@@ -583,13 +583,13 @@ describe("TopicsImpl - status() Method", () => {
 
       // Subscribe, then clear
       await topics.subscribe("room:1");
-      expect(topics.status("room:1")).toBe("settled");
+      expect(topics.localStatus("room:1")).toBe("settled");
 
       await topics.clear();
-      expect(topics.status("room:1")).toBe("absent");
+      expect(topics.localStatus("room:1")).toBe("absent");
     });
 
-    it("should handle status() on non-existent topics", () => {
+    it("should handle localStatus() on non-existent topics", () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
@@ -599,12 +599,12 @@ describe("TopicsImpl - status() Method", () => {
       const topics = new TopicsImpl(mockWs);
 
       // Multiple calls should always return absent
-      expect(topics.status("unknown:1")).toBe("absent");
-      expect(topics.status("unknown:2")).toBe("absent");
-      expect(topics.status("random:uuid")).toBe("absent");
+      expect(topics.localStatus("unknown:1")).toBe("absent");
+      expect(topics.localStatus("unknown:2")).toBe("absent");
+      expect(topics.localStatus("random:uuid")).toBe("absent");
     });
 
-    it("status() should be consistent with iteration", async () => {
+    it("localStatus() should be consistent with iteration", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
@@ -623,7 +623,7 @@ describe("TopicsImpl - status() Method", () => {
       expect(topicsInSet).toEqual(["room:1", "room:2", "room:3"]);
 
       for (const topic of topicsInSet) {
-        expect(topics.status(topic)).toBe("settled");
+        expect(topics.localStatus(topic)).toBe("settled");
       }
     });
   });

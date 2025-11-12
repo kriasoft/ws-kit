@@ -95,7 +95,7 @@ export interface Topics extends ReadonlySet<string> {
   has(topic: string): boolean;
 
   /**
-   * Get detailed subscription status (settled, pending, or absent).
+   * Get detailed local subscription status (settled, pending, or absent).
    * Use when you need to distinguish in-flight operations from settled state.
    *
    * **Important**: "settled" means the operation completed locally after a successful adapter call.
@@ -107,7 +107,7 @@ export interface Topics extends ReadonlySet<string> {
    *          'pending-unsubscribe' (unsubscribe in-flight),
    *          'absent' (not subscribed)
    */
-  status(
+  localStatus(
     topic: string,
   ): "settled" | "pending-subscribe" | "pending-unsubscribe" | "absent";
 
@@ -228,7 +228,7 @@ export interface Topics extends ReadonlySet<string> {
   /**
    * Probe the adapter for current subscription truth.
    *
-   * **Key difference from status()**: status() reflects local settlement state;
+   * **Key difference from localStatus()**: localStatus() reflects local settlement state;
    * verify() checks adapter truth (useful after failures/failovers or for correctness checks).
    *
    * Returns a discriminated union representing different verification outcomes, allowing
