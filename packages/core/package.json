@@ -11,6 +11,11 @@
       "bun": "./src/index.ts",
       "import": "./dist/src/index.js"
     },
+    "./plugin": {
+      "types": "./dist/src/plugin/index.d.ts",
+      "bun": "./src/plugin/index.ts",
+      "import": "./dist/src/plugin/index.js"
+    },
     "./pubsub": {
       "types": "./dist/src/capabilities/pubsub/index.d.ts",
       "bun": "./src/capabilities/pubsub/index.ts",

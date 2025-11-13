@@ -1,14 +1,13 @@
 /**
  * Connection data persistence test
  *
- * Verifies that ctx.setData() persists across multiple messages on the same connection.
+ * Verifies that ctx.assignData() persists across multiple messages on the same connection.
  * This test validates the fix for the critical bug where connection data was not persisted.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
 import { createTestRouter } from "../../src/testing";
-import type { Router } from "../../src/core/types";
 
 interface TestAppData {
   userId?: string;
@@ -29,7 +28,7 @@ describe("Connection data persistence", () => {
     // Simulate first message handler that sets data
     const route1Called: boolean[] = [];
     router.on({ type: "SET_USER", kind: "event" } as any, (ctx) => {
-      ctx.setData({ userId: "user-123" });
+      ctx.assignData({ userId: "user-123" });
       route1Called.push(true);
     });
 
@@ -44,7 +43,7 @@ describe("Connection data persistence", () => {
       });
       // Update count
       const count = (currentData.messageCount ?? 0) + 1;
-      ctx.setData({ messageCount: count });
+      ctx.assignData({ messageCount: count });
     });
 
     // Send first message to set user
@@ -100,7 +99,7 @@ describe("Connection data persistence", () => {
 
     // Connection 1: set userId A
     router.on({ type: "SET_ID", kind: "event" } as any, (ctx) => {
-      ctx.setData({ userId: "user-A", name: "Alice" });
+      ctx.assignData({ userId: "user-A", name: "Alice" });
     });
 
     conn1.send("SET_ID", {});
@@ -112,7 +111,7 @@ describe("Connection data persistence", () => {
 
     // Now change conn2's name
     router.on({ type: "SET_NAME", kind: "event" } as any, (ctx) => {
-      ctx.setData({ name: "Bob" });
+      ctx.assignData({ name: "Bob" });
     });
 
     conn2.send("SET_NAME", {});
@@ -163,7 +162,7 @@ describe("Connection data persistence", () => {
 
     // Set some data
     router.on({ type: "SET", kind: "event" } as any, (ctx) => {
-      ctx.setData({ userId: "test-user" });
+      ctx.assignData({ userId: "test-user" });
     });
 
     conn.send("SET", {});

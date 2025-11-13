@@ -14,9 +14,9 @@
  * See also: @ws-kit/core/testing (check normalization tests)
  */
 
-import { describe, expect, it } from "bun:test";
-import { z, message } from "@ws-kit/zod";
 import { normalizeInboundMessage } from "@ws-kit/core";
+import { message, z } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 
 describe("Runtime Normalization (Zod Validator)", () => {
   describe("Validator Receives Normalized Messages", () => {
@@ -37,11 +37,10 @@ describe("Runtime Normalization (Zod Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.payload?.id).toBe(456);
-        expect(
-          (result.data.meta as Record<string, unknown>).clientId,
-        ).toBeUndefined();
-        expect((result.data.meta as Record<string, unknown>).timestamp).toBe(
+        const data = result.data as any;
+        expect(data.payload?.id).toBe(456);
+        expect((data.meta as Record<string, unknown>).clientId).toBeUndefined();
+        expect((data.meta as Record<string, unknown>).timestamp).toBe(
           malicious.meta.timestamp,
         );
       }
@@ -64,13 +63,14 @@ describe("Runtime Normalization (Zod Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.payload?.text).toBe("hello");
+        const data = result.data as any;
+        expect(data.payload?.text).toBe("hello");
         expect(
-          (result.data.meta as Record<string, unknown>).receivedAt,
+          (data.meta as Record<string, unknown>).receivedAt,
         ).toBeUndefined();
-        expect(
-          (result.data.meta as Record<string, unknown>).correlationId,
-        ).toBe("req-123");
+        expect((data.meta as Record<string, unknown>).correlationId).toBe(
+          "req-123",
+        );
       }
     });
 
@@ -113,8 +113,9 @@ describe("Runtime Normalization (Zod Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.payload?.value).toBe("test");
-        const meta = result.data.meta as Record<string, unknown>;
+        const data = result.data as any;
+        expect(data.payload?.value).toBe("test");
+        const meta = data.meta as Record<string, unknown>;
         expect(meta.clientId).toBeUndefined();
         expect(meta.receivedAt).toBeUndefined();
         expect(meta.timestamp).toBe(malicious.meta.timestamp);

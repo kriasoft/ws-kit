@@ -18,6 +18,7 @@ export type {
   PublishError,
   PublishOptions,
   PublishResult,
+  StopFn,
 } from "./adapter";
 
 export {

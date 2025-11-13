@@ -28,7 +28,7 @@ Without this pattern, developers faced a type-safety gap:
 
 ```typescript
 // ❌ Problem: Type inference lost when passing router through helpers
-function setupChat(router: IWebSocketRouter<AppData>) {
+function setupChat(router: Router<AppData>) {
   router.on(JoinRoom, (c) => {
     const { roomId } = c.payload; // ❌ any, not string!
     // Needed workaround: (c: MessageContext<typeof JoinRoom, AppData>) => { ... }
@@ -59,7 +59,7 @@ The `on()` method is generic over the **schema parameter**:
 
 ```typescript
 // Core signature
-interface IWebSocketRouter<TData> {
+interface Router<TData> {
   on<S extends MessageSchemaType>(
     schema: S,
     handler: (ctx: MessageContext<S, TData>) => void | Promise<void>,
@@ -79,7 +79,7 @@ When you call `router.on(JoinRoom, handler)`:
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
-import type { IWebSocketRouter, WebSocketData } from "@ws-kit/core";
+import type { Router, WebSocketData } from "@ws-kit/core";
 
 const JoinRoom = message("JOIN_ROOM", {
   roomId: z.string(),
@@ -93,7 +93,7 @@ typedRouter.on(JoinRoom, (c) => {
 });
 
 // Also works when erased to interface
-function helperFunction(router: IWebSocketRouter<AppData>) {
+function helperFunction(router: Router<AppData>) {
   router.on(JoinRoom, (c) => {
     const roomId: string = c.payload.roomId; // ✅ Still inferred!
   });
@@ -161,7 +161,7 @@ Helpers are still appropriate for:
 
 ```typescript
 // ✅ Helpers work great for middleware
-export function setupLogging(router: IWebSocketRouter<AppData>) {
+export function setupLogging(router: Router<AppData>) {
   router.use(async (ctx, next) => {
     console.log(`[${ctx.type}] from ${ctx.ws.data.clientId}`);
     await next();
@@ -185,7 +185,7 @@ Lightweight helpers to assert router validator family when needed:
 ```typescript
 import { asZodRouter } from "@ws-kit/zod";
 
-function advancedSetup(router: IWebSocketRouter<AppData>) {
+function advancedSetup(router: Router<AppData>) {
   // Optional: assert Zod family for family-specific features
   const zodRouter = asZodRouter(router);
 
@@ -221,7 +221,7 @@ The A + G + D approach provides the following compile-time and runtime guarantee
 
 1. **Payload Type Inference**: `ctx.payload` is typed directly from the schema parameter—no manual annotations needed
 2. **Property Access Safety**: Accessing non-existent properties on `ctx.payload` is a TypeScript error
-3. **Handler Context Typing**: Full inference of `ctx` type without annotations through `IWebSocketRouter<TData>` interface
+3. **Handler Context Typing**: Full inference of `ctx` type without annotations through `Router<TData>` type
 4. **Connection Data Consistency**: `TData` is enforced across merged routers (type-checked at compile time)
 5. **Composition Type Preservation**: Merged routers maintain all type information—no type erasure through composition
 6. **Message Type Correctness**: `ctx.type` is a literal type matching the schema (e.g., `"JOIN_ROOM"` not `string`)
@@ -240,7 +240,7 @@ Use **narrower helpers** (Pillar D) for validator-family enforcement:
 ```typescript
 import { asZodRouter } from "@ws-kit/zod";
 
-export function setupFeature(router: IWebSocketRouter<AppData>) {
+export function setupFeature(router: Router<AppData>) {
   // Optionally assert router uses Zod validator
   const zodRouter = asZodRouter(router, { validate: true });
   // Throws at runtime if router uses Valibot instead of Zod
@@ -356,12 +356,12 @@ export function createChatRouter<TData extends WebSocketData>() {
 **middleware/auth.ts**
 
 ```typescript
-export function setupAuth(router: IWebSocketRouter<AppData>) {
-  router.onAuth(async (ctx) => {
+export function setupAuth(router: Router<AppData>) {
+  router.use(async (ctx, next) => {
     const token = extractToken(ctx);
     const user = await verifyToken(token);
     ctx.assignData({ userId: user.id, role: user.role });
-    return true; // Allow connection
+    await next();
   });
 }
 ```
@@ -421,7 +421,7 @@ If you have existing code using helpers:
 **Before**:
 
 ```typescript
-function setupChat(router: IWebSocketRouter<AppData>) {
+function setupChat(router: Router<AppData>) {
   router.on(JoinRoom, (c: MessageContext<typeof JoinRoom, AppData>) => {
     // Manual annotation needed
   });

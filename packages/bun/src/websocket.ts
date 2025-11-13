@@ -18,10 +18,10 @@ import type { ServerWebSocket as BunServerWebSocket } from "bun";
  */
 export function toBunServerWebSocket<TData = unknown>(
   ws: BunServerWebSocket<TData>,
-): ServerWebSocket<TData> {
+): ServerWebSocket {
   // Verify the interface at compile time
   // At runtime, this is a no-op—we just return the WebSocket as-is
-  const socket: ServerWebSocket<TData> = ws;
+  const socket: ServerWebSocket = ws as any;
   return socket;
 }
 

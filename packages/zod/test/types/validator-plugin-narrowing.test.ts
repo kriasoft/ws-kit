@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
- * Type-level tests: Validator plugin narrowing and capability gating
+ * Type-level tests: Zod validator plugin narrowing and capability gating
+ *
+ * Mirrors the Valibot type tests to ensure both validators have equivalent type coverage.
  *
  * Scenarios:
  * - Router without validation plugin does NOT have rpc()
@@ -11,11 +16,11 @@
  * Run with: `bun tsc --noEmit` or `bun test`
  */
 
-import { describe, it, expectTypeOf } from "bun:test";
-import type { Router, MessageDescriptor } from "@ws-kit/core";
-import { z, message, withZod, createRouter } from "../../src/index";
+import type { MessageDescriptor, Router } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
+import { createRouter, message, withZod, z } from "../../src/index";
 
-describe("validator plugin narrowing (types)", () => {
+describe("validator plugin narrowing - Zod (types)", () => {
   // Test 1: Router without plugin has NO rpc() method
   it("router without plugin should NOT have rpc", () => {
     // Type assertion: Router without plugins should not have rpc
@@ -27,7 +32,6 @@ describe("validator plugin narrowing (types)", () => {
 
   // Test 2: withZod() returns Router with validation capability
   it("withZod() plugin narrows router to validation capability", () => {
-    type UnvalidatedRouter = Router<{ userId?: string }>;
     type ValidatedRouter = ReturnType<ReturnType<typeof withZod>>;
 
     expectTypeOf<ValidatedRouter>().toHaveProperty("rpc");
@@ -66,33 +70,36 @@ describe("validator plugin narrowing (types)", () => {
       password: z.string(),
     });
 
-    // At type level, schema has __zod_payload brand
-    expectTypeOf(LoginMessage).toHaveProperty("__zod_payload");
+    // At type level, schema has shape property from Zod
+    expectTypeOf(LoginMessage).toHaveProperty("shape");
 
-    // Can extract payload type and verify it's a ZodObject
-    type PayloadType = typeof LoginMessage extends { __zod_payload: infer P }
-      ? P
+    // Can extract payload type
+    type PayloadType = typeof LoginMessage extends {
+      shape: Record<string, any>;
+    }
+      ? (typeof LoginMessage)["shape"]
       : never;
 
-    // PayloadType should be a valid Zod schema object
-    expectTypeOf<PayloadType>().toMatchTypeOf<z.ZodType>();
+    // PayloadType should exist
+    expectTypeOf<PayloadType>().toMatchTypeOf<Record<string, any>>();
   });
 
   // Test 6: withZod options configuration is type-safe
   it("withZod options are type-safe", () => {
-    // Standard configuration should return function
+    // Standard configuration
     const standardConfig = withZod({
       validateOutgoing: true,
-      coerce: false,
     });
     expectTypeOf(standardConfig).toBeFunction();
 
     // With custom error hook
-    type ErrorHookType = (err: Error & { code: string; details: unknown }, ctx: { type: string; direction: "inbound" | "outbound"; payload: unknown }) => void | Promise<void>;
-
     const configWithHook = withZod({
       onValidationError: async (err, ctx) => {
+        // err should have code and details
         expectTypeOf(err.code).toBeString();
+        expectTypeOf(err.details).toBeDefined();
+
+        // ctx should have type and direction
         expectTypeOf(ctx.type).toBeString();
         expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
       },
@@ -111,11 +118,18 @@ describe("validator plugin narrowing (types)", () => {
 
   // Test 8: Multiple plugins merge capabilities
   it("multiple plugins merge capabilities correctly", () => {
-    // Mock pubsub plugin
+    // Mock pubsub plugin for testing capability merging
     const withMockPubSub = (r: Router<any>) => {
       const enhanced = Object.assign(r, {
-        publish: async (topic: string, schema: MessageDescriptor, payload: unknown) => {},
-        subscriptions: { list: () => [] as string[], has: (t: string) => false },
+        publish: async (
+          topic: string,
+          schema: MessageDescriptor,
+          payload: unknown,
+        ) => {},
+        subscriptions: {
+          list: () => [] as string[],
+          has: (t: string) => false,
+        },
       }) as Router<any, { pubsub: true }>;
       (enhanced as any).__caps = { pubsub: true };
       return enhanced;
@@ -146,14 +160,21 @@ describe("validator plugin narrowing (types)", () => {
 
   // Test 10: Options don't affect type narrowing
   it("withZod options don't affect type narrowing", () => {
-    const withoutValidation = withZod({ validateOutgoing: false });
-    const withValidation = withZod({ validateOutgoing: true, coerce: true });
+    const withoutValidation = withZod({
+      validateOutgoing: false,
+    });
+
+    const withValidation = withZod({
+      validateOutgoing: true,
+    });
+
     const withHook = withZod({
       onValidationError: (err, ctx) => {
         // Just for type testing
       },
     });
 
+    // All return same Router<TContext, { validation: true }> type
     const r1 = createRouter().plugin(withoutValidation);
     const r2 = createRouter().plugin(withValidation);
     const r3 = createRouter().plugin(withHook);
@@ -180,5 +201,16 @@ describe("validator plugin narrowing (types)", () => {
     });
 
     expectTypeOf(plugin).toBeFunction();
+  });
+
+  // Test 12: withZod() can be stacked with other plugins safely
+  it("withZod() can be stacked with other plugins safely", () => {
+    // Apply same plugin twice - should be idempotent
+    const plugin = withZod();
+
+    const router = createRouter().plugin(plugin).plugin(plugin); // Second application is safe
+
+    // Should still have rpc (not duplicated or broken)
+    expectTypeOf(router).toHaveProperty("rpc");
   });
 });

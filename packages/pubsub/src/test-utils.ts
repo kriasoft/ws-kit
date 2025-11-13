@@ -19,8 +19,8 @@ import type {
 export interface PublishRecord {
   topic: string;
   payload: unknown;
-  type?: string;
-  meta: Record<string, unknown> | undefined;
+  type?: string | undefined;
+  meta?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -57,8 +57,8 @@ export class TestPubSub implements PubSubAdapter {
     this.publishedMessages.push({
       topic: envelope.topic,
       payload: envelope.payload,
-      type: envelope.type,
-      meta: envelope.meta,
+      ...(envelope.type && { type: envelope.type }),
+      ...(envelope.meta && { meta: envelope.meta }),
     });
 
     // Delegate to wrapped adapter
@@ -80,10 +80,10 @@ export class TestPubSub implements PubSubAdapter {
   }
 
   /**
-   * Get local subscribers (delegated).
+   * Get subscribers (delegated).
    */
-  getLocalSubscribers(topic: string): AsyncIterable<string> {
-    return this.wrapped.getLocalSubscribers(topic);
+  getSubscribers(topic: string): AsyncIterable<string> {
+    return this.wrapped.getSubscribers(topic);
   }
 
   /**
@@ -101,12 +101,16 @@ export class TestPubSub implements PubSubAdapter {
   }
 
   /**
-   * Register remote published handler (delegated).
+   * Replace subscriptions (delegated).
    */
-  onRemotePublished(
-    handler: (envelope: PublishEnvelope) => void | Promise<void>,
-  ): () => void {
-    return this.wrapped.onRemotePublished?.(handler) ?? (() => {});
+  replace?(
+    clientId: string,
+    topics: Iterable<string>,
+  ): Promise<{ added: number; removed: number; total: number }> {
+    return (
+      this.wrapped.replace?.(clientId, topics) ??
+      Promise.resolve({ added: 0, removed: 0, total: 0 })
+    );
   }
 
   /**
@@ -114,6 +118,16 @@ export class TestPubSub implements PubSubAdapter {
    */
   async close(): Promise<void> {
     return this.wrapped.close?.();
+  }
+
+  /**
+   * Start broker consumer (delegated).
+   */
+  start?(
+    onRemote: (envelope: PublishEnvelope) => void | Promise<void>,
+  ): (() => void | Promise<void>) | Promise<() => void | Promise<void>> {
+    const result = this.wrapped.start?.(onRemote);
+    return result ?? undefined;
   }
 
   // Test-specific helpers

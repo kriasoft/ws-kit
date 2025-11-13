@@ -68,6 +68,9 @@ export type { CreateTestRouterOptions } from "./test-harness";
 export { FakeClock, SystemClock } from "./fake-clock";
 export type { Clock } from "./fake-clock";
 
+// Plugin testing utilities
+export { mockPlugin } from "./plugin";
+
 // Type exports
 export type {
   TestRouter,
@@ -88,6 +91,7 @@ export { InMemoryPlatformAdapter } from "./test-adapter";
 import * as testHarness from "./test-harness";
 import * as fakeClock from "./fake-clock";
 import * as actModule from "./act";
+import * as pluginModule from "./plugin";
 
 export const testing = {
   createTestRouter: testHarness.createTestRouter,
@@ -95,6 +99,7 @@ export const testing = {
   FakeClock: fakeClock.FakeClock,
   SystemClock: fakeClock.SystemClock,
   act: actModule.act,
+  mockPlugin: pluginModule.mockPlugin,
 };
 
 // Backward compatibility alias (prefer 'testing' over 'test')

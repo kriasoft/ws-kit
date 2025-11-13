@@ -2,83 +2,72 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Type-level tests for IWebSocketRouter interface conformance.
+ * Type-level tests for Router interface conformance.
  *
  * These tests verify that:
- * 1. TypedZodRouter conforms to IWebSocketRouter
- * 2. WebSocketRouter implements IWebSocketRouter
- * 3. Adapters accept IWebSocketRouter parameters
+ * 1. TypedZodRouter conforms to Router
+ * 2. WebSocketRouter implements Router
+ * 3. Adapters accept Router parameters
  * 4. Fluent chaining works correctly
  *
  * Run: bun test packages/core/test/types/router-interface.test.ts
  */
 
-import type {
-  IWebSocketRouter,
-  ValidatorAdapter,
-  WebSocketData,
-} from "@ws-kit/core";
-import { WebSocketRouter } from "@ws-kit/core";
+import type { Router, WebSocketData } from "@ws-kit/core";
 import { createRouter, message, z } from "@ws-kit/zod";
 import { describe, expectTypeOf, it } from "bun:test";
 
-describe("IWebSocketRouter interface conformance", () => {
-  // Test 1: TypedZodRouter conforms to IWebSocketRouter
-  it("TypedZodRouter satisfies IWebSocketRouter type", () => {
+describe("Router interface conformance", () => {
+  // Test 1: TypedZodRouter conforms to Router
+  it("TypedZodRouter satisfies Router type", () => {
     const typed = createRouter<{ userId?: string }>();
 
-    // Type-level verification: typed must satisfy IWebSocketRouter
-    expectTypeOf(typed).toMatchTypeOf<IWebSocketRouter<{ userId?: string }>>();
+    // Type-level verification: typed must satisfy Router
+    expectTypeOf(typed).toMatchTypeOf<Router<{ userId?: string }>>();
   });
 
-  // Test 2: WebSocketRouter implements IWebSocketRouter
-  it("WebSocketRouter implements IWebSocketRouter", () => {
-    const core = new WebSocketRouter<ValidatorAdapter, { clientId: string }>();
+  // Test 2: Router from createRouter implements Router
+  it("Router implements Router", () => {
+    const core = createRouter<{ clientId: string }>();
 
-    // Type-level verification: core must satisfy IWebSocketRouter
-    expectTypeOf(core).toMatchTypeOf<IWebSocketRouter<{ clientId: string }>>();
+    // Type-level verification: core must satisfy Router
+    expectTypeOf(core).toMatchTypeOf<Router<{ clientId: string }>>();
   });
 
-  // Test 3: Functions can accept IWebSocketRouter parameters
-  it("Functions accept IWebSocketRouter parameters", () => {
-    const acceptRouter = (r: IWebSocketRouter<{ clientId: string }>): void => {
+  // Test 3: Functions can accept Router parameters
+  it("Functions accept Router parameters", () => {
+    const acceptRouter = (r: Router<{ clientId: string }>): void => {
       // Verify router has required methods
       expectTypeOf(r.on).toBeFunction();
-      expectTypeOf(r.rpc).toBeFunction();
-      expectTypeOf(r.topic).toBeFunction();
-      expectTypeOf(r.publish).toBeFunction();
       expectTypeOf(r.merge).toBeFunction();
+      expectTypeOf(r.use).toBeFunction();
     };
 
     const typed = createRouter<{ clientId: string }>();
     // Type-level verification: typed is assignable to parameter type
     expectTypeOf(typed).toMatchTypeOf<Parameters<typeof acceptRouter>[0]>();
 
-    const core = new WebSocketRouter<ValidatorAdapter, { clientId: string }>();
+    const core = createRouter<{ clientId: string }>();
     expectTypeOf(core).toMatchTypeOf<Parameters<typeof acceptRouter>[0]>();
   });
 
   // Test 4: Fluent chaining returns correct type
   it("Fluent chaining returns correct type", () => {
     const TestMsg = message("TEST", { data: z.string() });
+    const TestMsg2 = message("TEST2", { data: z.string() });
     const router = createRouter<{ clientId: string }>();
 
-    // Chaining should return a router that still matches IWebSocketRouter
+    // Chaining should return a router that still matches Router
     const result = router
       .on(TestMsg, (ctx) => {
         ctx.send(TestMsg, { data: "test" });
       })
-      .onOpen((ctx) => {
-        expectTypeOf(ctx.clientId).toBeString();
-      })
-      .onClose((ctx) => {
-        expectTypeOf(ctx.clientId).toBeString();
+      .on(TestMsg2, (ctx) => {
+        ctx.send(TestMsg2, { data: "test" });
       });
 
     // Verify result still satisfies router interface
-    expectTypeOf(result).toMatchTypeOf<
-      IWebSocketRouter<{ clientId: string }>
-    >();
+    expectTypeOf(result).toMatchTypeOf<Router<{ clientId: string }>>();
     expectTypeOf(result.on).toBeFunction();
     expectTypeOf(result.rpc).toBeFunction();
   });
@@ -105,55 +94,50 @@ describe("IWebSocketRouter interface conformance", () => {
       expectTypeOf(ctx.send).toBeFunction();
     });
 
-    expectTypeOf(router).toMatchTypeOf<IWebSocketRouter<{ userId?: string }>>();
+    expectTypeOf(router).toMatchTypeOf<Router<{ userId?: string }>>();
   });
 
-  // Test 6: Mixed router types can be merged
-  it("Different router types can be merged", () => {
-    const typed = createRouter<{ clientId: string }>();
-    const core = new WebSocketRouter<ValidatorAdapter, { clientId: string }>();
+  // Test 6: Mixed router instances can be merged
+  it("Different router instances can be merged", () => {
+    const router1 = createRouter<{ clientId: string }>();
+    const router2 = createRouter<{ clientId: string }>();
 
     // Both must satisfy the interface for composition
-    expectTypeOf(typed).toMatchTypeOf<IWebSocketRouter<{ clientId: string }>>();
-    expectTypeOf(core).toMatchTypeOf<IWebSocketRouter<{ clientId: string }>>();
+    expectTypeOf(router1).toMatchTypeOf<Router<{ clientId: string }>>();
+    expectTypeOf(router2).toMatchTypeOf<Router<{ clientId: string }>>();
 
     // Merge should return a router
-    const result = typed.merge(core);
-    expectTypeOf(result).toMatchTypeOf<
-      IWebSocketRouter<{ clientId: string }>
-    >();
+    const result = router1.merge(router2);
+    expectTypeOf(result).toMatchTypeOf<Router<{ clientId: string }>>();
   });
 
   // Test 7: Router satisfies WebSocketData constraint
   it("Router works with generic WebSocketData", () => {
     // Router should work with the base WebSocketData type
     const router = createRouter<WebSocketData>();
-    expectTypeOf(router).toMatchTypeOf<IWebSocketRouter<WebSocketData>>();
+    expectTypeOf(router).toMatchTypeOf<Router<WebSocketData>>();
   });
 });
 
 describe("Adapter compatibility", () => {
   // Type-level tests that verify routers are compatible with adapters
-  // by checking they satisfy IWebSocketRouter parameter types
+  // by checking they satisfy Router parameter types
 
   it("Typed router is compatible with adapter expectations", () => {
     const router = createRouter<{ clientId: string }>();
 
-    // Define adapter-like function that accepts IWebSocketRouter
-    type AdapterFn = (r: IWebSocketRouter<{ clientId: string }>) => void;
+    // Define adapter-like function that accepts Router
+    type AdapterFn = (r: Router<{ clientId: string }>) => void;
 
     // Verify router satisfies adapter parameter type
     expectTypeOf(router).toMatchTypeOf<Parameters<AdapterFn>[0]>();
   });
 
-  it("Core router is compatible with adapter expectations", () => {
-    const router = new WebSocketRouter<
-      ValidatorAdapter,
-      { clientId: string }
-    >();
+  it("Zod router is compatible with adapter expectations", () => {
+    const router = createRouter<{ clientId: string }>();
 
     // Adapter parameter type
-    type AdapterFn = (r: IWebSocketRouter<{ clientId: string }>) => void;
+    type AdapterFn = (r: Router<{ clientId: string }>) => void;
 
     // Verify router satisfies adapter parameter type
     expectTypeOf(router).toMatchTypeOf<Parameters<AdapterFn>[0]>();

@@ -3,7 +3,7 @@
 
 /**
  * Client data constraint: always available (no plugin dependency).
- * Minimal surface: clientId, ws, type, data, setData.
+ * Minimal surface: clientId, ws, type, data, assignData.
  *
  * clientId is a stable identifier assigned at connection accept time.
  * Used for pub/sub membership tracking, middleware policy, and logging.
@@ -35,9 +35,7 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
  * const router = createRouter<ChatData>();
  * ```
  */
-export interface ConnectionData {
-  [key: string]: unknown;
-}
+export type ConnectionData = Record<string, unknown>;
 
 /**
  * Utility type for defining custom per-connection data.
@@ -90,7 +88,22 @@ export interface MinimalContext<
   /**
    * Update connection data (partial merge).
    */
-  setData(partial: Partial<TContext>): void;
+  assignData(partial: Partial<TContext>): void;
+
+  /**
+   * Plugin extensions registry. Each plugin stores its context enhancements here.
+   * Use this to avoid collisions and enable plugin composition.
+   *
+   * @example
+   * ```ts
+   * // In plugin enhancer
+   * ctx.extensions.set('zod', { reply, send, progress });
+   *
+   * // In another plugin or handler
+   * const zodExt = ctx.extensions.get('zod');
+   * ```
+   */
+  readonly extensions: Map<string, unknown>;
 }
 
 /**
@@ -104,6 +117,29 @@ export function isMinimalContext(ctx: unknown): ctx is MinimalContext {
     "ws" in ctx &&
     "type" in ctx &&
     "data" in ctx &&
-    typeof (ctx as any).setData === "function"
+    typeof (ctx as any).assignData === "function"
   );
+}
+
+/**
+ * Type-safe helper to retrieve a plugin extension from context.
+ *
+ * @typeParam T - The type of the extension to retrieve
+ * @param ctx - The context object
+ * @param name - The plugin namespace (e.g., 'zod', 'pubsub')
+ * @returns The extension value, or undefined if not found
+ *
+ * @example
+ * ```ts
+ * const zodExt = getContextExtension<ZodContextExt>(ctx, 'zod');
+ * if (zodExt) {
+ *   await zodExt.reply({ result: 'ok' });
+ * }
+ * ```
+ */
+export function getContextExtension<T>(
+  ctx: MinimalContext,
+  name: string,
+): T | undefined {
+  return ctx.extensions.get(name) as T | undefined;
 }

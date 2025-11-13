@@ -10,17 +10,38 @@
 - **Type-safe**: Full TypeScript inference from schema through handlers
 - **Platform-agnostic**: Works with any platform (Bun, Cloudflare, Node.js)
 
+## Import Patterns
+
+`createRouter()` is the base router factory available from `@ws-kit/core`. It's also re-exported from validator packages (`@ws-kit/zod`, `@ws-kit/valibot`) for convenience:
+
+- **`@ws-kit/core`** — Base router (minimal, validator-agnostic). Use when you need a bare router or want explicit control over plugin imports.
+- **`@ws-kit/zod`** / **`@ws-kit/valibot`** — Re-export `createRouter` plus validators and helpers for single-source imports.
+
+**Recommended**: Import from your validator package for a single canonical import source:
+
+```typescript
+// ✅ Single import source (recommended)
+import { createRouter, withZod, z, message } from "@ws-kit/zod";
+
+const router = createRouter().plugin(withZod());
+```
+
+Both patterns work equally well — choose based on your preference.
+
 ## Quick Start
 
 ```typescript
 import { createRouter } from "@ws-kit/core";
+import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
 
-const router = createRouter<{ userId?: string }>();
+const router = createRouter<{ userId?: string }>()
+  .plugin(withZod()); // Add validation plugin for full features
 
-// Register an event handler (requires validation plugin to add payload inference)
+// Register an event handler (with validation)
 router.on(schema, (ctx) => {
-  ctx.data; // { userId?: string }
+  ctx.ws.data; // { userId?: string }
   ctx.type; // Literal from schema
+  ctx.payload; // Typed payload (available with validation plugin)
 });
 
 // Errors flow to universal sink

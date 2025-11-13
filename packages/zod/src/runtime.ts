@@ -14,13 +14,13 @@
  */
 
 import { z, type ZodObject, type ZodRawShape, type ZodType } from "zod";
-import type { MessageDescriptor } from "@ws-kit/core";
 import {
   DESCRIPTOR,
   ZOD_PAYLOAD,
   setSchemaOpts,
   type SchemaOpts,
 } from "./metadata.js";
+import type { BrandedSchema } from "./types.js";
 
 /**
  * Standard meta fields that are always allowed.
@@ -61,34 +61,50 @@ const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 export function message<
   const T extends string,
   P extends ZodRawShape | ZodObject<any> | undefined = undefined,
-  M extends ZodRawShape = {},
+  M extends ZodRawShape | undefined = undefined,
 >(spec: {
-  readonly type: T;
-  readonly payload?: P;
-  readonly meta?: M;
-  readonly options?: SchemaOpts;
-}): ZodObject<any> & {
-  readonly kind: "event";
-  readonly __zod_payload: P;
-  readonly __descriptor: { readonly type: T };
-  readonly __runtime: "ws-kit-schema";
-};
+  type: T;
+  payload?: P;
+  meta?: M;
+  options?: SchemaOpts;
+}): ZodObject<any> &
+  BrandedSchema<
+    T,
+    P extends undefined ? never : P,
+    never,
+    M extends ZodRawShape
+      ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
+      : {}
+  > & {
+    readonly kind: "event";
+    readonly __zod_payload: P;
+    readonly __descriptor: { readonly type: T };
+    readonly __runtime: "ws-kit-schema";
+  };
 
 // Positional form (compact)
 export function message<
   const T extends string,
   P extends ZodRawShape | ZodObject<any> | undefined = undefined,
-  M extends ZodRawShape = {},
+  M extends ZodRawShape | undefined = undefined,
 >(
   type: T,
   payload?: P,
   metaShape?: M,
-): ZodObject<any> & {
-  readonly kind: "event";
-  readonly __zod_payload: P;
-  readonly __descriptor: { readonly type: T };
-  readonly __runtime: "ws-kit-schema";
-};
+): ZodObject<any> &
+  BrandedSchema<
+    T,
+    P extends undefined ? never : P,
+    never,
+    M extends ZodRawShape
+      ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
+      : {}
+  > & {
+    readonly kind: "event";
+    readonly __zod_payload: P;
+    readonly __descriptor: { readonly type: T };
+    readonly __runtime: "ws-kit-schema";
+  };
 
 // Implementation
 export function message<
@@ -99,12 +115,20 @@ export function message<
   specOrType: { type: T; payload?: P; meta?: M; options?: SchemaOpts } | T,
   payload?: P,
   metaShape?: M,
-): ZodObject<any> & {
-  readonly kind: "event";
-  readonly __zod_payload: P;
-  readonly __descriptor: { readonly type: T };
-  readonly __runtime: "ws-kit-schema";
-} {
+): ZodObject<any> &
+  BrandedSchema<
+    T,
+    P extends undefined ? never : P,
+    never,
+    M extends ZodRawShape
+      ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
+      : {}
+  > & {
+    readonly kind: "event";
+    readonly __zod_payload: P;
+    readonly __descriptor: { readonly type: T };
+    readonly __runtime: "ws-kit-schema";
+  } {
   // Normalize inputs: support both object and positional forms
   let type: T;
   let payloadDef: P | undefined;
@@ -185,7 +209,20 @@ export function message<
     setSchemaOpts(root, options);
   }
 
-  return root as any;
+  return root as ZodObject<any> &
+    BrandedSchema<
+      T,
+      P extends undefined ? never : P,
+      never,
+      M extends ZodRawShape
+        ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
+        : {}
+    > & {
+      readonly kind: "event";
+      readonly __zod_payload: P;
+      readonly __descriptor: { readonly type: T };
+      readonly __runtime: "ws-kit-schema";
+    };
 }
 
 /**
@@ -222,26 +259,49 @@ export function rpc<
   ReqP extends ZodRawShape | ZodObject<any> | undefined,
   ResT extends string,
   ResP extends ZodRawShape | ZodObject<any> | undefined,
+  ReqM extends ZodRawShape | undefined = undefined,
+  ResM extends ZodRawShape | undefined = undefined,
 >(spec: {
-  readonly req: {
-    readonly type: ReqT;
-    readonly payload?: ReqP;
-    readonly meta?: ZodRawShape;
-    readonly options?: SchemaOpts;
+  req: {
+    type: ReqT;
+    payload?: ReqP;
+    meta?: ReqM;
+    options?: SchemaOpts;
   };
-  readonly res: {
-    readonly type: ResT;
-    readonly payload?: ResP;
-    readonly meta?: ZodRawShape;
-    readonly options?: SchemaOpts;
+  res: {
+    type: ResT;
+    payload?: ResP;
+    meta?: ResM;
+    options?: SchemaOpts;
   };
-}): ZodObject<any> & {
-  readonly kind: "rpc";
-  readonly response: ZodObject<any>;
-  readonly __zod_payload: ReqP;
-  readonly __descriptor: { readonly type: ReqT };
-  readonly __runtime: "ws-kit-schema";
-};
+}): ZodObject<any> &
+  BrandedSchema<
+    ReqT,
+    ReqP extends undefined ? never : ReqP,
+    ResP extends undefined ? never : ResP,
+    ReqM extends ZodRawShape
+      ? { [K in keyof ReqM]: ReqM[K] extends ZodType<infer U> ? U : never }
+      : {}
+  > & {
+    readonly kind: "rpc";
+    readonly response: ZodObject<any> &
+      BrandedSchema<
+        ResT,
+        ResP extends undefined ? never : ResP,
+        never,
+        ResM extends ZodRawShape
+          ? { [K in keyof ResM]: ResM[K] extends ZodType<infer U> ? U : never }
+          : {}
+      > & {
+        readonly kind: "event";
+        readonly __zod_payload: ResP;
+        readonly __descriptor: { readonly type: ResT };
+        readonly __runtime: "ws-kit-schema";
+      };
+    readonly __zod_payload: ReqP;
+    readonly __descriptor: { readonly type: ReqT };
+    readonly __runtime: "ws-kit-schema";
+  };
 
 // Positional form (compact)
 export function rpc<
@@ -254,13 +314,25 @@ export function rpc<
   requestPayload: ReqP,
   responseType: ResT,
   responsePayload: ResP,
-): ZodObject<any> & {
-  readonly kind: "rpc";
-  readonly response: ZodObject<any>;
-  readonly __zod_payload: ReqP;
-  readonly __descriptor: { readonly type: ReqT };
-  readonly __runtime: "ws-kit-schema";
-};
+): ZodObject<any> &
+  BrandedSchema<
+    ReqT,
+    ReqP extends undefined ? never : ReqP,
+    ResP extends undefined ? never : ResP,
+    {}
+  > & {
+    readonly kind: "rpc";
+    readonly response: ZodObject<any> &
+      BrandedSchema<ResT, ResP extends undefined ? never : ResP, never, {}> & {
+        readonly kind: "event";
+        readonly __zod_payload: ResP;
+        readonly __descriptor: { readonly type: ResT };
+        readonly __runtime: "ws-kit-schema";
+      };
+    readonly __zod_payload: ReqP;
+    readonly __descriptor: { readonly type: ReqT };
+    readonly __runtime: "ws-kit-schema";
+  };
 
 // Implementation
 export function rpc<
@@ -288,13 +360,25 @@ export function rpc<
   requestPayload?: ReqP,
   responseType?: ResT,
   responsePayload?: ResP,
-): ZodObject<any> & {
-  readonly kind: "rpc";
-  readonly response: ZodObject<any>;
-  readonly __zod_payload: ReqP;
-  readonly __descriptor: { readonly type: ReqT };
-  readonly __runtime: "ws-kit-schema";
-} {
+): ZodObject<any> &
+  BrandedSchema<
+    ReqT,
+    ReqP extends undefined ? never : ReqP,
+    ResP extends undefined ? never : ResP,
+    {}
+  > & {
+    readonly kind: "rpc";
+    readonly response: ZodObject<any> &
+      BrandedSchema<ResT, ResP extends undefined ? never : ResP, never, {}> & {
+        readonly kind: "event";
+        readonly __zod_payload: ResP;
+        readonly __descriptor: { readonly type: ResT };
+        readonly __runtime: "ws-kit-schema";
+      };
+    readonly __zod_payload: ReqP;
+    readonly __descriptor: { readonly type: ReqT };
+    readonly __runtime: "ws-kit-schema";
+  } {
   // Normalize inputs: support both object and positional forms
   let reqType: ReqT;
   let reqPayload: ReqP | undefined;
@@ -324,14 +408,14 @@ export function rpc<
   const requestRoot = message({
     type: reqType,
     payload: reqPayload,
-    options: reqOptions,
+    ...(reqOptions !== undefined ? { options: reqOptions } : {}),
   });
 
   // Build response schema using message() with per-response options
   const responseRoot = message({
     type: resType,
     payload: resPayload,
-    options: resOptions,
+    ...(resOptions !== undefined ? { options: resOptions } : {}),
   });
 
   // Replace kind and attach response to request

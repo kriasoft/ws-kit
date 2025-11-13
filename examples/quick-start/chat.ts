@@ -37,7 +37,7 @@ export type ChatData = WebSocketData & { roomId?: string; clientId: string };
  * - SendMessage: Broadcast message to room subscribers
  * - onClose: Notify room that user left
  *
- * @typeParam TData - Application data type (must include clientId)
+ * @typeParam TContext - Application data type (must include clientId)
  * @returns A configured router that can be merged into the main app router
  *
  * @example
@@ -48,8 +48,8 @@ export type ChatData = WebSocketData & { roomId?: string; clientId: string };
  *   .merge(createPresenceRouter<AppData>());
  * ```
  */
-export function createChatRouter<TData extends ChatData = ChatData>() {
-  const router = createRouter<TData>();
+export function createChatRouter<TContext extends ChatData = ChatData>() {
+  const router = createRouter<TContext>();
 
   router
     // Handler 1: User joins a room

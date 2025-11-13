@@ -119,4 +119,23 @@ describe("withValibot() Plugin", () => {
 
     expect(router).toBeDefined();
   });
+
+  it("should throw if rpc called without validation plugin", () => {
+    const GetUser = rpc("GET_USER", { id: v.string() }, "USER", {
+      name: v.string(),
+    });
+
+    const router = createRouter() as any;
+
+    // rpc method should not exist at runtime on unplugged router
+    // If it does exist (from partial definePlugin implementation), calling it should fail
+    if (typeof router.rpc === "function") {
+      expect(() => {
+        router.rpc(GetUser, () => {});
+      }).toThrow();
+    } else {
+      // Preferred: rpc simply not defined
+      expect("rpc" in router).toBe(false);
+    }
+  });
 });

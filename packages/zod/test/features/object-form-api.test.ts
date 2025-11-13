@@ -1,7 +1,9 @@
-import { describe, it, expect } from "bun:test";
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
+import { createRouter, message, rpc, withZod } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { message, rpc, withZod, createRouter } from "@ws-kit/zod";
-import { test } from "@ws-kit/core";
 
 describe("Object-form API", () => {
   it("message() object form creates valid schema", () => {
@@ -172,7 +174,7 @@ describe("Per-schema option precedence", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.payload.count).toBe(42);
+      expect((result.data.payload as any).count).toBe(42);
     }
   });
 });

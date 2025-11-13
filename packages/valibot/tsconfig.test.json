@@ -5,8 +5,7 @@
     "noEmit": true,
     "rootDir": ".",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/test.tsbuildinfo",
-    "typeRoots": ["./src", "../../node_modules/@types"]
+    "tsBuildInfoFile": "dist/test.tsbuildinfo"
   },
   "include": ["test", "**/*.test.ts"],
   "references": [{ "path": "./tsconfig.json" }]

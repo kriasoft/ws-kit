@@ -8,7 +8,7 @@
  * - createRouter() → Factory with only heartbeat/limits options
  * - Router → RouterCore (use/on/route/merge/mount/plugin/onError)
  * - MessageDescriptor → Stable runtime shape for all validators
- * - MinimalContext → Base context (clientId, ws, type, data, setData)
+ * - MinimalContext → Base context (clientId, ws, type, data, assignData)
  *
  * Plugins add:
  * - withZod/withValibot → ValidationAPI (rpc method, payload/reply context)
@@ -40,6 +40,7 @@ export {
 } from "./schema/guards";
 
 // Minimal context (always present)
+export { getContextExtension, isMinimalContext } from "./context/base-context";
 export type {
   ConnectionData,
   MinimalContext,
@@ -50,7 +51,7 @@ export type {
 export type { EventHandler, Middleware } from "./core/types";
 
 // Plugin system
-export type { AsCapabilities, MergeCapabilities, Plugin } from "./plugin/types";
+export type { Plugin } from "./plugin/types";
 
 // Error handling
 export type { ErrorCode, WsKitErrorData } from "./error/codes";
@@ -63,13 +64,6 @@ export type {
 } from "./capabilities/pubsub/adapter";
 // Router-level Pub/Sub API (user-facing)
 export type {
-  PublishCapability,
-  PublishError,
-  PublishOptions,
-  PublishResult,
-} from "./core/router";
-export { isPublishError } from "./core/types";
-export type {
   Observer,
   TelemetryHooks,
 } from "./capabilities/telemetry/contracts";
@@ -77,6 +71,13 @@ export type {
   ValidationContext,
   ValidatorAdapter,
 } from "./capabilities/validation/contracts";
+export type {
+  PublishCapability,
+  PublishError,
+  PublishOptions,
+  PublishResult,
+} from "./core/router";
+export { isPublishError } from "./core/types";
 
 // Platform adapter contract
 export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
@@ -93,3 +94,6 @@ export type { ThrottledBroadcastConfig } from "./utils/throttle";
 
 // Test harness (opt-in)
 export * as test from "./testing";
+
+// Normalization utility (for testing validator integration)
+export { normalizeInboundMessage } from "./internal/normalize";

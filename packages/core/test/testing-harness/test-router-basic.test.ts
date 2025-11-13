@@ -29,7 +29,7 @@ describe("Test Router - Basic", () => {
       expect(conn.getData()).toEqual({ userId: "user-123" });
     });
 
-    it("should support setData to update connection data", async () => {
+    it("should support assignData to update connection data", async () => {
       const tr = test.createTestRouter<{ userId: string; role?: string }>({
         create: () => createRouter(),
       });
@@ -37,7 +37,7 @@ describe("Test Router - Basic", () => {
       const conn = await tr.connect({ data: { userId: "user-123" } });
       expect(conn.getData().userId).toBe("user-123");
 
-      conn.setData({ role: "admin" });
+      conn.assignData({ role: "admin" });
       expect(conn.getData()).toEqual({ userId: "user-123", role: "admin" });
     });
   });

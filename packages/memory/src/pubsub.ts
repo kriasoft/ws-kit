@@ -22,7 +22,7 @@ import type {
  * ```ts
  * import { memoryPubSub } from "@ws-kit/memory";
  *
- * const router = createRouter<AppData>()
+ * const router = createRouter<TContext>()
  *   .plugin(withPubSub({ adapter: memoryPubSub() }));
  *
  * router.on(Message, (ctx) => {

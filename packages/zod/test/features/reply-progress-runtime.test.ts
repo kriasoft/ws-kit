@@ -10,9 +10,9 @@
  * Spec: docs/specs/router.md#rpc
  */
 
-import { describe, it, expect } from "bun:test";
-import { z, message, rpc, withZod } from "@ws-kit/zod";
 import { createRouter } from "@ws-kit/core";
+import { message, rpc, withZod, z } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 
 describe("reply() and progress() runtime", () => {
   describe("context methods exist and are properly typed", () => {
@@ -25,12 +25,12 @@ describe("reply() and progress() runtime", () => {
       const router = createRouter().plugin(withZod());
 
       let contextHasReply = false;
-      router.on(GetUser, async (ctx: any) => {
+      router.rpc(GetUser, async (ctx: any) => {
         contextHasReply = typeof ctx.reply === "function";
       });
 
       expect(contextHasReply).toBe(false); // Not called yet
-      expect(typeof router.on).toBe("function");
+      expect(typeof router.rpc).toBe("function");
     });
 
     it("should have progress method in RPC handler context", async () => {
@@ -42,7 +42,7 @@ describe("reply() and progress() runtime", () => {
       const router = createRouter().plugin(withZod());
 
       let contextHasProgress = false;
-      router.on(GetUser, async (ctx: any) => {
+      router.rpc(GetUser, async (ctx: any) => {
         contextHasProgress = typeof ctx.progress === "function";
       });
 
@@ -136,7 +136,7 @@ describe("reply() and progress() runtime", () => {
         name: z.string(),
       });
 
-      expect(GetUser.type).toBe("GET_USER");
+      expect((GetUser as any).type).toBe("GET_USER");
       expect((GetUser as any).response?.type).toBe("USER");
       expect((GetUser as any).kind).toBe("rpc");
     });

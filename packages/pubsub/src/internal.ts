@@ -27,7 +27,6 @@ export type {
 } from "@ws-kit/core";
 
 export type {
-  PublishOptions,
   PublishResult,
   PubSubObserver,
   TopicMutateOptions,

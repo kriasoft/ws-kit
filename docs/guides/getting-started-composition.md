@@ -287,7 +287,7 @@ Helpers are appropriate for **middleware**, **setup**, and **lifecycle hooks**:
 
 ```typescript
 // ✅ Use helper for global middleware
-function setupLogging(router: IWebSocketRouter<AppData>) {
+function setupLogging(router: Router<AppData>) {
   router.use(async (ctx, next) => {
     console.time(`${ctx.type}`);
     await next();
@@ -296,12 +296,12 @@ function setupLogging(router: IWebSocketRouter<AppData>) {
 }
 
 // ✅ Use helper for global auth
-function setupAuth(router: IWebSocketRouter<AppData>) {
-  router.onAuth(async (ctx) => {
+function setupAuth(router: Router<AppData>) {
+  router.use(async (ctx, next) => {
     const token = extractToken(ctx);
     const user = await verifyToken(token);
     ctx.assignData({ userId: user.id });
-    return user.id !== undefined;
+    await next();
   });
 }
 
@@ -358,7 +358,7 @@ Make sure you're using the schema-driven pattern:
 
 ```typescript
 // ❌ Helper pattern (old):
-function setupChat(router: IWebSocketRouter<AppData>) {
+function setupChat(router: Router<AppData>) {
   router.on(JoinRoom, (c) => {
     const { roomId } = c.payload; // ❌ any, not inferred
   });

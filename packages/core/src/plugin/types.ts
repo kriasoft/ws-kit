@@ -4,102 +4,51 @@
 /**
  * Plugin system: pure functions that widen router capabilities.
  *
+ * Plugins are defined via the definePlugin() helper and return plugin API
+ * extensions that are merged into the router. See ADR-029 for the design.
+ *
  * Plugins:
  * - Are idempotent (safe to call multiple times)
  * - Return a widened router (with new methods or context)
- * - Add capabilities via capability bit-flags (validation, pubsub, etc.)
- * - Do NOT mutate the router
+ * - Use the enhancer chain pattern for safe composition
+ * - Do NOT mutate the router directly
+ *
+ * @see ADR-029: Context Enhancer Registry & Plugin Safety
+ * @see definePlugin() for type-safe plugin creation
  */
 
 import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
 
 /**
- * Plugin<TContext, TCaps> takes a router, returns a router with added capabilities.
- * TCaps describes what capabilities are added (e.g., { validation: true }).
- * TContext — the per-connection data structure available throughout the router.
+ * Plugin<TContext, TPluginApi> is a function that takes a router
+ * and returns a router with extended API.
+ *
+ * The plugin is generic over both the current extensions (captured via `any`)
+ * and the new extensions it adds (TPluginApi).
+ *
+ * @typeParam TContext - Per-connection data structure
+ * @typeParam TPluginApi - Object representing the API this plugin adds
+ *
+ * @example
+ * ```typescript
+ * // A plugin that adds { rpc() } method
+ * type ValidationPlugin = Plugin<MyContext, { rpc(...): this }>;
+ *
+ * // A plugin that adds { publish() } method
+ * type PubSubPlugin = Plugin<MyContext, { publish(...): Promise<...> }>;
+ * ```
+ *
+ * For type-safe plugin definition, use definePlugin() helper:
+ * ```typescript
+ * export const withMyFeature = definePlugin<MyContext, MyAPI>(
+ *   (router) => ({ ... }),
+ * );
+ * ```
  */
 export type Plugin<
   TContext extends ConnectionData = ConnectionData,
-  TCaps = unknown,
-> = (
-  router: Router<TContext, any>,
-) => Router<TContext, MergeCapabilities<TCaps>>;
-
-/**
- * Capability bit-flags (internal union).
- * Plugins merge their capabilities into this type.
- * @internal
- */
-export interface Capabilities {
-  validation?: boolean;
-  pubsub?: boolean;
-  telemetry?: boolean;
-}
-
-/**
- * Merge capabilities (used by Router type narrowing).
- */
-export type MergeCapabilities<T = unknown> = T extends Capabilities ? T : {};
-
-/**
- * Internal alias for MergeCapabilities.
- * @internal
- */
-export type AsCapabilities<T = unknown> = MergeCapabilities<T>;
-
-/**
- * Example: Memory PubSub Plugin
- * ```ts
- * export function withMemoryPubSub(): Plugin<any, { pubsub: true }> {
- *   return (router) => {
- *     const pubsub = new InMemoryPubSub();
- *
- *     const publish = async (
- *       topic: string,
- *       schema: MessageDescriptor,
- *       payload: unknown,
- *       opts?: { partitionKey?: string; meta?: Record<string, unknown> }
- *     ) => {
- *       // Publish to topic...
- *       pubsub.publish(topic, payload);
- *     };
- *
- *     const topics = {
- *       list: () => pubsub.topics(),
- *       has: (topic: string) => pubsub.hasTopic(topic),
- *     };
- *
- *     const enhanced = Object.assign(router, {
- *       publish,
- *       topics,
- *     }) as Router<any, { pubsub: true }>;
- *
- *     (enhanced as any).__caps = { pubsub: true };
- *     return enhanced;
- *   };
- * }
- * ```
- *
- * Example: Telemetry Plugin
- * ```ts
- * export function withTelemetry(hooks: {
- *   onMessage?(meta: { type: string; size: number; ts: number }): void;
- *   onPublish?(meta: { topic: string; type: string }): void;
- * }): Plugin<any> {
- *   return (router) => {
- *     // Hook into onError, intercept messages, etc.
- *     router.onError((err, ctx) => {
- *       hooks.onMessage?.({
- *         type: ctx?.type ?? "unknown",
- *         size: JSON.stringify(err).length,
- *         ts: Date.now(),
- *       });
- *     });
- *
- *     (router as any).__caps = { telemetry: true };
- *     return router as Router<any, { telemetry: true }>;
- *   };
- * }
- * ```
- */
+  TPluginApi extends object = {},
+> = <TCurrentExt extends object>(
+  router: Router<TContext, TCurrentExt>,
+) => Router<TContext, TCurrentExt & TPluginApi>;

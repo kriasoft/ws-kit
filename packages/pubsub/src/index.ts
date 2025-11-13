@@ -42,7 +42,6 @@ export { usePubSub, type UsePubSubOptions } from "./middleware";
 
 // Types
 export type {
-  MinimalContext,
   PublishEnvelope,
   PublishOptions,
   PublishResult,

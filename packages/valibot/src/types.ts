@@ -1,8 +1,14 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { MessageContextMethods, ServerWebSocket } from "@ws-kit/core";
-import type { InferOutput, ObjectSchema } from "valibot";
+import type { ServerWebSocket } from "@ws-kit/core";
+import type { InferOutput, ObjectSchema, GenericSchema } from "valibot";
+
+/**
+ * Helper type for message context methods.
+ * @internal
+ */
+type MessageContextMethods<_Data> = Record<string, never>;
 
 /**
  * Standard error codes for type-safe error handling (per ADR-015).
@@ -101,7 +107,7 @@ export type MessageContext<
   Data extends { clientId: string },
 > = MessageContextMethods<Data> & {
   /** WebSocket connection with custom data */
-  ws: ServerWebSocket<Data>;
+  ws: ServerWebSocket;
   /** Message type extracted from schema */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type: Schema extends ObjectSchema<infer TEntries, any>
@@ -318,11 +324,4 @@ export type RpcSchema = MessageSchema & {
 export type AnySchema = MessageSchema | RpcSchema;
 
 /** Re-export shared types that are validator-agnostic. See: @ws-kit/core */
-export type {
-  CloseHandler,
-  CloseHandlerContext,
-  OpenHandler,
-  OpenHandlerContext,
-  WebSocketData,
-  WebSocketRouterOptions,
-} from "@ws-kit/core";
+export type { WebSocketData } from "@ws-kit/core";
