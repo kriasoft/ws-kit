@@ -100,9 +100,13 @@ import { serve } from "@ws-kit/bun";
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Create type-safe router with optional connection data
-type AppData = { userId?: string };
-const router = createRouter<AppData>();
+// Define connection data for this router
+interface ConnectionData {
+  userId?: string;
+}
+
+// Create type-safe router
+const router = createRouter<ConnectionData>();
 
 // Register handlers — fully typed!
 router.on(PingMessage, (ctx) => {
@@ -122,14 +126,14 @@ serve(router, {
 
 **That's it!** Validator, router, messages, and platform adapter all come from focused packages. Type-safe from server to client.
 
-### Eliminating Verbose Generics with Declaration Merging
+### Multi-Router Apps: Module Augmentation
 
-For applications with multiple routers, reduce repetition by declaring your connection data type once using TypeScript **declaration merging**. Then omit the generic everywhere — it's automatic:
+For applications with **multiple routers across files**, use TypeScript **module augmentation** to define connection data once and share it everywhere:
 
 ```ts
-// types/app-data.d.ts
+// types/connection-data.d.ts (project root)
 declare module "@ws-kit/core" {
-  interface AppDataDefault {
+  interface ConnectionData {
     userId?: string;
     email?: string;
     roles?: string[];
@@ -137,25 +141,31 @@ declare module "@ws-kit/core" {
 }
 ```
 
-Now all routers automatically use this type — no repetition:
+Now all routers automatically use this type — no need to repeat generics:
 
 ```ts
-// ✅ No generic needed — automatically uses AppDataDefault
-const router = createRouter();
+// src/auth-router.ts
+const authRouter = createRouter<ConnectionData>(); // ✅ No generic needed
+
+// src/chat-router.ts
+const chatRouter = createRouter<ConnectionData>(); // ✅ Automatic
 
 router.on(SecureMessage, (ctx) => {
-  // ✅ ctx.ws.data is properly typed with all default fields
+  // ✅ ctx.ws.data is properly typed from global augmentation
   const userId = ctx.ws.data?.userId; // string | undefined
   const roles = ctx.ws.data?.roles; // string[] | undefined
 });
 ```
 
-If you need custom data for a specific router, use an explicit generic:
+**For domain-specific routers**, extend the global `ConnectionData`:
 
 ```ts
-type CustomData = { feature: string; version: number };
-const featureRouter = createRouter<CustomData>();
+// Features that add custom fields beyond the global ConnectionData
+type ChatData = ConnectionData & { roomId?: string };
+const chatRouter = createRouter<ChatData>();
 ```
+
+**Key pattern**: Module augmentation is ideal for production apps where you want connection data shared across the entire application.
 
 ### Do and Don't
 
@@ -267,14 +277,15 @@ const SendMessage = message("SEND_MESSAGE", {
   text: z.string(),
 });
 
-// Define router with user data type
-type AppData = {
+// In a real app, ConnectionData would be defined once via module augmentation
+// Here we define it locally for this example to be self-contained
+interface ConnectionData {
   userId?: string;
   email?: string;
   roles?: string[];
-};
+}
 
-const router = createRouter<AppData>();
+const router = createRouter<ConnectionData>();
 
 // Global middleware for auth checks
 router.use((ctx, next) => {
@@ -446,10 +457,10 @@ Register handlers with full type safety. The context includes schema-typed paylo
 import { z, message, createRouter } from "@ws-kit/zod";
 import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
 
-type ConnectionData = {
+interface ConnectionData {
   userId?: string;
   roomId?: string;
-};
+}
 
 const router = createRouter<ConnectionData>();
 
@@ -530,7 +541,11 @@ const RoomUpdate = message("ROOM_UPDATE", {
   message: z.string(),
 });
 
-const router = createRouter<{ roomId?: string }>();
+interface ConnectionData {
+  roomId?: string;
+}
+
+const router = createRouter<ConnectionData>();
 
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
@@ -593,8 +608,12 @@ Optional `options` parameter for `publish()`:
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
 
-type AppData = { userId?: string; roomId?: string };
-const router = createRouter<AppData>();
+interface ConnectionData {
+  userId?: string;
+  roomId?: string;
+}
+
+const router = createRouter<ConnectionData>();
 
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
 const UserJoined = message("USER_JOINED", {
@@ -662,8 +681,11 @@ Use `ctx.error()` to send type-safe error responses with optional retry hints:
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
 
-type AppData = { userId?: string };
-const router = createRouter<AppData>();
+interface ConnectionData {
+  userId?: string;
+}
+
+const router = createRouter<ConnectionData>();
 
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
 
@@ -799,7 +821,11 @@ const limiter = rateLimit({
   key: keyPerUserPerType, // Per-user per-message-type buckets (recommended)
 });
 
-const router = createRouter<AppData>();
+interface ConnectionData {
+  userId?: string;
+}
+
+const router = createRouter<ConnectionData>();
 router.use(limiter); // Apply to all messages
 ```
 
@@ -898,7 +924,11 @@ import { createClient } from "redis";
 const redisClient = createClient({ url: process.env.REDIS_URL });
 await redisClient.connect();
 
-const router = createRouter({
+interface ConnectionData {
+  userId?: string;
+}
+
+const router = createRouter<ConnectionData>({
   pubsub: redisPubSub(redisClient),
 });
 
@@ -916,20 +946,38 @@ Without explicit `pubsub` configuration, broadcasting is scoped to the current i
 Organize code by splitting handlers into separate routers, then merge them into a main router using the `merge()` method:
 
 ```ts
+// types/connection-data.d.ts (project root - define once, share everywhere)
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+  }
+}
+```
+
+Then in your main application file:
+
+```ts
 import { createRouter } from "@ws-kit/zod";
 import { chatRoutes } from "./chat";
 import { notificationRoutes } from "./notification";
 
-type AppData = { userId?: string };
+// Create main router - automatically uses globally-defined ConnectionData
+const mainRouter = createRouter<ConnectionData>();
 
-// Create main router
-const mainRouter = createRouter<AppData>();
-
-// Compose with sub-routers
+// Compose with sub-routers (each defined in their own modules)
 mainRouter.merge(chatRoutes).merge(notificationRoutes);
 ```
 
-Where `chatRoutes` and `notificationRoutes` are separate routers created with `createRouter<AppData>()` in their own files. The `merge()` method combines handlers, lifecycle hooks, and middleware from the composed routers.
+Where `chatRoutes` and `notificationRoutes` are separate routers:
+
+```ts
+// chat.ts
+const chatRouter = createRouter<ConnectionData>();
+chatRouter.on(SendMessage, handleChat);
+export const chatRoutes = chatRouter;
+```
+
+The `merge()` method combines handlers, lifecycle hooks, and middleware from the composed routers. This pattern scales because ConnectionData is defined once at the project level, and all routers automatically share it.
 
 ## Browser Client
 

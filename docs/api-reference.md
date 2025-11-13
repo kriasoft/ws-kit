@@ -1672,9 +1672,9 @@ type ChatMsg = InferMessage<typeof ChatMessage>;
 Declare default connection data type once using TypeScript declaration merging:
 
 ```typescript
-// types/app-data.d.ts
+// types/connection-data.d.ts
 declare module "@ws-kit/core" {
-  interface AppDataDefault {
+  interface ConnectionData {
     userId?: string;
     roles?: string[];
     tenant?: string;
@@ -1682,7 +1682,7 @@ declare module "@ws-kit/core" {
 }
 
 // Now in any module (no generic needed):
-const router = createRouter(); // Automatically uses AppDataDefault
+const router = createRouter(); // Automatically uses ConnectionData
 
 router.on(SecureMessage, (ctx) => {
   // ctx.ws.data is properly typed with userId, roles, tenant

@@ -2,9 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "typeRoots": ["./src", "../../node_modules/@types"]
   },
   "include": ["src"],
   "exclude": ["**/*.test.ts"],

@@ -44,28 +44,37 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ```typescript
 import { createClient } from "redis";
 import { createRouter } from "@ws-kit/core";
-import { z, message, withZod } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimiter } from "@ws-kit/rate-limit";
-import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+import { z, message } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimiter, keyPerUserPerType } from "@ws-kit/rate-limit";
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 
-type AppData = { userId?: string };
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    roles?: string[];
+  }
+}
 
 const redis = createClient({ url: process.env.REDIS_URL! });
 await redis.connect();
 
-const router = createRouter<AppData>()
-  .plugin(withZod()) // or .plugin(withValibot())
-  .plugin(withPubSub({ adapter: redisPubSub(redis) }))
-  .plugin(
-    withRateLimiter(
-      redisRateLimiter(redis, { capacity: 200, tokensPerSecond: 100 }),
-    ),
-  );
-
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
+
+const router = createRouter<ConnectionData>()
+  .plugin(withZod())
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }));
+
+router.use(
+  rateLimit({
+    adapter: redisRateLimiter(),
+    capacity: 100,
+    tokensPerSecond: 50,
+    key: keyPerUserPerType,
+  }),
+);
 
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
@@ -74,10 +83,13 @@ router.on(PingMessage, (ctx) => {
 serve(router, {
   port: 3000,
   authenticate(req) {
-    return { userId: "anonymous" };
+    const token = req.headers.get("authorization");
+    return token ? { userId: "user_123", roles: ["admin"] } : undefined;
   },
 });
 ```
+
+**Architecture notes**: Module augmentation for `ConnectionData` (define once, shared across all routers). Rate limiting and pub/sub via middleware, not plugins.
 
 ## API Surface
 
@@ -112,7 +124,7 @@ client.request(schema, data); // RPC call (returns Promise, auto-correlation)
 - `progress()` — non-terminal RPC updates for streaming (ADR-015)
 - `request()` — client-side RPC with auto-correlation (ADR-014)
 
-**Connection Data**: Pass generic `AppData` type to `createRouter<AppData>()` for full type inference. See [docs/specs/router.md#connection-data](./docs/specs/router.md) for details.
+**Connection Data**: Use `createRouter<ConnectionData>()` for full type inference. Module augmentation allows you to define connection data once and share across all routers. See [docs/specs/router.md#custom-connection-data](./docs/specs/router.md) for details.
 
 ## Key Patterns
 

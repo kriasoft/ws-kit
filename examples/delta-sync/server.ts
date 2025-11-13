@@ -9,14 +9,13 @@
  */
 
 import { serve } from "@ws-kit/bun";
-import type { ServerWebSocket } from "@ws-kit/core";
+import type { ServerWebSocket, ConnectionData } from "@ws-kit/core";
 import { createRouter, message } from "@ws-kit/zod";
 import { RingBuffer } from "./ring-buffer";
 import {
   JoinMessage,
   LeaveMessage,
   UpdateMessage,
-  type AppData,
   type Operation,
   type Participant,
 } from "./schema";
@@ -53,7 +52,7 @@ class DeltaSyncServer {
    * Initialize router with message handlers
    */
   createRouter() {
-    const router = createRouter<AppData>();
+    const router = createRouter<ConnectionData>();
 
     router.on(JoinMessage, async (ctx) => {
       const { participantId, name } = ctx.payload;

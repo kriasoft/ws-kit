@@ -8,19 +8,21 @@
  * Activity tracking enables heartbeat and connection monitoring.
  */
 
-import type { MinimalContext } from "../context/base-context";
+import type { ConnectionData, MinimalContext } from "../context/base-context";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 
-export type ErrorHandler<TContext> = (
+export type ErrorHandler<TContext extends ConnectionData = ConnectionData> = (
   err: unknown,
   ctx: MinimalContext<TContext> | null,
 ) => void | Promise<void>;
 
-export type OpenHandler<TContext> = (
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export type OpenHandler<TContext extends ConnectionData = ConnectionData> = (
   ws: ServerWebSocket,
 ) => void | Promise<void>;
 
-export type CloseHandler<TContext> = (
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export type CloseHandler<TContext extends ConnectionData = ConnectionData> = (
   ws: ServerWebSocket,
   code?: number,
   reason?: string,
@@ -33,7 +35,9 @@ export type CloseHandler<TContext> = (
  * - Tracks close handlers for per-connection cleanup
  * - Tracks last activity timestamp per connection for heartbeat monitoring
  */
-export class LifecycleManager<TContext> {
+export class LifecycleManager<
+  TContext extends ConnectionData = ConnectionData,
+> {
   private errorHandlers: ErrorHandler<TContext>[] = [];
   private openHandlers: OpenHandler<TContext>[] = [];
   private closeHandlers: CloseHandler<TContext>[] = [];

@@ -8,7 +8,7 @@
  * next() is async; exceptions bubble to onError.
  */
 
-import type { MinimalContext } from "../context/base-context";
+import type { ConnectionData, MinimalContext } from "../context/base-context";
 import type { Middleware } from "../core/types";
 
 /**
@@ -39,7 +39,9 @@ import type { Middleware } from "../core/types";
  * await pipeline(async () => console.log("handler"));
  * ```
  */
-export function composePipeline<TContext>(
+export function composePipeline<
+  TContext extends ConnectionData = ConnectionData,
+>(
   middlewares: Middleware<TContext>[],
 ): (ctx: MinimalContext<TContext>, next: () => Promise<void>) => Promise<void> {
   return async (ctx: MinimalContext<TContext>, next: () => Promise<void>) => {

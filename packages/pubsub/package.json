@@ -29,18 +29,18 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/src/index.d.ts",
       "bun": "./src/index.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/src/index.js"
     },
     "./internal": {
-      "types": "./dist/internal.d.ts",
+      "types": "./dist/src/internal.d.ts",
       "bun": "./src/internal.ts",
-      "default": "./dist/internal.js"
+      "default": "./dist/src/internal.js"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "files": [
     "dist"
   ],

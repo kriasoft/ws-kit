@@ -9,7 +9,9 @@ Organize your application into modules by composing multiple routers:
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
 
-type AppData = { userId?: string };
+interface ConnectionData {
+  userId?: string;
+}
 
 // Define message schemas
 const LoginMessage = message("LOGIN", {
@@ -26,14 +28,14 @@ const BroadcastMessage = message("BROADCAST", {
 });
 
 // Authentication router
-const authRouter = createRouter<AppData>();
+const authRouter = createRouter<ConnectionData>();
 authRouter.on(LoginMessage, (ctx) => {
   // Verify credentials and update connection data
   ctx.assignData({ userId: "user_123" });
 });
 
 // Chat router
-const chatRouter = createRouter<AppData>();
+const chatRouter = createRouter<ConnectionData>();
 chatRouter.on(SendMessageMessage, (ctx) => {
   const userId = ctx.ws.data?.userId;
   const roomId = "general"; // or from ctx.ws.data?.roomId
@@ -46,7 +48,7 @@ chatRouter.on(SendMessageMessage, (ctx) => {
 });
 
 // Compose routers together
-const router = createRouter<AppData>();
+const router = createRouter<ConnectionData>();
 router.merge(authRouter).merge(chatRouter);
 ```
 
@@ -59,8 +61,12 @@ Middleware runs before handlers—use it for authorization, validation, logging,
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
 
-type AppData = { userId?: string; roles?: string[] };
-const router = createRouter<AppData>();
+interface ConnectionData {
+  userId?: string;
+  roles?: string[];
+}
+
+const router = createRouter<ConnectionData>();
 
 // Global middleware: authentication check
 router.use((ctx, next) => {
@@ -291,9 +297,9 @@ This pattern is useful for protocol versioning, command/query separation, event 
 For large applications, declare your default connection data type once using TypeScript declaration merging:
 
 ```typescript
-// types/app-data.d.ts
+// types/connection-data.d.ts
 declare module "@ws-kit/core" {
-  interface AppDataDefault {
+  interface ConnectionData {
     userId?: string;
     email?: string;
     roles?: string[];
@@ -305,7 +311,7 @@ declare module "@ws-kit/core" {
 Now throughout your app, omit the generic type:
 
 ```typescript
-// ✅ No generic needed—automatically uses AppDataDefault
+// ✅ No generic needed—automatically uses ConnectionData
 const router = createRouter();
 
 router.on(SecureMessage, (ctx) => {

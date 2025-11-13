@@ -6,7 +6,7 @@
  * No magic here—validation and dispatch happen normally.
  */
 
-import type { BaseContextData } from "../context/base-context";
+import type { ConnectionData } from "../context/base-context";
 import type { TestConnection } from "./types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 
@@ -25,7 +25,7 @@ export const act = {
    * Emit an event message (kind === "event").
    * Throws if schema kind is not "event".
    */
-  emit<TContext extends BaseContextData = {}>(
+  emit<TContext extends ConnectionData = ConnectionData>(
     conn: TestConnection<TContext>,
     schema: MessageDescriptor & { kind?: "event" },
     payload?: unknown,
@@ -57,7 +57,7 @@ export const act = {
    * console.log("User:", user);
    * ```
    */
-  call<TContext extends BaseContextData = {}, TResponse = unknown>(
+  call<TContext extends ConnectionData = ConnectionData, TResponse = unknown>(
     conn: TestConnection<TContext>,
     schema: MessageDescriptor & { kind?: "rpc"; response?: MessageDescriptor },
     payload?: unknown,

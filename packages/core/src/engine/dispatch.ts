@@ -6,7 +6,7 @@
  * Full message processing from raw frame to handler execution.
  */
 
-import type { BaseContextData, MinimalContext } from "../context/base-context";
+import type { ConnectionData, MinimalContext } from "../context/base-context";
 import type { CoreRouter } from "../core/router";
 import { ROUTE_TABLE } from "../core/symbols";
 import type { EventHandler, Middleware } from "../core/types";
@@ -18,7 +18,9 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
 import { composePipeline } from "./middleware";
 import type { MessageEnvelope } from "./types";
 
-export interface DispatchOptions<TContext> {
+export interface DispatchOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   globalMiddleware: Middleware<TContext>[];
   routeMiddleware: Middleware<TContext>[];
   handler: EventHandler<TContext>;
@@ -30,7 +32,9 @@ export interface DispatchOptions<TContext> {
  *
  * Errors are NOT caught here; callers handle error routing.
  */
-export async function dispatch<TContext>(
+export async function dispatch<
+  TContext extends ConnectionData = ConnectionData,
+>(
   ctx: MinimalContext<TContext>,
   schema: MessageDescriptor,
   opts: DispatchOptions<TContext>,
@@ -54,7 +58,7 @@ export async function dispatch<TContext>(
  * @param ws WebSocket connection
  * @param impl Router implementation (provides registry, lifecycle, context factory, etc.)
  */
-export async function dispatchMessage<TContext extends BaseContextData>(
+export async function dispatchMessage<TContext extends ConnectionData>(
   raw: string | ArrayBuffer,
   clientId: string,
   ws: ServerWebSocket,

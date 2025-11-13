@@ -11,7 +11,7 @@
  * - Do NOT mutate the router
  */
 
-import type { BaseContextData } from "../context/base-context";
+import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
 
 /**
@@ -19,7 +19,10 @@ import type { Router } from "../core/router";
  * TCaps describes what capabilities are added (e.g., { validation: true }).
  * TContext — the per-connection data structure available throughout the router.
  */
-export type Plugin<TContext extends BaseContextData = {}, TCaps = unknown> = (
+export type Plugin<
+  TContext extends ConnectionData = ConnectionData,
+  TCaps = unknown,
+> = (
   router: Router<TContext, any>,
 ) => Router<TContext, MergeCapabilities<TCaps>>;
 

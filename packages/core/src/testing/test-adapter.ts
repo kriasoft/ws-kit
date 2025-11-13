@@ -6,7 +6,7 @@
  * Manages in-memory WebSocket connections and coordinates with the router.
  */
 
-import type { BaseContextData } from "../context/base-context";
+import type { ConnectionData } from "../context/base-context";
 import type { CoreRouter } from "../core/router";
 import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
 import { TestWebSocket, type ConnectionState } from "./test-websocket";
@@ -19,8 +19,9 @@ import type { OutgoingFrame } from "./types";
  * Integrates with router's websocket bridge to exercise the same code paths
  * as production adapters (Bun, Cloudflare, etc.).
  */
-export class InMemoryPlatformAdapter<TContext extends BaseContextData = {}>
-  implements PlatformAdapter
+export class InMemoryPlatformAdapter<
+  TContext extends ConnectionData = ConnectionData,
+> implements PlatformAdapter
 {
   private connections = new Map<string, ConnectionState<TContext>>();
   private nextClientId = 0;
@@ -40,14 +41,18 @@ export class InMemoryPlatformAdapter<TContext extends BaseContextData = {}>
   }): TestWebSocket {
     const clientId = String(this.nextClientId++);
     const ws = new TestWebSocket(clientId, init?.data);
-    const data = init?.data || ({} as TContext);
+    const data = (init?.data || {}) as TContext;
 
-    this.connections.set(clientId, {
+    const connectionState: ConnectionState<TContext> = {
       ws,
       data,
-      headers: init?.headers,
       subscriptions: new Set(),
-    });
+    };
+    if (init?.headers !== undefined) {
+      connectionState.headers = init.headers;
+    }
+
+    this.connections.set(clientId, connectionState);
 
     return ws;
   }

@@ -40,7 +40,11 @@ export {
 } from "./schema/guards";
 
 // Minimal context (always present)
-export type { BaseContextData, MinimalContext } from "./context/base-context";
+export type {
+  ConnectionData,
+  MinimalContext,
+  WebSocketData,
+} from "./context/base-context";
 
 // Middleware types
 export type { EventHandler, Middleware } from "./core/types";

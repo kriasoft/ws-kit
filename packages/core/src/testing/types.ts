@@ -5,8 +5,8 @@
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
 
-import type { Router } from "../core/router";
-import type { BaseContextData } from "../context/base-context";
+import type { BaseRouter } from "../core/router";
+import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
 
@@ -32,14 +32,16 @@ export interface OutgoingFrame {
 export interface PublishRecord {
   topic: string;
   schema?: MessageDescriptor;
-  payload: unknown;
+  payload?: unknown;
   meta?: Record<string, unknown>;
 }
 
 /**
  * Test connection: models a single in-memory WebSocket connection.
  */
-export interface TestConnection<TContext extends BaseContextData = {}> {
+export interface TestConnection<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Unique client ID for this connection.
    */
@@ -93,7 +95,8 @@ export interface TestConnection<TContext extends BaseContextData = {}> {
 /**
  * Capture helpers for assertions.
  */
-export interface TestCapture<TContext extends BaseContextData = {}> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export interface TestCapture<TContext extends ConnectionData = ConnectionData> {
   /**
    * Get all errors caught by router.onError().
    */
@@ -119,9 +122,13 @@ export interface TestCapture<TContext extends BaseContextData = {}> {
 /**
  * Test router: wraps a real router with testing utilities.
  * Includes clock control, connection management, and capture helpers.
+ *
+ * Extends BaseRouter and includes testing-specific methods for clock control,
+ * connection management, and capture helpers. The actual router instance
+ * may have additional APIs (validation, pubsub) from plugins.
  */
-export interface TestRouter<TContext extends BaseContextData = {}>
-  extends Router<TContext, any> {
+export interface TestRouter<TContext extends ConnectionData = ConnectionData>
+  extends BaseRouter<TContext> {
   /**
    * Establish a connection and wait for all `onConnect` hooks to settle.
    * Always await this method before sending messages.

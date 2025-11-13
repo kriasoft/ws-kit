@@ -212,8 +212,8 @@ Update `packages/zod/package.json` and `packages/valibot/package.json`:
 {
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
     }
   }
 }
@@ -255,14 +255,14 @@ This works because:
 3. Builder pattern (ADR-005) preserves generic constraints through Proxy/forwarding
 4. No type widening occurs
 
-## AppDataDefault: Zero-Repetition Connection Data Types
+## ConnectionData: Zero-Repetition Connection Data Types
 
 For large applications, declaring `TData` at every `createRouter()` site creates friction. **TypeScript's declaration merging** eliminates this without build-time magic:
 
 ```typescript
-// types/app-data.d.ts (single, centralized declaration)
+// types/connection-data.d.ts (single, centralized declaration)
 declare module "@ws-kit/core" {
-  interface AppDataDefault {
+  interface ConnectionData {
     userId?: string;
     username?: string;
     roles?: string[];
@@ -273,11 +273,11 @@ declare module "@ws-kit/core" {
 // Now throughout your app, omit the generic:
 import { createRouter } from "@ws-kit/zod";
 
-const router = createRouter(); // ✅ Uses AppDataDefault automatically
+const router = createRouter(); // ✅ Uses ConnectionData automatically
 const authRouter = createRouter(); // ✅ Same type
 
 router.use((ctx, next) => {
-  // ✅ ctx.ws.data has merged AppDataDefault type
+  // ✅ ctx.ws.data has merged ConnectionData type
   const userId = ctx.ws.data?.userId; // string | undefined
   return next();
 });
@@ -297,10 +297,10 @@ router.on(SecureMessage, (ctx) => {
 
 **When to use:**
 
-- **AppDataDefault** — Global, shared connection data (tenant ID, user auth, trace ID)
+- **ConnectionData** — Global, shared connection data (tenant ID, user auth, trace ID)
 - **Explicit `<TData>`** — Feature modules with custom context (room-specific state)
 
-Both patterns can coexist—AppDataDefault provides the base, explicit generics allow features to extend it.
+Both patterns can coexist—ConnectionData provides the base, explicit generics allow features to extend it.
 
 ## Consequences
 
@@ -383,8 +383,8 @@ const schema = messageSchema("LOGIN", { ... });
 - **Implementation**:
   - `packages/zod/src/index.ts` — Exports `z`, `message()`, `createRouter()`
   - `packages/valibot/src/index.ts` — Mirror implementation for Valibot
-- **AppDataDefault Pattern**:
-  - `types/app-data.d.ts` — Centralized connection data declaration (optional)
+- **ConnectionData Pattern**:
+  - `types/connection-data.d.ts` — Centralized connection data declaration (optional)
   - Uses TypeScript declaration merging (no build-time setup)
 - **Examples**:
   - `examples/quick-start/index.ts` — Uses export-with-helpers pattern

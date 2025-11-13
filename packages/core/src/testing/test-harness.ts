@@ -6,7 +6,7 @@
  * Provides a clean, ergonomic testing API for WS-Kit routers.
  */
 
-import type { BaseContextData } from "../context/base-context";
+import type { ConnectionData } from "../context/base-context";
 import type { CoreRouter, Router } from "../core/router";
 import type { RouterObserver } from "../core/types";
 import { FakeClock, type Clock } from "./fake-clock";
@@ -22,7 +22,9 @@ import type {
 /**
  * Test harness options.
  */
-export interface CreateTestRouterOptions<TContext> {
+export interface CreateTestRouterOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Router factory (default: createRouter with no options).
    */
@@ -72,9 +74,9 @@ export interface CreateTestRouterOptions<TContext> {
  * expect(conn.outgoing()).toContainEqual({ type: "PONG", ... });
  * ```
  */
-export function createTestRouter<TContext extends BaseContextData = {}>(
-  opts?: CreateTestRouterOptions<TContext>,
-): TestRouter<TContext> {
+export function createTestRouter<
+  TContext extends ConnectionData = ConnectionData,
+>(opts?: CreateTestRouterOptions<TContext>): TestRouter<TContext> {
   // Create the router
   if (!opts?.create) {
     throw new Error(
@@ -84,7 +86,7 @@ export function createTestRouter<TContext extends BaseContextData = {}>(
   const router = opts.create();
 
   // Apply plugins
-  let configuredRouter = router;
+  let configuredRouter: Router<TContext, any> = router;
   if (opts?.plugins) {
     for (const plugin of opts.plugins) {
       configuredRouter = plugin(configuredRouter);
@@ -114,8 +116,10 @@ export function createTestRouter<TContext extends BaseContextData = {}>(
  * Wrap an existing router with test infrastructure.
  * Useful for testing production routers in black-box mode.
  */
-export function wrapTestRouter<TContext extends BaseContextData = {}>(
-  router: Router<TContext>,
+export function wrapTestRouter<
+  TContext extends ConnectionData = ConnectionData,
+>(
+  router: Router<TContext, any>,
   opts?: {
     clock?: Clock;
     onErrorCapture?: boolean;
@@ -134,7 +138,7 @@ export function wrapTestRouter<TContext extends BaseContextData = {}>(
   const capturedErrors: unknown[] = [];
   const connections = new Map<string, TestConnectionImpl<TContext>>();
   const capturedPublishes: PublishRecord[] = [];
-  const unsubscribers: Array<() => void> = [];
+  const unsubscribers: (() => void)[] = [];
 
   // Register router observer (no casting required for this API)
   // This replaces the previous pubsub.tap() approach with a public, composable API
@@ -277,7 +281,7 @@ export function wrapTestRouter<TContext extends BaseContextData = {}>(
 /**
  * Implementation of TestConnection.
  */
-class TestConnectionImpl<TContext extends BaseContextData = unknown>
+class TestConnectionImpl<TContext extends ConnectionData = ConnectionData>
   implements TestConnection<TContext>
 {
   private outgoingFrames: OutgoingFrame[] = [];
