@@ -20,7 +20,6 @@ import type {
   PublishOptions,
   PublishResult,
 } from "@ws-kit/core";
-import { definePlugin } from "@ws-kit/core/plugin";
 import { ROUTER_IMPL } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
 import type { PublishEnvelope } from "@ws-kit/core/pubsub";
