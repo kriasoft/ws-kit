@@ -1,10 +1,14 @@
-# WS-Kit — Type-Safe WebSocket Router
+# WS-Kit — A Type-Safe, Plugin-Driven WebSocket Framework
 
 [![CI](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
 [![Coverage](https://codecov.io/gh/kriasoft/ws-kit/branch/main/graph/badge.svg)](https://app.codecov.io/gh/kriasoft/ws-kit)
 [![npm](https://img.shields.io/npm/v/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
 [![Downloads](https://img.shields.io/npm/dm/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
 [![Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
+
+> [!WARNING] Major Refactor Underway
+>
+> WS-Kit is transitioning to a new plugin architecture with a normalized adapter façade. The codebase is evolving quickly and several components are still incomplete. Early feedback, testing, and PRs are appreciated.
 
 Type-safe WebSocket framework for real-time apps. Define message contracts with Zod or Valibot — get complete TypeScript inference in server handlers, browser clients, and Node.js clients. Includes RPC patterns, distributed broadcasting, standard error codes with automatic retry hints, and full connection lifecycle control. Server works on Bun, Cloudflare, or Node.js; client works in browsers and Node.js.
 
@@ -90,7 +94,7 @@ bun add valibot bun @types/bun -D
 
 ## Quick Start
 
-The **export-with-helpers pattern** is the first-class way to use WS-Kit —no factories, no dual imports:
+The **canonical import pattern** is the first-class way to use WS-Kit — import from a single validator package to ensure type safety and avoid dual-package hazards:
 
 ```ts
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -100,13 +104,8 @@ import { serve } from "@ws-kit/bun";
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Define connection data for this router
-interface ConnectionData {
-  userId?: string;
-}
-
-// Create type-safe router
-const router = createRouter<ConnectionData>();
+// Create type-safe router (validator is pre-configured)
+const router = createRouter();
 
 // Register handlers — fully typed!
 router.on(PingMessage, (ctx) => {
@@ -114,12 +113,18 @@ router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
 });
 
-// Serve with type-safe handlers
+// Serve with authentication and lifecycle hooks
 serve(router, {
   port: 3000,
   authenticate(req) {
     const token = req.headers.get("authorization");
     return token ? { userId: "u_123" } : undefined;
+  },
+  onOpen(ctx) {
+    console.log(`Connected: ${ctx.ws.data?.userId}`);
+  },
+  onClose(ctx) {
+    console.log(`Disconnected: ${ctx.ws.data?.userId}`);
   },
 });
 ```
@@ -128,7 +133,7 @@ serve(router, {
 
 ### Multi-Router Apps: Module Augmentation
 
-For applications with **multiple routers across files**, use TypeScript **module augmentation** to define connection data once and share it everywhere:
+For applications with **multiple routers across files**, use TypeScript **module augmentation** to define connection data once — all routers automatically share it:
 
 ```ts
 // types/connection-data.d.ts (project root)
@@ -141,31 +146,40 @@ declare module "@ws-kit/core" {
 }
 ```
 
-Now all routers automatically use this type — no need to repeat generics:
+Now create feature routers without repeating type parameters:
 
 ```ts
-// src/auth-router.ts
-const authRouter = createRouter<ConnectionData>(); // ✅ No generic needed
+// src/features/chat.ts
+import { createRouter } from "@ws-kit/zod";
+import { JoinRoom, SendMessage, UserJoined } from "./schema";
 
-// src/chat-router.ts
-const chatRouter = createRouter<ConnectionData>(); // ✅ Automatic
+const chatRouter = createRouter(); // ✅ Connection data is automatically typed
 
-router.on(SecureMessage, (ctx) => {
-  // ✅ ctx.ws.data is properly typed from global augmentation
-  const userId = ctx.ws.data?.userId; // string | undefined
-  const roles = ctx.ws.data?.roles; // string[] | undefined
+chatRouter.on(JoinRoom, async (ctx) => {
+  const userId = ctx.ws.data?.userId; // ✅ Properly typed
+  const roomId = ctx.payload.roomId;
+  await ctx.topics.subscribe(roomId);
+  ctx.send(UserJoined, { roomId, userId: userId || "anonymous" });
 });
+
+export { chatRouter };
 ```
 
-**For domain-specific routers**, extend the global `ConnectionData`:
+Compose feature routers into your main app:
 
 ```ts
-// Features that add custom fields beyond the global ConnectionData
-type ChatData = ConnectionData & { roomId?: string };
-const chatRouter = createRouter<ChatData>();
+// src/server.ts
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { chatRouter } from "./features/chat";
+import { presenceRouter } from "./features/presence";
+
+const mainRouter = createRouter().merge(chatRouter).merge(presenceRouter);
+
+serve(mainRouter, { port: 3000 });
 ```
 
-**Key pattern**: Module augmentation is ideal for production apps where you want connection data shared across the entire application.
+**Key pattern**: Module augmentation at the project level eliminates type repetition across all routers.
 
 ### Do and Don't
 
@@ -272,20 +286,19 @@ import { z, message, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 import { verifyIdToken } from "./auth"; // Your authentication logic
 
-// Define secured message
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    email?: string;
+    roles?: string[];
+  }
+}
+
 const SendMessage = message("SEND_MESSAGE", {
   text: z.string(),
 });
 
-// In a real app, ConnectionData would be defined once via module augmentation
-// Here we define it locally for this example to be self-contained
-interface ConnectionData {
-  userId?: string;
-  email?: string;
-  roles?: string[];
-}
-
-const router = createRouter<ConnectionData>();
+const router = createRouter();
 
 // Global middleware for auth checks
 router.use((ctx, next) => {
@@ -317,9 +330,6 @@ serve(router, {
         roles: decoded.roles || [],
       };
     }
-  },
-  onError(error, ctx) {
-    console.error(`WS-Kit error in ${ctx?.type}:`, error);
   },
   onOpen(ctx) {
     console.log(`User ${ctx.ws.data?.email} connected`);
@@ -457,16 +467,18 @@ Register handlers with full type safety. The context includes schema-typed paylo
 import { z, message, createRouter } from "@ws-kit/zod";
 import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
 
-interface ConnectionData {
-  userId?: string;
-  roomId?: string;
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    roomId?: string;
+  }
 }
 
-const router = createRouter<ConnectionData>();
+const router = createRouter();
 
 // Handle new connections
 router.onOpen((ctx) => {
-  console.log(`Client connected: ${ctx.ws.data.userId}`);
+  console.log(`Client connected: ${ctx.ws.data?.userId}`);
 });
 
 // Handle specific message types (fully typed!)
@@ -474,42 +486,48 @@ router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload; // ✅ Fully typed from schema
   const userId = ctx.ws.data?.userId;
 
-  // Update connection data
-  ctx.assignData({ roomId });
+  // Store roomId in connection data for later use
+  if (ctx.ws.data) {
+    ctx.ws.data.roomId = roomId;
+  }
 
   // Subscribe to room broadcasts
   await ctx.topics.subscribe(roomId);
 
   console.log(`User ${userId} joined room: ${roomId}`);
-  console.log(`Message received at: ${ctx.receivedAt}`);
 
   // Send confirmation (type-safe!)
   ctx.send(UserJoined, { roomId, userId: userId || "anonymous" });
+
+  // Broadcast to other subscribers in the room
+  await ctx.publish(roomId, UserJoined, {
+    roomId,
+    userId: userId || "anonymous",
+  });
 });
 
 router.on(SendMessage, async (ctx) => {
-  const { text } = ctx.payload;
+  const { roomId, text } = ctx.payload; // ✅ Fully typed
   const userId = ctx.ws.data?.userId;
-  const roomId = ctx.ws.data?.roomId;
 
   console.log(`[${roomId}] ${userId}: ${text}`);
 
   // Broadcast to room subscribers (type-safe!)
-  await router.publish(roomId, SendMessage, {
+  await ctx.publish(roomId, SendMessage, {
+    roomId,
     text,
     userId: userId || "anonymous",
   });
 });
 
 // Handle disconnections
-router.onClose(async (ctx) => {
+router.onClose((ctx) => {
   const userId = ctx.ws.data?.userId;
   const roomId = ctx.ws.data?.roomId;
 
-  if (roomId) {
-    await ctx.topics.unsubscribe(roomId);
-    // Notify others
-    await router.publish(roomId, UserLeft, { userId: userId || "anonymous" });
+  if (roomId && userId) {
+    // Use router.publish() in lifecycle hooks (ctx.publish available in handlers only)
+    void router.publish(roomId, UserLeft, { userId });
   }
   console.log(`Disconnected: ${userId}`);
 });
@@ -518,15 +536,14 @@ router.onClose(async (ctx) => {
 **Context Fields:**
 
 - `ctx.payload` — Typed payload from schema (✅ fully typed!)
-- `ctx.ws.data` — Connection data (type-narrowed from `<TData>`)
+- `ctx.ws.data` — Connection data (type-narrowed from module augmentation)
 - `ctx.type` — Message type literal (e.g., `"JOIN_ROOM"`)
-- `ctx.meta` — Client metadata (correlationId, timestamp)
-- `ctx.receivedAt` — Server receive timestamp
-- `ctx.send()` — Type-safe send to this client only
-- `ctx.getData()` — Type-safe single field access from connection data
-- `ctx.assignData()` — Type-safe partial data updates
-- `ctx.topics.subscribe()` / `ctx.topics.unsubscribe()` — Topic management (async)
+- `ctx.meta` — Client metadata (clientId, timestamp)
+- `ctx.send(schema, data)` — Type-safe send to this client only
+- `ctx.publish(topic, schema, data)` — Broadcast to topic subscribers (only in handlers)
+- `ctx.topics.subscribe(topic)` / `ctx.topics.unsubscribe(topic)` — Topic management (async)
 - `ctx.error(code, message?, details?, options?)` — Send type-safe error with optional retry hints
+- `router.publish(topic, schema, data)` — Broadcast from lifecycle hooks or middleware
 
 ## Broadcasting and Subscriptions
 
@@ -538,51 +555,55 @@ import { z, message, createRouter } from "@ws-kit/zod";
 const RoomUpdate = message("ROOM_UPDATE", {
   roomId: z.string(),
   users: z.number(),
-  message: z.string(),
+  text: z.string(),
 });
 
-interface ConnectionData {
-  roomId?: string;
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    roomId?: string;
+  }
 }
 
-const router = createRouter<ConnectionData>();
+const router = createRouter();
 
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Subscribe to room updates
   await ctx.topics.subscribe(roomId);
-  ctx.assignData({ roomId });
+  if (ctx.ws.data) {
+    ctx.ws.data.roomId = roomId;
+  }
 
   console.log(`User joined: ${roomId}`);
 
   // Broadcast to all room subscribers (type-safe!)
-  await router.publish(roomId, RoomUpdate, {
+  await ctx.publish(roomId, RoomUpdate, {
     roomId,
     users: 5,
-    message: "A user has joined",
+    text: "A user has joined",
   });
 });
 
 router.on(SendMessage, async (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
+  const { roomId, text } = ctx.payload;
 
   // Broadcast message to room (fully typed, no JSON.stringify needed!)
-  await router.publish(roomId, RoomUpdate, {
+  await ctx.publish(roomId, RoomUpdate, {
     roomId,
     users: 5,
-    message: ctx.payload.text,
+    text,
   });
 });
 
-router.onClose(async (ctx) => {
+router.onClose((ctx) => {
   const roomId = ctx.ws.data?.roomId;
   if (roomId) {
-    await ctx.topics.unsubscribe(roomId);
-    await router.publish(roomId, RoomUpdate, {
+    // Use router.publish() in lifecycle hooks
+    void router.publish(roomId, RoomUpdate, {
       roomId,
       users: 4,
-      message: "A user has left",
+      text: "A user has left",
     });
   }
 });
@@ -590,8 +611,8 @@ router.onClose(async (ctx) => {
 
 **Broadcasting API:**
 
-- `router.publish(scope, schema, payload, options?)` — Type-safe broadcast to all subscribers on a scope, returns `Promise<PublishResult>` with delivery info
-- `ctx.publish(scope, schema, payload, options?)` — Same as `router.publish()` but available within a handler context
+- `ctx.publish(topic, schema, payload, options?)` — Broadcast to topic subscribers (only in message handlers)
+- `router.publish(topic, schema, payload, options?)` — Broadcast from lifecycle hooks or middleware; returns `Promise<PublishResult>` with delivery info
 - `await ctx.topics.subscribe(topic)` — Subscribe connection to a topic (async, adapter-dependent)
 - `await ctx.topics.unsubscribe(topic)` — Unsubscribe from a topic (async)
 
@@ -605,70 +626,7 @@ Optional `options` parameter for `publish()`:
 }
 ```
 
-```ts
-import { z, message, createRouter } from "@ws-kit/zod";
-
-interface ConnectionData {
-  userId?: string;
-  roomId?: string;
-}
-
-const router = createRouter<ConnectionData>();
-
-const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
-const UserJoined = message("USER_JOINED", {
-  roomId: z.string(),
-  userId: z.string(),
-});
-const SendMessage = message("SEND_MESSAGE", {
-  roomId: z.string(),
-  message: z.string(),
-});
-const NewMessage = message("NEW_MESSAGE", {
-  roomId: z.string(),
-  userId: z.string(),
-  message: z.string(),
-});
-const UserLeft = message("USER_LEFT", { userId: z.string() });
-
-router.on(JoinRoom, async (ctx) => {
-  const { roomId } = ctx.payload;
-  const userId = ctx.ws.data?.userId || "anonymous";
-
-  // Store room ID and subscribe to topic
-  ctx.assignData({ roomId });
-  await ctx.topics.subscribe(roomId);
-
-  // Send confirmation back
-  ctx.send(UserJoined, { roomId, userId });
-
-  // Broadcast to room subscribers with schema validation
-  await ctx.publish(roomId, UserJoined, { roomId, userId });
-});
-
-router.on(SendMessage, async (ctx) => {
-  const { roomId, message: msg } = ctx.payload;
-  const userId = ctx.ws.data?.userId || "anonymous";
-
-  console.log(`Message in room ${roomId} from ${userId}: ${msg}`);
-
-  // Broadcast the message to all room subscribers
-  await ctx.publish(roomId, NewMessage, { roomId, userId, message: msg });
-});
-
-router.onClose(async (ctx) => {
-  const userId = ctx.ws.data?.userId || "anonymous";
-  const roomId = ctx.ws.data?.roomId;
-
-  if (roomId) {
-    await ctx.topics.unsubscribe(roomId);
-    // Notify others in the room
-    await router.publish(roomId, UserLeft, { userId });
-  }
-});
-```
-
-The `publish()` function ensures that all broadcast messages are validated against their schemas before being sent, providing the same type safety for broadcasts that you get with direct messaging.
+For more detailed examples including multi-instance deployments with Redis, see the [examples/](./examples) directory and [docs/specs/pubsub.md](./docs/specs/pubsub.md).
 
 ## Error handling and sending error messages
 
@@ -803,30 +761,37 @@ router.on(AuthenticateUser, (ctx) => {
 
 ## Rate Limiting
 
-Protect your WebSocket server from abuse with atomic, distributed rate limiting. WS-Kit provides an adapter-first rate limiting system that works across single-instance and multi-pod deployments.
+Protect your WebSocket server from abuse with atomic, distributed rate limiting. WS-Kit provides a middleware-based rate limiting system that works across single-instance and multi-pod deployments.
 
 ### Quick Start (Single-Instance)
 
 For development or single-instance deployments, use the in-memory adapter:
 
 ```ts
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
-const limiter = rateLimit({
-  limiter: memoryRateLimiter({
-    capacity: 200, // Max 200 tokens per bucket
-    tokensPerSecond: 100, // Refill at 100 tokens/second
+const router = createRouter();
+
+// Apply rate limiting to all messages
+router.use(
+  rateLimit({
+    adapter: memoryRateLimiter({
+      capacity: 200, // Max 200 tokens per bucket
+      tokensPerSecond: 100, // Refill at 100 tokens/second
+    }),
+    key: keyPerUserPerType, // Per-user per-message-type buckets (recommended)
   }),
-  key: keyPerUserPerType, // Per-user per-message-type buckets (recommended)
+);
+
+router.on(SendMessage, async (ctx) => {
+  // Rate limit is checked automatically before handler runs
+  await ctx.publish(roomId, SendMessage, ctx.payload);
 });
 
-interface ConnectionData {
-  userId?: string;
-}
-
-const router = createRouter<ConnectionData>();
-router.use(limiter); // Apply to all messages
+serve(router, { port: 3000 });
 ```
 
 ### Multi-Pod Deployments (Redis)
@@ -841,34 +806,15 @@ import { createClient } from "redis";
 const redisClient = createClient({ url: process.env.REDIS_URL });
 await redisClient.connect();
 
-const limiter = rateLimit({
-  limiter: redisRateLimiter(redisClient, {
-    capacity: 200,
-    tokensPerSecond: 100,
+router.use(
+  rateLimit({
+    adapter: redisRateLimiter(redisClient, {
+      capacity: 200,
+      tokensPerSecond: 100,
+    }),
+    key: keyPerUserPerType,
   }),
-  key: keyPerUserPerType,
-});
-
-router.use(limiter);
-```
-
-### Cloudflare Workers (Durable Objects)
-
-For Cloudflare Workers, use Durable Objects for coordination:
-
-```ts
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
-
-const limiter = rateLimit({
-  limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
-    capacity: 200,
-    tokensPerSecond: 100,
-  }),
-  key: keyPerUserPerType,
-});
-
-router.use(limiter);
+);
 ```
 
 ### Key Functions
@@ -876,74 +822,74 @@ router.use(limiter);
 Three built-in key functions provide different isolation strategies:
 
 - **`keyPerUserPerType`** (recommended) — One bucket per (user, message type). Prevents one operation from starving others.
-- **`keyPerUserOrIpPerType`** — Per-user for authenticated traffic, IP fallback for anonymous (requires router integration for IP access).
-- **`perUserKey`** — Simpler per-user bucket. Use `cost()` to weight operations within a shared budget.
+- **`keyPerUser`** — Per-user bucket. Use `cost()` to weight operations within a shared budget.
 
-Create custom key functions for other strategies:
-
-```ts
-const limiter = rateLimit({
-  limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
-  key: (ctx) => `${ctx.ws.data?.userId}:${ctx.type}`, // Custom keying
-  cost: (ctx) => (ctx.type === "ExpensiveOp" ? 10 : 1),
-});
-```
-
-### Observability
-
-Rate limit violations are reported via the `onLimitExceeded` hook:
+Create custom key functions:
 
 ```ts
-serve(router, {
-  port: 3000,
-  onLimitExceeded(info) {
-    if (info.type === "rate") {
-      console.warn("rate_limited", {
-        clientId: info.clientId,
-        observed: info.observed, // Attempted cost
-        limit: info.limit, // Bucket capacity
-        retryAfterMs: info.retryAfterMs,
-      });
-      metrics.increment("rate_limit.exceeded");
-    }
-  },
-});
+router.use(
+  rateLimit({
+    adapter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
+    key: (ctx) => `${ctx.ws.data?.userId}:${ctx.type}`, // Custom keying
+    cost: (ctx) => (ctx.type === "ExpensiveOp" ? 10 : 1),
+  }),
+);
 ```
 
-For complete documentation, see [docs/proposals/rate-limiting.md](docs/proposals/rate-limiting.md) and [docs/guides/rate-limiting.md](docs/guides/rate-limiting.md).
+For complete documentation, see [docs/specs/router.md](./docs/specs/router.md) and examples in the [`@ws-kit/middleware`](./packages/middleware) package.
 
 ## Multi-Instance Deployments
 
-For distributed deployments across multiple server instances, use Redis to coordinate subscriptions and broadcasting:
+For distributed deployments across multiple server instances, use Redis or Cloudflare to coordinate subscriptions and broadcasting:
 
 ```ts
 import { createRouter } from "@ws-kit/zod";
-import { redisPubSub } from "@ws-kit/redis-pubsub";
+import { serve } from "@ws-kit/bun";
+import { redisPubSub } from "@ws-kit/redis";
 import { createClient } from "redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
 await redisClient.connect();
 
-interface ConnectionData {
-  userId?: string;
-}
+const router = createRouter();
 
-const router = createRouter<ConnectionData>({
-  pubsub: redisPubSub(redisClient),
-});
+// Register a plugin to enable Redis-backed pub/sub
+router.plugin(redisPubSub(redisClient));
 
 // Now ctx.publish() and ctx.topics.subscribe() work across all instances
 router.on(JoinRoom, async (ctx) => {
   await ctx.topics.subscribe(ctx.payload.roomId);
-  ctx.publish(ctx.payload.roomId, UserJoined, { userId: ctx.ws.data?.userId });
+  await ctx.publish(ctx.payload.roomId, UserJoined, {
+    userId: ctx.ws.data?.userId,
+  });
 });
+
+serve(router, { port: 3000 });
 ```
 
-Without explicit `pubsub` configuration, broadcasting is scoped to the current instance. Redis enables cross-instance pub/sub for chat rooms, notifications, and real-time dashboards.
+Without Redis pubsub, broadcasting is scoped to the current instance. Redis enables cross-instance pub/sub for chat rooms, notifications, and real-time dashboards.
+
+For Cloudflare Durable Objects, use the native `createDurableObjectHandler`:
+
+```ts
+import { createRouter } from "@ws-kit/zod";
+import { createDurableObjectHandler } from "@ws-kit/cloudflare";
+
+const router = createRouter();
+const handler = createDurableObjectHandler(router, {
+  /* options */
+});
+
+export default {
+  fetch(req: Request) {
+    return handler.fetch(req);
+  },
+};
+```
 
 ## How to compose routes
 
-Organize code by splitting handlers into separate routers, then merge them into a main router using the `merge()` method:
+Organize code by splitting handlers into feature modules, then merge them into a main router using the `merge()` method:
 
 ```ts
 // types/connection-data.d.ts (project root - define once, share everywhere)
@@ -954,30 +900,54 @@ declare module "@ws-kit/core" {
 }
 ```
 
-Then in your main application file:
+Create feature routers in separate modules:
 
 ```ts
+// src/features/chat.ts
 import { createRouter } from "@ws-kit/zod";
-import { chatRoutes } from "./chat";
-import { notificationRoutes } from "./notification";
+import { JoinRoom, SendMessage, UserJoined } from "./schema";
 
-// Create main router - automatically uses globally-defined ConnectionData
-const mainRouter = createRouter<ConnectionData>();
+export function createChatRouter() {
+  const router = createRouter();
 
-// Compose with sub-routers (each defined in their own modules)
-mainRouter.merge(chatRoutes).merge(notificationRoutes);
+  router.on(JoinRoom, async (ctx) => {
+    const { roomId } = ctx.payload;
+    const userId = ctx.ws.data?.userId;
+
+    await ctx.topics.subscribe(roomId);
+    if (ctx.ws.data) {
+      ctx.ws.data.roomId = roomId;
+    }
+
+    ctx.send(UserJoined, { roomId, userId });
+    await ctx.publish(roomId, UserJoined, { roomId, userId });
+  });
+
+  router.on(SendMessage, async (ctx) => {
+    // Handle message
+  });
+
+  return router;
+}
 ```
 
-Where `chatRoutes` and `notificationRoutes` are separate routers:
+Compose in your main application:
 
 ```ts
-// chat.ts
-const chatRouter = createRouter<ConnectionData>();
-chatRouter.on(SendMessage, handleChat);
-export const chatRoutes = chatRouter;
+// src/server.ts
+import { createRouter } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { createChatRouter } from "./features/chat";
+import { createPresenceRouter } from "./features/presence";
+
+const mainRouter = createRouter()
+  .merge(createChatRouter())
+  .merge(createPresenceRouter());
+
+serve(mainRouter, { port: 3000 });
 ```
 
-The `merge()` method combines handlers, lifecycle hooks, and middleware from the composed routers. This pattern scales because ConnectionData is defined once at the project level, and all routers automatically share it.
+The `merge()` method combines handlers, lifecycle hooks, and middleware from composed routers. With module augmentation, all routers automatically share the same `ConnectionData` type.
 
 ## Browser Client
 

@@ -15,13 +15,13 @@
  */
 
 import type {
-  CoreRouter,
   MessageDescriptor,
   Plugin,
   PublishOptions,
   PublishResult,
   Router,
 } from "@ws-kit/core";
+import { ROUTER_IMPL } from "@ws-kit/core/internal";
 import type { PublishEnvelope } from "@ws-kit/core/pubsub";
 import type { PubSubObserver, WithPubSubOptions } from "./types";
 
@@ -119,8 +119,8 @@ export function withPubSub<TContext>(
      */
     const onClientOpen = async (ws: any) => {
       // Get clientId from router's mapping
-      const routerImpl = router as any as CoreRouter<any>;
-      const clientId = routerImpl.getClientId?.(ws);
+      const routerImpl = (router as any)[ROUTER_IMPL];
+      const clientId = routerImpl?.getClientId?.(ws);
       if (clientId && typeof ws.send === "function") {
         sends.set(clientId, ws.send.bind(ws));
       }
@@ -133,8 +133,8 @@ export function withPubSub<TContext>(
      */
     const onClientClose = async (ws: any) => {
       // Get clientId from router's mapping
-      const routerImpl = router as any as CoreRouter<any>;
-      const clientId = routerImpl.getClientId?.(ws);
+      const routerImpl = (router as any)[ROUTER_IMPL];
+      const clientId = routerImpl?.getClientId?.(ws);
       if (!clientId) return;
 
       // Remove send function
@@ -259,8 +259,8 @@ export function withPubSub<TContext>(
         });
 
         // Also notify router observers (for testing/monitoring via router.observe())
-        const routerImpl = router as any as CoreRouter<any>;
-        if (routerImpl.notifyPublish) {
+        const routerImpl = (router as any)[ROUTER_IMPL];
+        if (routerImpl?.notifyPublish) {
           routerImpl.notifyPublish({
             topic: envelope.topic,
             type: envelope.type,
@@ -312,7 +312,12 @@ export function withPubSub<TContext>(
      * Wrap createContext to attach pub/sub methods to the context.
      * These methods are only added when withPubSub() is plugged.
      */
-    const routerImpl = router as any as CoreRouter<any>;
+    const routerImpl = (router as any)[ROUTER_IMPL];
+    if (!routerImpl) {
+      throw new Error(
+        "withPubSub requires internal router access (ROUTER_IMPL symbol)",
+      );
+    }
     const originalCreateContext = routerImpl.createContext?.bind(routerImpl);
 
     if (originalCreateContext) {

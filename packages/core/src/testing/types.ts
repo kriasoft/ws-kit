@@ -5,7 +5,7 @@
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
 
-import type { BaseRouter } from "../core/router";
+import type { Router, RouterCore } from "../core/router";
 import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
@@ -123,12 +123,12 @@ export interface TestCapture<TContext extends ConnectionData = ConnectionData> {
  * Test router: wraps a real router with testing utilities.
  * Includes clock control, connection management, and capture helpers.
  *
- * Extends BaseRouter and includes testing-specific methods for clock control,
+ * Extends RouterCore and includes testing-specific methods for clock control,
  * connection management, and capture helpers. The actual router instance
  * may have additional APIs (validation, pubsub) from plugins.
  */
 export interface TestRouter<TContext extends ConnectionData = ConnectionData>
-  extends BaseRouter<TContext> {
+  extends RouterCore<TContext> {
   /**
    * Establish a connection and wait for all `onConnect` hooks to settle.
    * Always await this method before sending messages.

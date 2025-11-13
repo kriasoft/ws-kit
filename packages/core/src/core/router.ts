@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * BaseRouter implementation.
+ * RouterCore implementation.
  *
  * Public methods:
  * - use(mw) → Global middleware
@@ -26,7 +26,7 @@ import type { Plugin } from "../plugin/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import { RouteTable } from "./route-table";
-import { ROUTE_TABLE } from "./symbols";
+import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols";
 import type {
   CreateRouterOptions,
   EventHandler,
@@ -42,7 +42,7 @@ import type {
 
 export type { PublishCapability, PublishError, PublishOptions, PublishResult };
 
-export interface BaseRouter<TContext extends ConnectionData = ConnectionData> {
+export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   use(mw: Middleware<TContext>): this;
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
   route(schema: MessageDescriptor): RouteBuilder<TContext>;
@@ -103,13 +103,13 @@ export interface BaseRouter<TContext extends ConnectionData = ConnectionData> {
 }
 
 /**
- * Router<TContext, Caps> = BaseRouter + capability-gated APIs
+ * Router<TContext, Caps> = RouterCore + capability-gated APIs
  * Caps is merged from plugins; unknown plugins don't widen the type.
  */
 export type Router<
   TContext extends ConnectionData = ConnectionData,
   Caps = Record<string, never>,
-> = BaseRouter<TContext> &
+> = RouterCore<TContext> &
   (Caps extends { validation: true }
     ? ValidationAPI<TContext>
     : Record<string, never>) &
@@ -118,8 +118,9 @@ export type Router<
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
  * Only addition: rpc() method (on() already exists in base).
+ * TContext is kept for type alignment with other API interfaces.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 export interface ValidationAPI<
   TContext extends ConnectionData = ConnectionData,
 > {
@@ -271,14 +272,15 @@ export function getRouteIndex(router: Router<any>): ReadonlyRouteIndex {
 /**
  * Per-route builder implementation.
  * Accumulates middleware for a single message type, then registers with router.
+ * @internal
  */
-export class CoreRouteBuilder<TContext extends ConnectionData = ConnectionData>
+class RouteBuilderImpl<TContext extends ConnectionData = ConnectionData>
   implements RouteBuilder<TContext>
 {
   private middlewares: Middleware<TContext>[] = [];
 
   constructor(
-    private router: CoreRouter<TContext>,
+    private router: RouterImpl<TContext>,
     private schema: MessageDescriptor,
   ) {}
 
@@ -298,11 +300,12 @@ export class CoreRouteBuilder<TContext extends ConnectionData = ConnectionData>
 }
 
 /**
- * CoreRouter implementation.
+ * RouterImpl implementation.
  * Stores global middleware, per-route handlers (via registry), and error hooks.
+ * @internal
  */
-export class CoreRouter<TContext extends ConnectionData = ConnectionData>
-  implements BaseRouter<TContext>
+export class RouterImpl<TContext extends ConnectionData = ConnectionData>
+  implements RouterCore<TContext>
 {
   private globalMiddlewares: Middleware<TContext>[] = [];
   private routes = new RouteTable<TContext>();
@@ -329,6 +332,9 @@ export class CoreRouter<TContext extends ConnectionData = ConnectionData>
     // Initialize plugin host with self reference (cast to bypass recursive type)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);
+    // Attach to symbol for internal access escape hatch
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this as any)[ROUTER_IMPL] = this;
   }
 
   /**
@@ -377,7 +383,7 @@ export class CoreRouter<TContext extends ConnectionData = ConnectionData>
   }
 
   route(schema: MessageDescriptor): RouteBuilder<TContext> {
-    return new CoreRouteBuilder(this, schema);
+    return new RouteBuilderImpl(this, schema);
   }
 
   /**
@@ -477,7 +483,7 @@ export class CoreRouter<TContext extends ConnectionData = ConnectionData>
       return extractor.call(other);
     }
     throw new Error(
-      "Cannot merge router: target is not a CoreRouter instance or does not expose internal route table",
+      "Cannot merge router: target does not expose internal route table symbol",
     );
   }
 

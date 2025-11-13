@@ -9,7 +9,8 @@ import type {
   ValidatorAdapter,
   WebSocketData,
 } from "../src/index.js";
-import { CoreRouter } from "../src/core/router.js";
+import type { RouterImpl } from "../src/internal";
+import { RouterImpl as RouterImplClass } from "../src/core/router.js";
 
 // ============================================================================
 // Mock Implementations
@@ -104,7 +105,7 @@ describe("WebSocketRouter", () => {
   let ws: ReturnType<typeof createMockWebSocket>;
 
   beforeEach(() => {
-    router = new CoreRouter({
+    router = new RouterImplClass({
       validator: mockValidator,
     });
     ws = createMockWebSocket();
@@ -179,8 +180,8 @@ describe("WebSocketRouter", () => {
 
   describe("Router Composition", () => {
     it("should merge message handlers via merge", () => {
-      const router1 = new CoreRouter({ validator: mockValidator });
-      const router2 = new CoreRouter({ validator: mockValidator });
+      const router1 = new RouterImpl({ validator: mockValidator });
+      const router2 = new RouterImpl({ validator: mockValidator });
 
       const schema1 = { type: "MSG1" } as MessageSchemaType;
       const schema2 = { type: "MSG2" } as MessageSchemaType;
@@ -191,7 +192,7 @@ describe("WebSocketRouter", () => {
       router1.on(schema1, handler);
       router2.on(schema2, handler);
 
-      const combined = new CoreRouter({ validator: mockValidator });
+      const combined = new RouterImpl({ validator: mockValidator });
       combined.merge(router1).merge(router2);
 
       // Test that both handlers are present by trying to handle messages
@@ -200,16 +201,16 @@ describe("WebSocketRouter", () => {
     });
 
     it("should support method chaining with merge", () => {
-      const router1 = new CoreRouter({ validator: mockValidator });
-      const router2 = new CoreRouter({ validator: mockValidator });
+      const router1 = new RouterImpl({ validator: mockValidator });
+      const router2 = new RouterImpl({ validator: mockValidator });
 
       const result = router.merge(router1).merge(router2);
       expect(result).toBe(router);
     });
 
     it("should handle last-write-wins for duplicate message types", () => {
-      const router1 = new CoreRouter({ validator: mockValidator });
-      const router2 = new CoreRouter({ validator: mockValidator });
+      const router1 = new RouterImpl({ validator: mockValidator });
+      const router2 = new RouterImpl({ validator: mockValidator });
 
       const schema = { type: "MSG" } as MessageSchemaType;
       let callCount = 0;
@@ -224,7 +225,7 @@ describe("WebSocketRouter", () => {
       router1.on(schema, handler1);
       router2.on(schema, handler2);
 
-      const combined = new CoreRouter({ validator: mockValidator });
+      const combined = new RouterImpl({ validator: mockValidator });
       combined.merge(router1).merge(router2);
 
       // router2's handler should override router1's
@@ -349,7 +350,7 @@ describe("WebSocketRouter", () => {
 
   describe("Payload Size Limits", () => {
     it("should enforce max payload size", async () => {
-      const smallRouter = new CoreRouter({
+      const smallRouter = new RouterImpl({
         validator: mockValidator,
         limits: { maxPayloadBytes: 100 },
       });
@@ -373,7 +374,7 @@ describe("WebSocketRouter", () => {
   describe("PubSub Integration", () => {
     it("should use provided PubSub instance", async () => {
       const pubsub = memoryPubSub();
-      const router2 = new CoreRouter({
+      const router2 = new RouterImpl({
         validator: mockValidator,
         pubsub,
       });
@@ -397,7 +398,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should default to MemoryPubSub if not provided", async () => {
-      const router2 = new CoreRouter({
+      const router2 = new RouterImpl({
         validator: mockValidator,
       });
 
@@ -423,7 +424,7 @@ describe("WebSocketRouter", () => {
 
   describe("Configuration", () => {
     it("should use default config when not provided", () => {
-      const defaultRouter = new CoreRouter({
+      const defaultRouter = new RouterImpl({
         validator: mockValidator,
       });
 
@@ -432,7 +433,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should accept custom heartbeat config", () => {
-      const customRouter = new CoreRouter({
+      const customRouter = new RouterImpl({
         validator: mockValidator,
         heartbeat: {
           intervalMs: 60000,
@@ -444,7 +445,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should accept custom limits config", () => {
-      const customRouter = new CoreRouter({
+      const customRouter = new RouterImpl({
         validator: mockValidator,
         limits: {
           maxPayloadBytes: 5_000_000,
@@ -457,7 +458,7 @@ describe("WebSocketRouter", () => {
 
   describe("Testability - Testing Mode", () => {
     it("should expose testing utilities when testing mode is enabled", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -470,7 +471,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should not expose testing utilities when testing mode is disabled", () => {
-      const normalRouter = new CoreRouter({
+      const normalRouter = new RouterImpl({
         validator: mockValidator,
         testing: false,
       } as any);
@@ -479,7 +480,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should allow inspecting handlers via _testing", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -496,7 +497,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should allow inspecting middleware via _testing", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -509,7 +510,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should allow inspecting lifecycle handlers via _testing", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -545,7 +546,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should clear all middleware when reset is called", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -561,7 +562,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should clear per-route middleware when reset is called", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -576,7 +577,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should clear lifecycle handlers when reset is called", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -603,7 +604,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should allow reusing router instance in tests", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);
@@ -632,7 +633,7 @@ describe("WebSocketRouter", () => {
     });
 
     it("should preserve validator config after reset", () => {
-      const testingRouter = new CoreRouter({
+      const testingRouter = new RouterImpl({
         validator: mockValidator,
         testing: true,
       } as any);

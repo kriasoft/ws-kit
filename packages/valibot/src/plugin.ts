@@ -12,13 +12,13 @@
  */
 
 import type {
-  CoreRouter,
   MessageDescriptor,
   MinimalContext,
   Plugin,
   Router,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
+import { ROUTER_IMPL } from "@ws-kit/core/internal";
 import { getValibotPayload, validatePayload } from "./internal.js";
 import { getSchemaOpts, typeOf, type SchemaOpts } from "./metadata.js";
 import type { AnySchema } from "./types.js";
@@ -130,7 +130,12 @@ export function withValibot(
   };
   return (router) => {
     // Get internal access to router for wrapping dispatch
-    const routerImpl = router as any as CoreRouter<any>;
+    const routerImpl = (router as any)[ROUTER_IMPL];
+    if (!routerImpl) {
+      throw new Error(
+        "withValibot requires internal router access (ROUTER_IMPL symbol)",
+      );
+    }
 
     // Store original context creator
     const originalCreateContext = routerImpl.createContext.bind(routerImpl);
@@ -201,7 +206,7 @@ export function withValibot(
     // Wrap the original createContext to attach send/reply/progress methods
     routerImpl.createContext = function (params: any) {
       const ctx = originalCreateContext(params);
-      const routerImpl = this as CoreRouter<any>;
+      const routerImpl = this as RouterImpl<any>;
 
       // Track reply idempotency
       let replied = false;

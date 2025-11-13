@@ -6,7 +6,7 @@
  *
  * Public API surface (capability-gated):
  * - createRouter() → Factory with only heartbeat/limits options
- * - Router → BaseRouter (use/on/route/merge/mount/plugin/onError)
+ * - Router → RouterCore (use/on/route/merge/mount/plugin/onError)
  * - MessageDescriptor → Stable runtime shape for all validators
  * - MinimalContext → Base context (clientId, ws, type, data, setData)
  *
@@ -21,10 +21,10 @@
 export { createRouter } from "./core/createRouter";
 export { getRouteIndex } from "./core/router";
 export type {
-  BaseRouter,
   ReadonlyRouteIndex,
   RouteBuilder,
   Router,
+  RouterCore,
 } from "./core/router";
 export type { CreateRouterOptions } from "./core/types";
 

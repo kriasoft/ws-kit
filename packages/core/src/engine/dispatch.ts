@@ -7,7 +7,7 @@
  */
 
 import type { ConnectionData, MinimalContext } from "../context/base-context";
-import type { CoreRouter } from "../core/router";
+import type { RouterImpl } from "../internal";
 import { ROUTE_TABLE } from "../core/symbols";
 import type { EventHandler, Middleware } from "../core/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
@@ -62,7 +62,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
   raw: string | ArrayBuffer,
   clientId: string,
   ws: ServerWebSocket,
-  impl: CoreRouter<TContext>,
+  impl: RouterImpl<TContext>,
 ): Promise<void> {
   const now = Date.now();
 

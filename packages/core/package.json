@@ -20,6 +20,11 @@
       "types": "./dist/src/testing/index.d.ts",
       "bun": "./src/testing/index.ts",
       "import": "./dist/src/testing/index.js"
+    },
+    "./internal": {
+      "types": "./dist/src/internal.d.ts",
+      "bun": "./src/internal.ts",
+      "import": "./dist/src/internal.js"
     }
   },
   "scripts": {

@@ -7,7 +7,8 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
-import type { CoreRouter, Router } from "../core/router";
+import type { Router } from "../core/router";
+import type { RouterImpl } from "../internal";
 import type { RouterObserver } from "../core/types";
 import { FakeClock, type Clock } from "./fake-clock";
 import { InMemoryPlatformAdapter } from "./test-adapter";
@@ -128,11 +129,11 @@ export function wrapTestRouter<
   },
 ): TestRouter<TContext> {
   // Get router implementation for internal access (needed for test adapter)
-  // This is the only place we cast to internal CoreRouter type for test adapter setup
-  const impl = router as any as CoreRouter<TContext>;
+  // This is the only place we cast to internal RouterImpl type for test adapter setup
+  const impl = router as any as RouterImpl<TContext>;
 
   // Infrastructure
-  // Note: InMemoryPlatformAdapter needs internal access to CoreRouter
+  // Note: InMemoryPlatformAdapter needs internal access to RouterImpl
   const adapter = new InMemoryPlatformAdapter<TContext>(impl);
   const clock = opts?.clock || new FakeClock();
   const capturedErrors: unknown[] = [];
@@ -291,7 +292,7 @@ class TestConnectionImpl<TContext extends ConnectionData = ConnectionData>
     readonly clientId: string,
     readonly ws: any, // MockWebSocket
     readonly state: any, // ConnectionState<TContext>
-    readonly routerImpl: any, // CoreRouter<TContext>
+    readonly routerImpl: any, // RouterImpl<TContext>
     readonly adapter: InMemoryPlatformAdapter<TContext>,
     readonly clock: Clock,
   ) {}

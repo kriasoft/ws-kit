@@ -7,7 +7,7 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
-import type { CoreRouter } from "../core/router";
+import type { RouterImpl } from "../internal";
 import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
 import { TestWebSocket, type ConnectionState } from "./test-websocket";
 import type { OutgoingFrame } from "./types";
@@ -26,9 +26,9 @@ export class InMemoryPlatformAdapter<
   private connections = new Map<string, ConnectionState<TContext>>();
   private nextClientId = 0;
   private globalMessages: OutgoingFrame[] = [];
-  private router: CoreRouter<TContext>;
+  private router: RouterImpl<TContext>;
 
-  constructor(router: CoreRouter<TContext>) {
+  constructor(router: RouterImpl<TContext>) {
     this.router = router;
   }
 
