@@ -11,10 +11,10 @@
  * - Limits enforcement: maxPending
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import { createTestRouter } from "../../src/testing";
 import type { MessageDescriptor } from "../../src/core/types";
+import { createTestRouter } from "../../src/testing";
 
 describe("dispatch pipeline", () => {
   // Helper to create a simple test schema
@@ -295,7 +295,7 @@ describe("dispatch pipeline", () => {
       router.on(schema("MSG"), async (ctx) => {
         receivedType = ctx.type;
         hasWs = "ws" in ctx && ctx.ws !== undefined;
-        hasSetData = typeof ctx.setData === "function";
+        hasSetData = typeof ctx.assignData === "function";
       });
 
       const tr = createTestRouter({
@@ -312,20 +312,20 @@ describe("dispatch pipeline", () => {
       await tr.close();
     });
 
-    it("provides setData function in context", async () => {
+    it("provides assignData function in context", async () => {
       interface AppData {
         userId?: string;
         count?: number;
       }
 
       const router = createRouter<AppData>();
-      let setDataWasCalled = false;
+      let assignDataWasCalled = false;
 
       router.on(schema("UPDATE"), async (ctx) => {
-        // Verify setData is available and callable
-        expect(typeof ctx.setData).toBe("function");
-        ctx.setData({ count: 42 });
-        setDataWasCalled = true;
+        // Verify assignData is available and callable
+        expect(typeof ctx.assignData).toBe("function");
+        ctx.assignData({ count: 42 });
+        assignDataWasCalled = true;
       });
 
       const tr = createTestRouter({
@@ -336,7 +336,7 @@ describe("dispatch pipeline", () => {
       conn.send("UPDATE");
       await conn.drain();
 
-      expect(setDataWasCalled).toBe(true);
+      expect(assignDataWasCalled).toBe(true);
 
       await tr.close();
     });

@@ -9,9 +9,8 @@
  * They should NOT compile if capability gating is broken.
  */
 
-import { describe, it, expect } from "bun:test";
-import type { EventContext, MinimalContext } from "@ws-kit/core";
-import type { PubSubContext } from "@ws-kit/core";
+import type { EventContext, MinimalContext, PubSubContext } from "@ws-kit/core";
+import { describe, expect, it } from "bun:test";
 
 describe("Capability Gating (Types)", () => {
   it("should expose PubSubContext type with publish and topics", () => {
@@ -37,7 +36,7 @@ describe("Capability Gating (Types)", () => {
   });
 
   it("should show that MinimalContext has only base methods and clientId", () => {
-    // MinimalContext is the foundation: clientId (routing identity), ws, type, data, setData.
+    // MinimalContext is the foundation: clientId (routing identity), ws, type, data, assignData.
     // All plugin methods come from plugins.
     // The following would NOT compile:
     //   type BadPayload = MinimalContext["payload"]; // ❌ Property 'payload' does not exist
@@ -47,7 +46,7 @@ describe("Capability Gating (Types)", () => {
     type TestWs = MinimalContext["ws"]; // ✅ Exists
     type TestType = MinimalContext["type"]; // ✅ Exists
     type TestData = MinimalContext["data"]; // ✅ Exists
-    type TestSetData = MinimalContext["setData"]; // ✅ Exists
+    type TestAssignData = MinimalContext["assignData"]; // ✅ Exists
 
     expect(true).toBe(true); // Placeholder: real validation is at compile time
   });

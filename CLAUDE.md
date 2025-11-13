@@ -143,16 +143,16 @@ Each spec includes code examples, type signatures, and detailed semantics.
 
 ## Recent Changes & Breaking Updates
 
-### Validator Requirement (Breaking)
+### Validation Plugin Required for RPC (Breaking)
 
-Router now requires a validator to be configured. Methods `.on()`, `.off()`, `.use(schema, ...)`, and `.send()` throw immediately if no validator is set.
+The `.rpc()` method requires a validation plugin (`withZod()` or `withValibot()`). Fire-and-forget `.on()` works without validation but won't validate payloads.
 
-**Migration**: Create router with validator:
+**Migration**: Add validation plugin for RPC support:
 
 ```typescript
-import { createRouter } from "@ws-kit/zod"; // Provides validator
+import { createRouter } from "@ws-kit/zod";
 // or
-const router = new WebSocketRouter({ validator: new ZodAdapter() });
+const router = createRouter().plugin(withZod());
 ```
 
 ### Heartbeat is Now Opt-In (Breaking)

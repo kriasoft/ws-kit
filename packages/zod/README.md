@@ -7,7 +7,7 @@ Adds validation capability and RPC support to the core router via the `withZod()
 ## Quick Start
 
 ```typescript
-import { z, message, rpc, withZod, createRouter } from "@ws-kit/zod";
+import { createRouter, z, message, rpc, withZod } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 
 // Define message schemas with type-safe payload inference
@@ -17,9 +17,11 @@ const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
   name: z.string(),
 });
 
-// Create router and add validation
-type AppData = { userId?: string };
-const router = createRouter<AppData>()
+interface Connection {
+  userId?: string;
+}
+
+const router = createRouter<Connection>()
   .plugin(withZod())
   .on(Join, (ctx) => {
     // ctx.payload: { roomId: string } (validated)
@@ -66,21 +68,31 @@ import type {
 } from "@ws-kit/zod";
 
 const Join = message("JOIN", { roomId: z.string() });
-const GetUser = message(
-  "GET_USER",
-  { id: z.string() },
-  { response: { name: z.string() } },
-);
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
+  id: z.string(),
+  name: z.string(),
+});
 
 type JoinType = InferType<typeof Join>; // "JOIN"
 type JoinPayload = InferPayload<typeof Join>; // { roomId: string }
-type GetUserResponse = InferResponse<typeof GetUser>; // { name: string }
+type GetUserResponse = InferResponse<typeof GetUser>; // { id: string; name: string }
 ```
 
 ### Re-exports
 
 - **`z`** — Canonical Zod instance
-- **`createRouter`** — Core router factory (from `@ws-kit/core`)
+- **`createRouter`** — Core router factory (from `@ws-kit/core`). Available from both `@ws-kit/core` and `@ws-kit/zod` for flexibility — choose whichever import source you prefer
+
+**Import patterns (both valid)**:
+
+```typescript
+// ✅ Single import source (recommended)
+import { createRouter, z, message, withZod } from "@ws-kit/zod";
+
+// ✅ Also works
+import { createRouter } from "@ws-kit/core";
+import { z, message, withZod } from "@ws-kit/zod";
+```
 
 ## Key Design Principles
 

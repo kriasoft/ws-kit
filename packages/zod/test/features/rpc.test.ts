@@ -10,8 +10,8 @@
  * Spec: Request-response pattern binding
  */
 
+import { message, rpc, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
-import { z, message, rpc } from "@ws-kit/zod";
 
 describe("RPC Schema Helper", () => {
   describe("rpc() Creation", () => {
@@ -218,7 +218,7 @@ describe("RPC Schema Helper", () => {
         },
         "QUERY_RESULT",
         {
-          results: z.array(z.record(z.any())),
+          results: z.array(z.record(z.string(), z.any())),
           count: z.number(),
         },
       );

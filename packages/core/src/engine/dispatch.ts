@@ -7,9 +7,9 @@
  */
 
 import type { ConnectionData, MinimalContext } from "../context/base-context";
-import type { RouterImpl } from "../internal";
 import { ROUTE_TABLE } from "../core/symbols";
 import type { EventHandler, Middleware } from "../core/types";
+import type { RouterImpl } from "../internal";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { isMessageDescriptor } from "../schema/guards";
 import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved";
@@ -192,7 +192,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
     if (envelope.meta !== undefined) {
       contextData.meta = envelope.meta;
     }
-    ctx = impl.createContext(contextData);
+    ctx = await impl.createContext(contextData);
   } catch (err) {
     const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);

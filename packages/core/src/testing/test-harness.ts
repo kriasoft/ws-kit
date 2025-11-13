@@ -8,8 +8,8 @@
 
 import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
-import type { RouterImpl } from "../internal";
 import type { RouterObserver } from "../core/types";
+import type { RouterImpl } from "../internal";
 import { FakeClock, type Clock } from "./fake-clock";
 import { InMemoryPlatformAdapter } from "./test-adapter";
 import type {
@@ -351,7 +351,7 @@ class TestConnectionImpl<TContext extends ConnectionData = ConnectionData>
     return Object.freeze({ ...this.state.data });
   }
 
-  setData(patch: Partial<TContext>): void {
+  assignData(patch: Partial<TContext>): void {
     Object.assign(this.state.data, patch);
   }
 

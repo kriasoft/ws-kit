@@ -64,5 +64,8 @@
   },
   "publishConfig": {
     "directory": "dist"
+  },
+  "scripts": {
+    "typecheck": "bun tsc -b tsconfig.json && bun tsc -b tsconfig.test.json"
   }
 }

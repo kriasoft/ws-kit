@@ -80,7 +80,18 @@ type GetUserResponse = InferResponse<typeof GetUser>; // { name: string }
 ### Re-exports
 
 - **`v`** — Canonical Valibot instance
-- **`createRouter`** — Core router factory (from `@ws-kit/core`)
+- **`createRouter`** — Core router factory (from `@ws-kit/core`). Available from both `@ws-kit/core` and `@ws-kit/valibot` for flexibility — choose whichever import source you prefer
+
+**Import patterns (both valid)**:
+
+```typescript
+// ✅ Single import source (recommended)
+import { createRouter, v, message, withValibot } from "@ws-kit/valibot";
+
+// ✅ Also works
+import { createRouter } from "@ws-kit/core";
+import { v, message, withValibot } from "@ws-kit/valibot";
+```
 
 ## Key Design Principles
 

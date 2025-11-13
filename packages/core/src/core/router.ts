@@ -21,6 +21,7 @@ import type { ConnectionData, MinimalContext } from "../context/base-context";
 import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
+import type { ContextEnhancer } from "../internal";
 import { PluginHost } from "../plugin/manager";
 import type { Plugin } from "../plugin/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
@@ -341,6 +342,23 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
       }
     | undefined;
 
+  /**
+   * Context enhancers: pure functions that extend context after creation.
+   * Each entry has the function, priority (lower runs first), and registration order.
+   * @internal
+   */
+  private contextEnhancers: Array<{
+    fn: ContextEnhancer<TContext>;
+    priority: number;
+    order: number;
+  }> = [];
+
+  /**
+   * Next order for enhancers (for stable registration order).
+   * @internal
+   */
+  private nextEnhancerOrder = 0;
+
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
     // Initialize plugin host with self reference (cast to bypass recursive type)
@@ -349,6 +367,47 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
     // Attach to symbol for internal access escape hatch
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any)[ROUTER_IMPL] = this;
+  }
+
+  /**
+   * Register a context enhancer.
+   * Enhancers run in priority order, then registration order.
+   * @internal For use by plugins via getRouterPluginAPI()
+   */
+  addContextEnhancer(
+    enhancer: ContextEnhancer<TContext>,
+    opts?: { priority?: number },
+  ): void {
+    this.contextEnhancers.push({
+      fn: enhancer,
+      priority: opts?.priority ?? 0,
+      order: this.nextEnhancerOrder++,
+    });
+  }
+
+  /**
+   * Get sorted enhancers (by priority, then order).
+   * @internal
+   */
+  private getSortedEnhancers(): ContextEnhancer<TContext>[] {
+    return this.contextEnhancers
+      .sort((a, b) => a.priority - b.priority || a.order - b.order)
+      .map((e) => e.fn);
+  }
+
+  /**
+   * Get a read-only view of the route registry for plugins.
+   * @internal For use by plugins via getRouterPluginAPI()
+   */
+  getRouteRegistryForInternals(): ReadonlyMap<
+    string,
+    { schema?: unknown; kind?: string }
+  > {
+    const result = new Map<string, { schema?: unknown; kind?: string }>();
+    for (const [type, entry] of this.routes.list()) {
+      result.set(type, { schema: entry.schema, kind: (entry as any).kind });
+    }
+    return result;
   }
 
   /**
@@ -625,24 +684,53 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
    * This is a minimal implementation; validation plugins will extend it.
    * @internal
    */
-  createContext(params: {
+  async createContext(params: {
     clientId: string;
     ws: ServerWebSocket;
     type: string;
     payload?: unknown;
     meta?: Record<string, unknown>;
     receivedAt?: number;
-  }): MinimalContext<TContext> {
+  }): Promise<MinimalContext<TContext>> {
     const data = this.getOrInitData(params.ws);
-    return {
+    const ctx: MinimalContext<TContext> = {
       clientId: params.clientId,
       ws: params.ws,
       type: params.type,
       data,
-      setData: (partial: Partial<TContext>) => {
+      extensions: new Map(),
+      assignData: (partial: Partial<TContext>) => {
         Object.assign(data, partial);
       },
     };
+
+    // Run enhancers in priority order, with conflict detection in dev mode
+    const prevKeys = new Set(Object.keys(ctx));
+    for (const enhance of this.getSortedEnhancers()) {
+      try {
+        await enhance(ctx);
+      } catch (err) {
+        // Route to lifecycle, fail message (not router)
+        await this.lifecycle.handleError(err, ctx);
+        throw err;
+      }
+
+      // Conflict detection (dev mode only)
+      if (process.env.NODE_ENV !== "production") {
+        const newKeys = Object.keys(ctx);
+        const overwrites = newKeys.filter(
+          (k) => prevKeys.has(k) && k !== "extensions",
+        );
+        if (overwrites.length > 0) {
+          console.warn(
+            `[ws-kit] Enhancer overwrote ctx properties: ${overwrites.join(", ")}. ` +
+              `Consider using ctx.extensions for plugin-specific data.`,
+          );
+        }
+      }
+    }
+
+    return ctx;
   }
 
   /**

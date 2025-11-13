@@ -14,10 +14,10 @@
  * See also: @ws-kit/core/testing (check normalization tests)
  */
 
+import { normalizeInboundMessage } from "@ws-kit/core";
+import { message } from "@ws-kit/valibot";
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { message } from "@ws-kit/valibot";
-import { normalizeInboundMessage } from "@ws-kit/core";
 
 describe("Runtime Normalization (Valibot Validator)", () => {
   describe("Validator Receives Normalized Messages", () => {
@@ -38,13 +38,13 @@ describe("Runtime Normalization (Valibot Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.payload?.id).toBe(456);
+        expect((result.data as any).payload?.id).toBe(456);
         expect(
-          (result.data.meta as Record<string, unknown>).clientId,
+          ((result.data as any).meta as Record<string, unknown>).clientId,
         ).toBeUndefined();
-        expect((result.data.meta as Record<string, unknown>).timestamp).toBe(
-          malicious.meta.timestamp,
-        );
+        expect(
+          ((result.data as any).meta as Record<string, unknown>).timestamp,
+        ).toBe(malicious.meta.timestamp);
       }
     });
 
@@ -65,12 +65,12 @@ describe("Runtime Normalization (Valibot Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.payload?.text).toBe("hello");
+        expect((result.data as any).payload?.text).toBe("hello");
         expect(
-          (result.data.meta as Record<string, unknown>).receivedAt,
+          ((result.data as any).meta as Record<string, unknown>).receivedAt,
         ).toBeUndefined();
         expect(
-          (result.data.meta as Record<string, unknown>).correlationId,
+          ((result.data as any).meta as Record<string, unknown>).correlationId,
         ).toBe("req-123");
       }
     });
@@ -114,8 +114,8 @@ describe("Runtime Normalization (Valibot Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.payload?.value).toBe("test");
-        const meta = result.data.meta as Record<string, unknown>;
+        expect((result.data as any).payload?.value).toBe("test");
+        const meta = (result.data as any).meta as Record<string, unknown>;
         expect(meta.clientId).toBeUndefined();
         expect(meta.receivedAt).toBeUndefined();
         expect(meta.timestamp).toBe(malicious.meta.timestamp);
@@ -191,7 +191,7 @@ describe("Runtime Normalization (Valibot Validator)", () => {
       const result = TestMsg.safeParse(normalized);
       expect(result.success).toBe(true);
       if (result.success) {
-        const meta = result.data.meta as Record<string, unknown>;
+        const meta = (result.data as any).meta as Record<string, unknown>;
         expect(meta.clientId).toBeUndefined();
         expect(meta.receivedAt).toBeUndefined();
         expect(meta.sessionId).toBe("sess-123");

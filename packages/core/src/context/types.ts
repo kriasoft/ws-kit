@@ -5,11 +5,12 @@
  * Re-export context types for public API.
  */
 
+export { getContextExtension, isMinimalContext } from "./base-context";
 export type {
-  MinimalContext,
   ConnectionData,
+  MinimalContext,
   WebSocketData,
 } from "./base-context";
 export type { EventContext } from "./event-context";
-export type { RpcContext } from "./rpc-context";
 export type { PubSubContext } from "./pubsub-context";
+export type { RpcContext } from "./rpc-context";

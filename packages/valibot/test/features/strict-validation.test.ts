@@ -11,9 +11,9 @@
  * Spec: docs/specs/validation.md#strict-mode-enforcement
  */
 
+import { message } from "@ws-kit/valibot";
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { message } from "@ws-kit/valibot";
 
 describe("Strict Schema Validation (Valibot)", () => {
   describe("Unknown Key Rejection - Root Level", () => {
@@ -397,7 +397,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.meta).toEqual({});
+        expect((result.data as any).meta).toEqual({});
       }
     });
 
@@ -412,7 +412,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.meta).toEqual({});
+        expect((result.data as any).meta).toEqual({});
       }
     });
 
@@ -427,7 +427,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.meta).toEqual({
+        expect((result.data as any).meta).toEqual({
           timestamp: 1234567890,
           correlationId: "abc",
         });
@@ -450,7 +450,7 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.meta).toEqual({});
+        expect((result.data as any).meta).toEqual({});
       }
     });
   });

@@ -8,6 +8,12 @@
  * Zero runtime overhead - pure type-level wrapper around generic client.
  */
 
+import type {
+  InferMessage,
+  InferMeta,
+  InferPayload,
+  MessageSchema as ZodMessageSchema,
+} from "@ws-kit/zod";
 import { createClient as createGenericClient } from "../../src/index.js";
 import type {
   AnyInboundMessage,
@@ -15,25 +21,19 @@ import type {
   ClientState,
   WebSocketClient,
 } from "../../src/types.js";
-import type {
-  InferMessage,
-  InferMeta,
-  InferPayload,
-  MessageSchemaType as ZodMessageSchema,
-} from "@ws-kit/zod";
 
 // Re-export base types and error classes
-export * from "../../src/types.js";
-export * from "../../src/errors.js";
 export type {
   InferMessage,
   InferMeta,
   InferPayload,
-  MessageSchemaType as ZodMessageSchema,
+  MessageSchema as ZodMessageSchema,
 } from "@ws-kit/zod";
+export * from "../../src/errors.js";
+export * from "../../src/types.js";
 
 // Re-export schema helpers for convenience
-export { z, message, rpc } from "@ws-kit/zod";
+export { message, rpc, z } from "@ws-kit/zod";
 
 /**
  * Options for send() method with typed meta field inference.

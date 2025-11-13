@@ -11,10 +11,9 @@
  * - Validation error handling
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createRouter, message, rpc, withZod } from "../../src/index";
-import type { MessageDescriptor } from "@ws-kit/core";
 
 describe("withZod() Plugin", () => {
   it("should add rpc method after plugin", () => {
@@ -74,7 +73,7 @@ describe("withZod() Plugin", () => {
   it("should create schema with kind='event'", () => {
     const Join = message("JOIN", { roomId: z.string() });
     expect((Join as any).kind).toBe("event");
-    expect(Join.type).toBe("JOIN");
+    expect((Join as any).type).toBe("JOIN");
   });
 
   it("should create schema with kind='rpc' and response", () => {
@@ -84,13 +83,13 @@ describe("withZod() Plugin", () => {
     });
 
     expect((GetUser as any).kind).toBe("rpc");
-    expect(GetUser.type).toBe("GET_USER");
+    expect((GetUser as any).type).toBe("GET_USER");
     expect((GetUser as any).response?.type).toBe("USER");
   });
 
   it("should allow message schema without payload", () => {
     const Ping = message("PING");
-    expect(Ping.type).toBe("PING");
+    expect((Ping as any).type).toBe("PING");
     expect((Ping as any).kind).toBe("event");
   });
 
@@ -118,5 +117,24 @@ describe("withZod() Plugin", () => {
       });
 
     expect(router).toBeDefined();
+  });
+
+  it("should throw if rpc called without validation plugin", () => {
+    const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
+      name: z.string(),
+    });
+
+    const router = createRouter() as any;
+
+    // rpc method should not exist at runtime on unplugged router
+    // If it does exist (from partial definePlugin implementation), calling it should fail
+    if (typeof router.rpc === "function") {
+      expect(() => {
+        router.rpc(GetUser, () => {});
+      }).toThrow();
+    } else {
+      // Preferred: rpc simply not defined
+      expect("rpc" in router).toBe(false);
+    }
   });
 });

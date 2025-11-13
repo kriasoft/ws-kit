@@ -16,18 +16,16 @@
  */
 
 import {
+  fallback,
   literal,
-  optional,
-  string,
   number,
+  optional,
+  parseAsync,
   strictObject,
-  pipe,
-  default as default_,
-  parse as valibot_parse,
+  string,
   safeParse as valibot_safeParse,
   type GenericSchema,
 } from "valibot";
-import type { MessageDescriptor } from "@ws-kit/core";
 import {
   DESCRIPTOR,
   VALIBOT_PAYLOAD,
@@ -83,11 +81,18 @@ export function message<
   readonly payload?: P;
   readonly meta?: M;
   readonly options?: SchemaOpts;
-}): GenericSchema & {
+}): {
   readonly kind: "event";
   readonly __valibot_payload: P;
   readonly __descriptor: { readonly type: T };
   readonly __runtime: "ws-kit-schema";
+  readonly parse: (data: unknown) => Promise<unknown>;
+  readonly safeParse: (data: unknown) => {
+    success: boolean;
+    data?: unknown;
+    issues?: any[];
+  };
+  readonly type: T;
 };
 
 // Positional form (compact)
@@ -102,11 +107,18 @@ export function message<
   type: T,
   payload?: P,
   metaShape?: M,
-): GenericSchema & {
+): {
   readonly kind: "event";
   readonly __valibot_payload: P;
   readonly __descriptor: { readonly type: T };
   readonly __runtime: "ws-kit-schema";
+  readonly parse: (data: unknown) => Promise<unknown>;
+  readonly safeParse: (data: unknown) => {
+    success: boolean;
+    data?: unknown;
+    issues?: any[];
+  };
+  readonly type: T;
 };
 
 // Implementation
@@ -121,12 +133,7 @@ export function message<
   specOrType: { type: T; payload?: P; meta?: M; options?: SchemaOpts } | T,
   payload?: P,
   metaShape?: M,
-): GenericSchema & {
-  readonly kind: "event";
-  readonly __valibot_payload: P;
-  readonly __descriptor: { readonly type: T };
-  readonly __runtime: "ws-kit-schema";
-} {
+): any {
   // Normalize inputs: support both object and positional forms
   let type: T;
   let payloadDef: P | undefined;
@@ -172,15 +179,15 @@ export function message<
   const payloadObj = payloadDef
     ? payloadDef && typeof payloadDef === "object" && "parse" in payloadDef
       ? options?.strict === false
-        ? (payloadDef as GenericSchema) // Already a schema, use as-is (non-strict)
-        : (payloadDef as GenericSchema) // Already a schema, use as-is
+        ? (payloadDef as unknown as GenericSchema) // Already a schema, use as-is (non-strict)
+        : (payloadDef as unknown as GenericSchema) // Already a schema, use as-is
       : strictObject(payloadDef as Record<string, GenericSchema>) // Raw shape, make strict
     : undefined;
 
   // Build root schema: { type, meta, payload? }
   const rootShape: Record<string, GenericSchema> = {
     type: literal(type),
-    meta: pipe(metaObj, optional(), default_({})),
+    meta: fallback(metaObj, {}) as GenericSchema,
     ...(payloadObj ? { payload: payloadObj } : {}),
   };
 
@@ -195,7 +202,7 @@ export function message<
     [VALIBOT_PAYLOAD]: { value: payloadObj, enumerable: false },
     // Attach Valibot's parse methods for ergonomic API (.safeParse() method call)
     parse: {
-      value: (data: unknown) => valibot_parse(root, data),
+      value: (data: unknown) => parseAsync(root, data),
       enumerable: false,
     },
     safeParse: {
@@ -259,12 +266,31 @@ export function rpc<
     readonly meta?: Record<string, GenericSchema>;
     readonly options?: SchemaOpts;
   };
-}): GenericSchema & {
+}): {
   readonly kind: "rpc";
-  readonly response: GenericSchema;
+  readonly response: {
+    readonly kind: "event";
+    readonly __valibot_payload: ResP;
+    readonly __descriptor: { readonly type: ResT };
+    readonly __runtime: "ws-kit-schema";
+    readonly parse: (data: unknown) => Promise<unknown>;
+    readonly safeParse: (data: unknown) => {
+      success: boolean;
+      data?: unknown;
+      issues?: any[];
+    };
+    readonly type: ResT;
+  };
   readonly __valibot_payload: ReqP;
   readonly __descriptor: { readonly type: ReqT };
   readonly __runtime: "ws-kit-schema";
+  readonly parse: (data: unknown) => Promise<unknown>;
+  readonly safeParse: (data: unknown) => {
+    success: boolean;
+    data?: unknown;
+    issues?: any[];
+  };
+  readonly type: ReqT;
 };
 
 // Positional form (compact)
@@ -278,12 +304,31 @@ export function rpc<
   requestPayload: ReqP,
   responseType: ResT,
   responsePayload: ResP,
-): GenericSchema & {
+): {
   readonly kind: "rpc";
-  readonly response: GenericSchema;
+  readonly response: {
+    readonly kind: "event";
+    readonly __valibot_payload: ResP;
+    readonly __descriptor: { readonly type: ResT };
+    readonly __runtime: "ws-kit-schema";
+    readonly parse: (data: unknown) => Promise<unknown>;
+    readonly safeParse: (data: unknown) => {
+      success: boolean;
+      data?: unknown;
+      issues?: any[];
+    };
+    readonly type: ResT;
+  };
   readonly __valibot_payload: ReqP;
   readonly __descriptor: { readonly type: ReqT };
   readonly __runtime: "ws-kit-schema";
+  readonly parse: (data: unknown) => Promise<unknown>;
+  readonly safeParse: (data: unknown) => {
+    success: boolean;
+    data?: unknown;
+    issues?: any[];
+  };
+  readonly type: ReqT;
 };
 
 // Implementation
@@ -312,13 +357,7 @@ export function rpc<
   requestPayload?: ReqP,
   responseType?: ResT,
   responsePayload?: ResP,
-): GenericSchema & {
-  readonly kind: "rpc";
-  readonly response: GenericSchema;
-  readonly __valibot_payload: ReqP;
-  readonly __descriptor: { readonly type: ReqT };
-  readonly __runtime: "ws-kit-schema";
-} {
+): any {
   // Normalize inputs: support both object and positional forms
   let reqType: ReqT;
   let reqPayload: ReqP | undefined;
@@ -348,14 +387,14 @@ export function rpc<
   const requestRoot = message({
     type: reqType,
     payload: reqPayload,
-    options: reqOptions,
+    ...(reqOptions !== undefined ? { options: reqOptions } : {}),
   });
 
   // Build response schema using message() with per-response options
   const responseRoot = message({
     type: resType,
     payload: resPayload,
-    options: resOptions,
+    ...(resOptions !== undefined ? { options: resOptions } : {}),
   });
 
   // Replace kind and attach response to request

@@ -11,9 +11,9 @@
  * Spec: Request-response pattern binding
  */
 
+import { message, rpc } from "@ws-kit/valibot";
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { message, rpc } from "@ws-kit/valibot";
 
 describe("RPC Schema Helper (Valibot)", () => {
   describe("rpc() Creation", () => {
@@ -163,7 +163,7 @@ describe("RPC Schema Helper (Valibot)", () => {
         {
           user: v.object({
             name: v.string(),
-            email: v.string([v.email()]),
+            email: v.pipe(v.string(), v.email()),
           }),
         },
         "USER_CREATED",
@@ -172,7 +172,7 @@ describe("RPC Schema Helper (Valibot)", () => {
           user: v.object({
             id: v.string(),
             name: v.string(),
-            email: v.string([v.email()]),
+            email: v.pipe(v.string(), v.email()),
           }),
         },
       );

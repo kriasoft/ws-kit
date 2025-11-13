@@ -40,13 +40,24 @@ import type {
 
 **Single source of truth for all imports.** Reference this section from other specs instead of duplicating.
 
+### createRouter is Available from Multiple Sources
+
+`createRouter()` can be imported from **both** `@ws-kit/core` and `@ws-kit/zod`/`@ws-kit/valibot`:
+
+- **`@ws-kit/core`** — Base router (minimal, no validation)
+- **`@ws-kit/zod`** / **`@ws-kit/valibot`** — Re-export `createRouter` plus validators and helpers
+
+Both patterns work equally well. Choose whichever import source fits your workflow.
+
+### Recommended: Single Canonical Source
+
 ```typescript
-// ✅ Server setup (Zod)
-import { z, message, rpc, createRouter } from "@ws-kit/zod";
+// ✅ Server setup (Zod) - Single import source
+import { z, message, rpc, createRouter, withZod } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 
 type AppData = { userId?: string };
-const router = createRouter<AppData>();
+const router = createRouter<AppData>().plugin(withZod());
 
 // Standard messages
 const PingMessage = message("PING", { text: z.string() });
@@ -57,18 +68,38 @@ const QueryMsg = rpc("QUERY", { id: z.string() }, "QUERY_RESULT", {
   data: z.any(),
 });
 
-// ✅ Server setup (Valibot)
-import { v, message, rpc, createRouter } from "@ws-kit/valibot";
+// ✅ Server setup (Valibot) - Same pattern, different validator
+import { v, message, rpc, createRouter, withValibot } from "@ws-kit/valibot";
 
-// ✅ Client setup (Typed)
-import { wsClient } from "@ws-kit/client/zod";
-const client = wsClient<typeof router>("ws://localhost:3000");
-
-// ❌ NEVER: Mixing imports from different sources
-// Using both 'zod' and '@ws-kit/zod' risks dual package hazard
+const router = createRouter<AppData>().plugin(withValibot());
 ```
 
-**Validator Consistency**: Use the same validator (`/zod` or `/valibot`) across client, server, and schemas within a project. Mixing validators breaks type compatibility (TypeScript enforces this at compile time).
+### Alternative: Explicit Imports
+
+```typescript
+// ✅ Also works - explicit plugin import
+import { createRouter } from "@ws-kit/core";
+import { z, message, withZod } from "@ws-kit/zod";
+
+const router = createRouter<AppData>().plugin(withZod());
+```
+
+### Key Points
+
+- **Plugin is explicit**: Always call `.plugin(withZod())` or `.plugin(withValibot())` to enable validation
+- **Validator consistency**: Use the same validator (`/zod` or `/valibot`) across client, server, and schemas within a project. Mixing validators breaks type compatibility (TypeScript enforces this at compile time)
+- **No pre-baked validator**: The validator is never pre-configured — you must explicitly enable it via plugin
+
+```typescript
+// ❌ NEVER: Mixing imports from different sources
+// Using both 'zod' and '@ws-kit/zod' risks dual package hazard
+
+// ❌ NEVER: Bare router without validation when you need to access ctx.payload
+const router = createRouter(); // No plugin = no validation
+router.on(PingMessage, (ctx) => {
+  ctx.payload; // ❌ Type error - payload not available without validation plugin
+});
+```
 
 ## Strict Schemas (Required) {#Strict-Schemas}
 

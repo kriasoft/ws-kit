@@ -6,14 +6,27 @@
  * All operations are compile-time only (zero runtime cost).
  */
 
-import type { ZodObject, ZodRawShape, ZodType } from "zod";
+import type { z, ZodObject, ZodRawShape, ZodType } from "zod";
 
 /**
  * Symbol for branding schemas at the type level.
  * Purely type-level; not exposed at runtime.
  * @internal
  */
-declare const SchemaTag: unique symbol;
+export declare const SchemaTag: unique symbol;
+
+/**
+ * Helper type to infer meta fields from ZodRawShape.
+ * Converts ZodRawShape to inferred types.
+ * @internal
+ */
+type InferMetaShape<M extends ZodRawShape | undefined> = M extends ZodRawShape
+  ? M extends Record<string, infer V>
+    ? V extends ZodType
+      ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
+      : never
+    : never
+  : {};
 
 /**
  * Schema branded with type metadata for inference.
@@ -24,11 +37,13 @@ export interface BrandedSchema<
   TType extends string = string,
   TPayload extends unknown = unknown,
   TResponse extends unknown = never,
+  TMeta extends Record<string, unknown> = Record<string, never>,
 > {
   readonly [SchemaTag]: {
     readonly type: TType;
     readonly payload: TPayload;
     readonly response: TResponse extends never ? never : TResponse;
+    readonly meta: TMeta;
   };
 }
 
@@ -66,10 +81,16 @@ export type InferResponse<S extends { readonly [SchemaTag]?: any }> =
   S extends {
     readonly [SchemaTag]: infer B;
   }
-    ? B extends { readonly response: infer R }
-      ? R extends never
+    ? B extends { readonly response: infer P }
+      ? P extends never
         ? never
-        : R
+        : P extends ZodRawShape | ZodObject<any>
+          ? P extends ZodRawShape
+            ? { [K in keyof P]: P[K] extends ZodType<infer U> ? U : never }
+            : P extends ZodObject<any>
+              ? z.infer<P>
+              : never
+          : never
       : never
     : never;
 
@@ -105,27 +126,34 @@ export type InferMeta<S extends { readonly [SchemaTag]?: any }> = S extends {
   readonly [SchemaTag]: infer B;
 }
   ? B extends { readonly meta: infer M }
-    ? M extends Record<string, any>
+    ? M extends Record<string, unknown>
       ? Omit<M, "timestamp" | "correlationId">
-      : Record<string, never>
-    : Record<string, never>
-  : Record<string, never>;
+      : never
+    : never
+  : never;
 
 /**
  * Infer full message type from a branded schema (convenience alias).
  * Equivalent to z.infer<TSchema> but works with branded message schemas.
+ * Excludes the response field (which is schema metadata, not part of the wire format).
  *
  * @example
  * ```typescript
  * const Join = message("JOIN", { roomId: z.string() });
  * type Msg = InferMessage<typeof Join>;
- * // { type: "JOIN"; payload: { roomId: string }; ... }
+ * // { type: "JOIN"; meta: {...}; payload: { roomId: string } }
  * ```
  */
 export type InferMessage<S extends { readonly [SchemaTag]?: any }> = S extends {
   readonly [SchemaTag]: infer B;
 }
-  ? B
+  ? B extends {
+      readonly type: infer T;
+      readonly payload: infer P;
+      readonly meta: infer M;
+    }
+    ? { type: T; meta: M; payload: P extends never ? never : P }
+    : never
   : never;
 
 /**

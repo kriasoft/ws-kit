@@ -97,15 +97,15 @@ bun add valibot bun @types/bun -D
 The **canonical import pattern** is the first-class way to use WS-Kit — import from a single validator package to ensure type safety and avoid dual-package hazards:
 
 ```ts
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 
 // Define message schemas with full type inference
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Create type-safe router (validator is pre-configured)
-const router = createRouter();
+// Create router and enable validation via plugin
+const router = createRouter().plugin(withZod());
 
 // Register handlers — fully typed!
 router.on(PingMessage, (ctx) => {
@@ -129,7 +129,42 @@ serve(router, {
 });
 ```
 
-**That's it!** Validator, router, messages, and platform adapter all come from focused packages. Type-safe from server to client.
+**That's it!** Import from your validator package (`@ws-kit/zod` or `@ws-kit/valibot`), create a router, add plugins for features you need, and serve. Type-safe from server to client.
+
+### Import Patterns: Where Does `createRouter` Come From?
+
+`createRouter()` is available from **both** `@ws-kit/core` and `@ws-kit/zod`/`@ws-kit/valibot`:
+
+- **`@ws-kit/core`** — Base router factory (minimal, validator-agnostic)
+- **`@ws-kit/zod`** / **`@ws-kit/valibot`** — Re-exports `createRouter` for convenience, plus validators and helpers
+
+**Recommended**: Import from your validator package for a single canonical import source:
+
+```ts
+// ✅ Single import source (recommended)
+import { createRouter, withZod, z, message } from "@ws-kit/zod";
+```
+
+**If you prefer**: Import from core and plugins separately:
+
+```ts
+// ✅ Also works (explicit imports)
+import { createRouter } from "@ws-kit/core";
+import { withZod, z, message } from "@ws-kit/zod";
+```
+
+**Key point**: The validator plugin (`withZod()` / `withValibot()`) is **explicit and required** for RPC and payload validation. Create a bare router anytime, but enable validation when needed:
+
+```ts
+// Bare router (no validation)
+const router = createRouter();
+router.on(MyMessage, (ctx) => { /* payload not typed */ });
+
+// With validation plugin
+const validatedRouter = createRouter().plugin(withZod());
+validatedRouter.on(MyMessage, (ctx) => { /* payload fully typed */ });
+validatedRouter.rpc(RpcSchema, handler); // RPC available with validation
+```
 
 ### Multi-Router Apps: Module Augmentation
 
@@ -150,10 +185,10 @@ Now create feature routers without repeating type parameters:
 
 ```ts
 // src/features/chat.ts
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import { JoinRoom, SendMessage, UserJoined } from "./schema";
 
-const chatRouter = createRouter(); // ✅ Connection data is automatically typed
+const chatRouter = createRouter().plugin(withZod()); // ✅ Connection data is automatically typed, validation enabled
 
 chatRouter.on(JoinRoom, async (ctx) => {
   const userId = ctx.ws.data?.userId; // ✅ Properly typed
@@ -169,12 +204,15 @@ Compose feature routers into your main app:
 
 ```ts
 // src/server.ts
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 import { chatRouter } from "./features/chat";
 import { presenceRouter } from "./features/presence";
 
-const mainRouter = createRouter().merge(chatRouter).merge(presenceRouter);
+const mainRouter = createRouter()
+  .plugin(withZod())
+  .merge(chatRouter)
+  .merge(presenceRouter);
 
 serve(mainRouter, { port: 3000 });
 ```
@@ -282,7 +320,7 @@ export default {
 Secure your router by validating clients during the WebSocket upgrade. Pass authenticated user data via the `authenticate` hook — all handlers then have type-safe access to this data:
 
 ```ts
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 import { verifyIdToken } from "./auth"; // Your authentication logic
 
@@ -298,7 +336,7 @@ const SendMessage = message("SEND_MESSAGE", {
   text: z.string(),
 });
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 
 // Global middleware for auth checks
 router.use((ctx, next) => {
@@ -415,14 +453,14 @@ The client auto-detects the response type from the RPC schema, eliminating the n
 Register RPC handlers with `router.rpc()` to use request/response pattern with `ctx.reply()` and `ctx.progress()`:
 
 ```ts
-import { z, rpc, createRouter } from "@ws-kit/zod";
+import { z, rpc, createRouter, withZod } from "@ws-kit/zod";
 
 const GetUser = rpc("GET_USER", { userId: z.string() }, "USER_DATA", {
   name: z.string(),
   email: z.string(),
 });
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 
 router.rpc(GetUser, (ctx) => {
   const { userId } = ctx.payload;
@@ -464,7 +502,7 @@ router.rpc(DownloadFile, (ctx) => {
 Register handlers with full type safety. The context includes schema-typed payloads, connection data, and lifecycle hooks:
 
 ```ts
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
 import { JoinRoom, UserJoined, SendMessage, UserLeft } from "./schema";
 
 declare module "@ws-kit/core" {
@@ -474,7 +512,7 @@ declare module "@ws-kit/core" {
   }
 }
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 
 // Handle new connections
 router.onOpen((ctx) => {
@@ -550,7 +588,7 @@ router.onClose((ctx) => {
 Broadcasting messages to multiple clients is type-safe with schema validation:
 
 ```ts
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
 
 const RoomUpdate = message("ROOM_UPDATE", {
   roomId: z.string(),
@@ -564,7 +602,7 @@ declare module "@ws-kit/core" {
   }
 }
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
@@ -637,13 +675,13 @@ Effective error handling is crucial for maintaining robust WebSocket connections
 Use `ctx.error()` to send type-safe error responses with optional retry hints:
 
 ```ts
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
 
 interface ConnectionData {
   userId?: string;
 }
 
-const router = createRouter<ConnectionData>();
+const router = createRouter<ConnectionData>().plugin(withZod());
 
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
 
@@ -843,7 +881,7 @@ For complete documentation, see [docs/specs/router.md](./docs/specs/router.md) a
 For distributed deployments across multiple server instances, use Redis or Cloudflare to coordinate subscriptions and broadcasting:
 
 ```ts
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
 import { redisPubSub } from "@ws-kit/redis";
 import { createClient } from "redis";
@@ -851,10 +889,9 @@ import { createClient } from "redis";
 const redisClient = createClient({ url: process.env.REDIS_URL });
 await redisClient.connect();
 
-const router = createRouter();
-
-// Register a plugin to enable Redis-backed pub/sub
-router.plugin(redisPubSub(redisClient));
+const router = createRouter()
+  .plugin(withZod())
+  .plugin(redisPubSub(redisClient));
 
 // Now ctx.publish() and ctx.topics.subscribe() work across all instances
 router.on(JoinRoom, async (ctx) => {
@@ -872,10 +909,10 @@ Without Redis pubsub, broadcasting is scoped to the current instance. Redis enab
 For Cloudflare Durable Objects, use the native `createDurableObjectHandler`:
 
 ```ts
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import { createDurableObjectHandler } from "@ws-kit/cloudflare";
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 const handler = createDurableObjectHandler(router, {
   /* options */
 });
@@ -904,11 +941,11 @@ Create feature routers in separate modules:
 
 ```ts
 // src/features/chat.ts
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import { JoinRoom, SendMessage, UserJoined } from "./schema";
 
 export function createChatRouter() {
-  const router = createRouter();
+  const router = createRouter().plugin(withZod());
 
   router.on(JoinRoom, async (ctx) => {
     const { roomId } = ctx.payload;

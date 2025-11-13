@@ -5,8 +5,8 @@
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
 
-import type { Router, RouterCore } from "../core/router";
 import type { ConnectionData } from "../context/base-context";
+import type { RouterCore } from "../core/router";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
 
@@ -84,7 +84,7 @@ export interface TestConnection<
   /**
    * Update connection data (partial merge).
    */
-  setData(patch: Partial<TContext>): void;
+  assignData(patch: Partial<TContext>): void;
 
   /**
    * Close this connection.
