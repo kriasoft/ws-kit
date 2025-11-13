@@ -110,10 +110,20 @@ function resolveOptions(
 }
 
 /**
- * Validation plugin API interface.
+ * Validation plugin API interface with capability marker.
  * Added to the router when withZod() is applied.
+ *
+ * The { validation: true } marker enables Router type narrowing:
+ * - Before plugin: Router<TContext, {}> → keyof excludes rpc()
+ * - After plugin: Router<TContext, { validation: true }> → keyof includes rpc()
  */
 interface WithZodValidationAPI {
+  /**
+   * Marker for capability-gating in Router type system.
+   * @internal
+   */
+  readonly validation: true;
+
   /**
    * Register an RPC handler with request-response pattern.
    * @param schema RPC message schema with request and response types
@@ -560,8 +570,9 @@ export function withZod(options?: WithZodOptions) {
       return router.on(schema, handler);
     };
 
-    // Return the plugin API extensions
+    // Return the plugin API extensions with capability marker
     return {
+      validation: true as const,
       rpc: rpcMethod,
     };
   });

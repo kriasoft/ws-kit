@@ -19,10 +19,9 @@ import type {
   MessageDescriptor,
   PublishOptions,
   PublishResult,
-  Router,
 } from "@ws-kit/core";
-import { definePlugin } from "@ws-kit/core/plugin";
 import { ROUTER_IMPL } from "@ws-kit/core/internal";
+import { definePlugin } from "@ws-kit/core/plugin";
 import type { PublishEnvelope } from "@ws-kit/core/pubsub";
 import type { PubSubObserver, WithPubSubOptions } from "./types";
 
@@ -85,6 +84,13 @@ import type { PubSubObserver, WithPubSubOptions } from "./types";
  * Added to the router when withPubSub() is applied.
  */
 interface WithPubSubAPI {
+  /**
+   * Marker for capability-gating in Router type system.
+   * Ensures publish() and topics only appear in keyof when withPubSub() is applied.
+   * @internal
+   */
+  readonly pubsub: true;
+
   /**
    * Publish a message to a topic.
    * @param topic Topic name
@@ -414,8 +420,9 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
       };
     }
 
-    // Return the plugin API extensions
+    // Return the plugin API extensions with capability marker
     return {
+      pubsub: true as const,
       publish,
       topics,
       pubsub: {

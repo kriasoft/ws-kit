@@ -110,25 +110,40 @@ export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
 }
 
 /**
- * Router<TContext, TExtensions> = RouterCore + structural extensions.
+ * Router<TContext, TExtensions> = RouterCore + capability-gated APIs.
  *
  * TExtensions is an object type representing all APIs added by plugins.
  * Plugins use definePlugin<TContext, TPluginApi> to add their extensions.
  * Type is automatically widened: each .plugin(p) call intersects new APIs.
  *
+ * Capability-gating: API inclusion is controlled by markers in TExtensions:
+ * - { validation: true } → includes ValidationAPI (rpc, reply, progress, send)
+ * - { pubsub: true } → includes PubSubAPI (publish, topics)
+ *
+ * This ensures methods only appear in keyof when explicitly marked by plugins,
+ * preventing misuse of gated APIs at compile-time.
+ *
  * @example
  * ```typescript
- * // After withZod:
- * Router<MyContext, { rpc(...): this }>
+ * // Base (no plugins):
+ * Router<MyContext, {}> → RouterCore<MyContext>
  *
- * // After withPubSub:
- * Router<MyContext, { rpc(...): this } & { publish(...): Promise<PublishResult> }>
+ * // After withZod (adds { validation: true } marker):
+ * Router<MyContext, { validation: true } & ValidationAPI<MyContext>>
+ * → RouterCore<MyContext> & ValidationAPI<MyContext>
+ *
+ * // After both withZod and withPubSub:
+ * Router<MyContext, { validation: true, pubsub: true } & {...}>
+ * → RouterCore<MyContext> & ValidationAPI<MyContext> & PubSubAPI<MyContext>
  * ```
  */
 export type Router<
   TContext extends ConnectionData = ConnectionData,
   TExtensions extends object = {},
-> = RouterCore<TContext> & TExtensions;
+> = RouterCore<TContext> &
+  (TExtensions extends { validation: true } ? ValidationAPI<TContext> : {}) &
+  (TExtensions extends { pubsub: true } ? PubSubAPI<TContext> : {}) &
+  Omit<TExtensions, "validation" | "pubsub">;
 
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
@@ -747,7 +762,8 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
 
     // Merge initial context data provided by the adapter (e.g., from headers, auth).
     // This runs before lifecycle.handleOpen, so onOpen handlers and plugins see seeded data.
-    if (ws.initialData) {
+    // Type guard: Some adapters may not set initialData; check before accessing.
+    if ("initialData" in ws && ws.initialData) {
       const ctx = this.getOrInitData(ws);
       Object.assign(ctx, ws.initialData);
     }
