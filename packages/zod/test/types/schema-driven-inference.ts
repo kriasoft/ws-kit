@@ -6,7 +6,7 @@
  *
  * These are compile-time assertions that verify:
  * 1. Handlers have access to schema type information
- * 2. Type safety works through IWebSocketRouter interface
+ * 2. Type safety works through Router interface
  * 3. Composition preserves inference across merges
  * 4. Schema carries type information that flows to context
  *
@@ -17,7 +17,7 @@
  */
 
 import { z, message, createRouter } from "../..";
-import type { IWebSocketRouter } from "@ws-kit/core";
+import type { Router } from "@ws-kit/core";
 import type { MessageContext } from "@ws-kit/zod";
 
 // ============================================================================
@@ -63,7 +63,7 @@ async function handleJoinRoom(ctx: MessageContext<typeof JoinRoom, AppData>) {
 // Test 2: Handlers through interface parameter
 // ============================================================================
 
-function setupChatHelper(router: IWebSocketRouter<AppData>) {
+function setupChatHelper(router: Router<AppData>) {
   // Register pre-defined handlers - types flow from schema to context
   router.on(JoinRoom, handleJoinRoom);
 
@@ -97,35 +97,38 @@ function testComposition() {
   );
 
   // After merge, handlers still have proper types
-  const asInterface: IWebSocketRouter<AppData> = mainRouter;
+  const asInterface: Router<AppData> = mainRouter;
   setupChatHelper(asInterface);
 }
 
 // ============================================================================
-// Test 4: Type safety with lifecycle hooks
+// Test 4: Type safety with middleware
 // ============================================================================
 
-function setupLifecycleHooks(router: IWebSocketRouter<AppData>) {
-  router.onOpen((ctx) => {
-    const clientId: string = ctx.ws.data.clientId;
-    const userId: string | undefined = ctx.ws.data.userId;
-  });
-
-  router.onClose((ctx) => {
-    const clientId: string = ctx.ws.data.clientId;
-  });
-}
-
-// ============================================================================
-// Test 5: Global middleware with typed data access
-// ============================================================================
-
-function setupMiddleware(router: IWebSocketRouter<AppData>) {
-  // Global middleware can access typed connection data
+function setupMiddlewareWithDataAccess(router: Router<AppData>) {
+  // Middleware can access typed connection data
   router.use(async (ctx, next) => {
     const clientId: string = ctx.ws.data.clientId;
     await next();
   });
+}
+
+// ============================================================================
+// Test 5: Multiple handlers on same router
+// ============================================================================
+
+function setupMultipleHandlers(router: Router<AppData>) {
+  // Register multiple handlers with proper type inference
+  router
+    .on(JoinRoom, async (ctx: MessageContext<typeof JoinRoom, AppData>) => {
+      const roomId: string = ctx.payload.roomId;
+    })
+    .on(
+      SendMessage,
+      async (ctx: MessageContext<typeof SendMessage, AppData>) => {
+        const text: string = ctx.payload.text;
+      },
+    );
 }
 
 // ============================================================================
@@ -146,6 +149,6 @@ export function runCompileTimeTests() {
 
   setupChatHelper(router);
   testComposition();
-  setupLifecycleHooks(router);
-  setupMiddleware(router);
+  setupMiddlewareWithDataAccess(router);
+  setupMultipleHandlers(router);
 }

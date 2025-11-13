@@ -6,7 +6,7 @@
 
 ## Context
 
-When passing a router through function parameters (e.g., `setupChat(router: IWebSocketRouter<AppData>)`), type information about message payloads was lost. Developers had to manually annotate handler contexts to regain type safety:
+When passing a router through function parameters (e.g., `setupChat(router: Router<AppData>)`), type information about message payloads was lost. Developers had to manually annotate handler contexts to regain type safety:
 
 ```typescript
 // Problem: c.payload has no type information
@@ -22,7 +22,7 @@ router.on(JoinRoom, (c: MessageContext<typeof JoinRoom, AppData>) => {
 
 ## Root Cause
 
-The `IWebSocketRouter<TData>` interface defines `on()` as:
+The `Router<TData>` type defines `on()` as:
 
 ```typescript
 on<TSchema extends MessageSchemaType>(
@@ -60,7 +60,7 @@ Both Zod and Valibot brands schemas with **metadata that encodes the payload sha
 ✅ **Perfect inference everywhere** — Helpers, routers, middleware all get typed payloads without extra generics or assertions
 ✅ **No manual annotations** — Developers never write `(c: MessageContext<typeof Schema, AppData>)`
 ✅ **Validator-agnostic** — Works with Zod, Valibot, or any future validator
-✅ **Composable** — Functions accepting `IWebSocketRouter<TData>` automatically support typed messages
+✅ **Composable** — Functions accepting `Router<TData>` automatically support typed messages
 ✅ **Progressive** — No changes to public API; existing code continues to work
 
 ### Trade-offs
@@ -77,7 +77,7 @@ For applications that want explicit validator family verification, export lightw
 ```typescript
 import { asZodRouter } from "@ws-kit/zod";
 
-export function setupChat(router: IWebSocketRouter<AppData>) {
+export function setupChat(router: Router<AppData>) {
   const zodRouter = asZodRouter(router); // Type-safe cast
   zodRouter.on(JoinRoom, (c) => {
     // Full inference, guaranteed Zod family
@@ -85,7 +85,7 @@ export function setupChat(router: IWebSocketRouter<AppData>) {
 }
 ```
 
-**Design**: These helpers are optional. They provide `(router as IWebSocketRouter<TData> & { validator: ZodAdapter })` for advanced use cases (e.g., multi-validator apps requiring per-module consistency).
+**Design**: These helpers are optional. They provide `(router as Router<TData> & { validator: ZodAdapter })` for advanced use cases (e.g., multi-validator apps requiring per-module consistency).
 
 **Implementation**: Add to `@ws-kit/zod` and `@ws-kit/valibot` as lightweight type helpers. Zero runtime overhead (no-op type casts with optional assertions).
 
@@ -94,7 +94,7 @@ export function setupChat(router: IWebSocketRouter<AppData>) {
 ### A. Router-Level Validator Generic
 
 ```typescript
-interface IWebSocketRouter<TData, V extends ValidatorAdapter> {
+interface Router<TData, V extends ValidatorAdapter> {
   on<S extends MessageSchemaType>(schema: S, handler: ...): this;
 }
 ```
@@ -151,7 +151,7 @@ const router = createRouter<AppData>({
 
 ### Implementation
 
-- `packages/core/src/types.ts` — `IWebSocketRouter` interface, `MessageContext`, `EventMessageContext`, `RpcMessageContext`
+- `packages/core/src/core/router.ts` — `Router` type, `RouterCore` interface
 - `packages/zod/src/types.ts` — Zod schema metadata and type extraction
 - `packages/zod/src/validator.ts` — Validator adapter implementation
 - `packages/zod/src/narrower.ts` — Optional `asZodRouter()` helper

@@ -266,7 +266,7 @@ This design keeps the merge API simple and predictable: what you see (the merge 
 **Before** (helper function pattern):
 
 ```typescript
-function setupChat(router: IWebSocketRouter<AppData>) {
+function setupChat(router: Router<AppData>) {
   router.on(JoinRoom, handleJoinRoom);
   router.on(SendMessage, handleSendMessage);
 }
@@ -303,7 +303,7 @@ Helpers are appropriate for:
 3. **Hooks** — Open/close handlers, error handling
 
 ```typescript
-export function setupGlobalMiddleware(router: IWebSocketRouter<AppData>) {
+export function setupGlobalMiddleware(router: Router<AppData>) {
   router.use(async (ctx, next) => {
     // Logging, tracing
     await next();

@@ -1,11 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type {
-  IWebSocketRouter,
-  ServerWebSocket,
-  WebSocketData,
-} from "@ws-kit/core";
+import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
 import * as uuid from "uuid";
 import type {
@@ -26,7 +22,7 @@ const { v7: uuidv7 } = uuid;
  * import { createRouter } from "@ws-kit/zod";
  * import { createBunHandler } from "@ws-kit/bun";
  *
- * const router = createRouter<AppData>();
+ * const router = createRouter<TContext>();
  * const { fetch, websocket } = createBunHandler(router);
  *
  * Bun.serve({ fetch, websocket, port: 3000 });
@@ -44,10 +40,12 @@ const { v7: uuidv7 } = uuid;
  * @param options - Optional handler configuration
  * @returns Object with `fetch` and `websocket` handlers for Bun.serve
  */
-export function createBunHandler<TData extends WebSocketData = WebSocketData>(
-  router: IWebSocketRouter<TData>,
-  options?: BunHandlerOptions<TData>,
-): BunHandler<TData> {
+export function createBunHandler<
+  TContext extends ConnectionData = ConnectionData,
+>(
+  router: Router<TContext>,
+  options?: BunHandlerOptions<TContext>,
+): BunHandler<TContext> {
   const clientIdHeader = options?.clientIdHeader ?? "x-client-id";
 
   return {
@@ -84,7 +82,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
      */
     fetch: async (
       req: Request,
-      server: Server<BunWebSocketData<TData>>,
+      server: Server<BunWebSocketData<TContext>>,
     ): Promise<Response> => {
       try {
         // Call onUpgrade hook (before authentication)
@@ -94,16 +92,16 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
         const clientId = uuidv7();
 
         // Call user's authentication function if provided
-        const customData: TData | undefined = options?.authenticate
+        const customData: TContext | undefined = options?.authenticate
           ? await Promise.resolve(options.authenticate(req))
           : undefined;
 
         // Prepare connection data with clientId
-        const data: BunWebSocketData<TData> = {
+        const data: BunWebSocketData<TContext> = {
           clientId,
           connectedAt: Date.now(),
           ...(customData || {}),
-        } as BunWebSocketData<TData>;
+        } as BunWebSocketData<TContext>;
 
         // Upgrade connection with initial data
         // Returns true if successful, false if not a valid WebSocket request
@@ -151,7 +149,9 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
       /**
        * Called when a WebSocket connection is successfully established.
        */
-      async open(ws: ServerWebSocket<BunWebSocketData<TData>>): Promise<void> {
+      async open(
+        ws: ServerWebSocket<BunWebSocketData<TContext>>,
+      ): Promise<void> {
         try {
           // Ensure ws has the clientId from the data
           if (!ws.data?.clientId) {
@@ -184,7 +184,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
        * Called when a message is received from the client.
        */
       async message(
-        ws: ServerWebSocket<BunWebSocketData<TData>>,
+        ws: ServerWebSocket<BunWebSocketData<TContext>>,
         data: string | Buffer,
       ): Promise<void> {
         try {
@@ -201,7 +201,7 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
        * Called when the WebSocket connection is closed.
        */
       async close(
-        ws: ServerWebSocket<BunWebSocketData<TData>>,
+        ws: ServerWebSocket<BunWebSocketData<TContext>>,
         code: number,
         reason?: string,
       ): Promise<void> {
@@ -227,13 +227,13 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
        * Used for backpressure handling. Not implemented here, but can be
        * extended if needed for custom write buffer management.
        */
-      drain(ws: ServerWebSocket<BunWebSocketData<TData>>): void {
+      drain(ws: ServerWebSocket<BunWebSocketData<TContext>>): void {
         // Backpressure handling (optional)
         // Called when ws.send() buffers are flushed
         // Can be used to resume message processing if it was paused
         void ws; // Mark parameter as intentionally unused
       },
-    } as WebSocketHandler<BunWebSocketData<TData>>,
+    } as WebSocketHandler<BunWebSocketData<TContext>>,
   };
 }
 
@@ -261,8 +261,8 @@ export function createBunHandler<TData extends WebSocketData = WebSocketData>(
  * and implement your own routing logic.
  */
 export function createDefaultBunFetch<
-  TData extends WebSocketData = WebSocketData,
->(router: IWebSocketRouter<TData>, options?: BunHandlerOptions<TData>) {
+  TContext extends ConnectionData = ConnectionData,
+>(router: Router<TContext>, options?: BunHandlerOptions<TContext>) {
   const { fetch } = createBunHandler(router, options);
   return fetch;
 }

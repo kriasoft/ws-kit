@@ -7,7 +7,7 @@
  * High-level convenience wrapper for serving a router on Bun.
  */
 
-import type { IWebSocketRouter, WebSocketData } from "@ws-kit/core";
+import type { Router, ConnectionData } from "@ws-kit/core";
 import type { BunHandlerOptions } from "./types.js";
 
 /**
@@ -15,9 +15,8 @@ import type { BunHandlerOptions } from "./types.js";
  *
  * Extends BunHandlerOptions with Bun-specific server config.
  */
-export interface ServeOptions<
-  TData extends Record<string, unknown> = Record<string, unknown>,
-> extends BunHandlerOptions<TData> {
+export interface ServeOptions<TContext extends ConnectionData = ConnectionData>
+  extends BunHandlerOptions<TContext> {
   /**
    * Port to listen on.
    * @default 3000
@@ -44,9 +43,9 @@ export interface ServeOptions<
  * serve(router, { port: 3000 });
  * ```
  */
-export async function serve<TData extends WebSocketData>(
-  router: IWebSocketRouter<TData>,
-  options: ServeOptions<TData> = {},
+export async function serve<TContext extends ConnectionData = ConnectionData>(
+  router: Router<TContext>,
+  options: ServeOptions<TContext> = {},
 ): Promise<void> {
   const { createBunHandler } = await import("./handler.js");
   const { BunPubSub } = await import("./pubsub.js");

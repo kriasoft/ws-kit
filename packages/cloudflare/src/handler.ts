@@ -1,11 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type {
-  IWebSocketRouter,
-  ServerWebSocket,
-  WebSocketData,
-} from "@ws-kit/core";
+import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
 import * as uuid from "uuid";
 import type {
   DurableObjectHandler,
@@ -24,7 +20,7 @@ const { v7: uuidv7 } = uuid;
  * import { createRouter } from "@ws-kit/zod";
  * import { createDurableObjectHandler } from "@ws-kit/cloudflare";
  *
- * const router = createRouter<AppData>();
+ * const router = createRouter<TContext>();
  *
  * const handler = createDurableObjectHandler(router, {
  *   authenticate: (req) => ({ userId: "123" }),
@@ -48,13 +44,13 @@ const { v7: uuidv7 } = uuid;
  * @returns DurableObjectHandler with fetch method
  */
 export function createDurableObjectHandler<
-  TData extends WebSocketData = WebSocketData,
+  TContext extends ConnectionData = ConnectionData,
 >(
-  router: IWebSocketRouter<TData>,
+  router: Router<TContext>,
   options?: {
     authenticate?: (
       req: Request,
-    ) => Promise<TData | undefined> | TData | undefined;
+    ) => Promise<TContext | undefined> | TContext | undefined;
     maxConnections?: number;
   },
 ): DurableObjectHandler {
@@ -95,18 +91,18 @@ export function createDurableObjectHandler<
         "default";
 
       // Authenticate if provided
-      const customData: TData | undefined = authenticate
+      const customData: TContext | undefined = authenticate
         ? await Promise.resolve(authenticate(req))
         : undefined;
 
       // Prepare connection data
       const clientId = uuidv7();
-      const wsData: DurableObjectWebSocketData<TData> = {
+      const wsData: DurableObjectWebSocketData<TContext> = {
         clientId,
         resourceId,
         connectedAt: Date.now(),
         ...(customData || {}),
-      } as DurableObjectWebSocketData<TData>;
+      } as DurableObjectWebSocketData<TContext>;
 
       try {
         // Create a WebSocketPair (available in Cloudflare Workers)
@@ -127,7 +123,7 @@ export function createDurableObjectHandler<
 
         // Attach our data to the server WebSocket
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const serverWs = server as any as ServerWebSocket<TData>;
+        const serverWs = server as any as ServerWebSocket<TContext>;
         serverWs.data = wsData;
 
         connectionCount++;
