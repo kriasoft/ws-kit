@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { ServerWebSocket, Topics } from "@ws-kit/core";
+import type { ServerWebSocket } from "@ws-kit/core";
+import type { Topics } from "../types";
 import { DEFAULT_TOPIC_MAX_LENGTH, DEFAULT_TOPIC_PATTERN } from "./constants";
 import { AbortError, PubSubError } from "./error";
 
@@ -35,20 +36,21 @@ function composeSignal(base?: AbortSignal, timeoutMs?: number): AbortSignal {
 
   // Only base: return as-is
   if (!timeoutMs) {
-    return base;
+    return base!; // base is guaranteed to exist here due to the conditions above
   }
 
   // Both: create a composite controller
   // This controller aborts if either the base aborts or timeout fires
   const composite = new AbortController();
 
-  // Abort on base signal
-  if (base.aborted) {
-    composite.abort(base.reason);
+  // Abort on base signal (base is guaranteed to exist here)
+  const baseSignal = base!;
+  if (baseSignal.aborted) {
+    composite.abort(baseSignal.reason);
   } else {
-    base.addEventListener("abort", () => {
+    baseSignal.addEventListener("abort", () => {
       if (!composite.signal.aborted) {
-        composite.abort(base.reason);
+        composite.abort(baseSignal.reason);
       }
     });
   }
@@ -440,7 +442,7 @@ export class OptimisticTopics<
       ) {
         const verifyResult = await this.verify(normalizedTopic, {
           mode: options.verify,
-          signal: options?.signal,
+          ...(options?.signal && { signal: options.signal }),
         });
         if (verifyResult.kind === "unsubscribed") {
           throw new PubSubError(
@@ -565,7 +567,7 @@ export class OptimisticTopics<
       ) {
         const verifyResult = await this.verify(normalizedTopic, {
           mode: options.verify,
-          signal: options?.signal,
+          ...(options?.signal && { signal: options.signal }),
         });
         if (verifyResult.kind === "subscribed") {
           throw new PubSubError(
@@ -1017,7 +1019,7 @@ export class OptimisticTopics<
       // Try new API first
       if (typeof wsAdapter.isSubscribed === "function") {
         const result = await awaitWithAbort(
-          wsAdapter.isSubscribed(this.clientId, topic),
+          wsAdapter.isSubscribed(this.ws.clientId, topic),
           verifySignal,
         );
         return result ? { kind: "subscribed" } : { kind: "unsubscribed" };
@@ -1026,7 +1028,7 @@ export class OptimisticTopics<
       // Fall back to legacy API
       if (typeof wsAdapter.hasTopic === "function") {
         const result = await awaitWithAbort(
-          wsAdapter.hasTopic(topic, this.clientId),
+          wsAdapter.hasTopic(topic, this.ws.clientId),
           verifySignal,
         );
         return result ? { kind: "subscribed" } : { kind: "unsubscribed" };

@@ -5,13 +5,15 @@
  * @ws-kit/pubsub middleware — policy enforcement for pub/sub operations
  */
 
-import type { Middleware, MinimalContext } from "@ws-kit/core";
+import type { ConnectionData, Middleware, MinimalContext } from "@ws-kit/core";
 import type { PubSubPolicyHooks, Topics } from "./types";
 
 /**
  * Options for usePubSub middleware.
  */
-export interface UsePubSubOptions<TContext = unknown> {
+export interface UsePubSubOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Policy hooks for normalization and authorization.
    */
@@ -40,7 +42,7 @@ export interface UsePubSubOptions<TContext = unknown> {
  *   }));
  * ```
  */
-export function usePubSub<TContext = unknown>(
+export function usePubSub<TContext extends ConnectionData = ConnectionData>(
   options?: UsePubSubOptions<TContext>,
 ): Middleware<TContext> {
   const { hooks } = options ?? {};
@@ -151,7 +153,7 @@ function wrapTopicsWithPolicies<TContext>(
         await authorizeOperation("subscribe", topic, hooks, clientId, data);
       }
 
-      return topics.replace(normalized, options);
+      return topics.set(normalized, options);
     },
 
     // ReadonlySet interface

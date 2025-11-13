@@ -15,6 +15,7 @@
  */
 
 import type {
+  ConnectionData,
   MessageDescriptor,
   PublishOptions,
   PublishResult,
@@ -117,7 +118,7 @@ interface WithPubSubAPI {
   };
 }
 
-export function withPubSub<TContext>(
+export function withPubSub<TContext extends ConnectionData = ConnectionData>(
   opts: WithPubSubOptions,
 ): ReturnType<typeof definePlugin<TContext, WithPubSubAPI>> {
   const adapter = opts.adapter;
@@ -270,15 +271,15 @@ export function withPubSub<TContext>(
         topic,
         payload,
         type: schema.type || schema.name, // Schema name for observability
-        meta: opts?.meta, // Pass through optional metadata
+        ...(opts?.meta && { meta: opts.meta }), // Pass through optional metadata
       };
 
       // Construct adapter options (partitionKey, signal; excludeSelf handled above)
       const publishOpts: PublishOptions | undefined = opts
         ? {
-            partitionKey: opts.partitionKey,
-            meta: opts.meta,
-            signal: opts.signal,
+            ...(opts.partitionKey && { partitionKey: opts.partitionKey }),
+            ...(opts.meta && { meta: opts.meta }),
+            ...(opts.signal && { signal: opts.signal }),
           }
         : undefined;
 

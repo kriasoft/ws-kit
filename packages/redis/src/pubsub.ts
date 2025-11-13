@@ -106,11 +106,11 @@ export function redisPubSub(
     unsubscribe: (clientId: string, topic: string): Promise<void> =>
       local.unsubscribe(clientId, topic),
 
-    getLocalSubscribers: (topic: string): AsyncIterable<string> =>
-      local.getLocalSubscribers(topic),
+    getSubscribers: (topic: string): AsyncIterable<string> =>
+      local.getSubscribers(topic),
 
-    listTopics: local.listTopics?.bind(local),
+    ...(local.listTopics && { listTopics: local.listTopics.bind(local) }),
 
-    hasTopic: local.hasTopic?.bind(local),
-  };
+    ...(local.hasTopic && { hasTopic: local.hasTopic.bind(local) }),
+  } as PubSubDriver;
 }

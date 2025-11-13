@@ -142,16 +142,16 @@ export function withBroker(
     getSubscribers: driver.getSubscribers.bind(driver),
 
     // Optional: delegate convenience methods if present
-    replace: driver.replace?.bind(driver),
-    listTopics: driver.listTopics?.bind(driver),
-    hasTopic: driver.hasTopic?.bind(driver),
+    ...(driver.replace && { replace: driver.replace.bind(driver) }),
+    ...(driver.listTopics && { listTopics: driver.listTopics.bind(driver) }),
+    ...(driver.hasTopic && { hasTopic: driver.hasTopic.bind(driver) }),
 
     // Optional: handle distributed ingress if consumer provided
-    start: consumer ? consumer.start.bind(consumer) : undefined,
+    ...(consumer && { start: consumer.start.bind(consumer) }),
 
     // Optional: cleanup
-    close: driver.close?.bind(driver),
-  });
+    ...(driver.close && { close: driver.close.bind(driver) }),
+  }) as PubSubAdapter;
 }
 
 /**

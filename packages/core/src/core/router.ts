@@ -40,7 +40,13 @@ import type {
   RouterObserver,
 } from "./types";
 
-export type { PublishCapability, PublishError, PublishOptions, PublishResult };
+export type {
+  Plugin,
+  PublishCapability,
+  PublishError,
+  PublishOptions,
+  PublishResult,
+};
 
 export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   use(mw: Middleware<TContext>): this;
