@@ -16,11 +16,11 @@
 
 import type {
   MessageDescriptor,
-  Plugin,
   PublishOptions,
   PublishResult,
   Router,
 } from "@ws-kit/core";
+import { definePlugin } from "@ws-kit/core/plugin";
 import { ROUTER_IMPL } from "@ws-kit/core/internal";
 import type { PublishEnvelope } from "@ws-kit/core/pubsub";
 import type { PubSubObserver, WithPubSubOptions } from "./types";
@@ -79,15 +79,51 @@ import type { PubSubObserver, WithPubSubOptions } from "./types";
  * await router.pubsub.shutdown(); // Clean up
  * ```
  */
+/**
+ * Pub/Sub plugin API interface.
+ * Added to the router when withPubSub() is applied.
+ */
+interface WithPubSubAPI {
+  /**
+   * Publish a message to a topic.
+   * @param topic Topic name
+   * @param schema Message descriptor
+   * @param payload Message payload
+   * @param opts Publish options (partitionKey, excludeSelf, meta)
+   * @returns Result with success/failure and metrics
+   */
+  publish(
+    topic: string,
+    schema: MessageDescriptor,
+    payload: unknown,
+    opts?: PublishOptions,
+  ): Promise<PublishResult>;
+
+  /**
+   * Topic introspection and subscription management.
+   */
+  topics: {
+    list(): readonly string[];
+    has(topic: string): boolean;
+  };
+
+  /**
+   * Pub/Sub lifecycle and testing utilities.
+   */
+  pubsub: {
+    tap(observer: PubSubObserver): () => void;
+    init(): Promise<void>;
+    shutdown(): Promise<void>;
+  };
+}
+
 export function withPubSub<TContext>(
   opts: WithPubSubOptions,
-): Plugin<TContext, { pubsub: true }> {
+): ReturnType<typeof definePlugin<TContext, WithPubSubAPI>> {
   const adapter = opts.adapter;
   const observer = opts.observer;
 
-  return (
-    router: Router<TContext, any>,
-  ): Router<TContext, { pubsub: true }> => {
+  return definePlugin<TContext, WithPubSubAPI>((router) => {
     // Track active send functions by client ID for local delivery
     const sends = new Map<string, (frame: unknown) => void | Promise<void>>();
 
@@ -377,8 +413,8 @@ export function withPubSub<TContext>(
       };
     }
 
-    // Initialize enhanced router with publish/topics + pubsub.init/shutdown
-    const enhanced = Object.assign(router, {
+    // Return the plugin API extensions
+    return {
       publish,
       topics,
       pubsub: {
@@ -455,9 +491,6 @@ export function withPubSub<TContext>(
           stop = null;
         },
       },
-    }) as Router<TContext, { pubsub: true }>;
-
-    (enhanced as any).__caps = { pubsub: true };
-    return enhanced;
-  };
+    };
+  });
 }

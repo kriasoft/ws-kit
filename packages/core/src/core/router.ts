@@ -103,17 +103,25 @@ export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
 }
 
 /**
- * Router<TContext, Caps> = RouterCore + capability-gated APIs
- * Caps is merged from plugins; unknown plugins don't widen the type.
+ * Router<TContext, TExtensions> = RouterCore + structural extensions.
+ *
+ * TExtensions is an object type representing all APIs added by plugins.
+ * Plugins use definePlugin<TContext, TPluginApi> to add their extensions.
+ * Type is automatically widened: each .plugin(p) call intersects new APIs.
+ *
+ * @example
+ * ```typescript
+ * // After withZod:
+ * Router<MyContext, { rpc(...): this }>
+ *
+ * // After withPubSub:
+ * Router<MyContext, { rpc(...): this } & { publish(...): Promise<PublishResult> }>
+ * ```
  */
 export type Router<
   TContext extends ConnectionData = ConnectionData,
-  Caps = Record<string, never>,
-> = RouterCore<TContext> &
-  (Caps extends { validation: true }
-    ? ValidationAPI<TContext>
-    : Record<string, never>) &
-  (Caps extends { pubsub: true } ? PubSubAPI<TContext> : Record<string, never>);
+  TExtensions extends object = {},
+> = RouterCore<TContext> & TExtensions;
 
 /**
  * Validation API appears when withZod() or withValibot() is plugged.

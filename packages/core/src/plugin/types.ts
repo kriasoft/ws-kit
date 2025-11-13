@@ -15,20 +15,42 @@ import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
 
 /**
- * Plugin<TContext, TCaps> takes a router, returns a router with added capabilities.
- * TCaps describes what capabilities are added (e.g., { validation: true }).
- * TContext — the per-connection data structure available throughout the router.
+ * Plugin<TContext, TPluginApi> is a function that takes a router
+ * and returns a router with extended API.
+ *
+ * The plugin is generic over both the current extensions (captured via `any`)
+ * and the new extensions it adds (TPluginApi).
+ *
+ * @typeParam TContext - Per-connection data structure
+ * @typeParam TPluginApi - Object representing the API this plugin adds
+ *
+ * @example
+ * ```typescript
+ * // A plugin that adds { rpc() } method
+ * type ValidationPlugin = Plugin<MyContext, { rpc(...): this }>;
+ *
+ * // A plugin that adds { publish() } method
+ * type PubSubPlugin = Plugin<MyContext, { publish(...): Promise<...> }>;
+ * ```
+ *
+ * For type-safe plugin definition, use definePlugin() helper:
+ * ```typescript
+ * export const withMyFeature = definePlugin<MyContext, MyAPI>(
+ *   (router) => ({ ... }),
+ * );
+ * ```
  */
 export type Plugin<
   TContext extends ConnectionData = ConnectionData,
-  TCaps = unknown,
-> = (
-  router: Router<TContext, any>,
-) => Router<TContext, MergeCapabilities<TCaps>>;
+  TPluginApi extends object = {},
+> = <TCurrentExt extends object>(
+  router: Router<TContext, TCurrentExt>,
+) => Router<TContext, TCurrentExt & TPluginApi>;
 
 /**
  * Capability bit-flags (internal union).
- * Plugins merge their capabilities into this type.
+ * Kept for runtime capability tracking in PluginHost.
+ * NOT used for type-level API gating anymore.
  * @internal
  */
 export interface Capabilities {
@@ -38,13 +60,17 @@ export interface Capabilities {
 }
 
 /**
- * Merge capabilities (used by Router type narrowing).
+ * Merge capabilities (internal helper).
+ * Kept for backward compatibility with existing code.
+ * @internal
+ * @deprecated Use definePlugin() instead for new plugins
  */
 export type MergeCapabilities<T = unknown> = T extends Capabilities ? T : {};
 
 /**
  * Internal alias for MergeCapabilities.
  * @internal
+ * @deprecated Use definePlugin() instead for new plugins
  */
 export type AsCapabilities<T = unknown> = MergeCapabilities<T>;
 

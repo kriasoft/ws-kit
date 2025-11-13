@@ -11,13 +11,9 @@
  * - Validation errors routed to router.onError()
  */
 
-import type {
-  MessageDescriptor,
-  MinimalContext,
-  Plugin,
-  Router,
-} from "@ws-kit/core";
+import type { MessageDescriptor, MinimalContext, Router } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
+import { definePlugin } from "@ws-kit/core/plugin";
 import { ROUTER_IMPL } from "@ws-kit/core/internal";
 import { getValibotPayload, validatePayload } from "./internal.js";
 import { getSchemaOpts, typeOf, type SchemaOpts } from "./metadata.js";
@@ -121,14 +117,31 @@ function resolveOptions(
   };
 }
 
+/**
+ * Validation plugin API interface.
+ * Added to the router when withValibot() is applied.
+ */
+interface WithValibotValidationAPI {
+  /**
+   * Register an RPC handler with request-response pattern.
+   * @param schema RPC message schema with request and response types
+   * @param handler RPC handler function
+   */
+  rpc(
+    schema: MessageDescriptor & { response: MessageDescriptor },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler: any,
+  ): Router<any, any>;
+}
+
 export function withValibot(
   options?: WithValibotOptions,
-): Plugin<any, { validation: true }> {
+): ReturnType<typeof definePlugin<any, WithValibotValidationAPI>> {
   const pluginOpts = {
     validateOutgoing: options?.validateOutgoing ?? true,
     onValidationError: options?.onValidationError,
   };
-  return (router) => {
+  return definePlugin<any, WithValibotValidationAPI>((router) => {
     // Get internal access to router for wrapping dispatch
     const routerImpl = (router as any)[ROUTER_IMPL];
     if (!routerImpl) {
@@ -543,14 +556,9 @@ export function withValibot(
       return router.on(schema, handler);
     };
 
-    // Return router with rpc method added (capability-gated)
-    const enhanced = Object.assign(router, {
+    // Return the plugin API extensions
+    return {
       rpc: rpcMethod,
-    }) as Router<any, { validation: true }>;
-
-    // Attach capabilities for PluginManager to track
-    (enhanced as any).__caps = { validation: true };
-
-    return enhanced;
-  };
+    };
+  });
 }
