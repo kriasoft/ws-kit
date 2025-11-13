@@ -8,7 +8,7 @@
  * Tests subscribe/unsubscribe lifecycle and verify that clientId is passed to adapter.
  */
 
-import { createRouter } from "@ws-kit/core";
+import { createRouter, getRouteIndex } from "@ws-kit/core";
 import { withPubSub } from "@ws-kit/pubsub";
 import { message, withZod } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
@@ -60,7 +60,11 @@ describe("Capability Gating (Runtime)", () => {
       .plugin(withZod())
       .plugin(withPubSub({ adapter }));
 
-    testRouter.on(Message, router.routeTable.get("MSG")!.handler);
+    const routeIndex = getRouteIndex(router);
+    const msgRoute = routeIndex.get("MSG");
+    if (msgRoute?.handler) {
+      testRouter.on(Message, msgRoute.handler);
+    }
 
     // Since we can't directly test the router without platform adapter setup,
     // we verify that the adapter is properly wired via the plugin structure
@@ -94,7 +98,7 @@ describe("Capability Gating (Runtime)", () => {
 
     // The plugin structure is set up correctly
     // Actual message routing requires platform adapter setup
-    expect(router.routeTable.get("MSG")).toBeDefined();
+    expect(getRouteIndex(router).get("MSG")).toBeDefined();
   });
 
   it("should clean up subscriptions on connection close", async () => {
@@ -116,7 +120,7 @@ describe("Capability Gating (Runtime)", () => {
       .plugin(withZod())
       .plugin(withPubSub({ adapter }));
 
-    expect(router.routeTable).toBeDefined();
+    expect(getRouteIndex(router)).toBeDefined();
   });
 
   it("should expose PubSubContext type on handler context", async () => {
@@ -152,7 +156,7 @@ describe("Capability Gating (Runtime)", () => {
     expect(contextTypes).toBe(null); // Not called yet without platform
 
     // Verify route is registered
-    expect(router.routeTable.get("TEST")).toBeDefined();
+    expect(getRouteIndex(router).get("TEST")).toBeDefined();
   });
 
   describe("clientId stability", () => {

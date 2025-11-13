@@ -585,17 +585,6 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
   }
 
   /**
-   * Internal route table accessor (test utility only).
-   * Plugins should use getRouteIndex() instead for read-only schema lookups.
-   * Access via symbol ([ROUTE_TABLE]) is the standard internal pattern.
-   * @internal
-   * @deprecated Use getRouteIndex() or [ROUTE_TABLE]() instead
-   */
-  get routeTable(): RouteTable<TContext> {
-    return this.routes;
-  }
-
-  /**
    * Get internal lifecycle manager (used by plugins and testing).
    * @internal
    */

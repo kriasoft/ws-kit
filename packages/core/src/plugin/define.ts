@@ -8,6 +8,13 @@
  * of TPluginApi at compile-time. This replaces manual __caps assignments
  * and provides a cleaner API for plugin authors.
  *
+ * See ADR-029 for the plugin architecture design, including:
+ * - Context enhancer chains for safe multi-plugin composition
+ * - Typed plugin APIs to replace symbol-based internals access
+ * - Extension namespace pattern via ctx.extensions
+ *
+ * @see ADR-029: Context Enhancer Registry & Plugin Safety
+ *
  * @example
  * ```typescript
  * export const withValidation = definePlugin<MyContext, ValidationAPI<MyContext>>(

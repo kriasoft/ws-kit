@@ -1,6 +1,10 @@
-# Proposal: Context Enhancer Registry & Plugin Safety (ADR-024)
+# ADR-029: Context Enhancer Registry & Plugin Safety
 
-## Problem Statement
+**Status**: Accepted
+**Date**: 2025-11-13
+**References**: ADR-025 (Validator Plugins), ADR-026 (Internal Router Access), ADR-028 (Plugin Architecture)
+
+## Context
 
 The current plugin system has three critical interdependent issues that undermine reliability and composability:
 
@@ -12,7 +16,9 @@ The current plugin system has three critical interdependent issues that undermin
 
 These issues form a **fault network**: symbol access enables unsafe patterns → overwrites become the default composition model → validation silently skips when registration fails.
 
-## Solution: Core-Owned Enhancer Chain + Typed Plugin API
+## Decision
+
+Implement a **core-owned enhancer chain** with a **typed plugin API** to replace unsafe symbol access and monkey-patching.
 
 ### 1. Typed Plugin API (Replaces Symbol Access)
 
@@ -85,8 +91,6 @@ export function getContextExtension<T>(
 - ✅ **Stable contract**: Plugins depend on interface, not full RouterImpl shape
 - ✅ **Forwards-compatible**: RouterImpl can evolve without breaking plugins
 - ✅ **Testable**: Easy to mock or provide test implementations
-
----
 
 ### 2. Enhancer Chain (Fixes Composition)
 
@@ -174,8 +178,6 @@ export class RouterImpl<TContext = unknown> {
 - ✅ **Safe**: Conflict detection in dev mode prevents silent issues
 - ✅ **Powerful**: Priorities allow advanced ordering without DAG complexity
 
----
-
 ### 3. Context Stashing (Unifies Namespace)
 
 Add `extensions: Map<string, unknown>` to `MinimalContext`:
@@ -234,8 +236,6 @@ internals.addContextEnhancer((ctx) => {
 - ✅ **Type-safe**: Helper enforces named access
 - ✅ **Composable**: Plugins can read others' extensions
 - ✅ **Clean semantics**: Map is idiomatic for registries
-
----
 
 ### 4. Validation Behavior (Explicit, Env-Aware)
 
@@ -323,8 +323,6 @@ export function withZod(options?: WithZodOptions) {
 - ✅ **Explicit**: User can override if needed
 - ✅ **Symmetric**: Applies to both inbound and outbound
 
----
-
 ### 5. Plugin Dependencies (Manual + Light Validation)
 
 **Docs recommendation**: Order plugins manually; advanced users can use `priority`.
@@ -333,7 +331,7 @@ export function withZod(options?: WithZodOptions) {
 // Order matters
 const router = createRouter()
   .plugin(withZod({ missingSchema: "error" })) // Validation first
-  .plugin(mockWithPubSub()) // Depends on Zod
+  .plugin(withPubSub()) // Depends on Zod
   .plugin(customTelemetryPlugin()); // Optional
 
 // Advanced: use priority
@@ -362,8 +360,6 @@ definePlugin(
 - ✅ **Powerful**: Priorities enable advanced scenarios
 - ✅ **Safe**: Docs + validation catch common mistakes
 
----
-
 ### 6. Error Handling (Per-Message, Not Per-Router)
 
 Enhancers run during `createContext()`, which is called per-message.
@@ -386,8 +382,6 @@ for (const enhance of this.getSortedEnhancers()) {
 - 🛡️ **Router stays alive**: One enhancer error doesn't crash the whole server
 - 📊 **Observable**: Error routed to `lifecycle.handleError` for logging, metrics
 - 🧪 **Testable**: Easy to inject mock lifecycle or test error paths
-
----
 
 ### 7. Route Index Timing (Explicit)
 
@@ -414,8 +408,6 @@ router.listen({ port: 3000 });
 - ✅ **Immediate**: Most use cases (static routes) work out of the box
 - ✅ **Explicit**: Lazy routes opt into finalization
 - ✅ **Safe**: Strict mode catches missing schemas before accepting frames
-
----
 
 ## Backwards Compatibility
 
@@ -450,8 +442,6 @@ internals.addContextEnhancer((ctx) => {
   /* ... */
 });
 ```
-
----
 
 ## Examples
 
@@ -497,22 +487,17 @@ internals.addContextEnhancer(enrichContext, { priority: 0 });
 internals.addContextEnhancer(addTracing, { priority: 100 });
 ```
 
----
-
 ## Implementation Roadmap
 
-| Phase     | Task                                                      | Time    |
-| --------- | --------------------------------------------------------- | ------- |
-| 1         | Create ADR-024 doc + finalize decisions                   | 30m     |
-| 2         | Add types: `RouterPluginAPI`, `MinimalContext.extensions` | 20m     |
-| 3         | Implement enhancer chain in RouterImpl                    | 40m     |
-| 4         | Migrate `withZod` + `withValibot`                         | 40m     |
-| 5         | Write multi-plugin composition tests                      | 1h      |
-| 6         | Add backwards compat bridge (deprecation warnings)        | 20m     |
-| 7         | Update docs: "Plugin Author Guide" + examples             | 30m     |
-| **Total** |                                                           | **~4h** |
-
----
+| Phase     | Task                                                      | Time      |
+| --------- | --------------------------------------------------------- | --------- |
+| 1         | Add types: `RouterPluginAPI`, `MinimalContext.extensions` | 20m       |
+| 2         | Implement enhancer chain in RouterImpl                    | 40m       |
+| 3         | Migrate `withZod` + `withValibot`                         | 40m       |
+| 4         | Write multi-plugin composition tests                      | 1h        |
+| 5         | Add backwards compat bridge (deprecation warnings)        | 20m       |
+| 6         | Update docs: "Plugin Author Guide" + examples             | 30m       |
+| **Total** |                                                           | **~3.5h** |
 
 ## Rationale
 
@@ -531,15 +516,13 @@ internals.addContextEnhancer(addTracing, { priority: 100 });
 - **WeakMap for stashing**: Map is clearer and doesn't constrain key types
 - **Hard-coded validation mode**: Env-aware defaults are safer without surprise config
 
----
-
 ## Testing Strategy
 
 ### Composition Test (Multi-Plugin)
 
 ```typescript
 it("composes Zod + PubSub without method loss", async () => {
-  const router = createRouter().plugin(withZod()).plugin(mockWithPubSub());
+  const router = createRouter().plugin(withZod()).plugin(withPubSub());
 
   const ctx = createTestContext(router);
 
@@ -603,8 +586,6 @@ it("routes enhancer errors to lifecycle.handleError", async () => {
 });
 ```
 
----
-
 ## Migration Path for Existing Plugins
 
 ### `@ws-kit/zod` (and similar validators)
@@ -646,8 +627,6 @@ internals.addContextEnhancer(
 - ✅ Composable (doesn't break other plugins)
 - ✅ Testable (pure functions)
 
----
-
 ## Future Considerations
 
 1. **Plugin Metadata**: Optional `requires: ['zod']` for explicit deps
@@ -655,21 +634,13 @@ internals.addContextEnhancer(
 3. **Performance Monitoring**: Built-in timing for enhancer chains
 4. **Plugin Registry**: Central place to discover/validate community plugins
 
-These are out of scope for this proposal but enabled by the architecture.
+These are out of scope for this ADR but enabled by the architecture.
 
----
+## Consequences
 
-## Open Questions / Decisions Checklist
-
-- [x] Enhancer conflicts: Warn on direct overwrites, require Map for stashing
-- [x] Plugin ordering: Manual + optional priority, no DAG
-- [x] Context stashing: Core-provided Map, not ad-hoc `__wskit`
-- [x] Validation defaults: Env-aware ("warn" dev, "error" prod)
-- [x] Backwards compat: v1.x warns, v2.0 breaks
-- [x] Enhancer errors: Per-message fail via lifecycle, not per-router crash
-- [x] Route index timing: Immediate populate, optional finalization
-- [x] PubSub migration: Use same enhancer pattern (separate PR)
-
----
-
-**Status**: Ready for implementation (Phase 1: Types → Phase 7: Docs)
+- ✅ Plugins can compose safely without losing earlier enhancements
+- ✅ Type-safe plugin API eliminates runtime surprises from symbol access
+- ✅ Env-aware validation defaults prevent silent failures in production
+- ✅ Priority-based ordering provides flexibility without complexity
+- ⚠️ Requires migration for existing plugins using symbol access
+- ⚠️ Deprecation warnings in v1.x may generate noise during transition period

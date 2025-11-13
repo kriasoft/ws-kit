@@ -175,16 +175,3 @@ export function getRouterPluginAPI<
     },
   } as RouterPluginAPI<TContext>;
 }
-
-/**
- * Deprecated: Access router IMPL symbol directly.
- *
- * This is provided only for backwards compatibility with old plugins.
- * New plugins should use `getRouterInternals()` instead.
- *
- * @deprecated Use getRouterInternals() instead
- * @internal
- */
-export function getRouterImplSymbol(): symbol {
-  return ROUTER_IMPL;
-}

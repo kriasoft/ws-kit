@@ -260,61 +260,6 @@ export interface ErrorPayload {
 }
 
 /**
- * WebSocketError: Deprecated in favor of WsKitError.
- *
- * @deprecated Use WsKitError instead. This class will be removed in v1.0.
- *
- * WsKitError provides better support for:
- * - RPC error handling with correlationId for request tracking
- * - Backoff hints (retryAfterMs) for transient error recovery
- * - WHATWG Error standard `cause` chaining for error context preservation
- * - Immutable (readonly) properties for error integrity
- * - Compile-time type safety for the 13 standard error codes
- *
- * **Migration Example**:
- * ```typescript
- * // Old (deprecated):
- * throw new WebSocketError(ErrorCode.INTERNAL, "Failed to save");
- *
- * // New (recommended):
- * throw WsKitError.from(ErrorCode.INTERNAL, "Failed to save");
- * ```
- *
- * See ADR-015 for design rationale and WsKitError documentation for full API.
- */
-export class WebSocketError extends Error {
-  code: ErrorCode;
-  details?: Record<string, unknown>;
-
-  constructor(
-    code: ErrorCode,
-    message?: string,
-    details?: Record<string, unknown>,
-  ) {
-    super(message || code);
-    this.name = "WebSocketError";
-    this.code = code;
-    if (details) {
-      this.details = details;
-    }
-  }
-
-  /** Convert to error payload for sending to client */
-  toPayload(): ErrorPayload {
-    const payload: ErrorPayload = {
-      code: this.code,
-    };
-    if (this.message) {
-      payload.message = this.message;
-    }
-    if (this.details) {
-      payload.details = this.details;
-    }
-    return payload;
-  }
-}
-
-/**
  * Error message type definition (for schema creation).
  *
  * This is a placeholder; validator-specific adapters (Zod, Valibot)

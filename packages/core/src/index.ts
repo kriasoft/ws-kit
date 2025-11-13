@@ -51,7 +51,7 @@ export type {
 export type { EventHandler, Middleware } from "./core/types";
 
 // Plugin system
-export type { AsCapabilities, MergeCapabilities, Plugin } from "./plugin/types";
+export type { Plugin } from "./plugin/types";
 
 // Error handling
 export type { ErrorCode, WsKitErrorData } from "./error/codes";
