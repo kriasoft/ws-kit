@@ -6,8 +6,9 @@
  * Provides a clean, ergonomic testing API for WS-Kit routers.
  */
 
-import type { BaseContextData } from "../context/base-context";
-import type { CoreRouter, Router } from "../core/router";
+import type { ConnectionData } from "../context/base-context";
+import type { Router } from "../core/router";
+import type { RouterImpl } from "../internal";
 import type { RouterObserver } from "../core/types";
 import { FakeClock, type Clock } from "./fake-clock";
 import { InMemoryPlatformAdapter } from "./test-adapter";
@@ -22,7 +23,9 @@ import type {
 /**
  * Test harness options.
  */
-export interface CreateTestRouterOptions<TContext> {
+export interface CreateTestRouterOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Router factory (default: createRouter with no options).
    */
@@ -72,9 +75,9 @@ export interface CreateTestRouterOptions<TContext> {
  * expect(conn.outgoing()).toContainEqual({ type: "PONG", ... });
  * ```
  */
-export function createTestRouter<TContext extends BaseContextData = unknown>(
-  opts?: CreateTestRouterOptions<TContext>,
-): TestRouter<TContext> {
+export function createTestRouter<
+  TContext extends ConnectionData = ConnectionData,
+>(opts?: CreateTestRouterOptions<TContext>): TestRouter<TContext> {
   // Create the router
   if (!opts?.create) {
     throw new Error(
@@ -84,7 +87,7 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
   const router = opts.create();
 
   // Apply plugins
-  let configuredRouter = router;
+  let configuredRouter: Router<TContext, any> = router;
   if (opts?.plugins) {
     for (const plugin of opts.plugins) {
       configuredRouter = plugin(configuredRouter);
@@ -92,20 +95,32 @@ export function createTestRouter<TContext extends BaseContextData = unknown>(
   }
 
   // Wrap with test infrastructure
-  return wrapTestRouter(configuredRouter, {
-    clock: opts?.clock,
+  const testOpts: {
+    clock?: Clock;
+    onErrorCapture?: boolean;
+    capturePubSub?: boolean;
+    strict?: boolean;
+  } = {
     onErrorCapture: opts?.onErrorCapture !== false,
     capturePubSub: opts?.capturePubSub !== false,
-    strict: opts?.strict,
-  });
+  };
+  if (opts?.clock !== undefined) {
+    testOpts.clock = opts.clock;
+  }
+  if (opts?.strict !== undefined) {
+    testOpts.strict = opts.strict;
+  }
+  return wrapTestRouter(configuredRouter, testOpts);
 }
 
 /**
  * Wrap an existing router with test infrastructure.
  * Useful for testing production routers in black-box mode.
  */
-export function wrapTestRouter<TContext extends BaseContextData = unknown>(
-  router: Router<TContext>,
+export function wrapTestRouter<
+  TContext extends ConnectionData = ConnectionData,
+>(
+  router: Router<TContext, any>,
   opts?: {
     clock?: Clock;
     onErrorCapture?: boolean;
@@ -114,17 +129,17 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
   },
 ): TestRouter<TContext> {
   // Get router implementation for internal access (needed for test adapter)
-  // This is the only place we cast to internal CoreRouter type for test adapter setup
-  const impl = router as any as CoreRouter<TContext>;
+  // This is the only place we cast to internal RouterImpl type for test adapter setup
+  const impl = router as any as RouterImpl<TContext>;
 
   // Infrastructure
-  // Note: InMemoryPlatformAdapter needs internal access to CoreRouter
+  // Note: InMemoryPlatformAdapter needs internal access to RouterImpl
   const adapter = new InMemoryPlatformAdapter<TContext>(impl);
   const clock = opts?.clock || new FakeClock();
   const capturedErrors: unknown[] = [];
   const connections = new Map<string, TestConnectionImpl<TContext>>();
   const capturedPublishes: PublishRecord[] = [];
-  const unsubscribers: Array<() => void> = [];
+  const unsubscribers: (() => void)[] = [];
 
   // Register router observer (no casting required for this API)
   // This replaces the previous pubsub.tap() approach with a public, composable API
@@ -267,7 +282,7 @@ export function wrapTestRouter<TContext extends BaseContextData = unknown>(
 /**
  * Implementation of TestConnection.
  */
-class TestConnectionImpl<TContext extends BaseContextData = unknown>
+class TestConnectionImpl<TContext extends ConnectionData = ConnectionData>
   implements TestConnection<TContext>
 {
   private outgoingFrames: OutgoingFrame[] = [];
@@ -277,7 +292,7 @@ class TestConnectionImpl<TContext extends BaseContextData = unknown>
     readonly clientId: string,
     readonly ws: any, // MockWebSocket
     readonly state: any, // ConnectionState<TContext>
-    readonly routerImpl: any, // CoreRouter<TContext>
+    readonly routerImpl: any, // RouterImpl<TContext>
     readonly adapter: InMemoryPlatformAdapter<TContext>,
     readonly clock: Clock,
   ) {}

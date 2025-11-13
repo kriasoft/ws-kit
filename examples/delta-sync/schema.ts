@@ -139,7 +139,9 @@ export type ClientMessage = JoinPayload | UpdatePayload;
  * Application data attached to WebSocket connections
  * Set by authenticate() and updated when client joins
  */
-export interface AppData {
-  clientId: string;
-  participantId?: string;
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    clientId: string;
+    participantId?: string;
+  }
 }

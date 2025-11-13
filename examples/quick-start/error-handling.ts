@@ -19,11 +19,11 @@ const AuthenticateMessage = message("AUTHENTICATE", {
     .optional(), // Semver pattern
 });
 
-interface AppData {
+interface ConnectionData {
   clientId: string;
 }
 
-const router = createRouter<AppData>();
+const router = createRouter<ConnectionData>();
 
 // Example middleware for additional validation
 router.use((ctx, next) => {

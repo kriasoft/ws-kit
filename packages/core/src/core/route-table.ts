@@ -6,6 +6,7 @@
  * Implements conflict resolution for merge() and mount().
  */
 
+import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { RouteEntry } from "./types";
 
@@ -21,7 +22,7 @@ export interface RouteTableOptions {
  * - "skip": keep existing handler, ignore incoming
  * - "replace": replace existing with incoming
  */
-export class RouteTable<TContext> {
+export class RouteTable<TContext extends ConnectionData = ConnectionData> {
   private handlers = new Map<string, RouteEntry<TContext>>();
 
   /**

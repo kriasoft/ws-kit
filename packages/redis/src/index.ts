@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { Policy, RateLimitDecision, RateLimiter } from "@ws-kit/core";
+import type {
+  Policy,
+  RateLimitDecision,
+  RateLimiter,
+} from "@ws-kit/rate-limit";
 import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core/pubsub";
 
 /**

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * BaseRouter implementation.
+ * RouterCore implementation.
  *
  * Public methods:
  * - use(mw) → Global middleware
@@ -17,7 +17,7 @@
  * Capability-gated: rpc(), publish(), subscribe() exist only when plugins add them.
  */
 
-import type { BaseContextData, MinimalContext } from "../context/base-context";
+import type { ConnectionData, MinimalContext } from "../context/base-context";
 import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
@@ -26,7 +26,7 @@ import type { Plugin } from "../plugin/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import { RouteTable } from "./route-table";
-import { ROUTE_TABLE } from "./symbols";
+import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols";
 import type {
   CreateRouterOptions,
   EventHandler,
@@ -42,17 +42,17 @@ import type {
 
 export type { PublishCapability, PublishError, PublishOptions, PublishResult };
 
-export interface BaseRouter<TContext> {
+export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   use(mw: Middleware<TContext>): this;
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
   route(schema: MessageDescriptor): RouteBuilder<TContext>;
   merge(
-    other: Router<unknown>,
+    other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
   mount(
     prefix: string,
-    other: Router<unknown>,
+    other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
   plugin<P extends Plugin<TContext>>(plugin: P): ReturnType<P>;
@@ -103,13 +103,13 @@ export interface BaseRouter<TContext> {
 }
 
 /**
- * Router<TContext, Caps> = BaseRouter + capability-gated APIs
+ * Router<TContext, Caps> = RouterCore + capability-gated APIs
  * Caps is merged from plugins; unknown plugins don't widen the type.
  */
 export type Router<
-  TContext = unknown,
+  TContext extends ConnectionData = ConnectionData,
   Caps = Record<string, never>,
-> = BaseRouter<TContext> &
+> = RouterCore<TContext> &
   (Caps extends { validation: true }
     ? ValidationAPI<TContext>
     : Record<string, never>) &
@@ -118,9 +118,12 @@ export type Router<
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
  * Only addition: rpc() method (on() already exists in base).
+ * TContext is kept for type alignment with other API interfaces.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export interface ValidationAPI<TContext> {
+
+export interface ValidationAPI<
+  TContext extends ConnectionData = ConnectionData,
+> {
   rpc(
     schema: MessageDescriptor & { response: MessageDescriptor },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,7 +142,7 @@ export interface ValidationAPI<TContext> {
  * @see {@link PublishOptions} for publish configuration options
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export interface PubSubAPI<TContext> {
+export interface PubSubAPI<TContext extends ConnectionData = ConnectionData> {
   /**
    * Publish a message to a topic, optionally to multiple subscribers.
    *
@@ -219,7 +222,9 @@ export interface PubSubAPI<TContext> {
  * Per-route builder (fluent interface):
  *   router.route(schema).use(mw).use(mw2).on(handler)
  */
-export interface RouteBuilder<TContext> {
+export interface RouteBuilder<
+  TContext extends ConnectionData = ConnectionData,
+> {
   use(mw: Middleware<TContext>): this;
   on(handler: EventHandler<TContext>): void;
 }
@@ -241,7 +246,7 @@ export interface ReadonlyRouteIndex {
  * Uses the internal symbol to work across bundle boundaries.
  * @internal
  */
-export function getRouteIndex(router: Router<unknown>): ReadonlyRouteIndex {
+export function getRouteIndex(router: Router<any>): ReadonlyRouteIndex {
   // Extract RouteTable via symbol (works across bundle boundaries)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractor = (router as any)[ROUTE_TABLE];
@@ -250,7 +255,7 @@ export function getRouteIndex(router: Router<unknown>): ReadonlyRouteIndex {
       "Cannot extract route index: router does not expose internal route table symbol",
     );
   }
-  const table = extractor.call(router) as RouteTable<unknown>;
+  const table = extractor.call(router) as RouteTable<any>;
 
   // Wrap RouteTable in read-only interface, exposing only schema metadata
   return {
@@ -267,12 +272,15 @@ export function getRouteIndex(router: Router<unknown>): ReadonlyRouteIndex {
 /**
  * Per-route builder implementation.
  * Accumulates middleware for a single message type, then registers with router.
+ * @internal
  */
-export class CoreRouteBuilder<TContext> implements RouteBuilder<TContext> {
+class RouteBuilderImpl<TContext extends ConnectionData = ConnectionData>
+  implements RouteBuilder<TContext>
+{
   private middlewares: Middleware<TContext>[] = [];
 
   constructor(
-    private router: CoreRouter<TContext>,
+    private router: RouterImpl<TContext>,
     private schema: MessageDescriptor,
   ) {}
 
@@ -292,11 +300,12 @@ export class CoreRouteBuilder<TContext> implements RouteBuilder<TContext> {
 }
 
 /**
- * CoreRouter implementation.
+ * RouterImpl implementation.
  * Stores global middleware, per-route handlers (via registry), and error hooks.
+ * @internal
  */
-export class CoreRouter<TContext extends BaseContextData = unknown>
-  implements BaseRouter<TContext>
+export class RouterImpl<TContext extends ConnectionData = ConnectionData>
+  implements RouterCore<TContext>
 {
   private globalMiddlewares: Middleware<TContext>[] = [];
   private routes = new RouteTable<TContext>();
@@ -323,6 +332,9 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
     // Initialize plugin host with self reference (cast to bypass recursive type)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);
+    // Attach to symbol for internal access escape hatch
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this as any)[ROUTER_IMPL] = this;
   }
 
   /**
@@ -371,7 +383,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   }
 
   route(schema: MessageDescriptor): RouteBuilder<TContext> {
-    return new CoreRouteBuilder(this, schema);
+    return new RouteBuilderImpl(this, schema);
   }
 
   /**
@@ -383,7 +395,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
   }
 
   merge(
-    other: Router<unknown>,
+    other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this {
     const otherRouteTable = this.getRouteTable(other);
@@ -393,7 +405,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
 
   mount(
     prefix: string,
-    other: Router<unknown>,
+    other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this {
     const otherRouteTable = this.getRouteTable(other);
@@ -464,14 +476,14 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    * Works across multiple bundle copies (monorepo, playgrounds, etc.).
    * @internal
    */
-  private extractRouteTable(other: Router<unknown>): RouteTable<TContext> {
+  private extractRouteTable(other: Router<any>): RouteTable<TContext> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extractor = (other as any)[ROUTE_TABLE];
     if (typeof extractor === "function") {
       return extractor.call(other);
     }
     throw new Error(
-      "Cannot merge router: target is not a CoreRouter instance or does not expose internal route table",
+      "Cannot merge router: target does not expose internal route table symbol",
     );
   }
 
@@ -480,7 +492,7 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
    * Delegates to extractRouteTable() for symbol-based access.
    * @internal
    */
-  private getRouteTable(other: Router<unknown>): RouteTable<TContext> {
+  private getRouteTable(other: Router<any>): RouteTable<TContext> {
     return this.extractRouteTable(other);
   }
 
@@ -696,10 +708,14 @@ export class CoreRouter<TContext extends BaseContextData = unknown>
 
     // Notify observers
     if (clientId) {
-      this.notifyObservers("onConnectionClose", clientId, {
-        code,
-        reason,
-      });
+      const closeInfo: { code?: number; reason?: string } = {};
+      if (code !== undefined) {
+        closeInfo.code = code;
+      }
+      if (reason !== undefined) {
+        closeInfo.reason = reason;
+      }
+      this.notifyObservers("onConnectionClose", clientId, closeInfo);
     }
   }
 }

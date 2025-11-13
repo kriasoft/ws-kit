@@ -2,13 +2,22 @@
 // SPDX-License-Identifier: MIT
 
 import type {
-  IngressContext,
-  MessageContext,
+  ConnectionData,
+  EventContext,
   Middleware,
-  RateLimiter,
-  WebSocketData,
+  MinimalContext,
 } from "@ws-kit/core";
+import type { RateLimiter } from "@ws-kit/rate-limit";
 import { keyPerUserOrIpPerType } from "./keys";
+
+// Type aliases for clarity
+type IngressContext<T extends ConnectionData = ConnectionData> =
+  MinimalContext<T>;
+type MessageContext<
+  P = unknown,
+  T extends ConnectionData = ConnectionData,
+> = EventContext<T, P>;
+type WebSocketData = ConnectionData;
 
 /**
  * Options for rate limit middleware
@@ -176,10 +185,10 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
   };
 }
 
+export type { IngressContext } from "@ws-kit/core";
 export type {
-  IngressContext,
   Policy,
   RateLimitDecision,
   RateLimiter,
-} from "@ws-kit/core";
+} from "@ws-kit/rate-limit";
 export { keyPerUserOrIpPerType, keyPerUserPerType, perUserKey } from "./keys";

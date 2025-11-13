@@ -19,3 +19,13 @@ export const CAP_PUBSUB = Symbol("@ws-kit/caps/pubsub");
  * @internal
  */
 export const ROUTE_TABLE = Symbol("@ws-kit/route-table");
+
+/**
+ * Symbol for accessing the router implementation instance.
+ * Used by plugins and test infrastructure to access internal details without
+ * depending on implementation classes directly.
+ *
+ * Not part of public API. Escape hatch for rare cases where internals are needed.
+ * @internal
+ */
+export const ROUTER_IMPL = Symbol("@ws-kit/router-impl");

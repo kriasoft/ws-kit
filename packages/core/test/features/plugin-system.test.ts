@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import { CoreRouter } from "../../src/core/router";
+import { RouterImpl } from "../../src/core/router";
 
 describe("Plugin System", () => {
   it("should apply a plugin and return the router", () => {
@@ -22,7 +22,7 @@ describe("Plugin System", () => {
   });
 
   it("should enforce plugin idempotency (same plugin applied twice is a no-op)", () => {
-    const router = createRouter() as unknown as CoreRouter;
+    const router = createRouter() as unknown as RouterImpl;
     let callCount = 0;
 
     const idempotentPlugin = (r: any) => {
@@ -38,7 +38,7 @@ describe("Plugin System", () => {
   });
 
   it("should track capabilities added by plugins", () => {
-    const router = createRouter() as unknown as CoreRouter;
+    const router = createRouter() as unknown as RouterImpl;
 
     const pluginA = (r: any) => {
       (r as any).__caps = { validation: true };
@@ -80,7 +80,7 @@ describe("Plugin System", () => {
     const router = createRouter()
       .plugin(pluginA)
       .plugin(pluginB)
-      .plugin(pluginC) as unknown as CoreRouter;
+      .plugin(pluginC) as unknown as RouterImpl;
 
     const caps = router.getCapabilities();
     expect(caps.validation).toBe(true);
@@ -117,7 +117,7 @@ describe("Plugin System", () => {
   });
 
   it("should prevent idempotent plugins from being reapplied", () => {
-    const router = createRouter() as unknown as CoreRouter;
+    const router = createRouter() as unknown as RouterImpl;
     const callLog: string[] = [];
 
     const plugin = (r: any) => {

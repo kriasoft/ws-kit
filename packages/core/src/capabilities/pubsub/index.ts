@@ -23,7 +23,8 @@ export type {
 export {
   PUBLISH_ERROR_RETRYABLE,
   ensurePublishSuccess,
-  isPublishError,
   isPublishSuccess,
   wasDeliveredLocally,
 } from "./adapter";
+
+export { isPublishError } from "../../core/types";

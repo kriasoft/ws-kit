@@ -6,6 +6,7 @@
  * Captures all messages sent and tracks connection state.
  */
 
+import type { ConnectionData } from "../context/base-context";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 import type { OutgoingFrame } from "./types";
 
@@ -21,7 +22,9 @@ export class TestWebSocket implements ServerWebSocket {
 
   constructor(clientId: string, initialData?: Record<string, unknown>) {
     this.clientId = clientId;
-    this.initialData = initialData;
+    if (initialData !== undefined) {
+      this.initialData = initialData;
+    }
   }
 
   /**
@@ -88,7 +91,9 @@ export class TestWebSocket implements ServerWebSocket {
 /**
  * Connection state for test adapter.
  */
-export interface ConnectionState<TContext = unknown> {
+export interface ConnectionState<
+  TContext extends ConnectionData = ConnectionData,
+> {
   ws: TestWebSocket;
   data: TContext;
   headers?: Record<string, string>;

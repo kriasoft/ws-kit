@@ -25,15 +25,17 @@ const RoomUpdate = message("ROOM_UPDATE", {
   userId: z.string(),
 });
 
-// Type-safe app data
-interface AppData {
-  clientId: string;
-  userId?: string;
-  roomId?: string;
+// Type-safe app data - module augmentation for production
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    clientId: string;
+    userId?: string;
+    roomId?: string;
+  }
 }
 
 // Create router for this DO instance
-const router = createRouter<AppData>();
+const router = createRouter<ConnectionData>();
 
 // Join room: subscribe to scoped channel
 router.on(JoinRoom, async (ctx) => {

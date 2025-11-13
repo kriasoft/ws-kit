@@ -10,10 +10,11 @@
  * Internal; called by router.plugin().
  */
 
+import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
 import type { Capabilities, Plugin } from "./types";
 
-export class PluginHost<TContext> {
+export class PluginHost<TContext extends ConnectionData = ConnectionData> {
   private readonly applied = new WeakSet<Function>();
   private capabilities: Capabilities = {};
 

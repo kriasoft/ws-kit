@@ -16,16 +16,18 @@ import { serve } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 import { createChatRouter } from "./chat";
 
-interface AppData {
-  roomId?: string;
-  clientId: string;
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    roomId?: string;
+    clientId: string;
+  }
 }
 
 // Create the main app router by composing feature sub-routers
-const appRouter = createRouter<AppData>()
+const appRouter = createRouter<ConnectionData>()
   // Merge chat feature handlers
   // All handlers maintain full type inference (schema-driven)
-  .merge(createChatRouter<AppData>());
+  .merge(createChatRouter<ConnectionData>());
 
 // Get port from environment (default 3000)
 // Tip: Set PORT=0 to let the OS choose any available port if 3000 is busy

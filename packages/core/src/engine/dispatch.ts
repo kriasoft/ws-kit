@@ -6,8 +6,8 @@
  * Full message processing from raw frame to handler execution.
  */
 
-import type { BaseContextData, MinimalContext } from "../context/base-context";
-import type { CoreRouter } from "../core/router";
+import type { ConnectionData, MinimalContext } from "../context/base-context";
+import type { RouterImpl } from "../internal";
 import { ROUTE_TABLE } from "../core/symbols";
 import type { EventHandler, Middleware } from "../core/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
@@ -18,7 +18,9 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
 import { composePipeline } from "./middleware";
 import type { MessageEnvelope } from "./types";
 
-export interface DispatchOptions<TContext> {
+export interface DispatchOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   globalMiddleware: Middleware<TContext>[];
   routeMiddleware: Middleware<TContext>[];
   handler: EventHandler<TContext>;
@@ -30,7 +32,9 @@ export interface DispatchOptions<TContext> {
  *
  * Errors are NOT caught here; callers handle error routing.
  */
-export async function dispatch<TContext>(
+export async function dispatch<
+  TContext extends ConnectionData = ConnectionData,
+>(
   ctx: MinimalContext<TContext>,
   schema: MessageDescriptor,
   opts: DispatchOptions<TContext>,
@@ -54,11 +58,11 @@ export async function dispatch<TContext>(
  * @param ws WebSocket connection
  * @param impl Router implementation (provides registry, lifecycle, context factory, etc.)
  */
-export async function dispatchMessage<TContext extends BaseContextData>(
+export async function dispatchMessage<TContext extends ConnectionData>(
   raw: string | ArrayBuffer,
   clientId: string,
   ws: ServerWebSocket,
-  impl: CoreRouter<TContext>,
+  impl: RouterImpl<TContext>,
 ): Promise<void> {
   const now = Date.now();
 
@@ -169,14 +173,26 @@ export async function dispatchMessage<TContext extends BaseContextData>(
   // 6) Build minimal context
   let ctx: MinimalContext<TContext> | null = null;
   try {
-    ctx = impl.createContext({
+    const contextData: {
+      clientId: string;
+      ws: ServerWebSocket;
+      type: string;
+      payload?: unknown;
+      meta?: Record<string, unknown>;
+      receivedAt: number;
+    } = {
       clientId,
       ws,
       type: schema.type,
-      payload: envelope.payload,
-      meta: envelope.meta,
       receivedAt: now,
-    });
+    };
+    if (envelope.payload !== undefined) {
+      contextData.payload = envelope.payload;
+    }
+    if (envelope.meta !== undefined) {
+      contextData.meta = envelope.meta;
+    }
+    ctx = impl.createContext(contextData);
   } catch (err) {
     const lifecycle = impl.getInternalLifecycle();
     await lifecycle.handleError(err, null);

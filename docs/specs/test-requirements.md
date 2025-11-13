@@ -215,6 +215,69 @@ expect(mockWs._getMessages().length).toBe(1);
 
 **Metadata preservation**: Other metadata (correlationId, custom fields) is preserved when validation is skipped; only the `validate` flag is filtered out.
 
+## Accessing Internal Router State (Plugins and Advanced Testing)
+
+When writing plugins or advanced tests, you may need to access internal router implementation details such as lifecycle hooks, client connections, or the route table. Use the `ROUTER_IMPL` symbol pattern to do this safely without depending on implementation classes directly.
+
+### Pattern: Symbol-Based Internal Access
+
+All internal router access uses the `ROUTER_IMPL` symbol from `@ws-kit/core/internal` (marked `@internal`, not a public export):
+
+```typescript
+import { ROUTER_IMPL } from "@ws-kit/core/internal";
+import type { RouterImpl } from "@ws-kit/core/internal";
+
+// For plugins (e.g., @ws-kit/zod, @ws-kit/pubsub)
+export function withMyPlugin(options?: Options) {
+  return (router: Router<TContext>) => {
+    // Get internal access with proper error handling
+    const impl = (router as any)[ROUTER_IMPL] as
+      | RouterImpl<TContext>
+      | undefined;
+    if (!impl) {
+      throw new Error(
+        "withMyPlugin requires internal router access (ROUTER_IMPL symbol)",
+      );
+    }
+
+    // Now you can safely access impl.createContext, impl.getClientId(), etc.
+    const originalCreateContext = impl.createContext.bind(impl);
+    impl.createContext = function (params: any) {
+      const ctx = originalCreateContext(params);
+      // Attach custom methods to context
+      return ctx;
+    };
+  };
+}
+
+// For test harness and test utilities
+import { wrapTestRouter } from "@ws-kit/core/test";
+
+const testRouter = wrapTestRouter(router);
+// testRouter has all test-specific methods: connect(), getMessages(), etc.
+```
+
+### Key Points
+
+1. **Symbol is not exported from `@ws-kit/core`** — Only available via `@ws-kit/core/internal` to signal non-public dependency
+2. **Error handling is mandatory** — If the symbol is missing, throw early with a clear message
+3. **Type inference works** — Once accessed via symbol, TypeScript knows it's `RouterImpl<TContext>`
+4. **Prefer public APIs** — Only use internal access when absolutely necessary (wrapping core methods, introspection)
+
+### When to Use This Pattern
+
+- **Plugins** — Wrapping `createContext`, intercepting lifecycle hooks, tracking connections
+- **Test harnesses** — Accessing route tables, client IDs, live subscriptions
+- **Monitoring/telemetry** — Introspecting router state (rare)
+
+### When NOT to Use
+
+- **Regular tests** — Use the public test harness (`wrapTestRouter`) instead
+- **Application code** — Use public APIs (`ctx.send()`, `ctx.publish()`, etc.)
+- **Configuration** — Use router options, not internal hooks
+
+For more details, see **ADR-026: Internal Router Access Patterns**.
+
 ## Type-Level Testing
 
 Use `expectTypeOf` from Bun for compile-time validation:

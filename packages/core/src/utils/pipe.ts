@@ -6,9 +6,12 @@
  * Order: global (in reg order) → per-route (in reg order) → handler.
  */
 
+import type { ConnectionData } from "../context/base-context";
 import type { Middleware } from "../core/types";
 
-export function pipeMiddleware<TContext>(
+export function pipeMiddleware<
+  TContext extends ConnectionData = ConnectionData,
+>(
   middlewares: Middleware<TContext>[],
 ): (next: () => Promise<void>) => Promise<void> {
   let index = 0;
@@ -16,6 +19,8 @@ export function pipeMiddleware<TContext>(
   return async function executeNext() {
     if (index >= middlewares.length) return;
     const middleware = middlewares[index++];
-    return middleware({} as any, executeNext);
+    if (middleware) {
+      return middleware({} as any, executeNext);
+    }
   };
 }

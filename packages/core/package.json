@@ -3,22 +3,28 @@
   "version": "0.0.1",
   "type": "module",
   "description": "Tiny, type-safe WebSocket router",
-  "main": "./dist/index.js",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/src/index.d.ts",
       "bun": "./src/index.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/src/index.js"
     },
     "./pubsub": {
-      "types": "./dist/capabilities/pubsub/index.d.ts",
+      "types": "./dist/src/capabilities/pubsub/index.d.ts",
       "bun": "./src/capabilities/pubsub/index.ts",
-      "import": "./dist/capabilities/pubsub/index.js"
+      "import": "./dist/src/capabilities/pubsub/index.js"
     },
     "./testing": {
-      "types": "./dist/testing/index.d.ts",
+      "types": "./dist/src/testing/index.d.ts",
       "bun": "./src/testing/index.ts",
-      "import": "./dist/testing/index.js"
+      "import": "./dist/src/testing/index.js"
+    },
+    "./internal": {
+      "types": "./dist/src/internal.d.ts",
+      "bun": "./src/internal.ts",
+      "import": "./dist/src/internal.js"
     }
   },
   "scripts": {

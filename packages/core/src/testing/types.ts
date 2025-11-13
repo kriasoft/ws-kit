@@ -5,7 +5,8 @@
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
 
-import type { Router } from "../core/router";
+import type { Router, RouterCore } from "../core/router";
+import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { Clock } from "./fake-clock";
 
@@ -31,14 +32,16 @@ export interface OutgoingFrame {
 export interface PublishRecord {
   topic: string;
   schema?: MessageDescriptor;
-  payload: unknown;
+  payload?: unknown;
   meta?: Record<string, unknown>;
 }
 
 /**
  * Test connection: models a single in-memory WebSocket connection.
  */
-export interface TestConnection<TContext = unknown> {
+export interface TestConnection<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Unique client ID for this connection.
    */
@@ -92,7 +95,8 @@ export interface TestConnection<TContext = unknown> {
 /**
  * Capture helpers for assertions.
  */
-export interface TestCapture<TContext = unknown> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export interface TestCapture<TContext extends ConnectionData = ConnectionData> {
   /**
    * Get all errors caught by router.onError().
    */
@@ -118,8 +122,13 @@ export interface TestCapture<TContext = unknown> {
 /**
  * Test router: wraps a real router with testing utilities.
  * Includes clock control, connection management, and capture helpers.
+ *
+ * Extends RouterCore and includes testing-specific methods for clock control,
+ * connection management, and capture helpers. The actual router instance
+ * may have additional APIs (validation, pubsub) from plugins.
  */
-export interface TestRouter<TContext = unknown> extends Router<TContext, any> {
+export interface TestRouter<TContext extends ConnectionData = ConnectionData>
+  extends RouterCore<TContext> {
   /**
    * Establish a connection and wait for all `onConnect` hooks to settle.
    * Always await this method before sending messages.

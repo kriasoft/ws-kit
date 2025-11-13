@@ -66,20 +66,26 @@ Bun.serve({
 
 ## Creating a Router
 
-Use `createRouter<TData>()` with an explicit generic for full type safety:
+Use `createRouter<ConnectionData>()` with the `ConnectionData` generic for full type safety:
 
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 
-type AppData = { userId?: string; roles?: string[] };
-const router = createRouter<AppData>();
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    roles?: string[];
+  }
+}
+
+const router = createRouter<ConnectionData>();
 ```
 
 **Why explicit?** TypeScript cannot infer connection data types from handler assignments. The explicit generic ensures all handlers and lifecycle callbacks are fully typed:
 
 ```typescript
 router.on(SomeMessage, (ctx) => {
-  // ✅ ctx.ws.data is fully typed as AppData
+  // ✅ ctx.ws.data is fully typed as ConnectionData
   const userId = ctx.ws.data.userId; // string | undefined
   const roles = ctx.ws.data.roles; // string[] | undefined
 });
@@ -92,23 +98,23 @@ router.onClose((ctx) => {
 
 This is a **TypeScript language limitation** (not a design shortcoming). The one-line generic annotation provides complete type safety throughout your application.
 
-### Ambient AppData (Optional: Large Applications)
+### Ambient ConnectionData (Optional: Large Applications)
 
 For large applications with many routers across modules, use TypeScript declaration merging to set a global default and avoid repetition:
 
 ```typescript
-// types/app-data.d.ts
+// types/connection-data.d.ts
 declare module "@ws-kit/core" {
-  interface AppDataDefault {
+  interface ConnectionData {
     userId?: string;
     roles?: string[];
   }
 }
 
-// Now createRouter() uses AppDataDefault without repeating the type:
+// Now createRouter() uses ConnectionData without repeating the type:
 import { createRouter } from "@ws-kit/zod";
 
-const router = createRouter(); // ✅ Automatically uses AppDataDefault
+const router = createRouter(); // ✅ Automatically uses ConnectionData
 ```
 
 This is optional and most useful in large monorepos with shared auth context.
@@ -607,8 +613,14 @@ router.use(async (ctx, next) => {
 ## Example: Authentication + Authorization Middleware
 
 ```typescript
-type AppData = { userId?: string; roles?: string[] };
-const router = createRouter<AppData>();
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    roles?: string[];
+  }
+}
+
+const router = createRouter<ConnectionData>();
 
 // Global middleware: require authentication
 router.use((ctx, next) => {
@@ -681,15 +693,21 @@ Routers can be merged to combine handlers from multiple modules into a single ro
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 
-type AppData = { userId?: string };
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+  }
+}
 
-const authRouter = createRouter<AppData>();
+const authRouter = createRouter<ConnectionData>();
 authRouter.on(LoginMessage, handleLogin);
 
-const chatRouter = createRouter<AppData>();
+const chatRouter = createRouter<ConnectionData>();
 chatRouter.on(SendMessage, handleChat);
 
-const mainRouter = createRouter<AppData>().merge(authRouter).merge(chatRouter);
+const mainRouter = createRouter<ConnectionData>()
+  .merge(authRouter)
+  .merge(chatRouter);
 ```
 
 #### merge() Semantics
@@ -699,10 +717,10 @@ When merging routers, the following behavior applies:
 **Message Handlers**: Last-write-wins. If both routers handle the same message type, the handler from the later-merged router takes precedence:
 
 ```typescript
-const router1 = createRouter<AppData>().on(Msg, handler1);
-const router2 = createRouter<AppData>().on(Msg, handler2);
+const router1 = createRouter<ConnectionData>().on(Msg, handler1);
+const router2 = createRouter<ConnectionData>().on(Msg, handler2);
 
-const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+const mainRouter = createRouter<ConnectionData>().merge(router1).merge(router2);
 
 // Msg now routes to handler2 (from router2, merged second)
 ```
@@ -712,15 +730,15 @@ This is **intentional**: merge order is explicit, giving you full control. For f
 **Lifecycle Hooks** (`onOpen`, `onClose`, `onAuth`, `onError`): Handlers are **appended**, not replaced. All handlers execute in registration order:
 
 ```typescript
-const router1 = createRouter<AppData>().onOpen((ctx) => {
+const router1 = createRouter<ConnectionData>().onOpen((ctx) => {
   console.log("router1 onOpen");
 });
 
-const router2 = createRouter<AppData>().onOpen((ctx) => {
+const router2 = createRouter<ConnectionData>().onOpen((ctx) => {
   console.log("router2 onOpen");
 });
 
-const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+const mainRouter = createRouter<ConnectionData>().merge(router1).merge(router2);
 
 // Output:
 // router1 onOpen
@@ -730,16 +748,16 @@ const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
 **Middleware**: Global middleware is appended; per-route middleware is extended for existing message types:
 
 ```typescript
-const router1 = createRouter<AppData>()
+const router1 = createRouter<ConnectionData>()
   .use(mw1) // global middleware
   .on(Msg, handler1);
 
-const router2 = createRouter<AppData>()
+const router2 = createRouter<ConnectionData>()
   .use(mw2) // global middleware
   .on(Msg, handler2)
   .use(Msg, mwPerRoute); // per-route middleware
 
-const mainRouter = createRouter<AppData>().merge(router1).merge(router2);
+const mainRouter = createRouter<ConnectionData>().merge(router1).merge(router2);
 
 // Execution order for Msg:
 // 1. mw1 (global from router1)
@@ -870,17 +888,28 @@ For comprehensive pub/sub API documentation, semantics, and patterns, see [docs/
 
 ## Custom Connection Data
 
-Define your connection data shape and pass it as a generic to `createRouter()`:
+Define your connection data shape via module augmentation or as a custom type:
 
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 
-type AppData = {
-  userId: string;
-  roles: string[];
-};
+// Option 1: Module augmentation (shared across all routers)
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId: string;
+    roles: string[];
+  }
+}
 
-const router = createRouter<AppData>();
+const router = createRouter<ConnectionData>();
+```
+
+Or for custom per-router data:
+
+```typescript
+// Option 2: Custom type (specific to this router)
+type ChatData = ConnectionData & { roomId?: string };
+const router = createRouter<ChatData>();
 
 router.on(SecureMessage, (ctx) => {
   const userId = ctx.ws.data.userId; // ✅ Typed (string)
@@ -912,8 +941,14 @@ serve(router, {
 Use `ctx.assignData()` to merge partial updates into connection state:
 
 ```typescript
-type AppData = { userId?: string; roles?: string[] };
-const router = createRouter<AppData>();
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    roles?: string[];
+  }
+}
+
+const router = createRouter<ConnectionData>();
 
 router.on(LoginMessage, (ctx) => {
   const user = authenticate(ctx.payload);

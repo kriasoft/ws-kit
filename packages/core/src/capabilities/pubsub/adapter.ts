@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import type { PublishOptions, PublishResult } from "../../core/types";
+
 /**
  * Pub/Sub adapter contract (core-level).
  * Unified interface for subscription index, local fan-out, and optional distributed ingress.
@@ -432,7 +434,9 @@ export function ensurePublishSuccess(
       details?: Record<string, unknown>;
     };
     err.retryable = result.retryable;
-    err.details = result.details;
+    if (result.details !== undefined) {
+      err.details = result.details;
+    }
     throw err;
   }
 }

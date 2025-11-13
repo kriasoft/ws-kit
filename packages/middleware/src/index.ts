@@ -1,15 +1,20 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-export { rateLimit } from "./rate-limit";
-export type { RateLimitOptions } from "./rate-limit";
+// Re-export rate limiting middleware from @ws-kit/rate-limit for backward compatibility
+export { rateLimit } from "@ws-kit/rate-limit";
+export type { RateLimitOptions } from "@ws-kit/rate-limit";
 
-export { keyPerUserOrIpPerType, keyPerUserPerType, perUserKey } from "./keys";
+export {
+  keyPerUserOrIpPerType,
+  keyPerUserPerType,
+  perUserKey,
+  type RateLimitContext,
+} from "@ws-kit/rate-limit";
 
-// Re-export core types for convenience
+// Re-export rate limit types for convenience
 export type {
-  IngressContext,
   Policy,
   RateLimitDecision,
   RateLimiter,
-} from "@ws-kit/core";
+} from "@ws-kit/rate-limit";
