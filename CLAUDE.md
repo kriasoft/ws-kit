@@ -34,7 +34,6 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
 ## API Design Principles
 
-- **Single canonical import source**: Import validator and helpers from one place (`@ws-kit/zod` or `@ws-kit/valibot`) to avoid dual package hazards
 - **Plain functions**: `message()` and `createRouter()` are plain functions, not factories
 - **Full type inference**: TypeScript generics preserve types from schema through handlers without assertions
 - **Runtime identity**: Functions preserve `instanceof` checks and runtime behavior
@@ -43,7 +42,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 
 ```typescript
 import { z, message, createRouter, withZod } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 import { createClient } from "redis";
@@ -79,8 +78,13 @@ serve(router, {
 ```
 
 **Key concepts**:
-- Import validator and helpers from single source (`@ws-kit/zod` or `@ws-kit/valibot`)
-- Plugins add capabilities: `withZod()` (validation), `withPubSub()` (broadcasting)
+
+- **Canonical imports** (see ADR-032): Always import plugins from their official sources
+  - Validators + helpers: `@ws-kit/zod` or `@ws-kit/valibot` (choose one)
+  - Core plugins: `@ws-kit/plugins` (`withMessaging`, `withRpc`)
+  - Feature plugins: Feature-specific packages (`@ws-kit/pubsub`, `@ws-kit/rate-limit`, etc.)
+  - Adapters: Adapter packages (`@ws-kit/memory`, `@ws-kit/redis`, `@ws-kit/cloudflare`)
+- Plugins add capabilities: `.plugin(withZod())` (validation), `.plugin(withPubSub())` (broadcasting)
 - Module augmentation for `ConnectionData` (define once, shared across routers)
 - Adapters provide backends: memory (dev), Redis/Cloudflare (production)
 

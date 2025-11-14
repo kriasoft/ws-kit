@@ -9,22 +9,28 @@ Complete reference for the plugin system: how plugins work, core plugins shipped
 - Initialize adapter backends
 - Gate features at compile-time and runtime
 
-See [ADR-031](../adr/031-plugin-adapter-architecture.md) for design rationale.
+See [ADR-031](../adr/031-plugin-adapter-architecture.md) for design rationale and [ADR-032](../adr/032-canonical-imports-design.md) for canonical import sources.
 
-## Plugin Locations
+## Plugin Locations & Canonical Imports
 
-**Core Framework Plugins** (in `@ws-kit/plugins/`):
+**Core Framework Plugins** (import from `@ws-kit/plugins`):
 
 - `withMessaging()` — Fire-and-forget unicast/broadcast
 - `withRpc()` — Request-response with streaming
-- `withPubSub()` — Topic-based pub/sub (any adapter)
 
-**Validator Plugins** (in `@ws-kit/zod/` or `@ws-kit/valibot/`):
+**Feature Plugins** (import from feature packages):
 
-- `withValidation()` — Schema validation (validator-specific)
-- `withZod()` / `withValibot()` — All-in-one convenience plugins
+- `withPubSub()` — Topic-based pub/sub (canonical: `@ws-kit/pubsub`)
+- `withRateLimit()` — Rate limiting (canonical: `@ws-kit/rate-limit`)
+- Future: `withTelemetry()`, `withCompression()`, `withCaching()` (each has own package)
 
-Core plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for convenience. See [Plugin-Adapter Architecture (ADR-031)](../adr/031-plugin-adapter-architecture.md) for rationale.
+**Validator Plugins** (choose one validator, import from its package):
+
+- `withZod()` / `withValibot()` — All-in-one validation plugin
+
+**Convenience Re-exports** (optional, from validators):
+
+Core plugins and feature plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for convenience. See [ADR-032: Canonical Imports Design](../adr/032-canonical-imports-design.md) for complete rules and rationale.
 
 ---
 
@@ -64,8 +70,8 @@ const router = createRouter()
 **Style 1: Validator Plugins (Recommended for Most Apps)**
 
 ```typescript
-import { createRouter } from "@ws-kit/zod"; // or @ws-kit/valibot
-import { withPubSub } from "@ws-kit/plugins";
+import { createRouter, withZod } from "@ws-kit/zod"; // or @ws-kit/valibot
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 
 const router = createRouter()
@@ -81,11 +87,12 @@ const router = createRouter()
 
 ```typescript
 import { createRouter } from "@ws-kit/core";
-import { withValidation } from "@ws-kit/zod"; // Zod-specific validation
-import { withMessaging, withRpc, withPubSub } from "@ws-kit/plugins";
+import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
+import { withMessaging, withRpc } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 
 const router = createRouter()
-  .plugin(withValidation())
+  .plugin(withZod())
   .plugin(withMessaging())
   .plugin(withRpc())
   .plugin(withPubSub());
@@ -253,7 +260,7 @@ interface ProgressOptions extends ReplyOptions {
 
 ### `withPubSub(config?)`
 
-**Location**: `@ws-kit/plugins/src/pubsub` (re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
+**Location**: `@ws-kit/pubsub` (canonical; also re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
 
 **Purpose**: Enable topic-based broadcasting to multiple subscribers.
 
@@ -323,7 +330,7 @@ interface ContextWithPubSub {
 
 ### `withRateLimit(config?)`
 
-**Location**: `@ws-kit/core/src/plugins/rate-limit` (re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
+**Location**: `@ws-kit/rate-limit` (canonical; also re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
 
 **Purpose**: Enable rate-limiting of messages per connection, per user, or per type.
 
@@ -347,7 +354,7 @@ interface RateLimitConfig {
 **Example**:
 
 ```typescript
-import { withRateLimit } from "@ws-kit/plugins";
+import { withRateLimit } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 
 const router = createRouter().plugin(
@@ -787,43 +794,49 @@ const router = createRouter().plugin(withValidation()).plugin(withRpc());
 
 ## Migration Guide
 
-### From Monolithic `withZod()` to Granular Plugins
+### Canonical Import Sources (All Versions)
 
-**Before** (monolithic):
+Always use canonical sources per [ADR-032](../adr/032-canonical-imports-design.md):
+
+**Recommended** (validator convenience):
 
 ```typescript
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod"; // or @ws-kit/valibot
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimit } from "@ws-kit/rate-limit";
 
-const router = createRouter().plugin(withZod()); // Includes validation, messaging, RPC
+const router = createRouter()
+  .plugin(withZod())
+  .plugin(withPubSub())
+  .plugin(withRateLimit());
 ```
 
-**After** (same experience, clearer semantics):
+**Explicit** (canonical sources, same imports):
 
 ```typescript
-import { createRouter } from "@ws-kit/zod";
-
-const router = createRouter().plugin(withZod()); // Still includes everything (backward compat)
-```
-
-**Or explicitly** (for clarity):
-
-```typescript
-import { createRouter } from "@ws-kit/core";
-import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
+import { createRouter, withZod } from "@ws-kit/zod";
 import { withMessaging, withRpc } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimit } from "@ws-kit/rate-limit";
 
 const router = createRouter()
   .plugin(withZod())
   .plugin(withMessaging())
-  .plugin(withRpc());
+  .plugin(withRpc())
+  .plugin(withPubSub())
+  .plugin(withRateLimit());
 ```
+
+**Note**: Importing from non-canonical sources (e.g., `withPubSub` from `@ws-kit/plugins` when it's actually in `@ws-kit/pubsub`) will fail. Always use the canonical source for each feature.
 
 ---
 
 ## References
 
-- [ADR-028](../adr/028-plugin-architecture-final-design.md) - Plugin architecture design
+- [ADR-032](../adr/032-canonical-imports-design.md) - Canonical imports design (FOUNDATIONAL: import sources for all plugins)
 - [ADR-031](../adr/031-plugin-adapter-architecture.md) - Plugin-adapter split decision
+- [ADR-028](../adr/028-plugin-architecture-final-design.md) - Plugin architecture design
 - [docs/specs/router.md](./router.md) - Router API and handler registration
 - [docs/specs/context-methods.md](./context-methods.md) - Context methods reference
 - [docs/specs/pubsub.md](./pubsub.md) - Pub/sub patterns and semantics
+- [docs/specs/adapters.md](./adapters.md) - Adapter system and implementations

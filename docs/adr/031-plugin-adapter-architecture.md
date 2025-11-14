@@ -293,7 +293,7 @@ Refactor `@ws-kit/zod` and `@ws-kit/valibot`:
 
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { memoryPubSub } from "@ws-kit/memory";
 
 const router = createRouter()
@@ -305,7 +305,7 @@ const router = createRouter()
 
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 
 const router = createRouter()
@@ -320,7 +320,7 @@ const router = createRouter()
 ### Cloudflare Workers
 
 ```typescript
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { cloudflarePubSub } from "@ws-kit/cloudflare";
 
 const router = createRouter()

@@ -980,7 +980,7 @@ Each method requires specific plugins to function:
 
 ```typescript
 import { createRouter } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 import { createClient } from "redis";
 

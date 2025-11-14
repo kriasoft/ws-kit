@@ -884,7 +884,7 @@ For distributed deployments across multiple server instances, use Redis or Cloud
 
 ```ts
 import { createRouter, withZod } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 import { createClient } from "redis";

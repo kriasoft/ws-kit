@@ -185,10 +185,11 @@ const store = await autoDetectRateLimitStore(); // Bun → memory, Node → Redi
 
 ### 2. Single Monolithic Package
 
-Bundle all adapters in one package (`@ws-kit/rate-limiting`):
+Bundle all adapters in separate packages:
 
 ```typescript
-import { memoryRateLimiter, redisRateLimiter } from "@ws-kit/rate-limiting";
+import { memoryRateLimiter } from "@ws-kit/memory";
+import { redisRateLimiter } from "@ws-kit/redis";
 ```
 
 **Why rejected:**
