@@ -1,4 +1,4 @@
-# WS-Kit — A Type-Safe, Plugin-Driven WebSocket Framework
+# WS-Kit — Schema-First WebSocket Framework
 
 [![CI](https://github.com/kriasoft/ws-kit/actions/workflows/main.yml/badge.svg)](https://github.com/kriasoft/ws-kit/actions)
 [![Coverage](https://codecov.io/gh/kriasoft/ws-kit/branch/main/graph/badge.svg)](https://app.codecov.io/gh/kriasoft/ws-kit)
@@ -6,11 +6,9 @@
 [![Downloads](https://img.shields.io/npm/dm/@ws-kit/zod.svg)](https://www.npmjs.com/package/@ws-kit/zod)
 [![Discord](https://img.shields.io/discord/643523529131950086?label=Discord)](https://discord.gg/aW29wXyb7w)
 
-> [!WARNING] Major Refactor Underway
->
-> WS-Kit is transitioning to a new plugin architecture with a normalized adapter façade. The codebase is evolving quickly and several components are still incomplete. Early feedback, testing, and PRs are appreciated.
+> ⚠️ **WARNING**: WS-Kit is transitioning to a new plugin architecture with a normalized adapter façade. The codebase is evolving quickly and several components are still incomplete. Early feedback, testing, and PRs are appreciated.
 
-Type-safe WebSocket framework for real-time apps. Define message contracts with Zod or Valibot — get complete TypeScript inference in server handlers, browser clients, and Node.js clients. Includes RPC patterns, distributed broadcasting, standard error codes with automatic retry hints, and full connection lifecycle control. Server works on Bun, Cloudflare, or Node.js; client works in browsers and Node.js.
+Define message contracts with Zod or Valibot, get complete TypeScript inference across server and client. Type-safe RPC, pub/sub, middleware, and error handling out of the box. Plugin-driven architecture for extensibility — swap validators, adapters, and middleware. Runs on Bun, Cloudflare, Node.js, and browsers with testable, composable handlers.
 
 ## Requirements
 
@@ -158,11 +156,15 @@ import { withZod, z, message } from "@ws-kit/zod";
 ```ts
 // Bare router (no validation)
 const router = createRouter();
-router.on(MyMessage, (ctx) => { /* payload not typed */ });
+router.on(MyMessage, (ctx) => {
+  /* payload not typed */
+});
 
 // With validation plugin
 const validatedRouter = createRouter().plugin(withZod());
-validatedRouter.on(MyMessage, (ctx) => { /* payload fully typed */ });
+validatedRouter.on(MyMessage, (ctx) => {
+  /* payload fully typed */
+});
 validatedRouter.rpc(RpcSchema, handler); // RPC available with validation
 ```
 
