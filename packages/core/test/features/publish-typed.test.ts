@@ -15,7 +15,7 @@ import { createRouter, withZod } from "@ws-kit/zod";
 import { z, message } from "@ws-kit/zod";
 import type { ServerWebSocket, WebSocketData } from "../../src/index.js";
 import { withPubSub } from "@ws-kit/pubsub";
-import { memoryPubSub } from "../../src/index.js";
+import { memoryPubSub } from "@ws-kit/memory";
 
 // Mock WebSocket implementation
 class MockWebSocket<TData extends WebSocketData = WebSocketData>

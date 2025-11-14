@@ -20,11 +20,11 @@ Three candidates competed for ownership:
 
 Each had trade-offs:
 
-| Option | Pros | Cons |
-|--------|------|------|
-| Core | Always available, discoverable | Bloats core; some users don't need it |
-| Validators | Ships with validation | Couples unrelated features; requires duplication in Zod/Valibot |
-| Separate | Clear ownership, opt-in | Multiple imports, more packages to manage |
+| Option     | Pros                           | Cons                                                            |
+| ---------- | ------------------------------ | --------------------------------------------------------------- |
+| Core       | Always available, discoverable | Bloats core; some users don't need it                           |
+| Validators | Ships with validation          | Couples unrelated features; requires duplication in Zod/Valibot |
+| Separate   | Clear ownership, opt-in        | Multiple imports, more packages to manage                       |
 
 ### The Real Problem
 
@@ -43,12 +43,14 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 ### Core Principle: Plugin vs Adapter
 
 **Plugins** = Framework features, adapter-agnostic:
+
 - `withMessaging()` — Unicast and broadcast
 - `withRpc()` — Request-response with streaming
 - `withPubSub()` — Pub/sub pattern (any backend)
 - `withRateLimit()` — Rate limiting (any backend)
 
 **Adapters** = Backend implementations:
+
 - Memory adapters in `@ws-kit/core` (defaults, zero config)
 - Redis adapters in `@ws-kit/redis`
 - Cloudflare adapters in `@ws-kit/cloudflare`
@@ -74,17 +76,15 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 │   └── validation/
 │       ├── index.ts           # withValidation() plugin (generic)
 │       └── types.ts           # ValidatorAdapter interface
-├── adapters/                   # Backend implementations for stateful plugins
-│   ├── pubsub/
-│   │   ├── memory.ts          # memoryPubSub() - in-memory implementation
-│   │   └── types.ts           # PubSubAdapter interface (exported from plugins/pubsub/types)
-│   └── rate-limit/
-│       ├── memory.ts          # memoryRateLimiter() - in-memory token bucket
-│       └── types.ts           # RateLimiterAdapter interface (exported from plugins/rate-limit/types)
-└── index.ts                   # Re-exports: all plugins + memory adapters
+└── index.ts                   # Re-exports: all plugins
 
 @ws-kit/zod & @ws-kit/valibot/src
 └── index.ts                   # Re-exports core plugins (convenience)
+
+@ws-kit/memory/src             # In-memory adapters (development/testing)
+├── pubsub.ts                  # memoryPubSub() - in-memory implementation
+├── limiter.ts                 # memoryRateLimiter() - in-memory token bucket
+└── index.ts                   # Re-exports: all memory adapters
 
 @ws-kit/redis/src
 ├── pubsub.ts                  # redisPubSub(client) adapter
@@ -98,12 +98,14 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 ```
 
 **Key Design:**
+
 - **Plugins** (`@ws-kit/plugins`) contain framework APIs—stateless or adapter-agnostic
-- **Memory adapters** (`@ws-kit/core/adapters`) are bundled defaults for zero-config dev
+- **Memory adapters** (`@ws-kit/memory`) are bundled defaults for zero-config dev
 - **External adapters** (`@ws-kit/redis`, `@ws-kit/cloudflare`) are separate packages for production
 - **Separate plugins package**—all core plugins live in `@ws-kit/plugins` for clean separation
 
 **Why a separate plugins package?**
+
 - ✅ All plugins centralized and easy to discover (single import source: `@ws-kit/plugins`)
 - ✅ Simpler core package (core owns routing, adapters own adapter interfaces)
 - ✅ Cleaner mental model (core = framework, plugins = capabilities)
@@ -125,6 +127,7 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 - **Discoverability**: Users expect framework features in core
 
 **What lives in plugins:**
+
 - `withPubSub()` → context API (`ctx.publish()`), middleware integration
 - `withRateLimit()` → middleware, rate-limit checking logic
 - **No backend-specific code** (Redis Lua scripts, Cloudflare APIs, etc.)
@@ -141,6 +144,7 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 - **Backward compatible**: Apps transition from dev → prod by swapping adapters
 
 **Examples:**
+
 ```typescript
 // In-memory pub/sub (development)
 export function memoryPubSub(): PubSubAdapter {
@@ -152,7 +156,7 @@ export function memoryPubSub(): PubSubAdapter {
     },
     publish: (topic, message) => {
       const subscribers = subscriptions.get(topic) || new Set();
-      return { matched: subscribers.size, capability: 'exact' };
+      return { matched: subscribers.size, capability: "exact" };
     },
     // ... unsubscribe, etc.
   };
@@ -183,6 +187,7 @@ export function memoryRateLimiter(): RateLimiterAdapter {
 - **Choice**: Apps without these don't pay bundle cost
 
 **Examples:**
+
 ```typescript
 // @ws-kit/redis
 export function redisPubSub(client: RedisClient): PubSubAdapter {
@@ -207,21 +212,21 @@ export function cloudflarePubSub(env: CloudflareEnv): PubSubAdapter {
 
 ### For Users
 
-| Scenario | Experience |
-|----------|------------|
-| **Development** | `withPubSub()` uses memory adapter by default; works immediately |
-| **Testing** | No Redis needed; in-memory adapters sufficient |
-| **Production** | Swap to `redisPubSub(redis)` by changing one line |
-| **Scaling** | Seamless move from single-server to distributed without code changes |
+| Scenario        | Experience                                                           |
+| --------------- | -------------------------------------------------------------------- |
+| **Development** | `withPubSub()` uses memory adapter by default; works immediately     |
+| **Testing**     | No Redis needed; in-memory adapters sufficient                       |
+| **Production**  | Swap to `redisPubSub(redis)` by changing one line                    |
+| **Scaling**     | Seamless move from single-server to distributed without code changes |
 
 ### For Maintainers
 
-| Benefit | Details |
-|---------|---------|
-| **No duplication** | Plugins defined once in core; adapters in separate packages |
-| **Clear ownership** | Each adapter package owns its backend (Redis, Cloudflare, etc.) |
+| Benefit                    | Details                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| **No duplication**         | Plugins defined once in core; adapters in separate packages      |
+| **Clear ownership**        | Each adapter package owns its backend (Redis, Cloudflare, etc.)  |
 | **Independent versioning** | Core, validators, and adapters can release on separate schedules |
-| **Extensibility** | Users can implement custom adapters without forking |
+| **Extensibility**          | Users can implement custom adapters without forking              |
 
 ---
 
@@ -230,6 +235,7 @@ export function cloudflarePubSub(env: CloudflareEnv): PubSubAdapter {
 ### Phase 1: Extract Shared Logic (Unblock Plugins)
 
 Move from validator plugins to core (`@ws-kit/core/src/`):
+
 - `SendOptions`, `ReplyOptions`, `ProgressOptions` types
 - Meta utilities: `sanitizeMeta()`, `preserveCorrelationId()`
 - Throttling utilities
@@ -240,6 +246,7 @@ Move from validator plugins to core (`@ws-kit/core/src/`):
 ### Phase 2: Create Core Plugins
 
 Add to `@ws-kit/core/src/plugins/`:
+
 - `messaging/index.ts` + `types.ts` — `withMessaging()` (~100 LOC)
 - `rpc/index.ts` + `types.ts` — `withRpc()` (~120 LOC)
 - `pubsub/index.ts` + `types.ts` — `withPubSub()` (~100 LOC)
@@ -251,9 +258,10 @@ Each plugin gets its own subdirectory with implementation and types.
 
 ### Phase 3: Create Memory Adapters
 
-Add to `@ws-kit/core/src/adapters/`:
-- `pubsub/memory.ts` — `memoryPubSub()` adapter (~50 LOC)
-- `rate-limit/memory.ts` — `memoryRateLimiter()` adapter (~60 LOC)
+Add to `@ws-kit/memory/src/`:
+
+- `pubsub.ts` — `memoryPubSub()` adapter (~50 LOC)
+- `limiter.ts` — `memoryRateLimiter()` adapter (~60 LOC)
 
 Memory adapters implement the adapter interfaces defined in their corresponding plugins.
 
@@ -262,6 +270,7 @@ Memory adapters implement the adapter interfaces defined in their corresponding 
 ### Phase 4: External Adapters (Parallel)
 
 Create or update external packages:
+
 - `@ws-kit/redis` — `redisPubSub()`, `redisRateLimiter()`
 - `@ws-kit/cloudflare` — `cloudflarePubSub()`, `cloudflareRateLimiter()`
 
@@ -270,6 +279,7 @@ Create or update external packages:
 ### Phase 5: Update Validators
 
 Refactor `@ws-kit/zod` and `@ws-kit/valibot`:
+
 - Import plugins from core instead of implementing
 - Re-export core plugins for convenience
 
@@ -284,10 +294,11 @@ Refactor `@ws-kit/zod` and `@ws-kit/valibot`:
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/plugins";
+import { memoryPubSub } from "@ws-kit/memory";
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(withPubSub());          // ✅ Uses memoryPubSub() by default
+  .plugin(withPubSub({ adapter: memoryPubSub() })); // ✅ Zero-config memory adapter
 ```
 
 ### Production (Redis Adapters)
@@ -299,9 +310,11 @@ import { redisPubSub } from "@ws-kit/redis";
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(withPubSub({
-    adapter: redisPubSub(redis),  // ✅ Swap adapter
-  }));
+  .plugin(
+    withPubSub({
+      adapter: redisPubSub(redis), // ✅ Swap adapter
+    }),
+  );
 ```
 
 ### Cloudflare Workers
@@ -312,9 +325,11 @@ import { cloudflarePubSub } from "@ws-kit/cloudflare";
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(withPubSub({
-    adapter: cloudflarePubSub(env.DURABLE_OBJECTS),  // Cloudflare DO
-  }));
+  .plugin(
+    withPubSub({
+      adapter: cloudflarePubSub(env.DURABLE_OBJECTS), // Cloudflare DO
+    }),
+  );
 ```
 
 ---
@@ -336,7 +351,10 @@ export interface PubSubAdapter {
 
 ```typescript
 export interface RateLimiterAdapter {
-  consume(key: string, tokens: number): Promise<{ ok: boolean; retryAfterMs?: number }>;
+  consume(
+    key: string,
+    tokens: number,
+  ): Promise<{ ok: boolean; retryAfterMs?: number }>;
   reset(key: string): Promise<void>;
 }
 ```
@@ -363,9 +381,9 @@ export interface RateLimiterAdapter {
 
 ### Trade-offs
 
-| Aspect | Dev Experience | Production Complexity |
-|--------|---------------|--------------------|
-| **Single package** | ❌ All features bundled | ✅ Easy deployment |
+| Aspect                   | Dev Experience                | Production Complexity |
+| ------------------------ | ----------------------------- | --------------------- |
+| **Single package**       | ❌ All features bundled       | ✅ Easy deployment    |
 | **Plugin-adapter split** | ✅ Zero-config, swap adapters | ✅ Explicit, flexible |
 
 ---
