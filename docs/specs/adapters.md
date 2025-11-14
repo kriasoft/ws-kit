@@ -579,12 +579,12 @@ export type RateLimitDecision =
     };
 ```
 
-### Memory Adapter (`@ws-kit/adapters/memory`)
+### Memory Adapter (`@ws-kit/memory`)
 
 **Best for**: Development, single-instance deployments (Bun, Node.js)
 
 ```typescript
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = memoryRateLimiter({
   capacity: 100, // Max tokens available
