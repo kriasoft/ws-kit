@@ -42,6 +42,7 @@ export { usePubSub, type UsePubSubOptions } from "./middleware";
 
 // Types
 export type {
+  PubSubObserver,
   PublishEnvelope,
   PublishOptions,
   PublishResult,
@@ -50,7 +51,10 @@ export type {
   TopicMutateOptions,
   Topics,
   VerifyResult,
+  WithPubSubOptions,
 } from "./types";
+
+export type { WithPubSubCapability } from "./types";
 
 export { isSubscribed } from "./core/topics";
 export type { TopicValidator } from "./core/topics";

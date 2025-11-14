@@ -14,37 +14,44 @@
  * **RPC**:
  * - `withRpc()` - Request-response with streaming (ctx.reply, ctx.error, ctx.progress)
  *
- * **Pub/Sub**:
- * - `withPubSub(options)` - Topic-based broadcasting (ctx.publish)
- *
  * ## Quick Start
  *
  * ```typescript
  * import { createRouter } from "@ws-kit/zod";
- * import { withPubSub } from "@ws-kit/plugins";
+ * import { withMessaging } from "@ws-kit/plugins";
+ * import { withRpc } from "@ws-kit/plugins";
+ *
+ * const router = createRouter()
+ *   .plugin(withMessaging())    // Messaging (fire-and-forget)
+ *   .plugin(withRpc());         // RPC (request-response)
+ * ```
+ *
+ * ## Pub/Sub Plugin
+ *
+ * Pub/Sub plugin and middleware are provided by **@ws-kit/pubsub**:
+ * ```typescript
+ * import { withPubSub, usePubSub } from "@ws-kit/pubsub";
  * import { redisPubSub } from "@ws-kit/redis";
  *
  * const router = createRouter()
- *   .plugin(withZod())        // Validation (from validator)
- *   .plugin(withMessaging())    // Messaging (fire-and-forget)
- *   .plugin(withRpc())          // RPC (request-response)
- *   .plugin(withPubSub({
- *     adapter: redisPubSub(redis),  // Use Redis for distributed pub/sub
- *   }));
+ *   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
+ *   .use(usePubSub({ hooks: { ... } }));
  * ```
+ *
+ * See [packages/pubsub](https://github.com/kriasoft/ws-kit/tree/dev/packages/pubsub)
+ * for pub/sub documentation and policy enforcement middleware.
  *
  * ## Direct Imports
  *
  * For convenience, import plugins directly:
  * ```typescript
- * import { withMessaging, withRpc, withPubSub } from "@ws-kit/plugins";
+ * import { withMessaging, withRpc } from "@ws-kit/plugins";
  * ```
  *
  * Or import from subpaths:
  * ```typescript
  * import { withMessaging } from "@ws-kit/plugins/messaging";
  * import { withRpc } from "@ws-kit/plugins/rpc";
- * import { withPubSub } from "@ws-kit/plugins/pubsub";
  * ```
  *
  * ## Architecture
@@ -59,12 +66,8 @@ export type { SendOptions, WithMessagingCapability } from "./messaging/types";
 
 // RPC plugin
 export { withRpc } from "./rpc/index";
-export type { ProgressOptions, ReplyOptions, WithRpcCapability } from "./rpc/types";
-
-// Pub/Sub plugin
-export { withPubSub } from "./pubsub/index";
 export type {
-  PubSubObserver,
-  WithPubSubCapability,
-  WithPubSubOptions,
-} from "./pubsub/types";
+  ProgressOptions,
+  ReplyOptions,
+  WithRpcCapability,
+} from "./rpc/types";

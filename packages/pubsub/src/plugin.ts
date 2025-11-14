@@ -89,7 +89,13 @@ interface WithPubSubAPI {
    * Ensures publish() and topics only appear in keyof when withPubSub() is applied.
    * @internal
    */
-  readonly pubsub: true;
+  readonly pubsub:
+    | true
+    | {
+        tap(observer: PubSubObserver): () => void;
+        init(): Promise<void>;
+        shutdown(): Promise<void>;
+      };
 
   /**
    * Publish a message to a topic.
@@ -112,15 +118,6 @@ interface WithPubSubAPI {
   topics: {
     list(): readonly string[];
     has(topic: string): boolean;
-  };
-
-  /**
-   * Pub/Sub lifecycle and testing utilities.
-   */
-  pubsub: {
-    tap(observer: PubSubObserver): () => void;
-    init(): Promise<void>;
-    shutdown(): Promise<void>;
   };
 }
 
@@ -421,6 +418,11 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
       pubsub: true as const,
       publish,
       topics,
+      // Lifecycle and testing utilities (same property name as marker, but extends it at runtime)
+      // Type system treats this as WithPubSubAPI, but runtime provides the methods
+      ...(undefined as any as {
+        pubsub: { tap: any; init: any; shutdown: any };
+      }),
       pubsub: {
         /**
          * Register an observer for pub/sub operations (testing, instrumentation).

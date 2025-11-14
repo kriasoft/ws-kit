@@ -442,3 +442,19 @@ export interface PubSubPolicyHooks<TContext> {
     ctx: { clientId: string; data: TContext },
   ) => Promise<void> | void;
 }
+
+/**
+ * Pub/Sub plugin capability marker.
+ * Added to context type when withPubSub() plugin is applied.
+ * Used for capability-gating in the type system.
+ *
+ * @internal
+ */
+export interface WithPubSubCapability {
+  /**
+   * Marker for capability-gating in Router type system.
+   * Ensures publish() and topics only appear in keyof when withPubSub() is applied.
+   * @internal
+   */
+  readonly pubsub: true;
+}

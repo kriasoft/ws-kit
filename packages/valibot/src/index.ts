@@ -50,15 +50,18 @@ export type {
 } from "./types.js";
 
 // Plugin re-exports (for convenience)
-export { withMessaging, withPubSub, withRpc } from "@ws-kit/plugins";
+export { withMessaging, withRpc } from "@ws-kit/plugins";
 export type {
   ProgressOptions,
   ReplyOptions,
   SendOptions,
   WithMessagingCapability,
-  WithPubSubCapability,
   WithRpcCapability,
 } from "@ws-kit/plugins";
+
+// Pub/Sub plugin re-export (from dedicated @ws-kit/pubsub package)
+export { withPubSub } from "@ws-kit/pubsub";
+export type { WithPubSubCapability } from "@ws-kit/pubsub";
 
 // Core re-exports (for convenience)
 export { createRouter } from "@ws-kit/core";
