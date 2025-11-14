@@ -15,7 +15,6 @@ import type {
   ConnectionData,
   MessageDescriptor,
   MinimalContext,
-  Router,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
@@ -41,6 +40,12 @@ type EnhancedContext = MinimalContext<any> & {
   meta?: Record<string, unknown>;
   send?: (schema: AnySchema | MessageDescriptor, payload: any) => Promise<void>;
   reply?: (payload: any, opts?: any) => Promise<void>;
+  error?: (
+    code: string,
+    message: string,
+    details?: any,
+    opts?: any,
+  ) => Promise<void>;
   progress?: (payload: any, opts?: any) => Promise<void>;
   getData?: (key: string) => unknown;
 };
@@ -561,6 +566,43 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
             await sendOutbound(payload, opts);
           },
 
+          // error() method for RPC handlers (terminal, symmetric with reply())
+          error: async (
+            code: string,
+            message: string,
+            details?: any,
+            opts?: ReplyOptions,
+          ) => {
+            const wskit = guardRpc();
+            if (replied) return; // Idempotent: silently ignore if already replied
+
+            const responseSchema = wskit.response as any;
+
+            // Construct error response message
+            const errorMessage = {
+              type: "$ws:rpc-error",
+              meta: {
+                ...baseMeta(enhCtx),
+                ...sanitizeMeta(opts?.meta),
+              },
+              payload: {
+                code,
+                message,
+                ...(details !== undefined ? { details } : {}),
+              },
+            };
+
+            // Mark as replied (one-shot guard applies to both reply and error)
+            replied = true;
+
+            // Send the error message via WebSocket
+            sendMessage(
+              errorMessage.type,
+              errorMessage.payload,
+              errorMessage.meta,
+            );
+          },
+
           // progress() method for RPC handlers
           // Emits a dedicated $ws:rpc-progress control message (non-terminal)
           progress: async (payload: any, opts?: ReplyOptions) => {
@@ -619,6 +661,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         // Also expose methods directly on context for backwards compatibility
         enhCtx.send = zodExt.send;
         enhCtx.reply = zodExt.reply;
+        enhCtx.error = zodExt.error;
         enhCtx.progress = zodExt.progress;
         enhCtx.getData = zodExt.getData;
         enhCtx.assignData = zodExt.assignData;

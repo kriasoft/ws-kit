@@ -29,8 +29,15 @@ export interface RpcContext<
   reply(payload: TResponse): Promise<void>;
 
   /**
+   * Terminal error response (one-shot, symmetric with reply()).
+   * Sends application-level error to RPC caller.
+   * Only first call to reply() or error() sends; subsequent calls ignored.
+   */
+  error<T = unknown>(code: string, message: string, details?: T): Promise<void>;
+
+  /**
    * Non-terminal progress update (streaming).
-   * Can call multiple times before reply().
+   * Can call multiple times before reply() or error().
    */
   progress(payload: TResponse): Promise<void>;
 }
