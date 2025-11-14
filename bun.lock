@@ -107,11 +107,11 @@
       "devDependencies": {
         "@types/bun": "^1.3.2",
         "@ws-kit/core": "workspace:^",
-        "@ws-kit/rate-limit": "workspace:^",
+        "@ws-kit/plugins": "workspace:^",
       },
       "peerDependencies": {
         "@ws-kit/core": "workspace:^",
-        "@ws-kit/rate-limit": "workspace:^",
+        "@ws-kit/plugins": "workspace:^",
       },
     },
     "packages/middleware": {
@@ -122,6 +122,17 @@
       },
       "devDependencies": {
         "@types/bun": "^1.3.2",
+      },
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:^",
+      },
+    },
+    "packages/plugins": {
+      "name": "@ws-kit/plugins",
+      "version": "0.7.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.2",
+        "@ws-kit/core": "workspace:^",
       },
       "peerDependencies": {
         "@ws-kit/core": "workspace:^",
@@ -595,6 +606,8 @@
     "@ws-kit/memory": ["@ws-kit/memory@workspace:packages/memory"],
 
     "@ws-kit/middleware": ["@ws-kit/middleware@workspace:packages/middleware"],
+
+    "@ws-kit/plugins": ["@ws-kit/plugins@workspace:packages/plugins"],
 
     "@ws-kit/pubsub": ["@ws-kit/pubsub@workspace:packages/pubsub"],
 
