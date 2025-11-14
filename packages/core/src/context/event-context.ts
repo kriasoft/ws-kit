@@ -12,6 +12,35 @@
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { ConnectionData, MinimalContext } from "./base-context";
 
+export interface SendOptions {
+  /**
+   * Make the send async and wait for a specific condition.
+   * - 'drain': Wait for WebSocket send buffer to drain
+   * - 'ack': Wait for server-side acknowledgment
+   * Default: undefined (fire-and-forget, returns void)
+   */
+  waitFor?: "drain" | "ack";
+
+  /**
+   * Cancel the send operation if this signal is triggered.
+   * Gracefully skips sending if aborted before enqueue.
+   */
+  signal?: AbortSignal;
+
+  /**
+   * Custom metadata to merge into response meta.
+   * Reserved keys (type, correlationId) cannot be overridden.
+   */
+  meta?: Record<string, unknown>;
+
+  /**
+   * Automatically copy correlationId from inbound request meta to outgoing message.
+   * Useful for fire-and-forget acknowledgments without RPC semantics.
+   * Default: false (no-op if correlationId not present in inbound meta)
+   */
+  preserveCorrelation?: boolean;
+}
+
 export interface EventContext<
   TContext extends ConnectionData = ConnectionData,
   TPayload = unknown,
@@ -22,11 +51,15 @@ export interface EventContext<
   readonly payload: TPayload;
 
   /**
-   * Send event to other clients (1-to-many).
+   * Send event to current client (1-to-1, fire-and-forget).
    * Available only in event handlers (kind="event").
+   *
+   * Returns void by default (async enqueue). With {waitFor} option,
+   * returns Promise<boolean>: true if condition met, false if timed out.
    */
   send<T extends MessageDescriptor>(
     schema: T,
     payload: any, // InferPayload<T>
-  ): Promise<void>;
+    opts?: SendOptions,
+  ): void | Promise<boolean>;
 }

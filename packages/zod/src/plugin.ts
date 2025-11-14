@@ -15,6 +15,7 @@ import type {
   ConnectionData,
   MessageDescriptor,
   MinimalContext,
+  SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
@@ -38,7 +39,11 @@ type EnhancedContext = MinimalContext<any> & {
   __wskit?: WsContext;
   __connData?: Record<string, unknown>;
   meta?: Record<string, unknown>;
-  send?: (schema: AnySchema | MessageDescriptor, payload: any) => Promise<void>;
+  send?: (
+    schema: AnySchema | MessageDescriptor,
+    payload: any,
+    opts?: SendOptions,
+  ) => void | Promise<boolean>;
   reply?: (payload: any, opts?: any) => Promise<void>;
   error?: (
     code: string,
@@ -542,7 +547,16 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         // Create Zod extension object with all methods
         const zodExt = {
           // send() method for event handlers (always available after validation)
-          send: async (schema: AnySchema | MessageDescriptor, payload: any) => {
+          send: async (
+            schema: AnySchema | MessageDescriptor,
+            payload: any,
+            opts?: SendOptions,
+          ): Promise<void | boolean> => {
+            // Check if signal is already aborted
+            if (opts?.signal?.aborted) {
+              return opts?.waitFor ? false : undefined;
+            }
+
             // Validate outgoing payload
             const validatedPayload = await validateOutgoingPayload(
               schema,
@@ -555,8 +569,31 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
               (schema as any).type ||
               schema.type;
 
-            // Send with no meta
-            sendMessage(messageType, validatedPayload, {});
+            // Build meta: start with sanitized user meta, then add correlation ID
+            let outMeta: Record<string, unknown> = sanitizeMeta(opts?.meta);
+
+            // Auto-preserve correlation ID if requested
+            if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
+              outMeta.correlationId = enhCtx.meta.correlationId;
+            }
+
+            // Send the message
+            sendMessage(messageType, validatedPayload, outMeta);
+
+            // If waitFor specified, return a promise (stub for now; full impl requires buffer tracking)
+            // TODO: Implement actual buffer drain/ack tracking
+            if (opts?.waitFor) {
+              // For now, return a resolved promise indicating success
+              // Full implementation requires WebSocket buffer tracking
+              return new Promise((resolve) => {
+                // Immediately resolve since we enqueue synchronously
+                // Future: integrate with WebSocket buffer/ack signals
+                setImmediate(() => resolve(true));
+              });
+            }
+
+            // Default: fire-and-forget returns void
+            return undefined;
           },
 
           // reply() method for RPC handlers
