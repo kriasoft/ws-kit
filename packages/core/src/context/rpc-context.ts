@@ -12,6 +12,28 @@
 
 import type { ConnectionData, MinimalContext } from "./base-context";
 
+export interface ReplyOptions {
+  /**
+   * Make the reply async and wait for a specific condition.
+   * - 'drain': Wait for WebSocket send buffer to drain
+   * - 'ack': Wait for server-side acknowledgment
+   * Default: undefined (fire-and-forget, returns void)
+   */
+  waitFor?: "drain" | "ack";
+
+  /**
+   * Cancel the reply operation if this signal is triggered.
+   * Gracefully skips sending if aborted before enqueue.
+   */
+  signal?: AbortSignal;
+
+  /**
+   * Custom metadata to merge into response meta.
+   * Reserved keys (type, correlationId) cannot be overridden.
+   */
+  meta?: Record<string, unknown>;
+}
+
 export interface RpcContext<
   TContext extends ConnectionData = ConnectionData,
   TPayload = unknown,
@@ -25,19 +47,33 @@ export interface RpcContext<
   /**
    * Terminal response (one-shot).
    * Closes the RPC exchange.
+   *
+   * Returns void by default (async enqueue). With {waitFor} option,
+   * returns Promise<void> (always completes, never rejects).
    */
-  reply(payload: TResponse): Promise<void>;
+  reply(payload: TResponse, opts?: ReplyOptions): void | Promise<void>;
 
   /**
    * Terminal error response (one-shot, symmetric with reply()).
    * Sends application-level error to RPC caller.
    * Only first call to reply() or error() sends; subsequent calls ignored.
+   *
+   * Returns void by default (async enqueue). With {waitFor} option,
+   * returns Promise<void> (always completes, never rejects).
    */
-  error<T = unknown>(code: string, message: string, details?: T): Promise<void>;
+  error<T = unknown>(
+    code: string,
+    message: string,
+    details?: T,
+    opts?: ReplyOptions,
+  ): void | Promise<void>;
 
   /**
    * Non-terminal progress update (streaming).
    * Can call multiple times before reply() or error().
+   *
+   * Returns void by default (async enqueue). With {waitFor} option,
+   * returns Promise<void> (always completes, never rejects).
    */
-  progress(payload: TResponse): Promise<void>;
+  progress(payload: TResponse, opts?: ReplyOptions): void | Promise<void>;
 }

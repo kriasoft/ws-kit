@@ -13,4 +13,4 @@ export type {
 } from "./base-context";
 export type { EventContext, SendOptions } from "./event-context";
 export type { PubSubContext } from "./pubsub-context";
-export type { RpcContext } from "./rpc-context";
+export type { ReplyOptions, RpcContext } from "./rpc-context";

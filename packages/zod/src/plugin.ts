@@ -15,6 +15,7 @@ import type {
   ConnectionData,
   MessageDescriptor,
   MinimalContext,
+  ReplyOptions as CoreReplyOptions,
   SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
@@ -44,14 +45,14 @@ type EnhancedContext = MinimalContext<any> & {
     payload: any,
     opts?: SendOptions,
   ) => void | Promise<boolean>;
-  reply?: (payload: any, opts?: any) => Promise<void>;
+  reply?: (payload: any, opts?: ReplyOptions) => void | Promise<void>;
   error?: (
     code: string,
     message: string,
     details?: any,
-    opts?: any,
-  ) => Promise<void>;
-  progress?: (payload: any, opts?: any) => Promise<void>;
+    opts?: ReplyOptions,
+  ) => void | Promise<void>;
+  progress?: (payload: any, opts?: ReplyOptions) => void | Promise<void>;
   getData?: (key: string) => unknown;
 };
 
@@ -86,18 +87,12 @@ interface ResolvedOptions {
   validateOutgoing: boolean;
 }
 
-export interface ReplyOptions {
+export interface ReplyOptions extends CoreReplyOptions {
   /**
    * Whether to validate the outgoing payload.
    * Default: uses plugin validateOutgoing setting
    */
   validate?: boolean;
-
-  /**
-   * Additional metadata to merge into response meta.
-   * Reserved keys (type, correlationId) are immutable and cannot be overridden.
-   */
-  meta?: Record<string, unknown>;
 }
 
 /**
@@ -489,6 +484,11 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           payload: any,
           replyOpts?: ReplyOptions,
         ): Promise<void> => {
+          // Check if signal is already aborted
+          if (replyOpts?.signal?.aborted) {
+            return;
+          }
+
           const wskit = guardRpc();
           const responseSchema = wskit.response as any;
 
@@ -542,6 +542,13 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
             responseMessage.payload,
             responseMessage.meta,
           );
+
+          // If waitFor specified, return a promise
+          if (replyOpts?.waitFor) {
+            return new Promise((resolve) => {
+              setImmediate(() => resolve());
+            });
+          }
         };
 
         // Create Zod extension object with all methods
@@ -597,21 +604,45 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           },
 
           // reply() method for RPC handlers
-          reply: async (payload: any, opts?: ReplyOptions) => {
+          reply: (payload: any, opts?: ReplyOptions): void | Promise<void> => {
             guardRpc();
-            if (replied) return; // Idempotent: silently ignore if already replied
-            await sendOutbound(payload, opts);
+            if (replied) {
+              // Idempotent: return void or empty promise if already replied
+              return opts?.waitFor ? Promise.resolve() : undefined;
+            }
+
+            // If no waitFor, return void (fire-and-forget)
+            if (!opts?.waitFor) {
+              // Fire-and-forget path
+              sendOutbound(payload, opts).catch(() => {
+                // Silently catch errors; validation errors are handled in sendOutbound
+              });
+              return undefined;
+            }
+
+            // With waitFor, return promise
+            return (async () => {
+              await sendOutbound(payload, opts);
+            })();
           },
 
           // error() method for RPC handlers (terminal, symmetric with reply())
-          error: async (
+          error: (
             code: string,
             message: string,
             details?: any,
             opts?: ReplyOptions,
-          ) => {
+          ): void | Promise<void> => {
+            // Check if signal is already aborted
+            if (opts?.signal?.aborted) {
+              return opts?.waitFor ? Promise.resolve() : undefined;
+            }
+
             const wskit = guardRpc();
-            if (replied) return; // Idempotent: silently ignore if already replied
+            if (replied) {
+              // Idempotent: return void or empty promise if already replied
+              return opts?.waitFor ? Promise.resolve() : undefined;
+            }
 
             const responseSchema = wskit.response as any;
 
@@ -638,38 +669,95 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
               errorMessage.payload,
               errorMessage.meta,
             );
+
+            // If waitFor specified, return a promise
+            if (opts?.waitFor) {
+              return new Promise((resolve) => {
+                setImmediate(() => resolve());
+              });
+            }
+
+            return undefined;
           },
 
           // progress() method for RPC handlers
           // Emits a dedicated $ws:rpc-progress control message (non-terminal)
-          progress: async (payload: any, opts?: ReplyOptions) => {
+          progress: (
+            payload: any,
+            opts?: ReplyOptions,
+          ): void | Promise<void> => {
+            // Check if signal is already aborted
+            if (opts?.signal?.aborted) {
+              return opts?.waitFor ? Promise.resolve() : undefined;
+            }
+
             const wskit = guardRpc();
             const responseSchema = wskit.response as any;
 
-            // Validate progress payload against RPC response schema
-            const validatedPayload = await validateProgressPayload(
-              responseSchema,
-              payload,
-            );
+            // If no waitFor, return void (fire-and-forget)
+            if (!opts?.waitFor) {
+              // Fire-and-forget path
+              validateProgressPayload(responseSchema, payload)
+                .then((validatedPayload) => {
+                  // Build control message with correlation ID preserved
+                  const progressMessage = {
+                    type: "$ws:rpc-progress",
+                    meta: {
+                      ...baseMeta(ctx),
+                      ...sanitizeMeta(opts?.meta),
+                    },
+                    ...(validatedPayload !== undefined
+                      ? { payload: validatedPayload }
+                      : {}),
+                  };
 
-            // Build control message with correlation ID preserved
-            const progressMessage = {
-              type: "$ws:rpc-progress",
-              meta: {
-                ...baseMeta(ctx),
-                ...sanitizeMeta(opts?.meta),
-              },
-              ...(validatedPayload !== undefined
-                ? { payload: validatedPayload }
-                : {}),
-            };
+                  // Send control message without marking as replied
+                  sendMessage(
+                    progressMessage.type,
+                    progressMessage.payload,
+                    progressMessage.meta,
+                  );
+                })
+                .catch(() => {
+                  // Silently catch errors; validation errors are handled in validateProgressPayload
+                });
+              return undefined;
+            }
 
-            // Send control message without marking as replied
-            sendMessage(
-              progressMessage.type,
-              progressMessage.payload,
-              progressMessage.meta,
-            );
+            // With waitFor, return promise
+            return (async () => {
+              // Validate progress payload against RPC response schema
+              const validatedPayload = await validateProgressPayload(
+                responseSchema,
+                payload,
+              );
+
+              // Build control message with correlation ID preserved
+              const progressMessage = {
+                type: "$ws:rpc-progress",
+                meta: {
+                  ...baseMeta(ctx),
+                  ...sanitizeMeta(opts?.meta),
+                },
+                ...(validatedPayload !== undefined
+                  ? { payload: validatedPayload }
+                  : {}),
+              };
+
+              // Send control message without marking as replied
+              sendMessage(
+                progressMessage.type,
+                progressMessage.payload,
+                progressMessage.meta,
+              );
+
+              // If waitFor specified, return a promise
+              if (opts?.waitFor) {
+                return new Promise((resolve) => {
+                  setImmediate(() => resolve());
+                });
+              }
+            })();
           },
 
           // getData() method - retrieve connection data
