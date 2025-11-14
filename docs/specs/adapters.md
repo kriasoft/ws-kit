@@ -710,8 +710,241 @@ const router = createRouter({
 serve(router); // Use Redis for cross-instance broadcasting
 ```
 
+## Feature Adapters
+
+Beyond platform adapters (Bun, Cloudflare, Deno), WS-Kit uses **feature adapters** for stateful capabilities that need backend implementations. This follows the **Plugin-Adapter Architecture** (see [ADR-031](../adr/031-plugin-adapter-architecture.md)).
+
+### Design Principle
+
+**Plugins** define the API; **adapters** implement the backend. Users swap adapters without code changes:
+
+```typescript
+// Same code, different adapters
+const router = createRouter()
+  .plugin(withPubSub({ adapter: memoryPubSub() }))     // Dev: memory
+  .plugin(withRateLimit({ adapter: memoryRateLimiter() }));
+
+// In production, swap adapters:
+.plugin(withPubSub({ adapter: redisPubSub(redis) }))
+.plugin(withRateLimit({ adapter: redisRateLimiter(redis) }))
+```
+
+### Pub/Sub Adapters
+
+**Plugin**: `withPubSub()` (via `@ws-kit/plugins`)
+
+**Adapters**:
+
+| Adapter | Location | Use Case | Guarantees |
+|---------|----------|----------|-----------|
+| **Memory** | `@ws-kit/core/adapters/pubsub/memory` | Dev, testing, single-server | ✅ In-memory, fast; ❌ no persistence |
+| **Redis** | `@ws-kit/redis` | Multi-pod production | ✅ Cross-server distribution; ❌ external dependency |
+| **Cloudflare** | `@ws-kit/cloudflare` | Cloudflare Workers | ✅ Durable Objects; ❌ per-DO limits |
+
+**Interface** (`@ws-kit/core/adapters/pubsub/types.ts`):
+
+```typescript
+export interface PubSubAdapter {
+  /**
+   * Subscribe a connection to a topic.
+   */
+  subscribe(clientId: string, topic: string): Promise<void>;
+
+  /**
+   * Unsubscribe a connection from a topic.
+   */
+  unsubscribe(clientId: string, topic: string): Promise<void>;
+
+  /**
+   * Publish a message to all subscribers of a topic.
+   * Returns the number of subscribers that received the message.
+   */
+  publish(
+    topic: string,
+    message: SerializedMessage
+  ): Promise<PublishResult>;
+
+  /**
+   * List all topics a connection is subscribed to.
+   */
+  list(clientId: string): Promise<string[]>;
+}
+
+export interface PublishResult {
+  matched: number;  // Number of subscribers that received message
+  capability: "exact" | "prefix" | "regex";  // Matching mode used
+}
+```
+
+**Example: Swapping Adapters**
+
+Development (no setup needed):
+```typescript
+import { withPubSub } from "@ws-kit/plugins";
+import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
+
+const router = createRouter()
+  .plugin(withPubSub({ adapter: memoryPubSub() }));
+```
+
+Production (Redis):
+```typescript
+import { withPubSub } from "@ws-kit/plugins";
+import { redisPubSub } from "@ws-kit/redis";
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const router = createRouter()
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }));
+```
+
+Cloudflare Workers (Durable Objects):
+```typescript
+import { withPubSub } from "@ws-kit/plugins";
+import { cloudflarePubSub } from "@ws-kit/cloudflare";
+
+const router = createRouter()
+  .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }));
+```
+
+### Rate Limiter Adapters
+
+**Plugin**: `withRateLimit()` (via `@ws-kit/plugins`)
+
+**Adapters**:
+
+| Adapter | Location | Use Case | Guarantees |
+|---------|----------|----------|-----------|
+| **Memory** | `@ws-kit/core/adapters/rate-limit/memory` | Dev, testing, single-server | ✅ Per-key mutex; ❌ no distribution |
+| **Redis** | `@ws-kit/redis` | Multi-pod production | ✅ Lua script atomicity; ❌ external dependency |
+| **Cloudflare** | `@ws-kit/cloudflare` | Cloudflare Workers | ✅ Sharded DOs; ❌ complexity |
+
+**Interface** (`@ws-kit/core/adapters/rate-limit/types.ts`):
+
+```typescript
+export interface RateLimiterAdapter {
+  /**
+   * Atomically attempt to consume tokens from a rate limit bucket.
+   * @param key - Rate limit key (e.g., "user:123:SendMessage")
+   * @param tokens - Number of tokens to consume
+   * @returns Decision: allowed + remaining, or denied + retryAfterMs
+   */
+  consume(
+    key: string,
+    tokens: number
+  ): Promise<{
+    ok: boolean;
+    retryAfterMs?: number;  // When tokens will be available
+  }>;
+
+  /**
+   * Reset the bucket (clear all tokens).
+   */
+  reset(key: string): Promise<void>;
+}
+```
+
+**Example: Swapping Adapters**
+
+Development (no setup needed):
+```typescript
+import { withRateLimit } from "@ws-kit/plugins";
+import { memoryRateLimiter } from "@ws-kit/core/adapters/rate-limit";
+
+const router = createRouter()
+  .plugin(withRateLimit({
+    adapter: memoryRateLimiter(),
+    capacity: 100,
+    tokensPerSecond: 10,
+  }));
+```
+
+Production (Redis):
+```typescript
+import { withRateLimit } from "@ws-kit/plugins";
+import { redisRateLimiter } from "@ws-kit/redis";
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const router = createRouter()
+  .plugin(withRateLimit({
+    adapter: redisRateLimiter(redis),
+    capacity: 1000,
+    tokensPerSecond: 50,
+    key: (ctx) => `user:${ctx.ws.data.userId}`,
+  }));
+```
+
+### Custom Adapters
+
+Implement any interface to create custom adapters for proprietary backends.
+
+**Example: Kafka-based Pub/Sub**
+
+```typescript
+import { PubSubAdapter, PublishResult } from "@ws-kit/core/adapters/pubsub";
+
+export function kafkaPubSub(producer: KafkaProducer): PubSubAdapter {
+  const subscriptions = new Map<string, Set<string>>();
+
+  return {
+    subscribe: async (clientId, topic) => {
+      if (!subscriptions.has(topic)) {
+        subscriptions.set(topic, new Set());
+      }
+      subscriptions.get(topic)!.add(clientId);
+    },
+
+    unsubscribe: async (clientId, topic) => {
+      subscriptions.get(topic)?.delete(clientId);
+    },
+
+    publish: async (topic, message): Promise<PublishResult> => {
+      await producer.send({
+        topic,
+        messages: [{ value: JSON.stringify(message) }],
+      });
+      const subscribers = subscriptions.get(topic) ?? new Set();
+      return {
+        matched: subscribers.size,
+        capability: "exact",
+      };
+    },
+
+    list: async (clientId) => {
+      const topics: string[] = [];
+      for (const [topic, clients] of subscriptions.entries()) {
+        if (clients.has(clientId)) {
+          topics.push(topic);
+        }
+      }
+      return topics;
+    },
+  };
+}
+
+// Usage
+const router = createRouter()
+  .plugin(withPubSub({ adapter: kafkaPubSub(kafkaProducer) }));
+```
+
+### Benefits of Feature Adapters
+
+- ✅ **Zero-config development**: Memory adapters work out-of-the-box
+- ✅ **Production-ready**: Swap single line of code for scalable backends
+- ✅ **Testing**: No external services needed for unit tests
+- ✅ **Extensibility**: Custom adapters for any backend
+- ✅ **Type safety**: Adapters implement well-defined interfaces
+- ✅ **Clear ownership**: Plugin defines API; adapter implements backend
+
+See [ADR-031: Plugin-Adapter Architecture](../adr/031-plugin-adapter-architecture.md) for complete design rationale.
+
 ## Future Considerations
 
 - **Redis Pub/Sub**: Additional adapter for distributed Redis-backed subscriptions
 - **Node.js Adapter**: Support for Node.js runtime (currently Bun/Deno/Cloudflare only)
 - **Subscription Persistence**: Optional durable subscriptions across reconnects
+- **Kafka Adapters**: Community-maintained adapters for Kafka-based pub/sub
+- **AWS SNS/SQS Adapters**: AWS service integrations

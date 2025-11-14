@@ -36,6 +36,74 @@ Adapters MUST receive normalized messages for validation.
 
 **Strict mode validation**: Schemas MUST reject unknown keys, including unexpected `payload` when schema defines none. See docs/specs/schema.md#Strict-Schemas for rationale and #Strict-Mode-Enforcement below for adapter requirements.
 
+## Type Inference for Handlers {#Type-Inference}
+
+### Event Handlers (`.on()`)
+
+Event handlers registered with `.on()` receive typed context **only after a validation plugin is applied**. Without a plugin, `ctx.payload` is `unknown`.
+
+**Without validation plugin:**
+
+```typescript
+router.on(MyMsg, (ctx) => {
+  ctx.payload; // ❌ Type is 'unknown'—no validation applied
+});
+```
+
+**With validation plugin:**
+
+```typescript
+router
+  .plugin(withZod()) // or withValibot()
+  .on(MyMsg, (ctx) => {
+    ctx.payload; // ✅ Type inferred from schema
+  });
+```
+
+**Rationale**: Validation is **opt-in via plugins**. Events without validation should not imply type safety. This design ensures:
+
+- Core remains validator-agnostic
+- Type inference is explicit and composable
+- Handlers clearly signal when they rely on validation
+
+### RPC Handlers (`.rpc()`)
+
+RPC handlers require a validation plugin and **automatically infer both request and response types** from the schema:
+
+```typescript
+const GetUser = rpc(
+  "GET_USER",
+  { id: z.string() }, // Request shape
+  "USER",
+  { id: z.string(), name: z.string() }, // Response shape
+);
+
+router.plugin(withZod()).rpc(GetUser, (ctx) => {
+  // ctx.payload: { id: string } ✅ Inferred
+  // ctx.reply: (payload: { id: string; name: string }) => Promise<void> ✅ Inferred
+});
+```
+
+### Custom Connection Data
+
+Both handlers infer context from custom `ConnectionData`:
+
+```typescript
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+  }
+}
+
+router.on(MyMsg, (ctx) => {
+  ctx.data.userId; // ✅ Properly typed
+});
+
+router.rpc(GetUser, (ctx) => {
+  ctx.data.userId; // ✅ Properly typed
+});
+```
+
 ## Strict Mode Enforcement
 
 Adapters MUST configure validators to reject unknown keys at all levels (root, meta, payload).

@@ -8,28 +8,17 @@
  * Uses Symbol.for() to avoid collisions, survive minification, and remain unspoofable.
  * Centralizes all non-enumerable property access through helpers.
  *
+ * This module is shared by all validator adapters (@ws-kit/zod, @ws-kit/valibot, etc.)
+ * to maintain consistent schema metadata handling across the ecosystem.
+ *
  * @internal
  */
-
-import type { ZodType } from "zod";
 
 /**
  * Symbol for message type descriptor.
  * Stores the message type literal (e.g., "USER_JOIN", "GET_USER").
  */
 export const DESCRIPTOR = Symbol.for("@ws-kit/descriptor");
-
-/**
- * Symbol for Zod payload schema.
- * Stores the Zod schema for the payload field.
- */
-export const ZOD_PAYLOAD = Symbol.for("@ws-kit/zod-payload");
-
-/**
- * Symbol for schema option metadata.
- * Stores per-schema behavior overrides (validateOutgoing, strict, deprecated).
- */
-export const SCHEMA_OPTS = Symbol.for("@ws-kit/schema-opts");
 
 /**
  * Per-schema behavior overrides for validation and strictness.
@@ -56,15 +45,18 @@ export interface SchemaOpts {
 }
 
 /**
- * Attach schema options to a Zod type without polluting enumerable keys.
+ * Symbol for schema option metadata.
+ * Stores per-schema behavior overrides (validateOutgoing, strict, deprecated).
+ */
+export const SCHEMA_OPTS = Symbol.for("@ws-kit/schema-opts");
+
+/**
+ * Attach schema options to a schema without polluting enumerable keys.
  * Uses non-enumerable property definition to keep the schema clean.
  *
  * @internal
  */
-export function setSchemaOpts<T extends ZodType>(
-  schema: T,
-  opts: SchemaOpts,
-): T {
+export function setSchemaOpts<T extends any>(schema: T, opts: SchemaOpts): T {
   Object.defineProperty(schema, SCHEMA_OPTS, {
     value: Object.freeze(opts),
     enumerable: false,
@@ -74,7 +66,7 @@ export function setSchemaOpts<T extends ZodType>(
 }
 
 /**
- * Retrieve schema options attached to a Zod type.
+ * Retrieve schema options attached to a schema.
  * Returns undefined if no options are set.
  *
  * @internal
@@ -85,13 +77,13 @@ export function getSchemaOpts(schema: any): SchemaOpts | undefined {
 
 /**
  * Clone options from one schema to another during composition.
- * Call this whenever you create a derivative Zod type via transform, refine, pipe, etc.
+ * Call this whenever you create a derivative schema via transform, refine, pipe, etc.
  *
  * Preserves the intent and options of the original schema through chained operations.
  *
  * @internal
  */
-export function cloneWithOpts<T extends ZodType>(from: any, to: T): T {
+export function cloneWithOpts<T extends any>(from: any, to: T): T {
   const opts = getSchemaOpts(from);
   if (opts) {
     setSchemaOpts(to, opts);
@@ -108,14 +100,6 @@ export function getDescriptor(schema: any): { type: string } | undefined {
 }
 
 /**
- * Get Zod payload schema from a schema.
- * @internal
- */
-export function getZodPayload(schema: any): ZodType | undefined {
-  return schema?.[ZOD_PAYLOAD];
-}
-
-/**
  * Dereference message type from schema descriptor.
  * Centralizes descriptor access: tries schemaObj first, falls back to schema.
  * This single point of access reduces copy-paste and future refactoring noise.
@@ -126,18 +110,4 @@ export function typeOf(
   schema?: unknown,
 ): string | undefined {
   return (schemaObj as any)?.[DESCRIPTOR]?.type ?? (schema as any)?.type;
-}
-
-/**
- * Augment ZodTypeAny to support all metadata symbols at the type level.
- * Purely for TypeScript awareness; actual properties are set via symbols.
- *
- * @internal
- */
-declare module "zod" {
-  interface ZodTypeAny {
-    readonly [DESCRIPTOR]?: { type: string };
-    readonly [ZOD_PAYLOAD]?: ZodType;
-    readonly [SCHEMA_OPTS]?: SchemaOpts;
-  }
 }

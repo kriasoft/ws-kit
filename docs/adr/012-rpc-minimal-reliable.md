@@ -36,7 +36,7 @@ Implement minimal, composable RPC features focused on reliability without bloati
 
 ### 3. **One-Shot Reply Guard**
 
-- After `ctx.send()` or `ctx.error()`, further sends are no-ops with debug log.
+- After `ctx.reply()` or `ctx.error()`, further sends are no-ops with debug log.
 - Prevents accidental double-sends or mixed terminals (reply→error).
 - Simplifies handler logic; no explicit "replied" flags needed.
 
@@ -98,6 +98,28 @@ Implement minimal, composable RPC features focused on reliability without bloati
 
 - RPC state map must be cleaned up on disconnect (done via `handleClose()`).
 - New test suite covers abort, one-shot, deadline, backpressure, validation (conformance tests prevent regressions).
+
+## Implementation: ctx.error() One-Shot Guard
+
+`ctx.error(code, message, details, opts)` is a terminal method (like `ctx.reply()`) enforced by the same RPC state tracking: the first call to either `.reply()` or `.error()` marks the RPC as responded; further calls become no-ops (logged in dev mode). This prevents accidental double-responses and unifies error/success paths under one reliability model.
+
+**Wire Format**: Errors are sent as `RPC_ERROR` frames with structured `{code, message, details, retryable, retryAfterMs}` to allow clients to distinguish retryable failures (e.g., "RESOURCE_EXHAUSTED", backoff advised) from fatal ones (e.g., "NOT_FOUND", don't retry).
+
+**Example**:
+
+```typescript
+router.rpc(GetUserMsg, (ctx) => {
+  const user = db.get(ctx.payload.id);
+  if (!user) {
+    // Terminal: RPC ends here; any further .reply() or .error() ignored
+    return ctx.error("NOT_FOUND", "User not found", { id: ctx.payload.id });
+  }
+  // Success path: symmetric to error path
+  ctx.reply({ id: user.id, name: user.name });
+});
+```
+
+---
 
 ## References
 

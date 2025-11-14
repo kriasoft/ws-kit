@@ -49,6 +49,21 @@ export type {
   RpcSchema,
 } from "./types.js";
 
+// Plugin re-exports (for convenience)
+export { withMessaging, withPubSub, withRpc } from "@ws-kit/plugins";
+export type {
+  ProgressOptions,
+  ReplyOptions,
+  SendOptions,
+  WithMessagingCapability,
+  WithPubSubCapability,
+  WithRpcCapability,
+} from "@ws-kit/plugins";
+
 // Core re-exports (for convenience)
 export { createRouter } from "@ws-kit/core";
-export type { EventContext as MessageContext, Router } from "@ws-kit/core";
+export type {
+  EventContext as MessageContext,
+  RpcContext,
+  Router,
+} from "@ws-kit/core";

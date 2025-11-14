@@ -178,7 +178,7 @@ router.rpc(ProcessData, async (ctx) => {
 - `INTERNAL`: Unexpected server error (server decides retryability)
 - `CANCELLED`: Client cancelled or disconnected
 
-See [Error Handling Spec](./specs/error-handling.md) for the complete taxonomy and retry semantics.
+See [Error Handling Spec](../specs/error-handling.md) for the complete taxonomy and retry semantics.
 
 ### Cancellation and Deadlines
 
@@ -492,11 +492,11 @@ Choose fire-and-forget when:
 
 For design rationale, alternatives considered, and implementation details, see:
 
-- [ADR-012: RPC Minimal, Reliable](./adr/012-rpc-minimal-reliable.md)
-- [ADR-013: RPC Reconnect & Idempotency](./adr/013-rpc-reconnect-idempotency.md)
-- [ADR-014: RPC DX & Safety Improvements](./adr/014-rpc-dx-safety-improvements.md)
-- [ADR-015: Unified RPC API Design](./adr/015-unified-rpc-api-design.md)
+- [ADR-012: RPC Minimal, Reliable](../adr/012-rpc-minimal-reliable.md)
+- [ADR-013: RPC Reconnect & Idempotency](../adr/013-rpc-reconnect-idempotency.md)
+- [ADR-014: RPC DX & Safety Improvements](../adr/014-rpc-dx-safety-improvements.md)
+- [ADR-015: Unified RPC API Design](../adr/015-unified-rpc-api-design.md)
 
 ## Troubleshooting
 
-See the [RPC Troubleshooting Guide](./guides/rpc-troubleshooting.md) for solutions to common issues.
+See the [RPC Troubleshooting Guide](./rpc-troubleshooting.md) for solutions to common issues.

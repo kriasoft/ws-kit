@@ -83,7 +83,14 @@ export { isPublishError } from "./core/types";
 export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 
 // Useful type utilities (capability-gated context types)
-export type { EventContext, PubSubContext, RpcContext } from "./context/types";
+export type {
+  EventContext,
+  ProgressOptions,
+  PubSubContext,
+  ReplyOptions,
+  RpcContext,
+  SendOptions,
+} from "./context/types";
 
 // Pub/Sub utilities
 export {
@@ -97,3 +104,12 @@ export * as test from "./testing";
 
 // Normalization utility (for testing validator integration)
 export { normalizeInboundMessage } from "./internal/normalize";
+
+// Memory adapters (development/testing)
+export { memoryPubSub } from "./adapters/pubsub/memory";
+export { memoryRateLimiter } from "./adapters/rate-limit/memory";
+export type {
+  RateLimitDecision,
+  RateLimiter,
+  Policy,
+} from "./adapters/rate-limit/types";

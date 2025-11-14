@@ -16,11 +16,16 @@
 import { z, type ZodObject, type ZodRawShape, type ZodType } from "zod";
 import {
   DESCRIPTOR,
-  ZOD_PAYLOAD,
   setSchemaOpts,
   type SchemaOpts,
-} from "./metadata.js";
+} from "@ws-kit/core/internal";
 import type { BrandedSchema } from "./types.js";
+
+/**
+ * Symbol for Zod payload schema (validator-specific).
+ * Stores the Zod schema for the payload field.
+ */
+export const ZOD_PAYLOAD = Symbol.for("@ws-kit/zod-payload");
 
 /**
  * Standard meta fields that are always allowed.
@@ -33,7 +38,9 @@ const STANDARD_META_FIELDS = {
 
 /**
  * Reserved meta field names that cannot be used in extended meta.
- * These are managed by the router/adapter layer.
+ * These are managed by the router/adapter layer and cannot be overridden in schema definitions.
+ *
+ * @internal
  */
 const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 

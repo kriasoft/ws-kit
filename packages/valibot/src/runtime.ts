@@ -28,10 +28,15 @@ import {
 } from "valibot";
 import {
   DESCRIPTOR,
-  VALIBOT_PAYLOAD,
   setSchemaOpts,
   type SchemaOpts,
-} from "./metadata.js";
+} from "@ws-kit/core/internal";
+
+/**
+ * Symbol for Valibot payload schema (validator-specific).
+ * Stores the Valibot schema for the payload field.
+ */
+export const VALIBOT_PAYLOAD = Symbol.for("@ws-kit/valibot-payload");
 
 /**
  * Standard meta fields that are always allowed.
@@ -44,7 +49,9 @@ const STANDARD_META_FIELDS = {
 
 /**
  * Reserved meta field names that cannot be used in extended meta.
- * These are managed by the router/adapter layer.
+ * These are managed by the router/adapter layer and cannot be overridden in schema definitions.
+ *
+ * @internal
  */
 const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 

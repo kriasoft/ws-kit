@@ -91,21 +91,21 @@ describe("validator plugin narrowing - Valibot (types)", () => {
     const standardConfig = withValibot({
       validateOutgoing: true,
     });
-    expectTypeOf(standardConfig).toBeFunction();
+    expectTypeOf(standardConfig).toBeFunction;
 
     // With custom error hook
     const configWithHook = withValibot({
       onValidationError: async (err, ctx) => {
         // err should have code and details
         expectTypeOf(err.code).toBeString();
-        expectTypeOf(err.details).toBeDefined();
+        expectTypeOf(err.details).not.toBeUndefined;
 
         // ctx should have type and direction
         expectTypeOf(ctx.type).toBeString();
         expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
       },
     });
-    expectTypeOf(configWithHook).toBeFunction();
+    expectTypeOf(configWithHook).toBeFunction;
   });
 
   // Test 7: RPC method available after plugin
@@ -120,25 +120,27 @@ describe("validator plugin narrowing - Valibot (types)", () => {
   // Test 8: Multiple plugins merge capabilities
   it("multiple plugins merge capabilities correctly", () => {
     // Mock pubsub plugin for testing capability merging
-    const withMockPubSub = (r: Router<any>) => {
+    const withMockPubSub: (r: Router<any>) => Router<any, { pubsub: true }> = (
+      r: Router<any>,
+    ) => {
       const enhanced = Object.assign(r, {
         publish: async (
           topic: string,
           schema: MessageDescriptor,
           payload: unknown,
-        ) => {},
-        subscriptions: {
-          list: () => [] as string[],
+        ) => ({ ok: true as const, matched: 0, capability: "exact" as const }),
+        topics: {
+          list: () => [] as readonly string[],
           has: (t: string) => false,
         },
-      }) as Router<any, { pubsub: true }>;
+      }) as unknown as Router<any, { pubsub: true }>;
       (enhanced as any).__caps = { pubsub: true };
       return enhanced;
     };
 
     const router = createRouter<{ userId?: string }>()
       .plugin(withValibot())
-      .plugin(withMockPubSub);
+      .plugin(withMockPubSub as any);
 
     // Both validation and pubsub methods should be available
     expectTypeOf(router).toHaveProperty("rpc");
@@ -192,16 +194,16 @@ describe("validator plugin narrowing - Valibot (types)", () => {
       onValidationError: (err, ctx) => {
         // Error structure
         expectTypeOf(err.code).toBeString();
-        expectTypeOf(err.details).toBeDefined();
+        expectTypeOf(err.details).not.toBeUndefined;
 
         // Context structure
         expectTypeOf(ctx.type).toBeString();
         expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
-        expectTypeOf(ctx.payload).toBeDefined();
+        expectTypeOf(ctx.payload).not.toBeUndefined;
       },
     });
 
-    expectTypeOf(plugin).toBeFunction();
+    expectTypeOf(plugin).toBeFunction;
   });
 
   // Test 12: withValibot() can be stacked with other plugins safely

@@ -32,6 +32,8 @@ This directory contains architectural decisions that shaped ws-kit's design. Eac
 | [025](./025-validator-plugins-configurable.md)              | Validator Plugins with Configurable Options      | **Accepted**   | Core—Composable, configurable validators            | [router.md](../specs/router.md), [validation.md](../specs/validation.md) |
 | [028](./028-plugin-architecture-final-design.md)            | Plugin Architecture - Final Design               | **Accepted**   | Core—Type-safe plugin API, capability tracking      | [router.md](../specs/router.md)                                          |
 | [029](./029-context-enhancer-registry-plugin-safety.md)     | Context Enhancer Registry & Plugin Safety        | **Accepted**   | Core—Safe multi-plugin composition, typed API       | [router.md](../specs/router.md)                                          |
+| [030](./030-context-methods-design.md)                      | Context Methods Design (reply, progress, send)   | **Final**      | RPC/Messaging—Unified API for message sending       | [context-methods.md](../specs/context-methods.md)                        |
+| [031](./031-plugin-adapter-architecture.md)                 | Plugin-Adapter Architecture                      | **Final**      | Core—Plugins define APIs, adapters implement them   | [plugins.md](../specs/plugins.md), [adapters.md](../specs/adapters.md)   |
 
 ## Status Legend
 

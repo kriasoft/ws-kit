@@ -39,16 +39,31 @@ export type { WithValibotOptions } from "./plugin.js";
 
 // Type inference utilities (type-level only)
 export type {
-  InferType,
-  InferPayload,
-  InferMeta,
+  AnySchema,
   InferMessage,
+  InferMeta,
+  InferPayload,
   InferResponse,
+  InferType,
   MessageSchema,
   RpcSchema,
-  AnySchema,
 } from "./types.js";
+
+// Plugin re-exports (for convenience)
+export { withMessaging, withPubSub, withRpc } from "@ws-kit/plugins";
+export type {
+  ProgressOptions,
+  ReplyOptions,
+  SendOptions,
+  WithMessagingCapability,
+  WithPubSubCapability,
+  WithRpcCapability,
+} from "@ws-kit/plugins";
 
 // Core re-exports (for convenience)
 export { createRouter } from "@ws-kit/core";
-export type { Router } from "@ws-kit/core";
+export type {
+  EventContext as MessageContext,
+  RpcContext,
+  Router,
+} from "@ws-kit/core";

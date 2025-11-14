@@ -241,15 +241,16 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
      * **Never throws for runtime conditions.** All expected failures return
      * a result object with ok:false and an error code.
      *
-     * **Special handling:**
-     * - `excludeSelf: true` returns UNSUPPORTED (not yet implemented) immediately
-     *   without invoking the adapter. This prevents unnecessary work while the
-     *   end-to-end path is being developed.
+     * **excludeSelf handling:**
+     * - When `excludeSelf: true`, the sender's clientId is added to envelope metadata
+     *   as `excludeClientId`, and deliverLocally() skips that client during fan-out.
+     * - This works for both router.publish() and ctx.publish() calls.
      *
      * @param topic - Topic name (validation is middleware responsibility)
      * @param schema - Message schema (for router observability and type name)
      * @param payload - Validated payload (may include meta from message schema)
      * @param opts - Optional: partitionKey (sharding hint), excludeSelf, meta
+     * @param senderClientId - Optional: client ID of the publisher (for excludeSelf filtering)
      * @returns PublishResult with capability + matched (if knowable) or error
      */
     const publish = async (
@@ -257,21 +258,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
       schema: MessageDescriptor,
       payload: unknown,
       opts?: PublishOptions,
+      senderClientId?: string,
     ): Promise<PublishResult> => {
-      // Fast-fail on excludeSelf (not yet supported end-to-end)
-      if (opts?.excludeSelf === true) {
-        return {
-          ok: false,
-          error: "UNSUPPORTED",
-          retryable: false,
-          details: {
-            feature: "excludeSelf",
-            reason:
-              "Not yet implemented end-to-end; use meta to filter on client side",
-          },
-        };
-      }
-
       // Construct envelope: the message itself
       const envelope: PublishEnvelope = {
         topic,
@@ -280,7 +268,14 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
         ...(opts?.meta && { meta: opts.meta }), // Pass through optional metadata
       };
 
-      // Construct adapter options (partitionKey, signal; excludeSelf handled above)
+      // If excludeSelf is true and we know the sender's clientId,
+      // store it in envelope metadata for deliverLocally to use
+      if (opts?.excludeSelf === true && senderClientId) {
+        envelope.meta = envelope.meta || {};
+        (envelope.meta as any).excludeClientId = senderClientId;
+      }
+
+      // Construct adapter options (partitionKey, signal)
       const publishOpts: PublishOptions | undefined = opts
         ? {
             ...(opts.partitionKey && { partitionKey: opts.partitionKey }),
@@ -374,7 +369,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
           payload: any,
           opts?: PublishOptions,
         ): Promise<PublishResult> => {
-          return await publish(topic, schema, payload, opts);
+          // Pass the sender's clientId for excludeSelf filtering
+          return await publish(topic, schema, payload, opts, ctx.clientId);
         };
 
         // Attach topics helper for subscription management

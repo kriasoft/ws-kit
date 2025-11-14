@@ -21,6 +21,17 @@ import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
 
 /**
+ * Runtime capabilities record: tracks which plugins have been applied.
+ *
+ * Used internally by PluginHost to merge and track applied capabilities.
+ * This is a simple object that maps capability names to true, used for
+ * runtime capability introspection via router.getCapabilities().
+ *
+ * @internal
+ */
+export type Capabilities = Record<string, unknown>;
+
+/**
  * Plugin<TContext, TPluginApi> is a function that takes a router
  * and returns a router with extended API.
  *

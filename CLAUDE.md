@@ -25,7 +25,7 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Architecture
 
 - **Modular Packages**: `@ws-kit/core` router with pluggable validator and platform adapters
-- **Capability Plugins**: `.plugin()` gates features (validation, pub/sub, rate limiters) for both runtime and types
+- **Capability Plugins**: `.plugin()` gates features (validation, pub/sub) for both runtime and types
 - **Composition Over Inheritance**: Single `WebSocketRouter<V>` class, any validator + platform combo works
 - **Message-Based Routing**: Routes by message `type` field to registered handlers
 - **Type Safety**: Full TypeScript inference from schema to handler via generics and overloads
@@ -42,13 +42,11 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Quick Start
 
 ```typescript
-import { createClient } from "redis";
-import { createRouter } from "@ws-kit/core";
-import { z, message } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/plugins";
+import { redisPubSub } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
-import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimiter, keyPerUserPerType } from "@ws-kit/rate-limit";
-import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+import { createClient } from "redis";
 
 declare module "@ws-kit/core" {
   interface ConnectionData {
@@ -63,18 +61,9 @@ await redis.connect();
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-const router = createRouter<ConnectionData>()
+const router = createRouter()
   .plugin(withZod())
   .plugin(withPubSub({ adapter: redisPubSub(redis) }));
-
-router.use(
-  rateLimit({
-    adapter: redisRateLimiter(),
-    capacity: 100,
-    tokensPerSecond: 50,
-    key: keyPerUserPerType,
-  }),
-);
 
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
@@ -89,7 +78,11 @@ serve(router, {
 });
 ```
 
-**Architecture notes**: Module augmentation for `ConnectionData` (define once, shared across all routers). Rate limiting and pub/sub via middleware, not plugins.
+**Key concepts**:
+- Import validator and helpers from single source (`@ws-kit/zod` or `@ws-kit/valibot`)
+- Plugins add capabilities: `withZod()` (validation), `withPubSub()` (broadcasting)
+- Module augmentation for `ConnectionData` (define once, shared across routers)
+- Adapters provide backends: memory (dev), Redis/Cloudflare (production)
 
 ## API Surface
 

@@ -8,15 +8,14 @@
  */
 
 import type { GenericSchema } from "valibot";
-import { getValibotPayload as getValibotPayloadFromMetadata } from "./metadata.js";
+import { VALIBOT_PAYLOAD } from "./runtime.js";
 
 /**
  * Helper to extract Valibot payload schema from a message schema.
- * Re-exports from metadata.ts for backward compatibility.
  * @internal
  */
 export function getValibotPayload(schema: any): GenericSchema | undefined {
-  return getValibotPayloadFromMetadata(schema);
+  return schema?.[VALIBOT_PAYLOAD];
 }
 
 /**
