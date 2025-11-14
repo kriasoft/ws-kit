@@ -16,7 +16,7 @@
 
 import { createBunHandler } from "@ws-kit/bun";
 import type { WsKitError } from "@ws-kit/core";
-import { createRouter, message, z } from "@ws-kit/zod";
+import { createRouter, message, withZod, z } from "@ws-kit/zod";
 
 // =======================
 // Message Schemas
@@ -89,7 +89,7 @@ const rooms = new Map<string, Set<string>>();
 // Router Setup
 // =======================
 
-const router = createRouter<WebSocketData>();
+const router = createRouter<WebSocketData>().plugin(withZod());
 
 // =======================
 // Middleware

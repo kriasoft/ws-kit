@@ -13,7 +13,7 @@
  */
 
 import { serve } from "@ws-kit/bun";
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import { createChatRouter } from "./chat";
 
 declare module "@ws-kit/core" {
@@ -25,6 +25,7 @@ declare module "@ws-kit/core" {
 
 // Create the main app router by composing feature sub-routers
 const appRouter = createRouter<ConnectionData>()
+  .plugin(withZod())
   // Merge chat feature handlers
   // All handlers maintain full type inference (schema-driven)
   .merge(createChatRouter<ConnectionData>());
