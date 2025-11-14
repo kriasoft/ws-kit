@@ -42,15 +42,15 @@ Current `withZod()` plugin violates separation of concerns:
 
 **Benefits:**
 
-| Aspect | Current | Proposed |
-|--------|---------|----------|
-| **Zod plugin** | ~880 LOC (monolithic) | ~200 LOC (validation only) |
-| **Duplication** | Same logic in Zod/Valibot | Zero—core owns shared logic |
-| **Testability** | Mixed concerns | Each plugin testable standalone |
-| **Composability** | All-or-nothing | Users pick features: validation-only, RPC with throttling, etc. |
-| **Type safety** | Hidden features (validate flag) | All runtime behaviors visible in types |
-| **Optional features** | Validation forces RPC overhead | Zero overhead for unused features |
-| **Code size** | 5 interdependent files | 10 simpler, focused files |
+| Aspect                | Current                         | Proposed                                                        |
+| --------------------- | ------------------------------- | --------------------------------------------------------------- |
+| **Zod plugin**        | ~880 LOC (monolithic)           | ~200 LOC (validation only)                                      |
+| **Duplication**       | Same logic in Zod/Valibot       | Zero—core owns shared logic                                     |
+| **Testability**       | Mixed concerns                  | Each plugin testable standalone                                 |
+| **Composability**     | All-or-nothing                  | Users pick features: validation-only, RPC with throttling, etc. |
+| **Type safety**       | Hidden features (validate flag) | All runtime behaviors visible in types                          |
+| **Optional features** | Validation forces RPC overhead  | Zero overhead for unused features                               |
+| **Code size**         | 5 interdependent files          | 10 simpler, focused files                                       |
 
 ---
 
@@ -101,6 +101,7 @@ These are orthogonal to validation:
 - **Progress throttling** — Request-response pattern detail, not validation detail
 
 Makes it impossible to:
+
 - Use RPC without a validator
 - Change RPC behavior without touching validator plugins
 - Implement alternative validators that match Zod/Valibot's RPC semantics
@@ -134,6 +135,7 @@ rpc<S extends AnySchema & { response?: AnySchema }>(
 ```
 
 Issues:
+
 - Indirect error: If you pass a message schema (no `response`), type becomes `never` → unclear IDE message
 - Only accepts `AnySchema` union at type level, not strictly `RpcSchema`
 - No runtime assertion that schema is RPC-compatible
@@ -175,6 +177,7 @@ Better: Accept only `RpcSchema`, let TypeScript reject invalid schemas upfront w
 **Responsibility:** Fire-and-forget unicast and broadcast.
 
 **Adds to context:**
+
 - `ctx.send(schema, payload, opts?)` — Send to current connection (1-to-1)
 - `router.publish(topic, schema, payload, opts?)` — Broadcast to subscribers (1-to-many)
 
@@ -185,7 +188,7 @@ Better: Accept only `RpcSchema`, let TypeScript reject invalid schemas upfront w
 
 export interface SendOptions {
   signal?: AbortSignal; // Cancel before send
-  waitFor?: 'drain' | 'ack'; // Backpressure control (async)
+  waitFor?: "drain" | "ack"; // Backpressure control (async)
   meta?: Record<string, unknown>; // Custom metadata
   preserveCorrelation?: boolean; // Auto-copy correlationId from request
 }
@@ -225,7 +228,7 @@ export function withMessaging(): Plugin<
 
         // Send and optionally wait
         ctx.ws.send(JSON.stringify(message));
-        if (opts?.waitFor === 'drain') {
+        if (opts?.waitFor === "drain") {
           return await ctx.ws.waitForDrain();
         }
         return undefined;
@@ -249,7 +252,9 @@ export function withMessaging(): Plugin<
 }
 
 // Core shared utilities (no duplication)
-export function sanitizeMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> {
+export function sanitizeMeta(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
   if (!meta) return {};
   const clean = { ...meta };
   delete clean.type; // Reserved
@@ -268,6 +273,7 @@ export function preserveCorrelationId(
 ```
 
 **Key Points:**
+
 - Requires validation plugin (type-checked: `{ validation: true }`)
 - No RPC semantics here (no reply guard, no progress)
 - Handles all messaging options: backpressure, meta, correlation
@@ -280,6 +286,7 @@ export function preserveCorrelationId(
 **Responsibility:** Request-response pattern with terminal responses and streaming.
 
 **Adds to context (RPC handlers only):**
+
 - `ctx.reply(payload, opts?)` — Terminal success response (one-shot guarded)
 - `ctx.error(code, message, details?, opts?)` — Terminal error response (one-shot guarded)
 - `ctx.progress(update, opts?)` — Non-terminal streaming update
@@ -345,7 +352,7 @@ export function withRpc(options?: { progressThrottleMs?: number }): Plugin<
 
         // Send as special RPC_ERROR message (preserved correlation)
         return ctx.send(
-          { type: '$ws:rpc-error' }, // Reserved control type
+          { type: "$ws:rpc-error" }, // Reserved control type
           errorPayload,
           { ...opts, preserveCorrelation: true },
         );
@@ -372,11 +379,10 @@ export function withRpc(options?: { progressThrottleMs?: number }): Plugin<
         }
 
         // Send as progress message (using messaging)
-        return ctx.send(
-          { type: '$ws:rpc-progress' },
-          update,
-          { ...opts, preserveCorrelation: true },
-        );
+        return ctx.send({ type: "$ws:rpc-progress" }, update, {
+          ...opts,
+          preserveCorrelation: true,
+        });
       };
 
       return next();
@@ -398,6 +404,7 @@ export function withRpc(options?: { progressThrottleMs?: number }): Plugin<
 ```
 
 **Key Points:**
+
 - Requires both validation and messaging
 - One-shot guard shared between `.reply()` and `.error()`
 - Progress throttling built-in, optional
@@ -420,7 +427,11 @@ export interface WithValidationOptions {
   validateOutgoing?: boolean; // Default: true
   onValidationError?: (
     error: ZodError,
-    context: { type: string; direction: 'inbound' | 'outbound'; payload: unknown },
+    context: {
+      type: string;
+      direction: "inbound" | "outbound";
+      payload: unknown;
+    },
   ) => void | Promise<void>;
 }
 
@@ -448,12 +459,12 @@ export function withValidation(options: WithValidationOptions = {}): Plugin<
           if (pluginOptions.onValidationError) {
             await pluginOptions.onValidationError(result.error, {
               type: ctx.type,
-              direction: 'inbound',
+              direction: "inbound",
               payload: ctx.payload,
             });
           } else {
             // Use core error (if in RPC context)
-            await ctx.error?.('INVALID_ARGUMENT', formatZodError(result.error));
+            await ctx.error?.("INVALID_ARGUMENT", formatZodError(result.error));
           }
           return; // Don't call next()
         }
@@ -472,7 +483,10 @@ export function withValidation(options: WithValidationOptions = {}): Plugin<
     if (pluginOptions.validateOutgoing) {
       router.use((ctx, next) => {
         // Store validator instance on context for messaging to call
-        ctx.__validateOutgoing = async (schema: AnySchema, payload: unknown) => {
+        ctx.__validateOutgoing = async (
+          schema: AnySchema,
+          payload: unknown,
+        ) => {
           const payloadSchema = getPayloadSchema(schema);
           if (!payloadSchema) return payload; // No validation needed
 
@@ -482,11 +496,13 @@ export function withValidation(options: WithValidationOptions = {}): Plugin<
             if (pluginOptions.onValidationError) {
               await pluginOptions.onValidationError(result.error, {
                 type: inferType(schema),
-                direction: 'outgoing',
+                direction: "outgoing",
                 payload,
               });
             }
-            throw new Error(`Outgoing validation failed: ${formatZodError(result.error)}`);
+            throw new Error(
+              `Outgoing validation failed: ${formatZodError(result.error)}`,
+            );
           }
           return result.data;
         };
@@ -500,6 +516,7 @@ export function withValidation(options: WithValidationOptions = {}): Plugin<
 ```
 
 **Key Points:**
+
 - **Only** inbound and outgoing validation; nothing else
 - No RPC semantics, no meta management, no options
 - ~120 LOC in Zod; identical in Valibot
@@ -549,10 +566,9 @@ router.rpc(GetUserMsg, async (ctx) => {
 **Variant: Validation-Only (Zero RPC Overhead):**
 
 ```typescript
-const router = createRouter<ConnectionData>()
-  .plugin(withValidation());
-  // No messaging, no RPC
-  // ctx.send, ctx.reply, ctx.progress → not available
+const router = createRouter<ConnectionData>().plugin(withValidation());
+// No messaging, no RPC
+// ctx.send, ctx.reply, ctx.progress → not available
 
 router.on(EventMsg, (ctx) => {
   // ctx.payload is validated
@@ -573,17 +589,17 @@ const router = createRouter<ConnectionData>()
 
 ## Benefits
 
-| Aspect | Current | Proposed |
-|--------|---------|----------|
-| **Code Size** | `withZod()` ~880 LOC | `withValidation()` ~120 LOC + core plugins ~220 LOC |
-| **Duplication** | Same logic in Zod/Valibot (~300 LOC) | Zero—core owns once |
-| **Type Safety** | Hidden features (validate flag) | All behaviors visible in types |
-| **Testability** | Mixed concerns, hard to isolate | Each plugin testable standalone |
-| **Composability** | All-or-nothing | Users pick needed features |
-| **Overhead** | Validation forces RPC code | Zero for unused features |
-| **Maintenance** | Bug fixes in 2 places (Zod + Valibot) | One place (core) |
-| **Type Inference** | Works but uses "never" tricks | Clean, uses branded types |
-| **Readability** | 5-file plugin hard to follow | 3-4 focused, ~100-LOC files each |
+| Aspect             | Current                               | Proposed                                            |
+| ------------------ | ------------------------------------- | --------------------------------------------------- |
+| **Code Size**      | `withZod()` ~880 LOC                  | `withValidation()` ~120 LOC + core plugins ~220 LOC |
+| **Duplication**    | Same logic in Zod/Valibot (~300 LOC)  | Zero—core owns once                                 |
+| **Type Safety**    | Hidden features (validate flag)       | All behaviors visible in types                      |
+| **Testability**    | Mixed concerns, hard to isolate       | Each plugin testable standalone                     |
+| **Composability**  | All-or-nothing                        | Users pick needed features                          |
+| **Overhead**       | Validation forces RPC code            | Zero for unused features                            |
+| **Maintenance**    | Bug fixes in 2 places (Zod + Valibot) | One place (core)                                    |
+| **Type Inference** | Works but uses "never" tricks         | Clean, uses branded types                           |
+| **Readability**    | 5-file plugin hard to follow          | 3-4 focused, ~100-LOC files each                    |
 
 ---
 
@@ -704,6 +720,7 @@ export type HandlerContext<TContext, TCaps, S> = BaseContext<TContext, S> &
 ```
 
 **Benefits:**
+
 - TypeScript narrows method availability based on plugins applied
 - `router.rpc()` unavailable until both validation + messaging + rpc plugins applied
 - IDE autocomplete only shows available methods
@@ -770,6 +787,7 @@ const router = createRouter<ConnectionData>()
 ### File Structure
 
 **Current:**
+
 ```
 packages/zod/src/
 ├── plugin.ts          (880 LOC monolith)
@@ -785,6 +803,7 @@ packages/valibot/src/
 ```
 
 **Proposed:**
+
 ```
 packages/core/src/plugins/
 ├── messaging.ts       (~100 LOC)
@@ -816,6 +835,7 @@ packages/valibot/src/
 **Inbound Validation:**
 
 **Current** (in Zod plugin ~60 LOC):
+
 ```typescript
 const payloadSchema = getZodPayload(schema);
 const result = payloadSchema.safeParse(inboundMessage);
@@ -836,6 +856,7 @@ if (result.data.payload !== undefined) {
 ```
 
 **Proposed** (in validation.ts ~40 LOC):
+
 ```typescript
 const payloadSchema = getPayloadSchema(schema);
 const result = payloadSchema.safeParse(ctx.payload);
@@ -843,11 +864,11 @@ if (!result.success) {
   if (options.onValidationError) {
     await options.onValidationError(result.error, {
       type: ctx.type,
-      direction: 'inbound',
+      direction: "inbound",
       payload: ctx.payload,
     });
   } else {
-    await ctx.error?.('INVALID_ARGUMENT', formatZodError(result.error));
+    await ctx.error?.("INVALID_ARGUMENT", formatZodError(result.error));
   }
   return;
 }
@@ -860,6 +881,7 @@ Cleaner: errors routed via core error handling, no ceremony.
 ### One-Shot Reply Guard
 
 **Current** (in Zod plugin ~20 LOC):
+
 ```typescript
 let replied = false;
 enhCtx.reply = (payload: any, opts?: ReplyOptions): void | Promise<void> => {
@@ -881,6 +903,7 @@ enhCtx.error = (...) => {
 ```
 
 **Proposed** (in rpc.ts ~20 LOC):
+
 ```typescript
 let replied = false;
 ctx.reply = async (payload, opts?) => {
@@ -891,7 +914,7 @@ ctx.reply = async (payload, opts?) => {
 ctx.error = async (code, message, details, opts?) => {
   if (replied) return opts?.waitFor ? Promise.resolve() : undefined;
   replied = true;
-  return ctx.send({ type: '$ws:rpc-error' }, { code, message, details }, opts);
+  return ctx.send({ type: "$ws:rpc-error" }, { code, message, details }, opts);
 };
 ```
 
@@ -906,11 +929,13 @@ Beyond the validator plugins, stateful features like **pub/sub** and **rate-limi
 ### Design: Plugins in Core, Adapters Separate
 
 **Plugins** = Framework features (live in `@ws-kit/core`):
+
 - `withPubSub()` — Pub/sub pattern (any backend)
 - `withRateLimit()` — Rate limiting (any backend)
 
 **Adapters** = Backend implementations:
-- Memory adapters in `@ws-kit/core/adapters` (zero-config dev defaults)
+
+- Memory adapters in `@ws-kit/memory` (zero-config dev defaults)
 - External adapters in separate packages:
   - `@ws-kit/redis` — Redis pub/sub and rate-limiting
   - `@ws-kit/cloudflare` — Cloudflare Durable Objects + native rate-limiting
@@ -964,11 +989,13 @@ Beyond the validator plugins, stateful features like **pub/sub** and **rate-limi
 ```typescript
 const router = createRouter()
   .plugin(withZod())
-  .plugin(withPubSub())          // Uses memoryPubSub() by default
-  .plugin(withRateLimit({
-    capacity: 100,
-    tokensPerSecond: 10,
-  }));
+  .plugin(withPubSub()) // Uses memoryPubSub() by default
+  .plugin(
+    withRateLimit({
+      capacity: 100,
+      tokensPerSecond: 10,
+    }),
+  );
 ```
 
 **Production (Redis, one-line change):**
@@ -978,14 +1005,18 @@ import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(withPubSub({
-    adapter: redisPubSub(redis),  // ← Swap adapter
-  }))
-  .plugin(withRateLimit({
-    adapter: redisRateLimiter(redis),  // ← Swap adapter
-    capacity: 1000,
-    tokensPerSecond: 50,
-  }));
+  .plugin(
+    withPubSub({
+      adapter: redisPubSub(redis), // ← Swap adapter
+    }),
+  )
+  .plugin(
+    withRateLimit({
+      adapter: redisRateLimiter(redis), // ← Swap adapter
+      capacity: 1000,
+      tokensPerSecond: 50,
+    }),
+  );
 ```
 
 **Cloudflare Workers:**
@@ -998,9 +1029,11 @@ export default {
     const router = createRouter()
       .plugin(withZod())
       .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
-      .plugin(withRateLimit({ adapter: cloudflareRateLimiter(env.RATE_LIMIT) }));
+      .plugin(
+        withRateLimit({ adapter: cloudflareRateLimiter(env.RATE_LIMIT) }),
+      );
     return router.handle(req);
-  }
+  },
 };
 ```
 
@@ -1008,7 +1041,8 @@ export default {
 
 ### Adapter Interfaces
 
-**PubSubAdapter** (from `@ws-kit/core/adapters/pubsub`):
+**PubSubAdapter** (from `@ws-kit/core`):
+
 ```typescript
 export interface PubSubAdapter {
   subscribe(clientId: string, topic: string): Promise<void>;
@@ -1018,10 +1052,14 @@ export interface PubSubAdapter {
 }
 ```
 
-**RateLimiterAdapter** (from `@ws-kit/core/adapters/rate-limit`):
+**RateLimiterAdapter** (from `@ws-kit/rate-limit`):
+
 ```typescript
 export interface RateLimiterAdapter {
-  consume(key: string, tokens: number): Promise<{
+  consume(
+    key: string,
+    tokens: number,
+  ): Promise<{
     ok: boolean;
     retryAfterMs?: number;
   }>;

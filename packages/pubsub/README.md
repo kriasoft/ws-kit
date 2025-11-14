@@ -15,7 +15,7 @@ bun add @ws-kit/pubsub
 ```typescript
 import { createRouter, message, withZod } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/plugins";
-import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 import { usePubSub } from "@ws-kit/pubsub";
 import { z } from "zod";
 
@@ -83,7 +83,7 @@ The core `withPubSub()` plugin is now in `@ws-kit/plugins`. It adds pub/sub capa
 
 ```typescript
 import { withPubSub } from "@ws-kit/plugins";
-import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 
 const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 ```
@@ -118,12 +118,12 @@ Optional middleware for topic normalization and authorization.
 
 Supported actions: `"subscribe"`, `"unsubscribe"`, `"publish"`
 
-#### Adapter: In-Memory (from `@ws-kit/core`)
+#### Adapter: In-Memory (from `@ws-kit/memory`)
 
-In-memory pub/sub adapter using `Map<topic, Set<clientId>>`. Available from core for zero-config development:
+In-memory pub/sub adapter using `Map<topic, Set<clientId>>`. Available from memory package for zero-config development:
 
 ```typescript
-import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 
 const adapter = memoryPubSub();
 ```

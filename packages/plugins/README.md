@@ -19,14 +19,16 @@ bun add @ws-kit/plugins
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod";
 import { withPubSub, withRpc } from "@ws-kit/plugins";
-import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
 
 const router = createRouter()
-  .plugin(withZod())           // Validation
-  .plugin(withRpc())           // Request-response
-  .plugin(withPubSub({
-    adapter: memoryPubSub(),   // In-memory pub/sub (dev)
-  }));
+  .plugin(withZod()) // Validation
+  .plugin(withRpc()) // Request-response
+  .plugin(
+    withPubSub({
+      adapter: memoryPubSub(), // In-memory pub/sub (dev)
+    }),
+  );
 
 // Handlers now have:
 // - ctx.send() — fire-and-forget
@@ -38,7 +40,7 @@ const router = createRouter()
 
 **Plugins** define framework features; **adapters** provide backend implementations:
 
-- **Memory** (in `@ws-kit/core/adapters`) — For development and testing
+- **Memory** (in `@ws-kit/memory`) — For development and testing
 - **Redis** (in `@ws-kit/redis`) — For distributed deployments
 - **Cloudflare** (in `@ws-kit/cloudflare`) — For Cloudflare Workers
 
@@ -73,6 +75,7 @@ import { withPubSub, withRpc } from "@ws-kit/plugins";
 ## TypeScript
 
 All plugins are fully typed. The type system enforces that:
+
 - Methods only appear after their plugin is registered
 - Context is properly enhanced with plugin methods
 - Payloads match schema types
