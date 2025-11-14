@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { serve } from "@ws-kit/bun";
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import {
   CatchUpRequestMessage,
   SequenceGapMessage,
@@ -10,7 +10,7 @@ import {
   StateUpdateMessage,
 } from "./schema";
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 let serverSeq = 0;
 const clientStates = new Map<
   string,

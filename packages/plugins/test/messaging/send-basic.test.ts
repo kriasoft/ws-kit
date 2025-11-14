@@ -21,7 +21,7 @@
  */
 
 import { createRouter } from "@ws-kit/core";
-import { withMessaging } from "@ws-kit/plugins";
+import { withMessaging } from "../../src/index.js";
 import { describe, expect, it } from "bun:test";
 
 describe("withMessaging() plugin - ctx.send()", () => {

@@ -579,12 +579,12 @@ export type RateLimitDecision =
     };
 ```
 
-### Memory Adapter (`@ws-kit/adapters/memory`)
+### Memory Adapter (`@ws-kit/memory`)
 
 **Best for**: Development, single-instance deployments (Bun, Node.js)
 
 ```typescript
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = memoryRateLimiter({
   capacity: 100, // Max tokens available
@@ -614,7 +614,7 @@ if (!decision.allowed) {
 Uses Lua scripting for atomic read-modify-write on Redis:
 
 ```typescript
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 
 const limiter = redisRateLimiter(redisClient, {
   capacity: 1000,
@@ -641,7 +641,7 @@ const decision = await limiter.consume("user:123", 1);
 Uses sharded Durable Objects for high-concurrency distributed rate limiting:
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER_NAMESPACE, {
   capacity: 500,
@@ -721,12 +721,21 @@ Beyond platform adapters (Bun, Cloudflare, Deno), WS-Kit uses **feature adapters
 ```typescript
 // Same code, different adapters
 const router = createRouter()
-  .plugin(withPubSub({ adapter: memoryPubSub() }))     // Dev: memory
-  .plugin(withRateLimit({ adapter: memoryRateLimiter() }));
+  .plugin(withPubSub({ adapter: memoryPubSub() })) // Dev: memory
+  .use(
+    rateLimit({
+      limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
+    }),
+  );
 
 // In production, swap adapters:
-.plugin(withPubSub({ adapter: redisPubSub(redis) }))
-.plugin(withRateLimit({ adapter: redisRateLimiter(redis) }))
+const productionRouter = createRouter()
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }))
+  .use(
+    rateLimit({
+      limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
+    }),
+  );
 ```
 
 ### Pub/Sub Adapters
@@ -735,13 +744,13 @@ const router = createRouter()
 
 **Adapters**:
 
-| Adapter | Location | Use Case | Guarantees |
-|---------|----------|----------|-----------|
-| **Memory** | `@ws-kit/core/adapters/pubsub/memory` | Dev, testing, single-server | ✅ In-memory, fast; ❌ no persistence |
-| **Redis** | `@ws-kit/redis` | Multi-pod production | ✅ Cross-server distribution; ❌ external dependency |
-| **Cloudflare** | `@ws-kit/cloudflare` | Cloudflare Workers | ✅ Durable Objects; ❌ per-DO limits |
+| Adapter        | Location             | Use Case                    | Guarantees                                           |
+| -------------- | -------------------- | --------------------------- | ---------------------------------------------------- |
+| **Memory**     | `@ws-kit/memory`     | Dev, testing, single-server | ✅ In-memory, fast; ❌ no persistence                |
+| **Redis**      | `@ws-kit/redis`      | Multi-pod production        | ✅ Cross-server distribution; ❌ external dependency |
+| **Cloudflare** | `@ws-kit/cloudflare` | Cloudflare Workers          | ✅ Durable Objects; ❌ per-DO limits                 |
 
-**Interface** (`@ws-kit/core/adapters/pubsub/types.ts`):
+**Interface** (`@ws-kit/core/pubsub`):
 
 ```typescript
 export interface PubSubAdapter {
@@ -759,10 +768,7 @@ export interface PubSubAdapter {
    * Publish a message to all subscribers of a topic.
    * Returns the number of subscribers that received the message.
    */
-  publish(
-    topic: string,
-    message: SerializedMessage
-  ): Promise<PublishResult>;
+  publish(topic: string, message: SerializedMessage): Promise<PublishResult>;
 
   /**
    * List all topics a connection is subscribed to.
@@ -771,56 +777,60 @@ export interface PubSubAdapter {
 }
 
 export interface PublishResult {
-  matched: number;  // Number of subscribers that received message
-  capability: "exact" | "prefix" | "regex";  // Matching mode used
+  matched: number; // Number of subscribers that received message
+  capability: "exact" | "prefix" | "regex"; // Matching mode used
 }
 ```
 
 **Example: Swapping Adapters**
 
 Development (no setup needed):
-```typescript
-import { withPubSub } from "@ws-kit/plugins";
-import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
 
-const router = createRouter()
-  .plugin(withPubSub({ adapter: memoryPubSub() }));
+```typescript
+import { withPubSub } from "@ws-kit/pubsub";
+import { memoryPubSub } from "@ws-kit/memory";
+
+const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 ```
 
 Production (Redis):
+
 ```typescript
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
-const router = createRouter()
-  .plugin(withPubSub({ adapter: redisPubSub(redis) }));
+const router = createRouter().plugin(
+  withPubSub({ adapter: redisPubSub(redis) }),
+);
 ```
 
 Cloudflare Workers (Durable Objects):
+
 ```typescript
-import { withPubSub } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 import { cloudflarePubSub } from "@ws-kit/cloudflare";
 
-const router = createRouter()
-  .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }));
+const router = createRouter().plugin(
+  withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }),
+);
 ```
 
 ### Rate Limiter Adapters
 
-**Plugin**: `withRateLimit()` (via `@ws-kit/plugins`)
+**Middleware**: `rateLimit()` (via `@ws-kit/rate-limit`)
 
 **Adapters**:
 
-| Adapter | Location | Use Case | Guarantees |
-|---------|----------|----------|-----------|
-| **Memory** | `@ws-kit/core/adapters/rate-limit/memory` | Dev, testing, single-server | ✅ Per-key mutex; ❌ no distribution |
-| **Redis** | `@ws-kit/redis` | Multi-pod production | ✅ Lua script atomicity; ❌ external dependency |
-| **Cloudflare** | `@ws-kit/cloudflare` | Cloudflare Workers | ✅ Sharded DOs; ❌ complexity |
+| Adapter        | Location             | Use Case                    | Guarantees                                      |
+| -------------- | -------------------- | --------------------------- | ----------------------------------------------- |
+| **Memory**     | `@ws-kit/memory`     | Dev, testing, single-server | ✅ Per-key mutex; ❌ no distribution            |
+| **Redis**      | `@ws-kit/redis`      | Multi-pod production        | ✅ Lua script atomicity; ❌ external dependency |
+| **Cloudflare** | `@ws-kit/cloudflare` | Cloudflare Workers          | ✅ Sharded DOs; ❌ complexity                   |
 
-**Interface** (`@ws-kit/core/adapters/rate-limit/types.ts`):
+**Interface** (`@ws-kit/rate-limit`):
 
 ```typescript
 export interface RateLimiterAdapter {
@@ -832,10 +842,10 @@ export interface RateLimiterAdapter {
    */
   consume(
     key: string,
-    tokens: number
+    tokens: number,
   ): Promise<{
     ok: boolean;
-    retryAfterMs?: number;  // When tokens will be available
+    retryAfterMs?: number; // When tokens will be available
   }>;
 
   /**
@@ -848,33 +858,33 @@ export interface RateLimiterAdapter {
 **Example: Swapping Adapters**
 
 Development (no setup needed):
-```typescript
-import { withRateLimit } from "@ws-kit/plugins";
-import { memoryRateLimiter } from "@ws-kit/core/adapters/rate-limit";
 
-const router = createRouter()
-  .plugin(withRateLimit({
-    adapter: memoryRateLimiter(),
-    capacity: 100,
-    tokensPerSecond: 10,
-  }));
+```typescript
+import { rateLimit } from "@ws-kit/rate-limit";
+import { memoryRateLimiter } from "@ws-kit/memory";
+
+const router = createRouter().use(
+  rateLimit({
+    limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
+  }),
+);
 ```
 
 Production (Redis):
+
 ```typescript
-import { withRateLimit } from "@ws-kit/plugins";
+import { rateLimit } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
-const router = createRouter()
-  .plugin(withRateLimit({
-    adapter: redisRateLimiter(redis),
-    capacity: 1000,
-    tokensPerSecond: 50,
+const router = createRouter().use(
+  rateLimit({
+    limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
     key: (ctx) => `user:${ctx.ws.data.userId}`,
-  }));
+  }),
+);
 ```
 
 ### Custom Adapters
@@ -884,7 +894,7 @@ Implement any interface to create custom adapters for proprietary backends.
 **Example: Kafka-based Pub/Sub**
 
 ```typescript
-import { PubSubAdapter, PublishResult } from "@ws-kit/core/adapters/pubsub";
+import { PubSubAdapter, PublishResult } from "@ws-kit/core";
 
 export function kafkaPubSub(producer: KafkaProducer): PubSubAdapter {
   const subscriptions = new Map<string, Set<string>>();
@@ -926,8 +936,9 @@ export function kafkaPubSub(producer: KafkaProducer): PubSubAdapter {
 }
 
 // Usage
-const router = createRouter()
-  .plugin(withPubSub({ adapter: kafkaPubSub(kafkaProducer) }));
+const router = createRouter().plugin(
+  withPubSub({ adapter: kafkaPubSub(kafkaProducer) }),
+);
 ```
 
 ### Benefits of Feature Adapters

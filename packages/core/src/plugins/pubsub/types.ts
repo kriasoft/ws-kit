@@ -3,7 +3,6 @@
 
 /**
  * Pub/Sub plugin types.
- * See adapters/pubsub/types.ts for PubSubAdapter interface.
  */
 
-export type { PubSubAdapter } from "../../adapters/pubsub/types";
+export type { PubSubAdapter } from "../../capabilities/pubsub/adapter";

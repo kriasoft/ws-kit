@@ -3,7 +3,10 @@
 
 /**
  * Rate limit plugin types.
- * See adapters/rate-limit/types.ts for RateLimiter interface.
  */
 
-export type { RateLimiter, Policy, RateLimitDecision } from "../../adapters/rate-limit/types";
+export type {
+  RateLimiter,
+  Policy,
+  RateLimitDecision,
+} from "@ws-kit/rate-limit";

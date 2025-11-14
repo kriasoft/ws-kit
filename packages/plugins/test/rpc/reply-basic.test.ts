@@ -24,7 +24,7 @@
  */
 
 import { createRouter } from "@ws-kit/core";
-import { withRpc } from "@ws-kit/plugins";
+import { withRpc } from "../../src/index.js";
 import { describe, expect, it } from "bun:test";
 
 describe("withRpc() plugin - ctx.reply()", () => {

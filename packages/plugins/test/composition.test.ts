@@ -14,7 +14,7 @@
  */
 
 import { createRouter } from "@ws-kit/core";
-import { withMessaging, withRpc } from "@ws-kit/plugins";
+import { withMessaging, withRpc } from "../src/index.js";
 import { describe, expect, it } from "bun:test";
 
 describe("Plugin composition - withMessaging + withRpc", () => {

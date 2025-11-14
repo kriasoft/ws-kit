@@ -16,8 +16,8 @@
  * See: ADR-023 (Schema-Driven Type Inference), docs/patterns/composition.md
  */
 
-import { createRouter } from "@ws-kit/zod";
 import type { WebSocketData } from "@ws-kit/core";
+import { createRouter, withZod } from "@ws-kit/zod";
 import {
   JoinRoom,
   NewMessage,
@@ -49,7 +49,7 @@ export type ChatData = WebSocketData & { roomId?: string; clientId: string };
  * ```
  */
 export function createChatRouter<TContext extends ChatData = ChatData>() {
-  const router = createRouter<TContext>();
+  const router = createRouter<TContext>().plugin(withZod());
 
   router
     // Handler 1: User joins a room

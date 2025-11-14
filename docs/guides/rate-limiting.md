@@ -46,7 +46,7 @@ This prevents clients from bypassing limits via clock manipulation.
 ```typescript
 import { z, createRouter } from "@ws-kit/zod";
 import { serve } from "@ws-kit/bun";
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 const router = createRouter();
@@ -69,7 +69,7 @@ serve(router, { port: 3000 });
 
 ```typescript
 import { createClient } from "redis";
-import { rateLimit } from "@ws-kit/middleware";
+import { rateLimit } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
@@ -220,7 +220,7 @@ Rate limit keys determine the isolation boundary. Choose based on your fairness 
 One bucket per (tenant, user, message type). Prevents one operation from starving others.
 
 ```typescript
-import { keyPerUserPerType } from "@ws-kit/middleware";
+import { keyPerUserPerType } from "@ws-kit/rate-limit";
 
 const limiter = rateLimit({
   limiter,
@@ -244,7 +244,7 @@ const limiter = rateLimit({
 One bucket per (tenant, user). Use cost() to weight operations.
 
 ```typescript
-import { perUserKey } from "@ws-kit/middleware";
+import { perUserKey } from "@ws-kit/rate-limit";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),
@@ -267,7 +267,7 @@ const limiter = rateLimit({
 Per-user for authenticated, IP fallback for anonymous. Currently falls back to "anon" (IP not available at middleware layer).
 
 ```typescript
-import { keyPerUserOrIpPerType } from "@ws-kit/middleware";
+import { keyPerUserOrIpPerType } from "@ws-kit/rate-limit";
 
 const limiter = rateLimit({
   limiter,
@@ -389,7 +389,7 @@ Run independent limiters with different policies on the same connection.
 ### Different Budgets for Different Operations
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 // Cheap operations: generous limit
@@ -482,7 +482,7 @@ Use real middleware with test utilities:
 
 ```typescript
 import { z, createRouter } from "@ws-kit/zod";
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 test("rate limit integration", async () => {

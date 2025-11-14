@@ -3,25 +3,34 @@
 Complete reference for the plugin system: how plugins work, core plugins shipped with WS-Kit, and how to implement custom plugins.
 
 **Quick Reference**: Plugins add capabilities to the router via `.plugin()` method. Each plugin can:
+
 - Define TypeScript types (adding methods to context)
 - Register middleware
 - Initialize adapter backends
 - Gate features at compile-time and runtime
 
-See [ADR-031](../adr/031-plugin-adapter-architecture.md) for design rationale.
+See [ADR-031](../adr/031-plugin-adapter-architecture.md) for design rationale and [ADR-032](../adr/032-canonical-imports-design.md) for canonical import sources.
 
-## Plugin Locations
+## Plugin Locations & Canonical Imports
 
-**Core Framework Plugins** (in `@ws-kit/plugins/`):
+**Core Framework Plugins** (import from `@ws-kit/plugins`):
+
 - `withMessaging()` — Fire-and-forget unicast/broadcast
 - `withRpc()` — Request-response with streaming
-- `withPubSub()` — Topic-based pub/sub (any adapter)
 
-**Validator Plugins** (in `@ws-kit/zod/` or `@ws-kit/valibot/`):
-- `withValidation()` — Schema validation (validator-specific)
-- `withZod()` / `withValibot()` — All-in-one convenience plugins
+**Feature Plugins** (import from feature packages):
 
-Core plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for convenience. See [Plugin-Adapter Architecture (ADR-031)](../adr/031-plugin-adapter-architecture.md) for rationale.
+- `withPubSub()` — Topic-based pub/sub (canonical: `@ws-kit/pubsub`)
+- `withRateLimit()` — Rate limiting (canonical: `@ws-kit/rate-limit`)
+- Future: `withTelemetry()`, `withCompression()`, `withCaching()` (each has own package)
+
+**Validator Plugins** (choose one validator, import from its package):
+
+- `withZod()` / `withValibot()` — All-in-one validation plugin
+
+**Convenience Re-exports** (optional, from validators):
+
+Core plugins and feature plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for convenience. See [ADR-032: Canonical Imports Design](../adr/032-canonical-imports-design.md) for complete rules and rationale.
 
 ---
 
@@ -30,6 +39,7 @@ Core plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for conven
 ### What is a Plugin?
 
 A plugin is a function that:
+
 1. **Takes** a router instance and optional configuration
 2. **Returns** a modified router (or void if modifying in-place)
 3. **Enhances** context with new methods, middleware, or capabilities
@@ -41,13 +51,14 @@ Plugins compose sequentially. Each plugin can depend on earlier plugins.
 
 ```typescript
 const router = createRouter()
-  .plugin(withValidation())      // Step 1: Enables type inference for payload
-  .plugin(withMessaging())        // Step 2: Adds ctx.send()
-  .plugin(withRpc())              // Step 3: Adds ctx.reply(), ctx.progress()
-  .plugin(withPubSub());          // Step 4: Adds ctx.publish()
+  .plugin(withValidation()) // Step 1: Enables type inference for payload
+  .plugin(withMessaging()) // Step 2: Adds ctx.send()
+  .plugin(withRpc()) // Step 3: Adds ctx.reply(), ctx.progress()
+  .plugin(withPubSub()); // Step 4: Adds ctx.publish()
 ```
 
 **Dependency Model**:
+
 - `withValidation()` has no dependencies
 - `withMessaging()` depends on `withValidation()` (type-level only)
 - `withRpc()` depends on `withValidation()` and `withMessaging()`
@@ -59,26 +70,29 @@ const router = createRouter()
 **Style 1: Validator Plugins (Recommended for Most Apps)**
 
 ```typescript
-import { createRouter } from "@ws-kit/zod"; // or @ws-kit/valibot
-import { withPubSub } from "@ws-kit/plugins";
+import { createRouter, withZod } from "@ws-kit/zod"; // or @ws-kit/valibot
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 
 const router = createRouter()
-  .plugin(withZod())           // ✅ Includes validation + messaging + RPC
-  .plugin(withPubSub({
-    adapter: redisPubSub(redis)
-  }));
+  .plugin(withZod()) // ✅ Includes validation + messaging + RPC
+  .plugin(
+    withPubSub({
+      adapter: redisPubSub(redis),
+    }),
+  );
 ```
 
 **Style 2: Granular Plugins (For Advanced Composition)**
 
 ```typescript
 import { createRouter } from "@ws-kit/core";
-import { withValidation } from "@ws-kit/zod";  // Zod-specific validation
-import { withMessaging, withRpc, withPubSub } from "@ws-kit/plugins";
+import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
+import { withMessaging, withRpc } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
 
 const router = createRouter()
-  .plugin(withValidation())
+  .plugin(withZod())
   .plugin(withMessaging())
   .plugin(withRpc())
   .plugin(withPubSub());
@@ -95,32 +109,35 @@ const router = createRouter()
 **Purpose**: Enable type-safe schema validation and payload type inference in handlers.
 
 **Configuration**:
+
 ```typescript
 interface ValidationConfig {
-  validator?: ValidatorAdapter;  // Custom validator; if omitted, no validation
+  validator?: ValidatorAdapter; // Custom validator; if omitted, no validation
 }
 ```
 
 **Effects**:
+
 - Enables `message()` helpers from validator packages
 - Adds type-safe `ctx.payload` inference based on schema
 - Validates incoming messages against handler schemas
 - Adds `ctx.error()` for validation error responses
 
 **Example (via Zod validator)**:
+
 ```typescript
-const router = createRouter()
-  .plugin(withValidation(withZodValidator()));
+const router = createRouter().plugin(withValidation(withZodValidator()));
 
 router.on(message("PING", { text: z.string() }), (ctx) => {
-  ctx.payload.text;  // ✅ Inferred as string
+  ctx.payload.text; // ✅ Inferred as string
 });
 ```
 
 **Type Effects**:
+
 ```typescript
 interface ContextWithValidation {
-  payload: TPayload;  // Type inferred from schema
+  payload: TPayload; // Type inferred from schema
   error(code: string, message: string, details?: unknown): void | Promise<void>;
 }
 ```
@@ -136,11 +153,13 @@ interface ContextWithValidation {
 **Configuration**: None
 
 **Effects**:
+
 - Adds `ctx.send(schema, data, opts?)` method
 - Allows sending typed messages to current connection
 - Works with or without validation plugin
 
 **Example**:
+
 ```typescript
 router.on(message("PING", { text: z.string() }), (ctx) => {
   ctx.send(message("PONG"), { reply: `Got: ${ctx.payload.text}` });
@@ -148,22 +167,24 @@ router.on(message("PING", { text: z.string() }), (ctx) => {
 ```
 
 **Type Effects**:
+
 ```typescript
 interface ContextWithMessaging {
   send<TPayload>(
     schema: MessageSchema<TPayload>,
     data: TPayload,
-    opts?: SendOptions
+    opts?: SendOptions,
   ): void | Promise<void>;
 }
 ```
 
 **SendOptions**:
+
 ```typescript
 interface SendOptions {
-  waitFor?: "drain" | "ack";      // Wait for send completion
-  signal?: AbortSignal;            // Cancel if aborted
-  meta?: Record<string, unknown>;  // Additional metadata
+  waitFor?: "drain" | "ack"; // Wait for send completion
+  signal?: AbortSignal; // Cancel if aborted
+  meta?: Record<string, unknown>; // Additional metadata
 }
 ```
 
@@ -178,12 +199,14 @@ interface SendOptions {
 **Configuration**: None
 
 **Effects**:
+
 - Adds `.rpc(schema, handler)` method to router
 - Adds `ctx.reply()` and `ctx.progress()` to handlers
 - Requires `withValidation()` plugin (enforced at type-level)
 - Auto-correlates responses via `correlationId`
 
 **Example**:
+
 ```typescript
 const FetchDataRequest = message("FETCH_DATA", { id: z.string() });
 const FetchDataResponse = message("FETCH_DATA_RESPONSE", { data: z.unknown() });
@@ -201,23 +224,24 @@ router.rpc(FetchDataRequest, FetchDataResponse, (ctx) => {
 ```
 
 **Type Effects**:
+
 ```typescript
 interface ContextWithRpc {
   reply<TResponse>(
     payload: TResponse,
-    opts?: ReplyOptions
+    opts?: ReplyOptions,
   ): void | Promise<void>;
 
   progress<TResponse>(
     payload: TResponse,
-    opts?: ProgressOptions
+    opts?: ProgressOptions,
   ): void | Promise<void>;
 
   error<TDetails = unknown>(
     code: string,
     message: string,
     details?: TDetails,
-    opts?: ReplyOptions
+    opts?: ReplyOptions,
   ): void | Promise<void>;
 }
 
@@ -228,7 +252,7 @@ interface ReplyOptions {
 }
 
 interface ProgressOptions extends ReplyOptions {
-  throttleMs?: number;  // Rate-limit rapid updates
+  throttleMs?: number; // Rate-limit rapid updates
 }
 ```
 
@@ -236,24 +260,27 @@ interface ProgressOptions extends ReplyOptions {
 
 ### `withPubSub(config?)`
 
-**Location**: `@ws-kit/plugins/src/pubsub` (re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
+**Location**: `@ws-kit/pubsub` (canonical; also re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
 
 **Purpose**: Enable topic-based broadcasting to multiple subscribers.
 
 **Configuration**:
+
 ```typescript
 interface PubSubConfig {
-  adapter?: PubSubAdapter;  // Defaults to memoryPubSub()
+  adapter?: PubSubAdapter; // Defaults to memoryPubSub()
 }
 ```
 
 **Effects**:
+
 - Adds `ctx.publish(topic, schema, data)` method
 - Adds `ctx.topics.subscribe(topic)` and `ctx.topics.unsubscribe(topic)`
 - Works with any backend via adapters (memory, Redis, Cloudflare, custom)
 - No validation dependency required
 
 **Example**:
+
 ```typescript
 // Subscribe (in a handler or lifecycle hook)
 await ctx.topics.subscribe("chat:room-123");
@@ -266,6 +293,7 @@ await ctx.topics.unsubscribe("chat:room-123");
 ```
 
 **Adapter Swap Pattern** (no code change needed):
+
 ```typescript
 // Development (memory adapter, zero config)
 .plugin(withPubSub())  // Uses memoryPubSub() by default
@@ -280,19 +308,20 @@ import { cloudflarePubSub } from "@ws-kit/cloudflare";
 ```
 
 **Type Effects**:
+
 ```typescript
 interface ContextWithPubSub {
   publish<TPayload>(
     topic: string,
     schema: MessageSchema<TPayload>,
     data: TPayload,
-    opts?: SendOptions
+    opts?: SendOptions,
   ): void | Promise<void>;
 
   topics: {
     subscribe(topic: string): Promise<void>;
     unsubscribe(topic: string): Promise<void>;
-    list(): Promise<string[]>;  // List subscribed topics for this connection
+    list(): Promise<string[]>; // List subscribed topics for this connection
   };
 }
 ```
@@ -301,52 +330,58 @@ interface ContextWithPubSub {
 
 ### `withRateLimit(config?)`
 
-**Location**: `@ws-kit/core/src/plugins/rate-limit` (re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
+**Location**: `@ws-kit/rate-limit` (canonical; also re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
 
 **Purpose**: Enable rate-limiting of messages per connection, per user, or per type.
 
 **Configuration**:
+
 ```typescript
 interface RateLimitConfig {
-  adapter?: RateLimiterAdapter;  // Defaults to memoryRateLimiter()
-  capacity: number;               // Token bucket size (default: 100)
-  tokensPerSecond: number;        // Refill rate (default: 10)
-  key?: (ctx: MinimalContext) => string;  // Custom key function
+  adapter?: RateLimiterAdapter; // Defaults to memoryRateLimiter()
+  capacity: number; // Token bucket size (default: 100)
+  tokensPerSecond: number; // Refill rate (default: 10)
+  key?: (ctx: MinimalContext) => string; // Custom key function
 }
 ```
 
 **Effects**:
+
 - Registers global middleware that checks rate limits before handlers
 - Blocks over-limit messages with error
 - Works with any backend via adapters (memory, Redis, Cloudflare)
 
 **Example**:
+
 ```typescript
-import { withRateLimit } from "@ws-kit/plugins";
+import { withRateLimit } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 
-const router = createRouter()
-  .plugin(withRateLimit({
+const router = createRouter().plugin(
+  withRateLimit({
     adapter: redisRateLimiter(redis),
     capacity: 1000,
     tokensPerSecond: 50,
-    key: (ctx) => `user:${ctx.ws.data.userId}`,  // Per-user limit
-  }));
+    key: (ctx) => `user:${ctx.ws.data.userId}`, // Per-user limit
+  }),
+);
 ```
 
 **Built-in Key Functions**:
+
 ```typescript
 // Per-connection (default)
-key: (ctx) => ctx.ws.data.clientId
+key: (ctx) => ctx.ws.data.clientId;
 
 // Per-user
-key: (ctx) => `user:${ctx.ws.data.userId}`
+key: (ctx) => `user:${ctx.ws.data.userId}`;
 
 // Per-user-per-type
-key: (ctx) => `user:${ctx.ws.data.userId}:${ctx.type}`
+key: (ctx) => `user:${ctx.ws.data.userId}:${ctx.type}`;
 ```
 
 **Type Effects**:
+
 ```typescript
 // Rate limiting applies globally; no context methods added
 // Handlers run only if rate limit not exceeded
@@ -360,6 +395,7 @@ key: (ctx) => `user:${ctx.ws.data.userId}:${ctx.type}`
 ### What is an Adapter?
 
 An adapter is a backend implementation for a plugin. Adapters:
+
 - Implement the plugin's interface contract
 - Handle backend-specific concerns (Redis, memory, Cloudflare, etc.)
 - Are swappable without code changes
@@ -384,10 +420,7 @@ export interface PubSubAdapter {
    * Publish a message to all subscribers of a topic.
    * Returns publish result with matched subscriber count.
    */
-  publish(
-    topic: string,
-    message: SerializedMessage
-  ): Promise<PublishResult>;
+  publish(topic: string, message: SerializedMessage): Promise<PublishResult>;
 
   /**
    * List all topics a connection is subscribed to.
@@ -396,8 +429,8 @@ export interface PubSubAdapter {
 }
 
 export interface PublishResult {
-  matched: number;        // Number of subscribers that received message
-  capability: "exact" | "prefix" | "regex";  // Matching mode used
+  matched: number; // Number of subscribers that received message
+  capability: "exact" | "prefix" | "regex"; // Matching mode used
 }
 ```
 
@@ -409,9 +442,12 @@ export interface RateLimiterAdapter {
    * Attempt to consume tokens from the bucket.
    * Returns whether consumption succeeded (tokens available).
    */
-  consume(key: string, tokens: number): Promise<{
+  consume(
+    key: string,
+    tokens: number,
+  ): Promise<{
     ok: boolean;
-    retryAfterMs?: number;  // When tokens will be available
+    retryAfterMs?: number; // When tokens will be available
   }>;
 
   /**
@@ -423,30 +459,28 @@ export interface RateLimiterAdapter {
 
 ### Memory Adapters (Zero-Config Defaults)
 
-Memory adapters are built into `@ws-kit/core/src/adapters` for development and testing. They're also re-exported from the main entry point.
+Memory adapters are available in `@ws-kit/memory` for development and testing.
 
 **`memoryPubSub()`**:
-```typescript
-import { memoryPubSub } from "@ws-kit/core";
-// Or directly:
-// import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
 
-const router = createRouter()
-  .plugin(withPubSub({ adapter: memoryPubSub() }));
+```typescript
+import { memoryPubSub } from "@ws-kit/memory";
+
+const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 ```
 
 **`memoryRateLimiter()`**:
-```typescript
-import { memoryRateLimiter } from "@ws-kit/core";
-// Or directly:
-// import { memoryRateLimiter } from "@ws-kit/core/adapters/rate-limit";
 
-const router = createRouter()
-  .plugin(withRateLimit({
+```typescript
+import { memoryRateLimiter } from "@ws-kit/memory";
+
+const router = createRouter().plugin(
+  withRateLimit({
     adapter: memoryRateLimiter(),
     capacity: 100,
     tokensPerSecond: 10,
-  }));
+  }),
+);
 ```
 
 ### External Adapters
@@ -466,11 +500,13 @@ await redis.connect();
 
 const router = createRouter()
   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
-  .plugin(withRateLimit({
-    adapter: redisRateLimiter(redis),
-    capacity: 1000,
-    tokensPerSecond: 50,
-  }));
+  .plugin(
+    withRateLimit({
+      adapter: redisRateLimiter(redis),
+      capacity: 1000,
+      tokensPerSecond: 50,
+    }),
+  );
 ```
 
 #### `@ws-kit/cloudflare`
@@ -484,14 +520,16 @@ export default {
   fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const router = createRouter()
       .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
-      .plugin(withRateLimit({
-        adapter: cloudflareRateLimiter(env.RATE_LIMITER),
-        capacity: 1000,
-        tokensPerSecond: 50,
-      }));
+      .plugin(
+        withRateLimit({
+          adapter: cloudflareRateLimiter(env.RATE_LIMITER),
+          capacity: 1000,
+          tokensPerSecond: 50,
+        }),
+      );
 
     return router.handle(req, ctx);
-  }
+  },
 };
 ```
 
@@ -500,6 +538,7 @@ export default {
 Users can implement custom adapters for proprietary backends.
 
 **Example: Kafka Pub/Sub**:
+
 ```typescript
 import { PubSubAdapter } from "@ws-kit/core";
 
@@ -522,7 +561,7 @@ export function kafkaPubSub(producer: KafkaProducer): PubSubAdapter {
     },
     list: async (clientId) => {
       const keys = await subscriptionMap.keys(`*:${clientId}`);
-      return keys.map(k => k.split(":")[0]);
+      return keys.map((k) => k.split(":")[0]);
     },
   };
 }
@@ -541,15 +580,14 @@ const router = createRouter();
 
 // ❌ Error: Property 'send' does not exist
 router.on(PingMessage, (ctx) => {
-  ctx.send(PongMessage, {});  // Missing withMessaging() plugin
+  ctx.send(PongMessage, {}); // Missing withMessaging() plugin
 });
 
 // ✅ OK after adding plugin
-const router2 = createRouter()
-  .plugin(withMessaging());
+const router2 = createRouter().plugin(withMessaging());
 
 router2.on(PingMessage, (ctx) => {
-  ctx.send(PongMessage, {});  // ✅ Available now
+  ctx.send(PongMessage, {}); // ✅ Available now
 });
 ```
 
@@ -565,12 +603,12 @@ interface Router<
   TCapabilities extends Record<string, unknown>,
 > {
   plugin<TNewCapability>(
-    plugin: Plugin<TContext, TNewCapability>
+    plugin: Plugin<TContext, TNewCapability>,
   ): Router<TValidator, TContext, TCapabilities & TNewCapability>;
 
   on<TPayload, TResponse>(
     schema: MessageSchema<TPayload>,
-    handler: (ctx: MinimalContext & TCapabilities) => void
+    handler: (ctx: MinimalContext & TCapabilities) => void,
   ): this;
 }
 ```
@@ -590,10 +628,7 @@ export interface MyPluginCapability {
   myMethod(arg: string): void;
 }
 
-export function withMyPlugin(): Plugin<
-  ConnectionData,
-  MyPluginCapability
-> {
+export function withMyPlugin(): Plugin<ConnectionData, MyPluginCapability> {
   return definePlugin<ConnectionData, MyPluginCapability>(
     "myPlugin",
     (router, config) => {
@@ -607,18 +642,18 @@ export function withMyPlugin(): Plugin<
       });
 
       return router;
-    }
+    },
   );
 }
 ```
 
 **Usage**:
+
 ```typescript
-const router = createRouter()
-  .plugin(withMyPlugin());
+const router = createRouter().plugin(withMyPlugin());
 
 router.on(someSchema, (ctx) => {
-  ctx.myMethod("hello");  // ✅ TypeScript knows about this
+  ctx.myMethod("hello"); // ✅ TypeScript knows about this
 });
 ```
 
@@ -631,17 +666,17 @@ router.on(someSchema, (ctx) => {
 Enable/disable features with configuration:
 
 ```typescript
-export function withMessaging(config?: {
-  enabled?: boolean;
-}): Plugin {
+export function withMessaging(config?: { enabled?: boolean }): Plugin {
   if (config?.enabled === false) {
-    return (router) => router;  // No-op
+    return (router) => router; // No-op
   }
 
   return (router) => {
     // Register messaging middleware
     router.use((ctx, next) => {
-      ctx.send = (schema, data) => { /* ... */ };
+      ctx.send = (schema, data) => {
+        /* ... */
+      };
       return next();
     });
     return router;
@@ -654,12 +689,10 @@ export function withMessaging(config?: {
 Choose adapters based on environment:
 
 ```typescript
-const adapter = process.env.NODE_ENV === "production"
-  ? redisPubSub(redis)
-  : memoryPubSub();
+const adapter =
+  process.env.NODE_ENV === "production" ? redisPubSub(redis) : memoryPubSub();
 
-const router = createRouter()
-  .plugin(withPubSub({ adapter }));
+const router = createRouter().plugin(withPubSub({ adapter }));
 ```
 
 ### Pattern 3: Plugin Dependencies
@@ -668,13 +701,10 @@ Ensure plugins are registered in correct order. Type system enforces this:
 
 ```typescript
 // ❌ Type error: withRpc() requires withValidation()
-const router = createRouter()
-  .plugin(withRpc());
+const router = createRouter().plugin(withRpc());
 
 // ✅ OK: withValidation() before withRpc()
-const router = createRouter()
-  .plugin(withValidation())
-  .plugin(withRpc());
+const router = createRouter().plugin(withValidation()).plugin(withRpc());
 ```
 
 ---
@@ -682,35 +712,41 @@ const router = createRouter()
 ## Best Practices
 
 1. **Always validate input schemas**
+
    ```typescript
    // ❌ No validation
    router.on((ctx) => {
-     console.log(ctx.payload);  // Any type
+     console.log(ctx.payload); // Any type
    });
 
    // ✅ With validation
    router.on(message("PING", { text: z.string() }), (ctx) => {
-     console.log(ctx.payload.text);  // string
+     console.log(ctx.payload.text); // string
    });
    ```
 
 2. **Use memory adapters for development, external for production**
+
    ```typescript
-   const adapter = process.env.NODE_ENV === "production"
-     ? redisPubSub(redis)
-     : memoryPubSub();
+   const adapter =
+     process.env.NODE_ENV === "production"
+       ? redisPubSub(redis)
+       : memoryPubSub();
    ```
 
 3. **Extract adapter initialization to functions**
+
    ```typescript
    // ❌ Adapter logic scattered
    function createApp() {
-     return createRouter()
-       .plugin(withPubSub({
-         adapter: process.env.NODE_ENV === "production"
-           ? redisPubSub(redis)
-           : memoryPubSub()
-       }));
+     return createRouter().plugin(
+       withPubSub({
+         adapter:
+           process.env.NODE_ENV === "production"
+             ? redisPubSub(redis)
+             : memoryPubSub(),
+       }),
+     );
    }
 
    // ✅ Clean initialization
@@ -721,12 +757,12 @@ const router = createRouter()
    }
 
    function createApp() {
-     return createRouter()
-       .plugin(withPubSub({ adapter: createAdapter() }));
+     return createRouter().plugin(withPubSub({ adapter: createAdapter() }));
    }
    ```
 
 4. **Configure rate limits per use case**
+
    ```typescript
    // Strict (API key)
    .plugin(withRateLimit({
@@ -744,6 +780,7 @@ const router = createRouter()
    ```
 
 5. **Use topic namespacing for organization**
+
    ```typescript
    // ❌ Flat namespace (collision risk)
    await ctx.topics.subscribe("messages");
@@ -757,42 +794,49 @@ const router = createRouter()
 
 ## Migration Guide
 
-### From Monolithic `withZod()` to Granular Plugins
+### Canonical Import Sources (All Versions)
 
-**Before** (monolithic):
+Always use canonical sources per [ADR-032](../adr/032-canonical-imports-design.md):
+
+**Recommended** (validator convenience):
+
 ```typescript
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod"; // or @ws-kit/valibot
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimit } from "@ws-kit/rate-limit";
 
 const router = createRouter()
-  .plugin(withZod());  // Includes validation, messaging, RPC
+  .plugin(withZod())
+  .plugin(withPubSub())
+  .plugin(withRateLimit());
 ```
 
-**After** (same experience, clearer semantics):
-```typescript
-import { createRouter } from "@ws-kit/zod";
+**Explicit** (canonical sources, same imports):
 
-const router = createRouter()
-  .plugin(withZod());  // Still includes everything (backward compat)
-```
-
-**Or explicitly** (for clarity):
 ```typescript
-import { createRouter } from "@ws-kit/core";
-import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
+import { createRouter, withZod } from "@ws-kit/zod";
 import { withMessaging, withRpc } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
+import { withRateLimit } from "@ws-kit/rate-limit";
 
 const router = createRouter()
   .plugin(withZod())
   .plugin(withMessaging())
-  .plugin(withRpc());
+  .plugin(withRpc())
+  .plugin(withPubSub())
+  .plugin(withRateLimit());
 ```
+
+**Note**: Importing from non-canonical sources (e.g., `withPubSub` from `@ws-kit/plugins` when it's actually in `@ws-kit/pubsub`) will fail. Always use the canonical source for each feature.
 
 ---
 
 ## References
 
-- [ADR-028](../adr/028-plugin-architecture-final-design.md) - Plugin architecture design
+- [ADR-032](../adr/032-canonical-imports-design.md) - Canonical imports design (FOUNDATIONAL: import sources for all plugins)
 - [ADR-031](../adr/031-plugin-adapter-architecture.md) - Plugin-adapter split decision
+- [ADR-028](../adr/028-plugin-architecture-final-design.md) - Plugin architecture design
 - [docs/specs/router.md](./router.md) - Router API and handler registration
 - [docs/specs/context-methods.md](./context-methods.md) - Context methods reference
 - [docs/specs/pubsub.md](./pubsub.md) - Pub/sub patterns and semantics
+- [docs/specs/adapters.md](./adapters.md) - Adapter system and implementations

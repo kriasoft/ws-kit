@@ -64,11 +64,12 @@ When specs reference the same concept, the canonical source takes precedence:
 
 ## Core Specifications
 
+- **[canonical-imports.md](./canonical-imports.md)** - Quick reference for importing all plugins, adapters, and utilities (implementation of ADR-032)
 - **[schema.md](./schema.md)** - Message structure, wire format, type definitions (see ADR-001, ADR-007)
 - **[router.md](./router.md)** - Server router API, handlers, lifecycle hooks (see ADR-005, ADR-008, ADR-009)
 - **[validation.md](./validation.md)** - Validation flow, normalization, error handling (strict mode per ADR-001)
 - **[context-methods.md](./context-methods.md)** - Handler context methods: `.send()`, `.reply()`, `.progress()`, `.publish()` (see ADR-030)
-- **[plugins.md](./plugins.md)** - Plugin system: core plugins (validation, messaging, RPC, pub/sub, rate-limit), adapters, and custom plugins (see ADR-031)
+- **[plugins.md](./plugins.md)** - Plugin system: core plugins (validation, messaging, RPC, pub/sub, rate-limit), adapters, and custom plugins (see ADR-031, ADR-032)
 - **[pubsub.md](./pubsub.md)** - Pub/Sub API, topic subscriptions, publishing, patterns (see ADR-022 for design rationale)
 - **[client.md](./client.md)** - Client SDK API, connection states, queueing (see ADR-002, ADR-006)
 - **[adapters.md](./adapters.md)** - Platform adapter responsibilities, feature adapters (pub/sub and rate-limiting), and custom adapters (see ADR-006, ADR-031)
@@ -87,25 +88,62 @@ For comprehensive architecture documentation and design rationale, see the [ADR 
 
 **Key ADRs referenced in specs:**
 
-- **ADR-007**: [Export-with-Helpers Pattern](../adr/007-export-with-helpers-pattern.md) — FOUNDATIONAL: Single canonical import source
+- **ADR-032**: [Canonical Imports Design](../adr/032-canonical-imports-design.md) — FOUNDATIONAL: Each plugin/feature has one canonical import source
+- **ADR-007**: [Export-with-Helpers Pattern](../adr/007-export-with-helpers-pattern.md) — Single source for validator + helpers (complementary to ADR-032)
 - **ADR-001**: [Message Context Conditional Payload Typing](../adr/001-message-context-conditional-payload-typing.md) — Type-safe `ctx.payload` access
 - **ADR-002**: [Typed Client Adapters](../adr/002-typed-client-adapters.md) — Full type inference in browser/Node.js clients
 - **ADR-015**: [Unified RPC API Design](../adr/015-unified-rpc-api-design.md) — Request/response patterns with schema unification
+- **ADR-031**: [Plugin-Adapter Architecture](../adr/031-plugin-adapter-architecture.md) — Separation of plugins (features) and adapters (backends)
 
 See [docs/adr/README.md](../adr/README.md) for the complete decision index.
 
-## Import Quick Reference
+## Canonical Imports Reference
 
-**Server imports MUST follow ADR-007 (export-with-helpers pattern).**
+**All imports MUST use canonical sources** (see ADR-032 for complete design).
 
-For complete canonical import patterns and usage examples, see [docs/specs/schema.md#Canonical-Import-Patterns](./schema.md#canonical-import-patterns).
+### Import Guidelines
 
-**Quick reference:**
+**Quick Reference by Category:**
 
-- Server (Zod/Valibot): `import { z/v, message, createRouter } from "@ws-kit/zod"` or `@ws-kit/valibot"`
-- Platform (Bun): `import { serve } from "@ws-kit/bun"`
-- Client (Typed): `import { wsClient } from "@ws-kit/client/zod"` or `@ws-kit/client/valibot"`
-- Client (Generic): `import { wsClient } from "@ws-kit/client"`
+| Category                | Canonical Source                   | Example                                                                        |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------ |
+| **Validator + Helpers** | `@ws-kit/zod` or `@ws-kit/valibot` | `import { z, message, createRouter, withZod } from "@ws-kit/zod"`              |
+| **Core Plugins**        | `@ws-kit/plugins`                  | `import { withMessaging, withRpc } from "@ws-kit/plugins"`                     |
+| **Pub/Sub Plugin**      | `@ws-kit/pubsub`                   | `import { withPubSub, usePubSub } from "@ws-kit/pubsub"`                       |
+| **Rate-Limit Plugin**   | `@ws-kit/rate-limit`               | `import { withRateLimit, useRateLimit } from "@ws-kit/rate-limit"`             |
+| **Middleware (Future)** | `@ws-kit/middleware`               | `import { useAuth, useLogging } from "@ws-kit/middleware"`                     |
+| **Memory Adapters**     | `@ws-kit/memory`                   | `import { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory"`             |
+| **Redis Adapters**      | `@ws-kit/redis`                    | `import { redisPubSub, redisRateLimiter } from "@ws-kit/redis"`                |
+| **Cloudflare Adapters** | `@ws-kit/cloudflare`               | `import { cloudflarePubSub, cloudflareRateLimiter } from "@ws-kit/cloudflare"` |
+| **Platform (Bun)**      | `@ws-kit/bun`                      | `import { serve } from "@ws-kit/bun"`                                          |
+| **Client (Typed)**      | `@ws-kit/client/zod` or `/valibot` | `import { wsClient } from "@ws-kit/client/zod"`                                |
+| **Client (Generic)**    | `@ws-kit/client`                   | `import { wsClient } from "@ws-kit/client"`                                    |
+
+### Convenience Re-exports
+
+**`@ws-kit/zod` and `@ws-kit/valibot` re-export** (for convenience only):
+
+```typescript
+// All of these are equivalent (same canonical source):
+import { withMessaging } from "@ws-kit/plugins"; // ✓ Canonical
+import { withMessaging } from "@ws-kit/zod"; // ✓ Convenience re-export
+
+import { withPubSub } from "@ws-kit/pubsub"; // ✓ Canonical
+import { withPubSub } from "@ws-kit/zod"; // ✓ Convenience re-export
+```
+
+### What Does NOT Get Re-exported
+
+These must always use their canonical sources:
+
+```typescript
+// Always use canonical (NO re-export):
+import { useAuth } from "@ws-kit/middleware"; // ✓ Must use canonical
+import { usePubSub } from "@ws-kit/pubsub"; // ✓ Must use canonical
+import { redisPubSub } from "@ws-kit/redis"; // ✓ Must use canonical
+```
+
+For complete rationale and design decisions, see **[ADR-032: Canonical Imports Design](../adr/032-canonical-imports-design.md)**.
 
 ## Quick Reference
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { serve } from "@ws-kit/bun";
-import { createRouter } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
 import {
   DataAckMessage,
   ResourceExhaustedMessage,
@@ -12,7 +12,7 @@ import {
 const QUEUE_CAPACITY = 10;
 const POLICY = "drop-oldest" as const; // or "drop-new", "queue"
 
-const router = createRouter();
+const router = createRouter().plugin(withZod());
 const queues = new Map<string, string[]>();
 
 router.on(SendDataMessage, (ctx) => {

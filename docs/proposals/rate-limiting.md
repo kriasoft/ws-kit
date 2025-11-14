@@ -30,7 +30,7 @@
 **Quick start:**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
@@ -459,7 +459,7 @@ The `cost()` function (optional; defaults to `1`) lets you weight operations wit
 **Single-policy (Bun/Node.js/Dev):**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
@@ -474,7 +474,7 @@ router.use(limiter);
 **Multi-policy (Cheap vs. Expensive, Bun/Node.js):**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 // Two independent rate limiters, each with its own budget
@@ -500,7 +500,7 @@ router.use(expensiveLimiter);
 **Multi-pod (Redis with Shared Connection):**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 import { createClient } from "redis";
 
@@ -523,7 +523,7 @@ router.use(limiter);
 **Cloudflare Workers (Durable Objects):**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = rateLimit({
@@ -1659,7 +1659,7 @@ router.use((ctx, next) => {
 **After (with middleware):**
 
 ```typescript
-import { rateLimit } from "@ws-kit/middleware";
+import { rateLimit } from "@ws-kit/rate-limit";
 import { memoryStore } from "@ws-kit/memory";
 
 const limiter = rateLimit({
@@ -1718,7 +1718,7 @@ The API supports multiple styles depending on your deployment model:
 **Single-policy convenience:**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryStore } from "@ws-kit/memory";
 
 const limiter = rateLimit({
@@ -1733,7 +1733,7 @@ router.use(limiter);
 **Multi-policy (independent budgets, shared backend):**
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { createRedisBackend } from "@ws-kit/redis";
 
 const backend = createRedisBackend({ client: redisConnection });

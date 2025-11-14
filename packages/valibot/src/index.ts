@@ -49,21 +49,27 @@ export type {
   RpcSchema,
 } from "./types.js";
 
-// Plugin re-exports (for convenience)
-export { withMessaging, withPubSub, withRpc } from "@ws-kit/plugins";
+// === Convenience Re-exports (ADR-032) ===
+// These are optional; canonical imports shown below for reference.
+
+// Core plugins (canonical: @ws-kit/plugins)
+export { withMessaging, withRpc } from "@ws-kit/plugins";
 export type {
   ProgressOptions,
   ReplyOptions,
   SendOptions,
   WithMessagingCapability,
-  WithPubSubCapability,
   WithRpcCapability,
 } from "@ws-kit/plugins";
 
-// Core re-exports (for convenience)
+// Feature plugins (canonical: feature-specific packages)
+export { withPubSub } from "@ws-kit/pubsub";
+export type { WithPubSubCapability } from "@ws-kit/pubsub";
+
+// Core router factory (canonical: @ws-kit/core)
 export { createRouter } from "@ws-kit/core";
 export type {
   EventContext as MessageContext,
-  RpcContext,
   Router,
+  RpcContext,
 } from "@ws-kit/core";
