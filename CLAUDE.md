@@ -42,13 +42,11 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 ## Quick Start
 
 ```typescript
-import { createClient } from "redis";
-import { createRouter } from "@ws-kit/core";
-import { z, message } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/plugins";
+import { redisPubSub } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
-import { withPubSub } from "@ws-kit/pubsub";
-import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
-import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+import { createClient } from "redis";
 
 declare module "@ws-kit/core" {
   interface ConnectionData {
@@ -63,18 +61,9 @@ await redis.connect();
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-const router = createRouter<ConnectionData>()
+const router = createRouter()
   .plugin(withZod())
   .plugin(withPubSub({ adapter: redisPubSub(redis) }));
-
-router.use(
-  rateLimit({
-    adapter: redisRateLimiter(redis),
-    capacity: 100,
-    tokensPerSecond: 50,
-    key: keyPerUserPerType,
-  }),
-);
 
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: `Got: ${ctx.payload.text}` });
@@ -89,7 +78,11 @@ serve(router, {
 });
 ```
 
-**Architecture notes**: Module augmentation for `ConnectionData` (define once, shared across all routers). Pub/sub is added via plugin (type-level capability), rate limiting via middleware (policy enforcement).
+**Key concepts**:
+- Import validator and helpers from single source (`@ws-kit/zod` or `@ws-kit/valibot`)
+- Plugins add capabilities: `withZod()` (validation), `withPubSub()` (broadcasting)
+- Module augmentation for `ConnectionData` (define once, shared across routers)
+- Adapters provide backends: memory (dev), Redis/Cloudflare (production)
 
 ## API Surface
 

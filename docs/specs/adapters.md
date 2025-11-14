@@ -731,7 +731,7 @@ const router = createRouter()
 
 ### Pub/Sub Adapters
 
-**Plugin**: `withPubSub()` (via `@ws-kit/core/plugins`)
+**Plugin**: `withPubSub()` (via `@ws-kit/plugins`)
 
 **Adapters**:
 
@@ -780,7 +780,7 @@ export interface PublishResult {
 
 Development (no setup needed):
 ```typescript
-import { withPubSub } from "@ws-kit/core/plugins";
+import { withPubSub } from "@ws-kit/plugins";
 import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
 
 const router = createRouter()
@@ -789,7 +789,7 @@ const router = createRouter()
 
 Production (Redis):
 ```typescript
-import { withPubSub } from "@ws-kit/core/plugins";
+import { withPubSub } from "@ws-kit/plugins";
 import { redisPubSub } from "@ws-kit/redis";
 
 const redis = createClient({ url: process.env.REDIS_URL });
@@ -801,7 +801,7 @@ const router = createRouter()
 
 Cloudflare Workers (Durable Objects):
 ```typescript
-import { withPubSub } from "@ws-kit/core/plugins";
+import { withPubSub } from "@ws-kit/plugins";
 import { cloudflarePubSub } from "@ws-kit/cloudflare";
 
 const router = createRouter()
@@ -810,7 +810,7 @@ const router = createRouter()
 
 ### Rate Limiter Adapters
 
-**Plugin**: `withRateLimit()` (via `@ws-kit/core/plugins`)
+**Plugin**: `withRateLimit()` (via `@ws-kit/plugins`)
 
 **Adapters**:
 
@@ -849,7 +849,7 @@ export interface RateLimiterAdapter {
 
 Development (no setup needed):
 ```typescript
-import { withRateLimit } from "@ws-kit/core/plugins";
+import { withRateLimit } from "@ws-kit/plugins";
 import { memoryRateLimiter } from "@ws-kit/core/adapters/rate-limit";
 
 const router = createRouter()
@@ -862,7 +862,7 @@ const router = createRouter()
 
 Production (Redis):
 ```typescript
-import { withRateLimit } from "@ws-kit/core/plugins";
+import { withRateLimit } from "@ws-kit/plugins";
 import { redisRateLimiter } from "@ws-kit/redis";
 
 const redis = createClient({ url: process.env.REDIS_URL });

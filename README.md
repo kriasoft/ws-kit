@@ -882,8 +882,9 @@ For distributed deployments across multiple server instances, use Redis or Cloud
 
 ```ts
 import { createRouter, withZod } from "@ws-kit/zod";
-import { serve } from "@ws-kit/bun";
+import { withPubSub } from "@ws-kit/plugins";
 import { redisPubSub } from "@ws-kit/redis";
+import { serve } from "@ws-kit/bun";
 import { createClient } from "redis";
 
 const redisClient = createClient({ url: process.env.REDIS_URL });
@@ -891,7 +892,7 @@ await redisClient.connect();
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(redisPubSub(redisClient));
+  .plugin(withPubSub({ adapter: redisPubSub(redisClient) }));
 
 // Now ctx.publish() and ctx.topics.subscribe() work across all instances
 router.on(JoinRoom, async (ctx) => {

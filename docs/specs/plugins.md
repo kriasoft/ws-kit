@@ -12,17 +12,16 @@ See [ADR-031](../adr/031-plugin-adapter-architecture.md) for design rationale.
 
 ## Plugin Locations
 
-**Core Framework Plugins** (in `@ws-kit/core/plugins/`):
+**Core Framework Plugins** (in `@ws-kit/plugins/`):
 - `withMessaging()` — Fire-and-forget unicast/broadcast
 - `withRpc()` — Request-response with streaming
 - `withPubSub()` — Topic-based pub/sub (any adapter)
-- `withRateLimit()` — Rate limiting (any adapter)
 
 **Validator Plugins** (in `@ws-kit/zod/` or `@ws-kit/valibot/`):
 - `withValidation()` — Schema validation (validator-specific)
 - `withZod()` / `withValibot()` — All-in-one convenience plugins
 
-All plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for convenience. See [Plugin-Adapter Architecture (ADR-031)](../adr/031-plugin-adapter-architecture.md) for rationale.
+Core plugins are re-exported from `@ws-kit/zod` and `@ws-kit/valibot` for convenience. See [Plugin-Adapter Architecture (ADR-031)](../adr/031-plugin-adapter-architecture.md) for rationale.
 
 ---
 
@@ -61,7 +60,7 @@ const router = createRouter()
 
 ```typescript
 import { createRouter } from "@ws-kit/zod"; // or @ws-kit/valibot
-import { withPubSub } from "@ws-kit/core/plugins";
+import { withPubSub } from "@ws-kit/plugins";
 import { redisPubSub } from "@ws-kit/redis";
 
 const router = createRouter()
@@ -76,7 +75,7 @@ const router = createRouter()
 ```typescript
 import { createRouter } from "@ws-kit/core";
 import { withValidation } from "@ws-kit/zod";  // Zod-specific validation
-import { withMessaging, withRpc, withPubSub } from "@ws-kit/core/plugins";
+import { withMessaging, withRpc, withPubSub } from "@ws-kit/plugins";
 
 const router = createRouter()
   .plugin(withValidation())
@@ -130,7 +129,7 @@ interface ContextWithValidation {
 
 ### `withMessaging()`
 
-**Location**: `@ws-kit/core/src/plugins/messaging`
+**Location**: `@ws-kit/plugins/src/messaging`
 
 **Purpose**: Enable fire-and-forget messaging to individual connections.
 
@@ -172,7 +171,7 @@ interface SendOptions {
 
 ### `withRpc()`
 
-**Location**: `@ws-kit/core/src/plugins/rpc`
+**Location**: `@ws-kit/plugins/src/rpc`
 
 **Purpose**: Enable request-response patterns with streaming progress updates.
 
@@ -237,7 +236,7 @@ interface ProgressOptions extends ReplyOptions {
 
 ### `withPubSub(config?)`
 
-**Location**: `@ws-kit/core/src/plugins/pubsub` (re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
+**Location**: `@ws-kit/plugins/src/pubsub` (re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
 
 **Purpose**: Enable topic-based broadcasting to multiple subscribers.
 
@@ -323,7 +322,7 @@ interface RateLimitConfig {
 
 **Example**:
 ```typescript
-import { withRateLimit } from "@ws-kit/core/plugins";
+import { withRateLimit } from "@ws-kit/plugins";
 import { redisRateLimiter } from "@ws-kit/redis";
 
 const router = createRouter()
@@ -779,12 +778,11 @@ const router = createRouter()
 **Or explicitly** (for clarity):
 ```typescript
 import { createRouter } from "@ws-kit/core";
-import { withValidation } from "@ws-kit/core/plugins";
-import { withZodValidator } from "@ws-kit/zod";
-import { withMessaging, withRpc } from "@ws-kit/core/plugins";
+import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
+import { withMessaging, withRpc } from "@ws-kit/plugins";
 
 const router = createRouter()
-  .plugin(withValidation(withZodValidator()))
+  .plugin(withZod())
   .plugin(withMessaging())
   .plugin(withRpc());
 ```

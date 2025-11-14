@@ -522,15 +522,13 @@ const router = createRouter<ConnectionData>();
 **After (proposed, composable):**
 
 ```typescript
-import { z, message, createRouter } from "@ws-kit/zod";
-import { withValidation, withMessaging, withRpc } from "@ws-kit/core/plugins";
-// Or re-exported from @ws-kit/zod for convenience:
-// import { withValidation, withMessaging, withRpc } from "@ws-kit/zod";
+import { createRouter, withZod } from "@ws-kit/zod";
+import { withMessaging, withRpc } from "@ws-kit/plugins";
 
 const router = createRouter<ConnectionData>()
-  .plugin(withValidation({ validateOutgoing: true }))
+  .plugin(withZod())
   .plugin(withMessaging())
-  .plugin(withRpc({ progressThrottleMs: 100 }));
+  .plugin(withRpc());
 
 // Now all methods available, with full type safety
 router.on(PingMsg, (ctx) => {
@@ -593,8 +591,8 @@ const router = createRouter<ConnectionData>()
 
 ### Phase 1: Create Core Plugins (Minimal Breaking)
 
-1. Add `@ws-kit/core/plugins/messaging.ts` with `withMessaging()`
-2. Add `@ws-kit/core/plugins/rpc.ts` with `withRpc()`
+1. Add `@ws-kit/plugins/messaging.ts` with `withMessaging()`
+2. Add `@ws-kit/plugins/rpc.ts` with `withRpc()`
 3. Extract shared utilities to `@ws-kit/core/utils/` (sanitizeMeta, preserveCorrelationId, throttle, etc.)
 4. Update `Router<TContext, TCaps>` type to support plugin chaining
 5. Update `HandlerContext` / `RpcContext` types to reflect capabilities

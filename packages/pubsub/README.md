@@ -1,33 +1,41 @@
 # @ws-kit/pubsub
 
-In-memory pub/sub plugin for WS-Kit with optional policy enforcement (topic normalization, authorization).
+Policy enforcement middleware for pub/sub operations (topic normalization, authorization).
+
+**Note:** The core `withPubSub()` plugin has moved to `@ws-kit/plugins`. This package provides optional policy middleware for controlling subscribe/publish/unsubscribe operations.
 
 ## Installation
 
 ```bash
-npm install @ws-kit/pubsub
+bun add @ws-kit/pubsub
 ```
 
 ## Quick Start
 
 ```typescript
-import { createRouter, message } from "@ws-kit/zod";
-import { withPubSub, usePubSub } from "@ws-kit/pubsub";
-import { memoryPubSub } from "@ws-kit/memory";
+import { createRouter, message, withZod } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/plugins";
+import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
+import { usePubSub } from "@ws-kit/pubsub";
 import { z } from "zod";
 
-type AppData = { userId: string };
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+  }
+}
 
 const Notify = message("NOTIFY", { text: z.string() });
 
-const router = createRouter<AppData>()
+const router = createRouter()
+  .plugin(withZod())
   .plugin(withPubSub({ adapter: memoryPubSub() }))
   .use(
     usePubSub({
       hooks: {
         normalizeTopic: (topic) => topic.toLowerCase(),
         authorize: async (action, topic, ctx) => {
-          if (action === "subscribe" && !ctx.data.userId) {
+          if (action === "subscribe" && !ctx.ws.data?.userId) {
             throw new Error("Unauthorized");
           }
         },
@@ -37,7 +45,7 @@ const router = createRouter<AppData>()
 
 router.on(Notify, async (ctx) => {
   await ctx.topics.subscribe("room:lobby");
-  ctx.publish("room:lobby", Notify, { text: "Hello" });
+  await ctx.publish("room:lobby", Notify, { text: "Hello" });
 });
 ```
 
@@ -71,11 +79,11 @@ src/
 
 #### Plugin: `withPubSub({ adapter })`
 
-Adds pub/sub capability to the router.
+The core `withPubSub()` plugin is now in `@ws-kit/plugins`. It adds pub/sub capability to the router:
 
 ```typescript
-import { withPubSub } from "@ws-kit/pubsub";
-import { memoryPubSub } from "@ws-kit/memory";
+import { withPubSub } from "@ws-kit/plugins";
+import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
 
 const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 ```
@@ -83,10 +91,10 @@ const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 Provides:
 
 - `router.publish(topic, schema, payload, opts)` — Broadcast to topic subscribers
-- `router.subscriptions.list()` — Active topics
-- `router.subscriptions.has(topic)` — Check if topic has subscribers
 - `ctx.publish(topic, schema, payload, opts)` — Publish from handler
 - `ctx.topics` — Per-connection subscription operations
+
+See `@ws-kit/plugins` for the complete plugin API.
 
 #### Middleware: `usePubSub(options)`
 
@@ -110,29 +118,19 @@ Optional middleware for topic normalization and authorization.
 
 Supported actions: `"subscribe"`, `"unsubscribe"`, `"publish"`
 
-#### Adapter: In-Memory (via `@ws-kit/memory`)
+#### Adapter: In-Memory (from `@ws-kit/core`)
 
-In-memory implementation using `Map<topic, Set<clientId>>`.
-
-Use the canonical `memoryPubSub()` from `@ws-kit/memory`:
+In-memory pub/sub adapter using `Map<topic, Set<clientId>>`. Available from core for zero-config development:
 
 ```typescript
-import { memoryPubSub } from "@ws-kit/memory";
+import { memoryPubSub } from "@ws-kit/core/adapters/pubsub";
 
 const adapter = memoryPubSub();
 ```
 
-Implements `PubSubAdapter` interface:
+For production, use distributed adapters like `redisPubSub()` from `@ws-kit/redis` or `cloudflarePubSub()` from `@ws-kit/cloudflare`.
 
-```typescript
-interface PubSubAdapter {
-  publish(msg: PubSubMessage): Promise<void>;
-  subscribe(clientId: string, topic: string): Promise<void>;
-  unsubscribe(clientId: string, topic: string): Promise<void>;
-  listTopics(): readonly string[];
-  hasTopic(topic: string): boolean;
-}
-```
+All adapters implement the same `PubSubAdapter` interface, so swapping is seamless.
 
 ## API Reference
 

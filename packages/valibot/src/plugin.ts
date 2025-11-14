@@ -38,7 +38,7 @@ import { definePlugin } from "@ws-kit/core/plugin";
 import {
   withMessaging as coreWithMessaging,
   withRpc as coreWithRpc,
-} from "@ws-kit/core/plugins";
+} from "@ws-kit/plugins";
 import { getValibotPayload, validatePayload } from "./internal.js";
 import type { AnySchema, InferPayload } from "./types.js";
 

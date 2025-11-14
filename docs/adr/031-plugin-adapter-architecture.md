@@ -98,17 +98,17 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 ```
 
 **Key Design:**
-- **Plugins** (`@ws-kit/core/plugins`) contain framework APIs—stateless or adapter-agnostic
+- **Plugins** (`@ws-kit/plugins`) contain framework APIs—stateless or adapter-agnostic
 - **Memory adapters** (`@ws-kit/core/adapters`) are bundled defaults for zero-config dev
 - **External adapters** (`@ws-kit/redis`, `@ws-kit/cloudflare`) are separate packages for production
-- **No separate package per plugin**—all plugins live in core to avoid import fragmentation and reduce complexity
+- **Separate plugins package**—all core plugins live in `@ws-kit/plugins` for clean separation
 
-**Why not split plugins into separate packages?**
-- ✅ All plugins ship together (no need to juggle many packages)
-- ✅ Clear discovery (users know to import from `@ws-kit/core/plugins`)
-- ✅ Simpler dependency graph (no inter-package dependencies)
-- ✅ Easier type inference across plugins (no circular dependency risks)
-- ⚠️ Trade-off: Users import entire plugin system (but tree-shaking removes unused plugins)
+**Why a separate plugins package?**
+- ✅ All plugins centralized and easy to discover (single import source: `@ws-kit/plugins`)
+- ✅ Simpler core package (core owns routing, adapters own adapter interfaces)
+- ✅ Cleaner mental model (core = framework, plugins = capabilities)
+- ✅ Extensibility (users can add plugins without core bloat)
+- ⚠️ Trade-off: One more package to import from (but re-exported by validators for convenience)
 
 ---
 
@@ -283,50 +283,37 @@ Refactor `@ws-kit/zod` and `@ws-kit/valibot`:
 
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod";
-import { withPubSub, withRateLimit } from "@ws-kit/core/plugins";
+import { withPubSub } from "@ws-kit/plugins";
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(withPubSub())          // ✅ Uses memoryPubSub() by default
-  .plugin(withRateLimit({
-    capacity: 100,
-    tokensPerSecond: 10,
-    // ✅ Uses memoryRateLimiter() by default
-  }));
+  .plugin(withPubSub());          // ✅ Uses memoryPubSub() by default
 ```
 
 ### Production (Redis Adapters)
 
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod";
-import { withPubSub, withRateLimit } from "@ws-kit/core/plugins";
-import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+import { withPubSub } from "@ws-kit/plugins";
+import { redisPubSub } from "@ws-kit/redis";
 
 const router = createRouter()
   .plugin(withZod())
   .plugin(withPubSub({
     adapter: redisPubSub(redis),  // ✅ Swap adapter
-  }))
-  .plugin(withRateLimit({
-    adapter: redisRateLimiter(redis),  // ✅ Swap adapter
-    capacity: 1000,
-    tokensPerSecond: 50,
   }));
 ```
 
 ### Cloudflare Workers
 
 ```typescript
-import { withPubSub, withRateLimit } from "@ws-kit/core/plugins";
-import { cloudflarePubSub, cloudflareRateLimiter } from "@ws-kit/cloudflare";
+import { withPubSub } from "@ws-kit/plugins";
+import { cloudflarePubSub } from "@ws-kit/cloudflare";
 
 const router = createRouter()
   .plugin(withZod())
   .plugin(withPubSub({
     adapter: cloudflarePubSub(env.DURABLE_OBJECTS),  // Cloudflare DO
-  }))
-  .plugin(withRateLimit({
-    adapter: cloudflareRateLimiter(env.RATE_LIMIT),  // CF Rate Limiting API
   }));
 ```
 
