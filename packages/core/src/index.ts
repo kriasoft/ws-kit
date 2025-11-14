@@ -85,6 +85,7 @@ export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 // Useful type utilities (capability-gated context types)
 export type {
   EventContext,
+  ProgressOptions,
   PubSubContext,
   ReplyOptions,
   RpcContext,

@@ -15,6 +15,7 @@ import type {
   ConnectionData,
   MessageDescriptor,
   MinimalContext,
+  ProgressOptions as CoreProgressOptions,
   ReplyOptions as CoreReplyOptions,
   SendOptions,
 } from "@ws-kit/core";
@@ -88,6 +89,14 @@ interface ResolvedOptions {
 }
 
 export interface ReplyOptions extends CoreReplyOptions {
+  /**
+   * Whether to validate the outgoing payload.
+   * Default: uses plugin validateOutgoing setting
+   */
+  validate?: boolean;
+}
+
+export interface ProgressOptions extends CoreProgressOptions {
   /**
    * Whether to validate the outgoing payload.
    * Default: uses plugin validateOutgoing setting
@@ -293,6 +302,9 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         // Track reply idempotency
         let replied = false;
 
+        // Track throttle state for progress updates
+        let lastProgressTime = 0;
+
         // Guard: ensure we're in an RPC context
         function guardRpc() {
           const wskit = enhCtx.__wskit;
@@ -321,6 +333,18 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           delete sanitized.type;
           delete sanitized.correlationId;
           return sanitized;
+        }
+
+        // Helper: check if we should throttle based on lastProgressTime
+        function shouldThrottle(throttleMs: number | undefined): boolean {
+          if (!throttleMs) return false;
+          const now = Date.now();
+          const timeSinceLastProgress = now - lastProgressTime;
+          if (timeSinceLastProgress >= throttleMs) {
+            lastProgressTime = now;
+            return false; // Don't throttle, send immediately
+          }
+          return true; // Throttle, skip this send
         }
 
         // Helper to validate outgoing message (full root validation)
@@ -715,6 +739,12 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
 
             const wskit = guardRpc();
             const responseSchema = wskit.response as any;
+
+            // Check if this update should be throttled
+            if (shouldThrottle(opts?.throttleMs)) {
+              // Throttled: return immediately without sending
+              return opts?.waitFor ? Promise.resolve() : undefined;
+            }
 
             // If no waitFor, return void (fire-and-forget)
             if (!opts?.waitFor) {

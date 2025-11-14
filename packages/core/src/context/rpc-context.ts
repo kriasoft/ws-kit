@@ -34,6 +34,16 @@ export interface ReplyOptions {
   meta?: Record<string, unknown>;
 }
 
+export interface ProgressOptions extends ReplyOptions {
+  /**
+   * Rate-limit rapid progress updates (ms between sends).
+   * Example: {throttleMs: 100} batches updates; max 10 per second
+   * Useful for high-frequency updates (animations, sensor data)
+   * Default: undefined (no throttling)
+   */
+  throttleMs?: number;
+}
+
 export interface RpcContext<
   TContext extends ConnectionData = ConnectionData,
   TPayload = unknown,
@@ -74,6 +84,8 @@ export interface RpcContext<
    *
    * Returns void by default (async enqueue). With {waitFor} option,
    * returns Promise<void> (always completes, never rejects).
+   *
+   * Supports {throttleMs} to rate-limit rapid updates (useful for animations/sensor data).
    */
-  progress(payload: TResponse, opts?: ReplyOptions): void | Promise<void>;
+  progress(payload: TResponse, opts?: ProgressOptions): void | Promise<void>;
 }
