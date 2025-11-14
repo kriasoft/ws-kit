@@ -2,20 +2,30 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * withValibot() plugin: adds validation capability to the router.
+ * withValibot() plugin: adds Valibot validation capability to the router.
+ *
+ * Composes core plugins (withMessaging + withRpc) with Valibot-specific validation:
+ * - Validates inbound payloads against Valibot schemas
+ * - Optionally validates outbound payloads (send, reply, progress)
+ * - Adds ctx.payload (validated) to event handlers
+ * - Provides .rpc() method for request-response handlers
  *
  * Once plugged, the router gains:
- * - router.rpc() method for request-response handlers
- * - Enhanced context: ctx.payload (validated), ctx.send(), ctx.reply(), ctx.progress()
- * - Automatic payload validation from schemas
- * - Validation errors routed to router.onError()
+ * - ctx.send() - Fire-and-forget unicast (from withMessaging)
+ * - ctx.reply() / ctx.error() / ctx.progress() - RPC methods (from withRpc)
+ * - ctx.payload - Validated message payload
+ * - router.rpc() - Request-response handler registration
+ *
+ * Validation errors are routed to router.onError() or custom onValidationError hook.
  */
 
 import type {
   ConnectionData,
+  ProgressOptions as CoreProgressOptions,
+  ReplyOptions as CoreReplyOptions,
   MessageDescriptor,
   MinimalContext,
-  Router,
+  SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
 import {
@@ -25,6 +35,10 @@ import {
   type SchemaOpts,
 } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
+import {
+  withMessaging as coreWithMessaging,
+  withRpc as coreWithRpc,
+} from "@ws-kit/core/plugins";
 import { getValibotPayload, validatePayload } from "./internal.js";
 import type { AnySchema, InferPayload } from "./types.js";
 
@@ -43,9 +57,19 @@ type EnhancedContext = MinimalContext<any> & {
   __wskit?: WsContext;
   __connData?: Record<string, unknown>;
   meta?: Record<string, unknown>;
-  send?: (schema: AnySchema | MessageDescriptor, payload: any) => Promise<void>;
-  reply?: (payload: any, opts?: any) => Promise<void>;
-  progress?: (payload: any, opts?: any) => Promise<void>;
+  send?: (
+    schema: AnySchema | MessageDescriptor,
+    payload: any,
+    opts?: SendOptions,
+  ) => void | Promise<boolean>;
+  reply?: (payload: any, opts?: any) => void | Promise<void>;
+  error?: (
+    code: string,
+    message: string,
+    details?: any,
+    opts?: any,
+  ) => void | Promise<void>;
+  progress?: (payload: any, opts?: any) => void | Promise<void>;
   getData?: (key: string) => unknown;
 };
 
@@ -80,53 +104,22 @@ interface ResolvedOptions {
   validateOutgoing: boolean;
 }
 
-export interface ReplyOptions {
+export interface ReplyOptions extends CoreReplyOptions {
   /**
    * Whether to validate the outgoing payload.
    * Default: uses plugin validateOutgoing setting
    */
   validate?: boolean;
-
-  /**
-   * Additional metadata to merge into response meta.
-   * Reserved keys (type, correlationId) are immutable and cannot be overridden.
-   */
-  meta?: Record<string, unknown>;
 }
 
-/**
- * Validation plugin for Valibot schemas.
- * Adds validation capability and RPC support to the router.
- *
- * Inserts a validation middleware that:
- * 1. Validates inbound payload from schema (always using safeParse)
- * 2. Enriches context with payload and methods (send, reply, progress)
- * 3. Optionally validates outgoing payloads
- * 4. Routes validation errors to router.onError() or custom onValidationError hook
- *
- * @example
- * ```typescript
- * import { v, message, withValibot, createRouter } from "@ws-kit/valibot";
- *
- * const Join = message("JOIN", { roomId: v.string() });
- * const GetUser = rpc("GET_USER", { id: v.string() }, "USER", {
- *   id: v.string(),
- *   name: v.string(),
- * });
- *
- * const router = createRouter()
- *   .plugin(withValibot({ validateOutgoing: true }))
- *   .on(Join, (ctx) => {
- *     // ctx.payload is now typed and validated
- *     console.log(ctx.payload.roomId);
- *   })
- *   .rpc(GetUser, async (ctx) => {
- *     // RPC handler: has ctx.reply() and ctx.progress()
- *     ctx.progress({ id: ctx.payload.id, name: "Loading..." });
- *     ctx.reply({ id: ctx.payload.id, name: "Alice" });
- *   });
- * ```
- */
+export interface ProgressOptions extends CoreProgressOptions {
+  /**
+   * Whether to validate the outgoing payload.
+   * Default: uses plugin validateOutgoing setting
+   */
+  validate?: boolean;
+}
+
 /**
  * Helper to format Valibot errors for better DX.
  * @internal
@@ -134,10 +127,11 @@ export interface ReplyOptions {
 function formatValidationError(error: any): string {
   if (Array.isArray(error)) {
     return error
-      .map((e: any) =>
-        e.path && e.message ? `${e.path.join(".")}: ${e.message}` : e.message,
-      )
+      .map((e: any) => `${e.path?.join(".")}: ${e.message}`)
       .join("; ");
+  }
+  if (typeof error === "string") {
+    return error;
   }
   return JSON.stringify(error);
 }
@@ -208,13 +202,20 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
     validateOutgoing: options?.validateOutgoing ?? true,
     onValidationError: options?.onValidationError,
   };
+
   return definePlugin<TContext, WithValibotValidationAPI<TContext>>(
     (router) => {
-      // Get plugin API for registering enhancers
+      // Step 1: Apply core messaging and RPC plugins first
+      // These provide ctx.send(), ctx.reply(), ctx.error(), ctx.progress()
+      router.plugin(coreWithMessaging<TContext>());
+      router.plugin(coreWithRpc<TContext>());
+
+      // Step 2: Get plugin API for registering validation middleware
       const api = getRouterPluginAPI(router);
 
-      // Inject validation middleware that validates root message and enriches context
-      // This runs automatically before any user handler
+      // Step 3: Inject validation middleware that validates root message and enriches context
+      // This runs BEFORE core messaging/RPC enhancers (lower priority)
+      // so that ctx.payload is available for the messaging methods to use
       router.use(
         async (ctx: MinimalContext<any>, next: () => Promise<void>) => {
           // Capture lifecycle for use in error handlers
@@ -228,8 +229,12 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
             const schema = schemaInfo.schema as any;
             const enhCtx = ctx as EnhancedContext;
 
-            // If schema has safeParse (Valibot), validate the full root message
+            // If schema is a Valibot object (has safeParse), validate the full root message
             if (typeof schema?.safeParse === "function") {
+              // Get per-schema options and resolve effective options
+              const schemaOpts = getSchemaOpts(schema);
+              const eff = resolveOptions(schemaOpts, pluginOpts);
+
               // Construct normalized inbound message
               const inboundMessage = {
                 type: ctx.type,
@@ -241,8 +246,8 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
 
               // Validate against root schema (enforces strict type, meta, payload)
               // Always use safeParse for consistent error handling.
-              // Coercion is controlled by schema design, not runtime flags.
               const result = schema.safeParse(inboundMessage);
+
               if (!result.success) {
                 // Create validation error and route to error sink
                 const validationError = new Error(
@@ -269,7 +274,7 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
                 enhCtx.payload = result.data.payload;
               }
 
-              // Stash schema info for later use in reply/progress/send
+              // Stash schema info for later use in reply/progress/send validation
               enhCtx.__wskit = {
                 kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
                 request: schema,
@@ -283,47 +288,15 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
         },
       );
 
-      // Register context enhancer to attach send/reply/progress methods
+      // Step 4: Register context enhancer to add outbound validation capability
+      // This wraps the core messaging/RPC methods to optionally validate outgoing payloads
       api.addContextEnhancer(
         (ctx: MinimalContext<any>) => {
           const enhCtx = ctx as EnhancedContext;
           // Capture lifecycle for use in nested functions
           const lifecycle = api.getLifecycle();
 
-          // Track reply idempotency
-          let replied = false;
-
-          // Guard: ensure we're in an RPC context
-          function guardRpc() {
-            const wskit = enhCtx.__wskit;
-            if (!wskit?.response) {
-              throw new Error(
-                "ctx.reply() and ctx.progress() are only available in RPC handlers",
-              );
-            }
-            return wskit;
-          }
-
-          // Extract base metadata from request (preserves correlationId)
-          function baseMeta(enhCtx: EnhancedContext): Record<string, unknown> {
-            return {
-              correlationId: enhCtx.meta?.correlationId,
-            };
-          }
-
-          // Sanitize user-provided meta: strip reserved keys
-          function sanitizeMeta(
-            userMeta: Record<string, unknown> | undefined,
-          ): Record<string, unknown> {
-            if (!userMeta) return {};
-            const sanitized = { ...userMeta };
-            // Strip reserved keys that cannot be overridden
-            delete sanitized.type;
-            delete sanitized.correlationId;
-            return sanitized;
-          }
-
-          // Helper to validate outgoing message (full root validation)
+          // Helper: validate outgoing message (full root validation)
           const validateOutgoingPayload = async (
             schema: AnySchema | MessageDescriptor,
             payload: any,
@@ -371,9 +344,12 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
               return result.data.payload ?? payload;
             }
 
-            // Fallback for non-Valibot schemas (legacy path)
+            // Fallback for schemas that don't have safeParse (e.g., legacy message descriptors).
+            // In normal usage with message() and rpc() builders, this branch is never reached.
+            // This path exists for edge cases where schemas are constructed manually.
             const payloadSchema = getValibotPayload(schema);
             if (!payloadSchema) {
+              // Non-Valibot schema without payload metadata—skip validation
               return payload;
             }
 
@@ -398,30 +374,6 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
             }
 
             return result.data ?? payload;
-          };
-
-          // Helper: serialize and send an outbound message
-          const sendMessage = (
-            type: string,
-            payload: any,
-            meta: Record<string, unknown>,
-          ): void => {
-            const message = {
-              type,
-              meta,
-              ...(payload !== undefined ? { payload } : {}),
-            };
-            try {
-              ctx.ws.send(JSON.stringify(message));
-            } catch (err) {
-              // Connection may have closed; error will be caught by socket wrapper
-              const sendError = new Error(
-                `Failed to send message ${type}: ${err instanceof Error ? err.message : String(err)}`,
-              );
-              (sendError as unknown as Error & { code: string }).code =
-                "SEND_ERROR";
-              lifecycle.handleError(sendError, ctx);
-            }
           };
 
           // Helper: validate payload against RPC response schema
@@ -476,159 +428,81 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
             return progressPayload;
           };
 
-          // Helper: send outbound message (terminal reply only)
-          const sendOutbound = async (
-            payload: any,
-            replyOpts?: ReplyOptions,
-          ): Promise<void> => {
-            const wskit = guardRpc();
-            const responseSchema = wskit.response as any;
+          // Get the messaging extension from core plugin
+          const messagingExt = ctx.extensions.get("messaging") as any;
+          const rpcExt = ctx.extensions.get("rpc") as any;
 
-            // Get per-schema options and determine if validation is enabled
-            const schemaOpts = getSchemaOpts(responseSchema);
-            const eff = resolveOptions(schemaOpts, pluginOpts);
-            const shouldValidate = replyOpts?.validate ?? eff.validateOutgoing;
-
-            // Construct response message with sanitized meta
-            const responseMessage = {
-              type: responseSchema.responseType || typeOf(responseSchema),
-              meta: {
-                ...baseMeta(ctx),
-                ...sanitizeMeta(replyOpts?.meta),
-              },
-              ...(payload !== undefined ? { payload } : {}),
-            };
-
-            // Validate if enabled
-            if (
-              shouldValidate &&
-              typeof responseSchema?.safeParse === "function"
-            ) {
-              const result = responseSchema.safeParse(responseMessage);
-              if (!result.success) {
-                const validationError = new Error(
-                  `Reply validation failed for ${ctx.type}: ${formatValidationError(result.error)}`,
-                ) as unknown as Error & { code: string; details: any };
-                validationError.code = "REPLY_VALIDATION_ERROR";
-                validationError.details = result.error;
-
-                if (pluginOpts.onValidationError) {
-                  await pluginOpts.onValidationError(validationError, {
-                    type: responseMessage.type,
-                    direction: "outbound",
-                    payload,
-                  });
-                } else {
-                  await lifecycle.handleError(validationError, ctx);
-                }
-                throw validationError;
-              }
-            }
-
-            // Mark as replied
-            replied = true;
-
-            // Send the message via WebSocket
-            sendMessage(
-              responseMessage.type,
-              responseMessage.payload,
-              responseMessage.meta,
-            );
-          };
-
-          // Create Valibot extension object with all methods
-          const valibotExt = {
-            // send() method for event handlers (always available after validation)
-            send: async (
+          if (messagingExt?.send) {
+            // Wrap send() with outbound validation
+            const coreSend = messagingExt.send;
+            (enhCtx as any).send = async (
               schema: AnySchema | MessageDescriptor,
               payload: any,
-            ) => {
-              // Validate outgoing payload
+              opts?: SendOptions,
+            ): Promise<any> => {
+              // Validate outgoing payload if enabled
               const validatedPayload = await validateOutgoingPayload(
                 schema,
                 payload,
               );
+              // Delegate to core send with validated payload
+              return coreSend(schema, validatedPayload, opts);
+            };
+          }
 
-              // Get message type from schema
-              const messageType =
-                (schema as any).__descriptor?.type ||
-                (schema as any).type ||
-                schema.type;
+          if (rpcExt?.reply) {
+            // Wrap reply() with outbound validation
+            const coreReply = rpcExt.reply;
+            (enhCtx as any).reply = async (
+              payload: any,
+              opts?: ReplyOptions,
+            ): Promise<any> => {
+              const wskit = enhCtx.__wskit;
+              if (wskit?.response) {
+                const schemaOpts = getSchemaOpts(wskit.response);
+                const eff = resolveOptions(schemaOpts, pluginOpts);
+                const shouldValidate = opts?.validate ?? eff.validateOutgoing;
 
-              // Send with no meta
-              sendMessage(messageType, validatedPayload, {});
-            },
-
-            // reply() method for RPC handlers
-            reply: async (payload: any, opts?: ReplyOptions) => {
-              guardRpc();
-              if (replied) return; // Idempotent: silently ignore if already replied
-              await sendOutbound(payload, opts);
-            },
-
-            // progress() method for RPC handlers
-            // Emits a dedicated $ws:rpc-progress control message (non-terminal)
-            progress: async (payload: any, opts?: ReplyOptions) => {
-              const wskit = guardRpc();
-              const responseSchema = wskit.response as any;
-
-              // Validate progress payload against RPC response schema
-              const validatedPayload = await validateProgressPayload(
-                responseSchema,
-                payload,
-              );
-
-              // Build control message with correlation ID preserved
-              const progressMessage = {
-                type: "$ws:rpc-progress",
-                meta: {
-                  ...baseMeta(ctx),
-                  ...sanitizeMeta(opts?.meta),
-                },
-                ...(validatedPayload !== undefined
-                  ? { payload: validatedPayload }
-                  : {}),
-              };
-
-              // Send control message without marking as replied
-              sendMessage(
-                progressMessage.type,
-                progressMessage.payload,
-                progressMessage.meta,
-              );
-            },
-
-            // getData() method - retrieve connection data
-            getData: (key: string): unknown => {
-              // Access per-connection data store (stored on the socket/connection object)
-              // The adapter is responsible for maintaining this store
-              const store = enhCtx.__connData || {};
-              return store[key];
-            },
-
-            // assignData() method - merge partial connection data
-            assignData: (partial: Record<string, unknown>): void => {
-              // Initialize per-connection data store if not present
-              if (!enhCtx.__connData) {
-                enhCtx.__connData = {};
+                if (shouldValidate) {
+                  // Validate response payload
+                  const validatedPayload = await validateOutgoingPayload(
+                    wskit.response,
+                    payload,
+                  );
+                  return coreReply(validatedPayload, opts);
+                }
               }
-              // Shallow merge the provided data
-              Object.assign(enhCtx.__connData, partial);
-              // TODO: Emit "data changed" event for adapters to persist if needed
-            },
-          };
+              return coreReply(payload, opts);
+            };
+          }
 
-          // Store extension in context
-          ctx.extensions.set("valibot", valibotExt);
+          if (rpcExt?.progress) {
+            // Wrap progress() with outbound validation
+            const coreProgress = rpcExt.progress;
+            (enhCtx as any).progress = async (
+              payload: any,
+              opts?: ProgressOptions,
+            ): Promise<any> => {
+              const wskit = enhCtx.__wskit;
+              if (wskit?.response) {
+                const schemaOpts = getSchemaOpts(wskit.response);
+                const eff = resolveOptions(schemaOpts, pluginOpts);
+                const shouldValidate = opts?.validate ?? eff.validateOutgoing;
 
-          // Also expose methods directly on context for backwards compatibility
-          enhCtx.send = valibotExt.send;
-          enhCtx.reply = valibotExt.reply;
-          enhCtx.progress = valibotExt.progress;
-          enhCtx.getData = valibotExt.getData;
-          enhCtx.assignData = valibotExt.assignData;
+                if (shouldValidate) {
+                  // Validate progress payload
+                  const validatedPayload = await validateProgressPayload(
+                    wskit.response,
+                    payload,
+                  );
+                  return coreProgress(validatedPayload, opts);
+                }
+              }
+              return coreProgress(payload, opts);
+            };
+          }
         },
-        { priority: -100 },
+        { priority: 100 }, // Higher priority (after core plugins)
       );
 
       // Type-safe RPC handler method with automatic context type inference

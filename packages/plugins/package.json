@@ -1,0 +1,71 @@
+{
+  "name": "@ws-kit/plugins",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Core plugins for WS-Kit routers (messaging, RPC, pub/sub)",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/plugins"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "plugin",
+    "messaging",
+    "rpc",
+    "pubsub",
+    "pub-sub",
+    "broadcasting",
+    "type-safe",
+    "typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "bun": "./src/index.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./messaging": {
+      "types": "./dist/src/messaging/index.d.ts",
+      "bun": "./src/messaging/index.ts",
+      "default": "./dist/src/messaging/index.js"
+    },
+    "./rpc": {
+      "types": "./dist/src/rpc/index.d.ts",
+      "bun": "./src/rpc/index.ts",
+      "default": "./dist/src/rpc/index.js"
+    },
+    "./pubsub": {
+      "types": "./dist/src/pubsub/index.d.ts",
+      "bun": "./src/pubsub/index.ts",
+      "default": "./dist/src/pubsub/index.js"
+    }
+  },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2",
+    "@ws-kit/core": "workspace:^"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "directory": "dist"
+  }
+}

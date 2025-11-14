@@ -104,3 +104,12 @@ export * as test from "./testing";
 
 // Normalization utility (for testing validator integration)
 export { normalizeInboundMessage } from "./internal/normalize";
+
+// Memory adapters (development/testing)
+export { memoryPubSub } from "./adapters/pubsub/memory";
+export { memoryRateLimiter } from "./adapters/rate-limit/memory";
+export type {
+  RateLimitDecision,
+  RateLimiter,
+  Policy,
+} from "./adapters/rate-limit/types";

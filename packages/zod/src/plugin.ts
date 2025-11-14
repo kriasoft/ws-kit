@@ -2,21 +2,29 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * withZod() plugin: adds validation capability to the router.
+ * withZod() plugin: adds Zod validation capability to the router.
+ *
+ * Composes core plugins (withMessaging + withRpc) with Zod-specific validation:
+ * - Validates inbound payloads against Zod schemas
+ * - Optionally validates outbound payloads (send, reply, progress)
+ * - Adds ctx.payload (validated) to event handlers
+ * - Provides .rpc() method for request-response handlers
  *
  * Once plugged, the router gains:
- * - router.rpc() method for request-response handlers
- * - Enhanced context: ctx.payload (validated), ctx.send(), ctx.reply(), ctx.progress()
- * - Automatic payload validation from schemas
- * - Validation errors routed to router.onError()
+ * - ctx.send() - Fire-and-forget unicast (from withMessaging)
+ * - ctx.reply() / ctx.error() / ctx.progress() - RPC methods (from withRpc)
+ * - ctx.payload - Validated message payload
+ * - router.rpc() - Request-response handler registration
+ *
+ * Validation errors are routed to router.onError() or custom onValidationError hook.
  */
 
 import type {
   ConnectionData,
-  MessageDescriptor,
-  MinimalContext,
   ProgressOptions as CoreProgressOptions,
   ReplyOptions as CoreReplyOptions,
+  MessageDescriptor,
+  MinimalContext,
   SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
@@ -27,6 +35,10 @@ import {
   type SchemaOpts,
 } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
+import {
+  withMessaging as coreWithMessaging,
+  withRpc as coreWithRpc,
+} from "@ws-kit/core/plugins";
 import { getZodPayload, validatePayload } from "./internal.js";
 import type { AnySchema, InferPayload } from "./types.js";
 
@@ -108,31 +120,6 @@ export interface ProgressOptions extends CoreProgressOptions {
   validate?: boolean;
 }
 
-/**
- * Validation plugin for Zod schemas.
- * Adds validation capability and RPC support to the router.
- *
- * Inserts a validation middleware that:
- * 1. Validates inbound payload from schema (always using safeParse)
- * 2. Enriches context with payload and methods (send, reply, progress)
- * 3. Optionally validates outgoing payloads
- * 4. Routes validation errors to router.onError() or custom onValidationError hook
- *
- * @example
- * ```typescript
- * const router = createRouter()
- *   .plugin(withZod({ validateOutgoing: true }))
- *   .on(Join, (ctx) => {
- *     // ctx.payload is now typed and validated
- *     console.log(ctx.payload.roomId);
- *   })
- *   .rpc(GetUser, async (ctx) => {
- *     // RPC handler: has ctx.reply() and ctx.progress()
- *     ctx.progress({ id: ctx.payload.id, name: "Loading..." });
- *     ctx.reply({ id: ctx.payload.id, name: "Alice" });
- *   });
- * ```
- */
 /**
  * Helper to format Zod errors for better DX.
  * @internal
@@ -220,11 +207,17 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
   };
 
   return definePlugin<TContext, WithZodValidationAPI<TContext>>((router) => {
-    // Get plugin API for registering enhancers
+    // Step 1: Apply core messaging and RPC plugins first
+    // These provide ctx.send(), ctx.reply(), ctx.error(), ctx.progress()
+    router.plugin(coreWithMessaging<TContext>());
+    router.plugin(coreWithRpc<TContext>());
+
+    // Step 2: Get plugin API for registering validation middleware
     const api = getRouterPluginAPI(router);
 
-    // Inject validation middleware that validates root message and enriches context
-    // This runs automatically before any user handler
+    // Step 3: Inject validation middleware that validates root message and enriches context
+    // This runs BEFORE core messaging/RPC enhancers (lower priority)
+    // so that ctx.payload is available for the messaging methods to use
     router.use(async (ctx: MinimalContext<any>, next: () => Promise<void>) => {
       // Capture lifecycle for use in error handlers
       const lifecycle = api.getLifecycle();
@@ -283,7 +276,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
             enhCtx.payload = result.data.payload;
           }
 
-          // Stash schema info for later use in reply/progress/send
+          // Stash schema info for later use in reply/progress/send validation
           enhCtx.__wskit = {
             kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
             request: schema,
@@ -296,62 +289,15 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
       await next();
     });
 
-    // Register context enhancer to attach send/reply/progress methods
+    // Step 4: Register context enhancer to add outbound validation capability
+    // This wraps the core messaging/RPC methods to optionally validate outgoing payloads
     api.addContextEnhancer(
       (ctx: MinimalContext<any>) => {
         const enhCtx = ctx as EnhancedContext;
         // Capture lifecycle for use in nested functions
         const lifecycle = api.getLifecycle();
 
-        // Track reply idempotency
-        let replied = false;
-
-        // Track throttle state for progress updates
-        let lastProgressTime = 0;
-
-        // Guard: ensure we're in an RPC context
-        function guardRpc() {
-          const wskit = enhCtx.__wskit;
-          if (!wskit?.response) {
-            throw new Error(
-              "ctx.reply() and ctx.progress() are only available in RPC handlers",
-            );
-          }
-          return wskit;
-        }
-
-        // Extract base metadata from request (preserves correlationId)
-        function baseMeta(enhCtx: EnhancedContext): Record<string, unknown> {
-          return {
-            correlationId: enhCtx.meta?.correlationId,
-          };
-        }
-
-        // Sanitize user-provided meta: strip reserved keys
-        function sanitizeMeta(
-          userMeta: Record<string, unknown> | undefined,
-        ): Record<string, unknown> {
-          if (!userMeta) return {};
-          const sanitized = { ...userMeta };
-          // Strip reserved keys that cannot be overridden
-          delete sanitized.type;
-          delete sanitized.correlationId;
-          return sanitized;
-        }
-
-        // Helper: check if we should throttle based on lastProgressTime
-        function shouldThrottle(throttleMs: number | undefined): boolean {
-          if (!throttleMs) return false;
-          const now = Date.now();
-          const timeSinceLastProgress = now - lastProgressTime;
-          if (timeSinceLastProgress >= throttleMs) {
-            lastProgressTime = now;
-            return false; // Don't throttle, send immediately
-          }
-          return true; // Throttle, skip this send
-        }
-
-        // Helper to validate outgoing message (full root validation)
+        // Helper: validate outgoing message (full root validation)
         const validateOutgoingPayload = async (
           schema: AnySchema | MessageDescriptor,
           payload: any,
@@ -431,30 +377,6 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           return result.data ?? payload;
         };
 
-        // Helper: serialize and send an outbound message
-        const sendMessage = (
-          type: string,
-          payload: any,
-          meta: Record<string, unknown>,
-        ): void => {
-          const message = {
-            type,
-            meta,
-            ...(payload !== undefined ? { payload } : {}),
-          };
-          try {
-            ctx.ws.send(JSON.stringify(message));
-          } catch (err) {
-            // Connection may have closed; error will be caught by socket wrapper
-            const sendError = new Error(
-              `Failed to send message ${type}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-            (sendError as unknown as Error & { code: string }).code =
-              "SEND_ERROR";
-            lifecycle.handleError(sendError, ctx);
-          }
-        };
-
         // Helper: validate payload against RPC response schema
         const validateProgressPayload = async (
           responseSchema: AnySchema,
@@ -507,347 +429,81 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           return progressPayload;
         };
 
-        // Helper: send outbound message (terminal reply only)
-        const sendOutbound = async (
-          payload: any,
-          replyOpts?: ReplyOptions,
-        ): Promise<void> => {
-          // Check if signal is already aborted
-          if (replyOpts?.signal?.aborted) {
-            return;
-          }
+        // Get the messaging extension from core plugin
+        const messagingExt = ctx.extensions.get("messaging") as any;
+        const rpcExt = ctx.extensions.get("rpc") as any;
 
-          const wskit = guardRpc();
-          const responseSchema = wskit.response as any;
-
-          // Get per-schema options and determine if validation is enabled
-          const schemaOpts = getSchemaOpts(responseSchema);
-          const eff = resolveOptions(schemaOpts, pluginOpts);
-          const shouldValidate = replyOpts?.validate ?? eff.validateOutgoing;
-
-          // Construct response message with sanitized meta
-          const responseMessage = {
-            type: responseSchema.responseType || typeOf(responseSchema),
-            meta: {
-              ...baseMeta(ctx),
-              ...sanitizeMeta(replyOpts?.meta),
-            },
-            ...(payload !== undefined ? { payload } : {}),
-          };
-
-          // Validate if enabled
-          if (
-            shouldValidate &&
-            typeof responseSchema?.safeParse === "function"
-          ) {
-            const result = responseSchema.safeParse(responseMessage);
-            if (!result.success) {
-              const validationError = new Error(
-                `Reply validation failed for ${ctx.type}: ${formatValidationError(result.error)}`,
-              ) as unknown as Error & { code: string; details: any };
-              validationError.code = "REPLY_VALIDATION_ERROR";
-              validationError.details = result.error;
-
-              if (pluginOpts.onValidationError) {
-                await pluginOpts.onValidationError(validationError, {
-                  type: responseMessage.type,
-                  direction: "outbound",
-                  payload,
-                });
-              } else {
-                await lifecycle.handleError(validationError, ctx);
-              }
-              throw validationError;
-            }
-          }
-
-          // Mark as replied
-          replied = true;
-
-          // Send the message via WebSocket
-          sendMessage(
-            responseMessage.type,
-            responseMessage.payload,
-            responseMessage.meta,
-          );
-
-          // If waitFor specified, return a promise
-          if (replyOpts?.waitFor) {
-            return new Promise((resolve) => {
-              setImmediate(() => resolve());
-            });
-          }
-        };
-
-        // Create Zod extension object with all methods
-        const zodExt = {
-          // send() method for event handlers (always available after validation)
-          send: (
+        if (messagingExt?.send) {
+          // Wrap send() with outbound validation
+          const coreSend = messagingExt.send;
+          (enhCtx as any).send = async (
             schema: AnySchema | MessageDescriptor,
             payload: any,
             opts?: SendOptions,
-          ): void | Promise<boolean> => {
-            // Check if signal is already aborted
-            if (opts?.signal?.aborted) {
-              return opts?.waitFor ? Promise.resolve(false) : undefined;
-            }
-
-            // If no waitFor, return void (fire-and-forget path)
-            if (!opts?.waitFor) {
-              // Fire-and-forget path
-              validateOutgoingPayload(schema, payload)
-                .then((validatedPayload) => {
-                  // Get message type from schema
-                  const messageType =
-                    (schema as any).__descriptor?.type ||
-                    (schema as any).type ||
-                    schema.type;
-
-                  // Build meta: start with sanitized user meta, then add correlation ID
-                  let outMeta: Record<string, unknown> = sanitizeMeta(
-                    opts?.meta,
-                  );
-
-                  // Auto-preserve correlation ID if requested
-                  if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
-                    outMeta.correlationId = enhCtx.meta.correlationId;
-                  }
-
-                  // Send the message
-                  sendMessage(messageType, validatedPayload, outMeta);
-                })
-                .catch(() => {
-                  // Silently catch errors; validation errors are handled in validateOutgoingPayload
-                });
-              return undefined;
-            }
-
-            // With waitFor, return promise
-            return new Promise<boolean>((resolveOuter) => {
-              validateOutgoingPayload(schema, payload)
-                .then((validatedPayload) => {
-                  // Get message type from schema
-                  const messageType =
-                    (schema as any).__descriptor?.type ||
-                    (schema as any).type ||
-                    schema.type;
-
-                  // Build meta: start with sanitized user meta, then add correlation ID
-                  let outMeta: Record<string, unknown> = sanitizeMeta(
-                    opts?.meta,
-                  );
-
-                  // Auto-preserve correlation ID if requested
-                  if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
-                    outMeta.correlationId = enhCtx.meta.correlationId;
-                  }
-
-                  // Send the message
-                  sendMessage(messageType, validatedPayload, outMeta);
-
-                  // If waitFor specified, resolve the promise (stub for now; full impl requires buffer tracking)
-                  // TODO: Implement actual buffer drain/ack tracking
-                  setImmediate(() => resolveOuter(true));
-                })
-                .catch(() => {
-                  // Silently catch errors; validation errors are handled in validateOutgoingPayload
-                  resolveOuter(true);
-                });
-            });
-          },
-
-          // reply() method for RPC handlers
-          reply: (payload: any, opts?: any): void | Promise<void> => {
-            guardRpc();
-            if (replied) {
-              // Idempotent: return void or empty promise if already replied
-              return opts?.waitFor ? Promise.resolve() : undefined;
-            }
-
-            // If no waitFor, return void (fire-and-forget)
-            if (!opts?.waitFor) {
-              // Fire-and-forget path
-              sendOutbound(payload, opts).catch(() => {
-                // Silently catch errors; validation errors are handled in sendOutbound
-              });
-              return undefined;
-            }
-
-            // With waitFor, return promise
-            return (async () => {
-              await sendOutbound(payload, opts);
-            })();
-          },
-
-          // error() method for RPC handlers (terminal, symmetric with reply())
-          error: (
-            code: string,
-            message: string,
-            details?: any,
-            opts?: any,
-          ): void | Promise<void> => {
-            // Check if signal is already aborted
-            if (opts?.signal?.aborted) {
-              return opts?.waitFor ? Promise.resolve() : undefined;
-            }
-
-            const wskit = guardRpc();
-            if (replied) {
-              // Idempotent: return void or empty promise if already replied
-              return opts?.waitFor ? Promise.resolve() : undefined;
-            }
-
-            const responseSchema = wskit.response as any;
-
-            // Construct error response message
-            const errorMessage = {
-              type: "$ws:rpc-error",
-              meta: {
-                ...baseMeta(enhCtx),
-                ...sanitizeMeta(opts?.meta),
-              },
-              payload: {
-                code,
-                message,
-                ...(details !== undefined ? { details } : {}),
-              },
-            };
-
-            // Mark as replied (one-shot guard applies to both reply and error)
-            replied = true;
-
-            // Send the error message via WebSocket
-            sendMessage(
-              errorMessage.type,
-              errorMessage.payload,
-              errorMessage.meta,
+          ): Promise<any> => {
+            // Validate outgoing payload if enabled
+            const validatedPayload = await validateOutgoingPayload(
+              schema,
+              payload,
             );
+            // Delegate to core send with validated payload
+            return coreSend(schema, validatedPayload, opts);
+          };
+        }
 
-            // If waitFor specified, return a promise
-            if (opts?.waitFor) {
-              return new Promise((resolve) => {
-                setImmediate(() => resolve());
-              });
-            }
+        if (rpcExt?.reply) {
+          // Wrap reply() with outbound validation
+          const coreReply = rpcExt.reply;
+          (enhCtx as any).reply = async (
+            payload: any,
+            opts?: ReplyOptions,
+          ): Promise<any> => {
+            const wskit = enhCtx.__wskit;
+            if (wskit?.response) {
+              const schemaOpts = getSchemaOpts(wskit.response);
+              const eff = resolveOptions(schemaOpts, pluginOpts);
+              const shouldValidate = opts?.validate ?? eff.validateOutgoing;
 
-            return undefined;
-          },
-
-          // progress() method for RPC handlers
-          // Emits a dedicated $ws:rpc-progress control message (non-terminal)
-          progress: (payload: any, opts?: any): void | Promise<void> => {
-            // Check if signal is already aborted
-            if (opts?.signal?.aborted) {
-              return opts?.waitFor ? Promise.resolve() : undefined;
-            }
-
-            const wskit = guardRpc();
-            const responseSchema = wskit.response as any;
-
-            // Check if this update should be throttled
-            if (shouldThrottle(opts?.throttleMs)) {
-              // Throttled: return immediately without sending
-              return opts?.waitFor ? Promise.resolve() : undefined;
-            }
-
-            // If no waitFor, return void (fire-and-forget)
-            if (!opts?.waitFor) {
-              // Fire-and-forget path
-              validateProgressPayload(responseSchema, payload)
-                .then((validatedPayload) => {
-                  // Build control message with correlation ID preserved
-                  const progressMessage = {
-                    type: "$ws:rpc-progress",
-                    meta: {
-                      ...baseMeta(ctx),
-                      ...sanitizeMeta(opts?.meta),
-                    },
-                    ...(validatedPayload !== undefined
-                      ? { payload: validatedPayload }
-                      : {}),
-                  };
-
-                  // Send control message without marking as replied
-                  sendMessage(
-                    progressMessage.type,
-                    progressMessage.payload,
-                    progressMessage.meta,
-                  );
-                })
-                .catch(() => {
-                  // Silently catch errors; validation errors are handled in validateProgressPayload
-                });
-              return undefined;
-            }
-
-            // With waitFor, return promise
-            return (async () => {
-              // Validate progress payload against RPC response schema
-              const validatedPayload = await validateProgressPayload(
-                responseSchema,
-                payload,
-              );
-
-              // Build control message with correlation ID preserved
-              const progressMessage = {
-                type: "$ws:rpc-progress",
-                meta: {
-                  ...baseMeta(ctx),
-                  ...sanitizeMeta(opts?.meta),
-                },
-                ...(validatedPayload !== undefined
-                  ? { payload: validatedPayload }
-                  : {}),
-              };
-
-              // Send control message without marking as replied
-              sendMessage(
-                progressMessage.type,
-                progressMessage.payload,
-                progressMessage.meta,
-              );
-
-              // If waitFor specified, return a promise
-              if (opts?.waitFor) {
-                return new Promise((resolve) => {
-                  setImmediate(() => resolve());
-                });
+              if (shouldValidate) {
+                // Validate response payload
+                const validatedPayload = await validateOutgoingPayload(
+                  wskit.response,
+                  payload,
+                );
+                return coreReply(validatedPayload, opts);
               }
-            })();
-          },
-
-          // getData() method - retrieve connection data
-          getData: (key: string): unknown => {
-            // Access per-connection data store (stored on the socket/connection object)
-            // The adapter is responsible for maintaining this store
-            const store = enhCtx.__connData || {};
-            return store[key];
-          },
-
-          // assignData() method - merge partial connection data
-          assignData: (partial: Record<string, unknown>): void => {
-            // Initialize per-connection data store if not present
-            if (!enhCtx.__connData) {
-              enhCtx.__connData = {};
             }
-            // Shallow merge the provided data
-            Object.assign(enhCtx.__connData, partial);
-            // TODO: Emit "data changed" event for adapters to persist if needed
-          },
-        };
+            return coreReply(payload, opts);
+          };
+        }
 
-        // Store extension in context
-        ctx.extensions.set("zod", zodExt);
+        if (rpcExt?.progress) {
+          // Wrap progress() with outbound validation
+          const coreProgress = rpcExt.progress;
+          (enhCtx as any).progress = async (
+            payload: any,
+            opts?: ProgressOptions,
+          ): Promise<any> => {
+            const wskit = enhCtx.__wskit;
+            if (wskit?.response) {
+              const schemaOpts = getSchemaOpts(wskit.response);
+              const eff = resolveOptions(schemaOpts, pluginOpts);
+              const shouldValidate = opts?.validate ?? eff.validateOutgoing;
 
-        // Also expose methods directly on context for backwards compatibility
-        enhCtx.send = zodExt.send;
-        enhCtx.reply = zodExt.reply;
-        enhCtx.error = zodExt.error;
-        enhCtx.progress = zodExt.progress;
-        enhCtx.getData = zodExt.getData;
-        enhCtx.assignData = zodExt.assignData;
+              if (shouldValidate) {
+                // Validate progress payload
+                const validatedPayload = await validateProgressPayload(
+                  wskit.response,
+                  payload,
+                );
+                return coreProgress(validatedPayload, opts);
+              }
+            }
+            return coreProgress(payload, opts);
+          };
+        }
       },
-      { priority: -100 },
+      { priority: 100 }, // Higher priority (after core plugins)
     );
 
     // Type-safe RPC handler method with automatic context type inference
