@@ -11,6 +11,7 @@
  * Usage:
  * ```ts
  * import { getRouterPluginAPI } from "@ws-kit/core/internal";
+ * import { DESCRIPTOR, SCHEMA_OPTS, type SchemaOpts } from "@ws-kit/core/internal";
  *
  * const api = getRouterPluginAPI(router);
  * const routes = api.getRouteRegistry();
@@ -26,6 +27,18 @@ import { ROUTER_IMPL } from "./core/symbols";
 
 export type { RouterImpl } from "./core/router";
 export { ROUTER_IMPL } from "./core/symbols";
+
+// Schema metadata infrastructure (shared by all validator adapters)
+export {
+  DESCRIPTOR,
+  SCHEMA_OPTS,
+  setSchemaOpts,
+  getSchemaOpts,
+  cloneWithOpts,
+  getDescriptor,
+  typeOf,
+} from "./schema/metadata.js";
+export type { SchemaOpts } from "./schema/metadata.js";
 
 /**
  * Function signature for context enhancers.

@@ -18,10 +18,14 @@ import type {
   Router,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
-import { getRouterPluginAPI } from "@ws-kit/core/internal";
+import {
+  getRouterPluginAPI,
+  getSchemaOpts,
+  typeOf,
+  type SchemaOpts,
+} from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
 import { getValibotPayload, validatePayload } from "./internal.js";
-import { getSchemaOpts, typeOf, type SchemaOpts } from "./metadata.js";
 import type { AnySchema, InferPayload } from "./types.js";
 
 interface WsContext {

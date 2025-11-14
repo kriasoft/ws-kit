@@ -8,15 +8,14 @@
  */
 
 import type { ZodType } from "zod";
-import { getZodPayload as getZodPayloadFromMetadata } from "./metadata.js";
+import { ZOD_PAYLOAD } from "./runtime.js";
 
 /**
  * Helper to extract Zod payload schema from a message schema.
- * Re-exports from metadata.ts for backward compatibility.
  * @internal
  */
 export function getZodPayload(schema: any): ZodType | undefined {
-  return getZodPayloadFromMetadata(schema);
+  return schema?.[ZOD_PAYLOAD];
 }
 
 /**
