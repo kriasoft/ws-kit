@@ -45,14 +45,14 @@ type EnhancedContext = MinimalContext<any> & {
     payload: any,
     opts?: SendOptions,
   ) => void | Promise<boolean>;
-  reply?: (payload: any, opts?: ReplyOptions) => void | Promise<void>;
+  reply?: (payload: any, opts?: any) => void | Promise<void>;
   error?: (
     code: string,
     message: string,
     details?: any,
-    opts?: ReplyOptions,
+    opts?: any,
   ) => void | Promise<void>;
-  progress?: (payload: any, opts?: ReplyOptions) => void | Promise<void>;
+  progress?: (payload: any, opts?: any) => void | Promise<void>;
   getData?: (key: string) => unknown;
 };
 
@@ -554,57 +554,82 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         // Create Zod extension object with all methods
         const zodExt = {
           // send() method for event handlers (always available after validation)
-          send: async (
+          send: (
             schema: AnySchema | MessageDescriptor,
             payload: any,
             opts?: SendOptions,
-          ): Promise<void | boolean> => {
+          ): void | Promise<boolean> => {
             // Check if signal is already aborted
             if (opts?.signal?.aborted) {
-              return opts?.waitFor ? false : undefined;
+              return opts?.waitFor ? Promise.resolve(false) : undefined;
             }
 
-            // Validate outgoing payload
-            const validatedPayload = await validateOutgoingPayload(
-              schema,
-              payload,
-            );
+            // If no waitFor, return void (fire-and-forget path)
+            if (!opts?.waitFor) {
+              // Fire-and-forget path
+              validateOutgoingPayload(schema, payload)
+                .then((validatedPayload) => {
+                  // Get message type from schema
+                  const messageType =
+                    (schema as any).__descriptor?.type ||
+                    (schema as any).type ||
+                    schema.type;
 
-            // Get message type from schema
-            const messageType =
-              (schema as any).__descriptor?.type ||
-              (schema as any).type ||
-              schema.type;
+                  // Build meta: start with sanitized user meta, then add correlation ID
+                  let outMeta: Record<string, unknown> = sanitizeMeta(
+                    opts?.meta,
+                  );
 
-            // Build meta: start with sanitized user meta, then add correlation ID
-            let outMeta: Record<string, unknown> = sanitizeMeta(opts?.meta);
+                  // Auto-preserve correlation ID if requested
+                  if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
+                    outMeta.correlationId = enhCtx.meta.correlationId;
+                  }
 
-            // Auto-preserve correlation ID if requested
-            if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
-              outMeta.correlationId = enhCtx.meta.correlationId;
+                  // Send the message
+                  sendMessage(messageType, validatedPayload, outMeta);
+                })
+                .catch(() => {
+                  // Silently catch errors; validation errors are handled in validateOutgoingPayload
+                });
+              return undefined;
             }
 
-            // Send the message
-            sendMessage(messageType, validatedPayload, outMeta);
+            // With waitFor, return promise
+            return new Promise<boolean>((resolveOuter) => {
+              validateOutgoingPayload(schema, payload)
+                .then((validatedPayload) => {
+                  // Get message type from schema
+                  const messageType =
+                    (schema as any).__descriptor?.type ||
+                    (schema as any).type ||
+                    schema.type;
 
-            // If waitFor specified, return a promise (stub for now; full impl requires buffer tracking)
-            // TODO: Implement actual buffer drain/ack tracking
-            if (opts?.waitFor) {
-              // For now, return a resolved promise indicating success
-              // Full implementation requires WebSocket buffer tracking
-              return new Promise((resolve) => {
-                // Immediately resolve since we enqueue synchronously
-                // Future: integrate with WebSocket buffer/ack signals
-                setImmediate(() => resolve(true));
-              });
-            }
+                  // Build meta: start with sanitized user meta, then add correlation ID
+                  let outMeta: Record<string, unknown> = sanitizeMeta(
+                    opts?.meta,
+                  );
 
-            // Default: fire-and-forget returns void
-            return undefined;
+                  // Auto-preserve correlation ID if requested
+                  if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
+                    outMeta.correlationId = enhCtx.meta.correlationId;
+                  }
+
+                  // Send the message
+                  sendMessage(messageType, validatedPayload, outMeta);
+
+                  // If waitFor specified, resolve the promise (stub for now; full impl requires buffer tracking)
+                  // TODO: Implement actual buffer drain/ack tracking
+                  setImmediate(() => resolveOuter(true));
+                })
+                .catch(() => {
+                  // Silently catch errors; validation errors are handled in validateOutgoingPayload
+                  resolveOuter(true);
+                });
+            });
           },
 
           // reply() method for RPC handlers
-          reply: (payload: any, opts?: ReplyOptions): void | Promise<void> => {
+          reply: (payload: any, opts?: any): void | Promise<void> => {
             guardRpc();
             if (replied) {
               // Idempotent: return void or empty promise if already replied
@@ -631,7 +656,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
             code: string,
             message: string,
             details?: any,
-            opts?: ReplyOptions,
+            opts?: any,
           ): void | Promise<void> => {
             // Check if signal is already aborted
             if (opts?.signal?.aborted) {
@@ -682,10 +707,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
 
           // progress() method for RPC handlers
           // Emits a dedicated $ws:rpc-progress control message (non-terminal)
-          progress: (
-            payload: any,
-            opts?: ReplyOptions,
-          ): void | Promise<void> => {
+          progress: (payload: any, opts?: any): void | Promise<void> => {
             // Check if signal is already aborted
             if (opts?.signal?.aborted) {
               return opts?.waitFor ? Promise.resolve() : undefined;

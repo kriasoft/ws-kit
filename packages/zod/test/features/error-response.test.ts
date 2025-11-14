@@ -55,7 +55,7 @@ describe("ctx.error() - RPC error responses", () => {
       expect(errorThrown).toBeDefined();
       // Error message should indicate error() is only for RPC
       if (errorThrown) {
-        expect(errorThrown.message).toContain("RPC");
+        expect((errorThrown as any).message).toContain("RPC");
       }
     });
 

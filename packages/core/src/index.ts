@@ -83,7 +83,13 @@ export { isPublishError } from "./core/types";
 export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
 
 // Useful type utilities (capability-gated context types)
-export type { EventContext, PubSubContext, RpcContext } from "./context/types";
+export type {
+  EventContext,
+  PubSubContext,
+  ReplyOptions,
+  RpcContext,
+  SendOptions,
+} from "./context/types";
 
 // Pub/Sub utilities
 export {
