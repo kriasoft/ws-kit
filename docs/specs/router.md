@@ -776,7 +776,7 @@ Use the rate limiting middleware from `@ws-kit/middleware` to apply token bucket
 
 ```typescript
 import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
-import { memoryRateLimiter } from "@ws-kit/adapters/memory";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 // Create adapter (memory for dev, Redis for production)
 const limiter = memoryRateLimiter({

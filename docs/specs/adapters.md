@@ -614,7 +614,7 @@ if (!decision.allowed) {
 Uses Lua scripting for atomic read-modify-write on Redis:
 
 ```typescript
-import { redisRateLimiter } from "@ws-kit/adapters/redis";
+import { redisRateLimiter } from "@ws-kit/redis";
 
 const limiter = redisRateLimiter(redisClient, {
   capacity: 1000,
@@ -641,7 +641,7 @@ const decision = await limiter.consume("user:123", 1);
 Uses sharded Durable Objects for high-concurrency distributed rate limiting:
 
 ```typescript
-import { durableObjectRateLimiter } from "@ws-kit/adapters/cloudflare";
+import { durableObjectRateLimiter } from "@ws-kit/cloudflare";
 
 const limiter = durableObjectRateLimiter(env.RATE_LIMITER_NAMESPACE, {
   capacity: 500,
