@@ -5,47 +5,17 @@ import { describe, it, expect, expectTypeOf } from "bun:test";
 import * as v from "valibot";
 import {
   message,
+  rpc,
   createRouter,
-  valibotValidator,
+  withValibot,
   type InferType,
   type InferPayload,
   type InferMeta,
   type InferMessage,
   type InferResponse,
-  type MessageContext,
 } from "../../src/index.js";
 
 describe("@ws-kit/valibot - Type Tests", () => {
-  describe("valibotValidator() factory", () => {
-    it("should return ValidatorAdapter type", () => {
-      const validator = valibotValidator();
-      expectTypeOf(validator).toHaveProperty("getMessageType");
-      expectTypeOf(validator).toHaveProperty("safeParse");
-      expectTypeOf(validator).toHaveProperty("infer");
-    });
-
-    it("getMessageType should accept MessageSchemaType and return string", () => {
-      const validator = valibotValidator();
-      const schema = message("PING");
-      expectTypeOf(validator.getMessageType).toBeFunction();
-      expectTypeOf(validator.getMessageType(schema)).toBeString();
-    });
-
-    it("safeParse should validate and return normalized result", () => {
-      const validator = valibotValidator();
-      const schema = message("PING", { text: v.string() });
-
-      const result = validator.safeParse(schema, {
-        type: "PING",
-        meta: {},
-        payload: { text: "hello" },
-      });
-
-      expectTypeOf(result).toHaveProperty("success");
-      expectTypeOf(result.success).toBeBoolean();
-    });
-  });
-
   describe("message() helper function", () => {
     it("should create message schema with message() helper", () => {
       const schema = message("PING");
@@ -368,18 +338,16 @@ describe("@ws-kit/valibot - Type Tests", () => {
       });
     });
 
-    it("should type connection data in lifecycle callbacks", () => {
+    it("should type error handler with connection data", () => {
       interface AppData {
         userId?: string;
       }
       const router = createRouter<AppData>();
 
-      router.onOpen((ctx) => {
-        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
-      });
-
-      router.onClose((ctx) => {
-        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+      router.onError((err, ctx) => {
+        if (ctx) {
+          expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+        }
       });
     });
   });
@@ -435,6 +403,72 @@ describe("@ws-kit/valibot - Type Tests", () => {
       const RequestB = message("REQUEST_B");
       expectTypeOf<InferResponse<typeof RequestA>>().toEqualTypeOf<never>();
       expectTypeOf<InferResponse<typeof RequestB>>().toEqualTypeOf<never>();
+    });
+  });
+
+  describe("Plugin type narrowing - Validation API", () => {
+    it("rpc method should be available after withValibot plugin", () => {
+      const GetUserSchema = rpc("GET_USER", { id: v.string() }, "USER_DATA", {
+        name: v.string(),
+      });
+
+      const router = createRouter().plugin(withValibot());
+
+      // Should type-check: rpc method exists after plugin
+      expectTypeOf(router.rpc).toBeFunction();
+
+      // Should be chainable with automatic context type inference
+      const routerWithHandler = router.rpc(GetUserSchema, (ctx) => {
+        // ctx type is automatically inferred from schema without explicit cast
+        expectTypeOf(ctx).not.toBeNever();
+        expectTypeOf(ctx.payload).toHaveProperty("id");
+        expectTypeOf(ctx.payload.id).toBeString();
+      });
+      expectTypeOf(routerWithHandler).not.toBeNever();
+    });
+
+    it("should support chaining after rpc registration", () => {
+      const GetUserSchema = rpc("GET_USER", { id: v.string() }, "USER_DATA", {
+        name: v.string(),
+      });
+
+      const JoinSchema = message("JOIN", { roomId: v.string() });
+
+      const router = createRouter()
+        .plugin(withValibot())
+        .rpc(GetUserSchema, (ctx) => {
+          // RPC handler - context type automatically inferred
+          expectTypeOf(ctx.payload.id).toBeString();
+          expectTypeOf(ctx.reply).toBeFunction();
+        })
+        .on(JoinSchema, (ctx) => {
+          // Event handler
+          expectTypeOf(ctx.payload.roomId).toBeString();
+        });
+
+      expectTypeOf(router).not.toBeNever();
+    });
+
+    it("should type rpc handler context with payload", () => {
+      const GetUserSchema = rpc("GET_USER", { id: v.string() }, "USER", {
+        name: v.string(),
+        email: v.string(),
+      });
+
+      const router = createRouter().plugin(withValibot());
+
+      router.rpc(GetUserSchema, (ctx) => {
+        // Context type is automatically inferred from schema - no cast needed
+        // Context should have payload with typed id
+        expectTypeOf(ctx.payload).toHaveProperty("id");
+        expectTypeOf(ctx.payload.id).toBeString();
+
+        // Context should have reply method
+        expectTypeOf(ctx.reply).toBeFunction();
+
+        // Context should have progress method
+        expectTypeOf(ctx.progress).toBeFunction();
+      });
     });
   });
 });

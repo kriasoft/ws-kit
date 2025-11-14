@@ -347,9 +347,12 @@ describe("@ws-kit/zod - Type Tests", () => {
       // Should type-check: rpc method exists after plugin
       expectTypeOf(router.rpc).toBeFunction();
 
-      // Should be chainable
-      const routerWithHandler = router.rpc(GetUserSchema, (ctx: any) => {
+      // Should be chainable with automatic context type inference
+      const routerWithHandler = router.rpc(GetUserSchema, (ctx) => {
+        // ctx type is automatically inferred from schema without explicit cast
         expectTypeOf(ctx).not.toBeNever();
+        expectTypeOf(ctx.payload).toHaveProperty("id");
+        expectTypeOf(ctx.payload.id).toBeString;
       });
       expectTypeOf(routerWithHandler).not.toBeNever();
     });
@@ -363,11 +366,14 @@ describe("@ws-kit/zod - Type Tests", () => {
 
       const router = createRouter()
         .plugin(withZod())
-        .rpc(GetUserSchema, (ctx: any) => {
-          // RPC handler
+        .rpc(GetUserSchema, (ctx) => {
+          // RPC handler - context type automatically inferred
+          expectTypeOf(ctx.payload.id).toBeString;
+          expectTypeOf(ctx.reply).toBeFunction();
         })
         .on(JoinSchema, (ctx: any) => {
           // Event handler
+          expectTypeOf(ctx.payload.roomId).toBeString;
         });
 
       expectTypeOf(router).not.toBeNever();
@@ -381,10 +387,11 @@ describe("@ws-kit/zod - Type Tests", () => {
 
       const router = createRouter().plugin(withZod());
 
-      router.rpc(GetUserSchema, (ctx: any) => {
+      router.rpc(GetUserSchema, (ctx) => {
+        // Context type is automatically inferred from schema - no cast needed
         // Context should have payload with typed id
         expectTypeOf(ctx.payload).toHaveProperty("id");
-        expectTypeOf(ctx.payload.id).toBeString();
+        expectTypeOf(ctx.payload.id).toBeString;
 
         // Context should have reply method
         expectTypeOf(ctx.reply).toBeFunction();

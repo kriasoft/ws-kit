@@ -11,19 +11,39 @@
  * - Validation errors routed to router.onError()
  */
 
-import type { MessageDescriptor, MinimalContext, Router } from "@ws-kit/core";
+import type {
+  ConnectionData,
+  MessageDescriptor,
+  MinimalContext,
+  Router,
+} from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
 import { getZodPayload, validatePayload } from "./internal.js";
 import { getSchemaOpts, typeOf, type SchemaOpts } from "./metadata.js";
-import type { AnySchema } from "./types.js";
+import type { AnySchema, InferPayload } from "./types.js";
 
 interface WsContext {
   kind?: string; // "event" | "rpc" if set by schema registry
-  request: AnySchema; // root message schema
-  response?: AnySchema; // only set for RPC
+  request: any; // root message schema (Zod object with safeParse)
+  response?: any; // only set for RPC (Zod object with safeParse)
 }
+
+/**
+ * Enhanced context type for type-safe internal mutations.
+ * @internal
+ */
+type EnhancedContext = MinimalContext<any> & {
+  payload?: unknown;
+  __wskit?: WsContext;
+  __connData?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  send?: (schema: AnySchema | MessageDescriptor, payload: any) => Promise<void>;
+  reply?: (payload: any, opts?: any) => Promise<void>;
+  progress?: (payload: any, opts?: any) => Promise<void>;
+  getData?: (key: string) => unknown;
+};
 
 export interface WithZodOptions {
   /**
@@ -96,6 +116,25 @@ export interface ReplyOptions {
  * ```
  */
 /**
+ * Helper to format Zod errors for better DX.
+ * @internal
+ */
+function formatValidationError(error: any): string {
+  if (error.flatten) {
+    const flat = error.flatten();
+    const issues = [
+      ...(flat.formErrors || []),
+      ...Object.entries(flat.fieldErrors || {}).flatMap(
+        ([field, msgs]: [string, any]) =>
+          (msgs || []).map((m: any) => `${field}: ${m}`),
+      ),
+    ];
+    return issues.length > 0 ? issues.join("; ") : JSON.stringify(error);
+  }
+  return JSON.stringify(error);
+}
+
+/**
  * Helper to resolve effective options, preferring per-schema over plugin defaults.
  * @internal
  */
@@ -117,7 +156,9 @@ function resolveOptions(
  * - Before plugin: Router<TContext, {}> → keyof excludes rpc()
  * - After plugin: Router<TContext, { validation: true }> → keyof includes rpc()
  */
-interface WithZodValidationAPI {
+interface WithZodValidationAPI<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Marker for capability-gating in Router type system.
    * @internal
@@ -126,23 +167,41 @@ interface WithZodValidationAPI {
 
   /**
    * Register an RPC handler with request-response pattern.
+   * Automatically infers context type from schema without explicit casting.
    * @param schema RPC message schema with request and response types
-   * @param handler RPC handler function
+   * @param handler RPC handler function with inferred context type
+   * @example
+   * const GetUser = rpc("GET_USER", { id: z.string() }, "USER", { name: z.string() });
+   * router.rpc(GetUser, (ctx) => {
+   *   // ctx is automatically typed as RpcContext<TContext, { id: string }, { name: string }>
+   *   ctx.reply({ name: "Alice" });
+   * });
    */
-  rpc(
-    schema: MessageDescriptor & { response: MessageDescriptor },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler: any,
-  ): Router<any, any>;
+  rpc<S extends AnySchema>(
+    schema: S & { response?: AnySchema },
+    handler: (
+      ctx: S extends { response: infer R }
+        ? R extends AnySchema
+          ? import("@ws-kit/core").RpcContext<
+              TContext,
+              InferPayload<S>,
+              InferPayload<R>
+            >
+          : never
+        : never,
+    ) => void | Promise<void>,
+  ): any; // Returns Router<TContext, any> (type system enforces via plugin mechanism)
 }
 
-export function withZod(options?: WithZodOptions) {
+export function withZod<TContext extends ConnectionData = ConnectionData>(
+  options?: WithZodOptions,
+) {
   const pluginOpts = {
     validateOutgoing: options?.validateOutgoing ?? true,
     onValidationError: options?.onValidationError,
   };
 
-  return definePlugin<any, WithZodValidationAPI>((router) => {
+  return definePlugin<TContext, WithZodValidationAPI<TContext>>((router) => {
     // Get plugin API for registering enhancers
     const api = getRouterPluginAPI(router);
 
@@ -158,6 +217,7 @@ export function withZod(options?: WithZodOptions) {
 
       if (schemaInfo) {
         const schema = schemaInfo.schema as any;
+        const enhCtx = ctx as EnhancedContext;
 
         // If schema is a Zod object (has safeParse), validate the full root message
         if (typeof schema?.safeParse === "function") {
@@ -168,9 +228,9 @@ export function withZod(options?: WithZodOptions) {
           // Construct normalized inbound message
           const inboundMessage = {
             type: ctx.type,
-            meta: (ctx as any).meta || {},
-            ...((ctx as any).payload !== undefined
-              ? { payload: (ctx as any).payload }
+            meta: enhCtx.meta || {},
+            ...(enhCtx.payload !== undefined
+              ? { payload: enhCtx.payload }
               : {}),
           };
 
@@ -182,8 +242,8 @@ export function withZod(options?: WithZodOptions) {
           if (!result.success) {
             // Create validation error and route to error sink
             const validationError = new Error(
-              `Validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
-            ) as any;
+              `Validation failed for ${ctx.type}: ${formatValidationError(result.error)}`,
+            ) as unknown as Error & { code: string; details: any };
             validationError.code = "VALIDATION_ERROR";
             validationError.details = result.error;
 
@@ -192,7 +252,7 @@ export function withZod(options?: WithZodOptions) {
               await pluginOpts.onValidationError(validationError, {
                 type: ctx.type,
                 direction: "inbound",
-                payload: (ctx as any).payload,
+                payload: enhCtx.payload,
               });
             } else {
               await lifecycle.handleError(validationError, ctx);
@@ -202,15 +262,15 @@ export function withZod(options?: WithZodOptions) {
 
           // Enrich context with validated payload (extracted from root validation)
           if (result.data.payload !== undefined) {
-            (ctx as any).payload = result.data.payload;
+            enhCtx.payload = result.data.payload;
           }
 
           // Stash schema info for later use in reply/progress/send
-          (ctx as any).__wskit = {
-            kind: (schemaInfo as any).kind, // may be undefined; that's ok
+          enhCtx.__wskit = {
+            kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
             request: schema,
-            response: (schema as any).response,
-          } as WsContext;
+            response: schema.response,
+          };
         }
       }
 
@@ -221,6 +281,7 @@ export function withZod(options?: WithZodOptions) {
     // Register context enhancer to attach send/reply/progress methods
     api.addContextEnhancer(
       (ctx: MinimalContext<any>) => {
+        const enhCtx = ctx as EnhancedContext;
         // Capture lifecycle for use in nested functions
         const lifecycle = api.getLifecycle();
 
@@ -229,7 +290,7 @@ export function withZod(options?: WithZodOptions) {
 
         // Guard: ensure we're in an RPC context
         function guardRpc() {
-          const wskit = (ctx as any).__wskit as WsContext | undefined;
+          const wskit = enhCtx.__wskit;
           if (!wskit?.response) {
             throw new Error(
               "ctx.reply() and ctx.progress() are only available in RPC handlers",
@@ -239,9 +300,9 @@ export function withZod(options?: WithZodOptions) {
         }
 
         // Extract base metadata from request (preserves correlationId)
-        function baseMeta(ctx: any): Record<string, unknown> {
+        function baseMeta(enhCtx: EnhancedContext): Record<string, unknown> {
           return {
-            correlationId: ctx.meta?.correlationId,
+            correlationId: enhCtx.meta?.correlationId,
           };
         }
 
@@ -285,8 +346,8 @@ export function withZod(options?: WithZodOptions) {
             const result = schemaObj.safeParse(outboundMessage);
             if (!result.success) {
               const validationError = new Error(
-                `Outbound validation failed for ${schema.type}: ${JSON.stringify(result.error)}`,
-              ) as any;
+                `Outbound validation failed for ${schema.type}: ${formatValidationError(result.error)}`,
+              ) as unknown as Error & { code: string; details: any };
               validationError.code = "OUTBOUND_VALIDATION_ERROR";
               validationError.details = result.error;
 
@@ -305,17 +366,20 @@ export function withZod(options?: WithZodOptions) {
             return result.data.payload ?? payload;
           }
 
-          // Fallback for non-Zod schemas (legacy path)
+          // Fallback for schemas that don't have safeParse (e.g., legacy message descriptors).
+          // In normal usage with message() and rpc() builders, this branch is never reached.
+          // This path exists for edge cases where schemas are constructed manually.
           const payloadSchema = getZodPayload(schema);
           if (!payloadSchema) {
+            // Non-Zod schema without payload metadata—skip validation
             return payload;
           }
 
           const result = validatePayload(payload, payloadSchema);
           if (!result.success) {
             const validationError = new Error(
-              `Outbound validation failed for ${schema.type}: ${JSON.stringify(result.error)}`,
-            ) as any;
+              `Outbound validation failed for ${schema.type}: ${formatValidationError(result.error)}`,
+            ) as unknown as Error & { code: string; details: any };
             validationError.code = "OUTBOUND_VALIDATION_ERROR";
             validationError.details = result.error;
 
@@ -352,7 +416,8 @@ export function withZod(options?: WithZodOptions) {
             const sendError = new Error(
               `Failed to send message ${type}: ${err instanceof Error ? err.message : String(err)}`,
             );
-            (sendError as any).code = "SEND_ERROR";
+            (sendError as unknown as Error & { code: string }).code =
+              "SEND_ERROR";
             lifecycle.handleError(sendError, ctx);
           }
         };
@@ -386,8 +451,8 @@ export function withZod(options?: WithZodOptions) {
             const result = schemaObj.safeParse(tempMessage);
             if (!result.success) {
               const validationError = new Error(
-                `Progress validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
-              ) as any;
+                `Progress validation failed for ${ctx.type}: ${formatValidationError(result.error)}`,
+              ) as unknown as Error & { code: string; details: any };
               validationError.code = "PROGRESS_VALIDATION_ERROR";
               validationError.details = result.error;
 
@@ -440,8 +505,8 @@ export function withZod(options?: WithZodOptions) {
             const result = responseSchema.safeParse(responseMessage);
             if (!result.success) {
               const validationError = new Error(
-                `Reply validation failed for ${ctx.type}: ${JSON.stringify(result.error)}`,
-              ) as any;
+                `Reply validation failed for ${ctx.type}: ${formatValidationError(result.error)}`,
+              ) as unknown as Error & { code: string; details: any };
               validationError.code = "REPLY_VALIDATION_ERROR";
               validationError.details = result.error;
 
@@ -532,18 +597,18 @@ export function withZod(options?: WithZodOptions) {
           getData: (key: string): unknown => {
             // Access per-connection data store (stored on the socket/connection object)
             // The adapter is responsible for maintaining this store
-            const store = (ctx as any).__connData || {};
+            const store = enhCtx.__connData || {};
             return store[key];
           },
 
           // assignData() method - merge partial connection data
           assignData: (partial: Record<string, unknown>): void => {
             // Initialize per-connection data store if not present
-            if (!(ctx as any).__connData) {
-              (ctx as any).__connData = {};
+            if (!enhCtx.__connData) {
+              enhCtx.__connData = {};
             }
             // Shallow merge the provided data
-            Object.assign((ctx as any).__connData, partial);
+            Object.assign(enhCtx.__connData, partial);
             // TODO: Emit "data changed" event for adapters to persist if needed
           },
         };
@@ -552,22 +617,32 @@ export function withZod(options?: WithZodOptions) {
         ctx.extensions.set("zod", zodExt);
 
         // Also expose methods directly on context for backwards compatibility
-        (ctx as any).send = zodExt.send;
-        (ctx as any).reply = zodExt.reply;
-        (ctx as any).progress = zodExt.progress;
-        (ctx as any).getData = zodExt.getData;
-        (ctx as any).assignData = zodExt.assignData;
+        enhCtx.send = zodExt.send;
+        enhCtx.reply = zodExt.reply;
+        enhCtx.progress = zodExt.progress;
+        enhCtx.getData = zodExt.getData;
+        enhCtx.assignData = zodExt.assignData;
       },
       { priority: -100 },
     );
 
-    // Type-safe RPC handler method
-    const rpcMethod = (
-      schema: MessageDescriptor & { response: MessageDescriptor },
-      handler: any,
+    // Type-safe RPC handler method with automatic context type inference
+    const rpcMethod = <S extends AnySchema>(
+      schema: S & { response?: AnySchema },
+      handler: (
+        ctx: S extends { response: infer R }
+          ? R extends AnySchema
+            ? import("@ws-kit/core").RpcContext<
+                TContext,
+                InferPayload<S>,
+                InferPayload<R>
+              >
+            : never
+          : never,
+      ) => void | Promise<void>,
     ) => {
       // Use the standard on() method but mark it internally as RPC-capable
-      return router.on(schema, handler);
+      return router.on(schema as any, handler as any);
     };
 
     // Return the plugin API extensions with capability marker

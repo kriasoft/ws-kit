@@ -7,9 +7,10 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 **Start Here:**
 
 1. **Implementing a feature?** → `rules.md` (quick index) → linked canonical spec
-2. **Debugging validation?** → `validation.md` (pipeline) → `schema.md` (structure)
-3. **Client integration?** → `client.md` (API) → `test-requirements.md` (patterns)
-4. **Understanding design?** → `docs/adr/` (decisions) → linked specs
+2. **Writing handlers?** → `context-methods.md` (send/reply/progress/publish API) → `router.md` (registration)
+3. **Debugging validation?** → `validation.md` (pipeline) → `schema.md` (structure)
+4. **Client integration?** → `client.md` (API) → `test-requirements.md` (patterns)
+5. **Understanding design?** → `docs/adr/` (decisions) → linked specs
 
 **Note on rules.md**: It's a quick-lookup INDEX, not the canonical source. Each rule links to the spec that owns that rule. The linked spec is authoritative.
 
@@ -17,15 +18,17 @@ Technical specifications for `WS-Kit` - type-safe WebSocket router for Bun and C
 
 When specs reference the same concept, the canonical source takes precedence:
 
-| Concept                 | Canonical Spec                          | Also Discussed In        | Why                                 |
-| ----------------------- | --------------------------------------- | ------------------------ | ----------------------------------- |
-| **Timestamp Usage**     | `schema.md#Which-timestamp-to-use`      | router.md, validation.md | Single table, referenced everywhere |
-| **Reserved Keys**       | `validation.md#normalization-rules`     | schema.md                | Implementation details here         |
-| **Identity (clientId)** | `schema.md#Why-clientId-is-not-in-meta` | validation.md, rules.md  | Design rationale + implementation   |
-| **Error Codes**         | `error-handling.md#error-code-enum`     | router.md, ADR-015       | Complete taxonomy and decision tree |
-| **Validation Flow**     | `validation.md#Flow`                    | rules.md                 | Full pipeline stages                |
-| **Normalization**       | `validation.md#normalization-rules`     | schema.md                | Implementation + code examples      |
-| **Export-with-Helpers** | `schema.md#Canonical-Import-Patterns`   | ADR-007                  | Pattern definition + ADR rationale  |
+| Concept                 | Canonical Spec                          | Also Discussed In        | Why                                           |
+| ----------------------- | --------------------------------------- | ------------------------ | --------------------------------------------- |
+| **Context Methods**     | `context-methods.md#Method-Reference`   | router.md, ADR-030       | Complete API for send/reply/publish           |
+| **Event Correlation**   | `context-methods.md#ctx.send-examples`  | ADR-030#Consequences     | `{preserveCorrelation: true}` option for acks |
+| **Timestamp Usage**     | `schema.md#Which-timestamp-to-use`      | router.md, validation.md | Single table, referenced everywhere           |
+| **Reserved Keys**       | `validation.md#normalization-rules`     | schema.md                | Implementation details here                   |
+| **Identity (clientId)** | `schema.md#Why-clientId-is-not-in-meta` | validation.md, rules.md  | Design rationale + implementation             |
+| **Error Codes**         | `error-handling.md#error-code-enum`     | router.md, ADR-015       | Complete taxonomy and decision tree           |
+| **Validation Flow**     | `validation.md#Flow`                    | rules.md                 | Full pipeline stages                          |
+| **Normalization**       | `validation.md#normalization-rules`     | schema.md                | Implementation + code examples                |
+| **Export-with-Helpers** | `schema.md#Canonical-Import-Patterns`   | ADR-007                  | Pattern definition + ADR rationale            |
 
 ## Terminology {#Terminology}
 
@@ -55,12 +58,14 @@ When specs reference the same concept, the canonical source takes precedence:
 
 - **Unicast**: Single-client messaging via `ctx.send()` (docs/specs/router.md#Type-Safe-Sending)
 - **Multicast**: Topic-based broadcasting via `publish()` to multiple subscribers (docs/specs/pubsub.md)
+- **Correlated Acks**: Optional acknowledgments with auto-correlation via `{preserveCorrelation: true}` (docs/specs/context-methods.md#ctx.send-examples)
 
 ## Core Specifications
 
 - **[schema.md](./schema.md)** - Message structure, wire format, type definitions (see ADR-001, ADR-007)
 - **[router.md](./router.md)** - Server router API, handlers, lifecycle hooks (see ADR-005, ADR-008, ADR-009)
 - **[validation.md](./validation.md)** - Validation flow, normalization, error handling (strict mode per ADR-001)
+- **[context-methods.md](./context-methods.md)** - Handler context methods: `.send()`, `.reply()`, `.progress()`, `.publish()` (see ADR-030)
 - **[pubsub.md](./pubsub.md)** - Pub/Sub API, topic subscriptions, publishing, patterns (see ADR-022 for design rationale)
 - **[client.md](./client.md)** - Client SDK API, connection states, queueing (see ADR-002, ADR-006)
 - **[adapters.md](./adapters.md)** - Platform adapter responsibilities, limits, and pub/sub guarantees (see ADR-006)

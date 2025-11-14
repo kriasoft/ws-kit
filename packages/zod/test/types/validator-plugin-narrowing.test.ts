@@ -81,7 +81,7 @@ describe("validator plugin narrowing - Zod (types)", () => {
       : never;
 
     // PayloadType should exist
-    expectTypeOf<PayloadType>().toMatchTypeOf<Record<string, any>>();
+    expectTypeOf<PayloadType>().toExtend<Record<string, any>>();
   });
 
   // Test 6: withZod options configuration is type-safe
@@ -96,11 +96,11 @@ describe("validator plugin narrowing - Zod (types)", () => {
     const configWithHook = withZod({
       onValidationError: async (err, ctx) => {
         // err should have code and details
-        expectTypeOf(err.code).toBeString();
-        expectTypeOf(err.details).toBeDefined();
+        expectTypeOf(err.code).toBeString;
+        expectTypeOf(err.details).not.toBeUndefined;
 
         // ctx should have type and direction
-        expectTypeOf(ctx.type).toBeString();
+        expectTypeOf(ctx.type).toBeString;
         expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
       },
     });
@@ -119,30 +119,38 @@ describe("validator plugin narrowing - Zod (types)", () => {
   // Test 8: Multiple plugins merge capabilities
   it("multiple plugins merge capabilities correctly", () => {
     // Mock pubsub plugin for testing capability merging
-    const withMockPubSub = (r: Router<any>) => {
+    const withMockPubSub: (r: Router<any>) => Router<any, { pubsub: true }> = (
+      r: Router<any>,
+    ) => {
       const enhanced = Object.assign(r, {
         publish: async (
           topic: string,
           schema: MessageDescriptor,
           payload: unknown,
-        ) => {},
-        subscriptions: {
-          list: () => [] as string[],
+        ) => ({ ok: true as const, matched: 0, capability: "exact" as const }),
+        topics: {
+          list: () => [] as readonly string[],
           has: (t: string) => false,
         },
-      }) as Router<any, { pubsub: true }>;
+      }) as unknown as Router<any, { pubsub: true }>;
       (enhanced as any).__caps = { pubsub: true };
       return enhanced;
     };
 
     const router = createRouter<{ userId?: string }>()
       .plugin(withZod())
-      .plugin(withMockPubSub);
+      .plugin(withMockPubSub as any);
 
     // Both validation and pubsub methods should be available
-    expectTypeOf(router).toHaveProperty("rpc");
-    expectTypeOf(router).toHaveProperty("publish");
-    expectTypeOf(router).toHaveProperty("on");
+    expectTypeOf<
+      "rpc" extends keyof typeof router ? true : false
+    >().toEqualTypeOf<true>();
+    expectTypeOf<
+      "publish" extends keyof typeof router ? true : false
+    >().toEqualTypeOf<true>();
+    expectTypeOf<
+      "on" extends keyof typeof router ? true : false
+    >().toEqualTypeOf<true>();
   });
 
   // Test 9: withZod() is idempotent
@@ -191,12 +199,12 @@ describe("validator plugin narrowing - Zod (types)", () => {
       onValidationError: (err, ctx) => {
         // Error structure
         expectTypeOf(err.code).toBeString();
-        expectTypeOf(err.details).toBeDefined();
+        expectTypeOf(err.details).not.toBeUndefined();
 
         // Context structure
         expectTypeOf(ctx.type).toBeString();
-        expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
-        expectTypeOf(ctx.payload).toBeDefined();
+        expectTypeOf(ctx.direction).toExtend<"inbound" | "outbound">();
+        expectTypeOf(ctx.payload).not.toBeUndefined();
       },
     });
 

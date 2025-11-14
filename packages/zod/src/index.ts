@@ -51,4 +51,8 @@ export type {
 
 // Core re-exports (for convenience)
 export { createRouter } from "@ws-kit/core";
-export type { EventContext as MessageContext, Router } from "@ws-kit/core";
+export type {
+  EventContext as MessageContext,
+  RpcContext,
+  Router,
+} from "@ws-kit/core";
