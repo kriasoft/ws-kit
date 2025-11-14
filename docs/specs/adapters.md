@@ -721,12 +721,21 @@ Beyond platform adapters (Bun, Cloudflare, Deno), WS-Kit uses **feature adapters
 ```typescript
 // Same code, different adapters
 const router = createRouter()
-  .plugin(withPubSub({ adapter: memoryPubSub() }))     // Dev: memory
-  .plugin(withRateLimit({ adapter: memoryRateLimiter() }));
+  .plugin(withPubSub({ adapter: memoryPubSub() })) // Dev: memory
+  .use(
+    rateLimit({
+      limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
+    }),
+  );
 
 // In production, swap adapters:
-.plugin(withPubSub({ adapter: redisPubSub(redis) }))
-.plugin(withRateLimit({ adapter: redisRateLimiter(redis) }))
+const productionRouter = createRouter()
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }))
+  .use(
+    rateLimit({
+      limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
+    }),
+  );
 ```
 
 ### Pub/Sub Adapters
@@ -811,7 +820,7 @@ const router = createRouter().plugin(
 
 ### Rate Limiter Adapters
 
-**Plugin**: `withRateLimit()` (via `@ws-kit/plugins`)
+**Middleware**: `rateLimit()` (via `@ws-kit/rate-limit`)
 
 **Adapters**:
 
@@ -851,14 +860,12 @@ export interface RateLimiterAdapter {
 Development (no setup needed):
 
 ```typescript
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
-const router = createRouter().plugin(
-  withRateLimit({
-    adapter: memoryRateLimiter(),
-    capacity: 100,
-    tokensPerSecond: 10,
+const router = createRouter().use(
+  rateLimit({
+    limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
   }),
 );
 ```
@@ -866,17 +873,15 @@ const router = createRouter().plugin(
 Production (Redis):
 
 ```typescript
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
-const router = createRouter().plugin(
-  withRateLimit({
-    adapter: redisRateLimiter(redis),
-    capacity: 1000,
-    tokensPerSecond: 50,
+const router = createRouter().use(
+  rateLimit({
+    limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
     key: (ctx) => `user:${ctx.ws.data.userId}`,
   }),
 );

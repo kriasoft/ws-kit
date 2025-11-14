@@ -101,6 +101,115 @@ router.on(PingMessage, (ctx) => {
 });
 ```
 
+## Canonical Imports (ADR-032) {#Canonical-Imports}
+
+**See [ADR-032: Canonical Imports Design](../adr/032-canonical-imports-design.md) for the complete specification, rationale, and all import patterns.**
+
+This section provides a quick reference; the ADR is the authoritative source.
+
+### Quick Import Reference
+
+**Always import from canonical sources. Convenience re-exports via validators are optional.**
+
+```typescript
+// Validator + core helpers (choose one)
+import { z, message, rpc, createRouter, withZod } from "@ws-kit/zod";
+// or
+import { v, message, rpc, createRouter, withValibot } from "@ws-kit/valibot";
+
+// Core plugins (canonical: @ws-kit/plugins)
+import { withMessaging, withRpc } from "@ws-kit/plugins";
+
+// Feature plugins (canonical: feature-specific packages)
+import { withPubSub } from "@ws-kit/pubsub";
+
+// Middleware (canonical: @ws-kit/middleware and @ws-kit/rate-limit)
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
+import { useAuth, useLogging, useMetrics } from "@ws-kit/middleware";
+
+// Adapters (canonical: adapter packages)
+import { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory";
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+```
+
+### Canonical Sources by Feature Type
+
+| Feature Type              | Canonical Source                   | Also Available Via   |
+| ------------------------- | ---------------------------------- | -------------------- |
+| **Validators**            | `@ws-kit/zod` or `@ws-kit/valibot` | —                    |
+| **Core plugins**          | `@ws-kit/plugins`                  | Validator re-exports |
+| **Pub/Sub**               | `@ws-kit/pubsub`                   | Validator re-exports |
+| **Rate limiting**         | `@ws-kit/rate-limit`               | —                    |
+| **Auth/Logging/Metrics**  | `@ws-kit/middleware`               | —                    |
+| **Adapters (in-memory)**  | `@ws-kit/memory`                   | —                    |
+| **Adapters (Redis)**      | `@ws-kit/redis`                    | —                    |
+| **Adapters (Cloudflare)** | `@ws-kit/cloudflare`               | —                    |
+
+### What NOT to Do
+
+```typescript
+// ✗ Middleware from validators (not re-exported)
+import { useAuth } from "@ws-kit/zod";
+
+// ✗ Adapters from validators or plugins (always explicit, never re-exported)
+import { memoryPubSub } from "@ws-kit/zod"; // Wrong!
+import { redisPubSub } from "@ws-kit/plugins"; // Wrong!
+import { redisPubSub } from "@ws-kit/zod"; // Wrong!
+
+// ✓ Always import adapters from their packages (clear: dev vs prod)
+import { memoryPubSub } from "@ws-kit/memory";
+import { redisPubSub } from "@ws-kit/redis";
+```
+
+### Complete Server Example
+
+See [ADR-032 Examples Section](../adr/032-canonical-imports-design.md#Examples) for comprehensive examples including:
+
+- Canonical imports (always correct)
+- Convenience re-exports (valid but secondary)
+- What breaks (invalid patterns)
+
+For quick reference:
+
+```typescript
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
+import { withMessaging, withRpc } from "@ws-kit/plugins";
+import { withPubSub } from "@ws-kit/pubsub";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
+import { useAuth } from "@ws-kit/middleware";
+import { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory"; // Always explicit
+import { serve } from "@ws-kit/bun";
+
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+  }
+}
+
+const router = createRouter()
+  .plugin(withZod())
+  .plugin(withMessaging())
+  .plugin(withRpc())
+  .plugin(withPubSub({ adapter: memoryPubSub() }))
+  .use(useAuth({ verify: async (token) => ({}) }))
+  .use(
+    rateLimit({
+      limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
+      key: keyPerUserPerType,
+    }),
+  );
+
+router.on(message("PING", { text: z.string() }), (ctx) => {
+  ctx.send(message("PONG", { reply: z.string() }), {
+    reply: `Got: ${ctx.payload.text}`,
+  });
+});
+
+await serve(router, { port: 3000 });
+```
+
+**For full examples with RPC, handlers, and all features, see [ADR-032: Examples](../adr/032-canonical-imports-design.md#Examples).**
+
 ## Strict Schemas (Required) {#Strict-Schemas}
 
 All message schemas **MUST** reject unknown keys at **root**, **meta**, and **payload** levels.

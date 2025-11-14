@@ -19,12 +19,12 @@ Three import patterns emerged in practice:
 ```typescript
 // Option 1: Direct from source
 import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit } from "@ws-kit/rate-limit";
 import { useAuth } from "@ws-kit/middleware";
 
-// Option 2: Via validator convenience re-exports
-import { withPubSub, withRateLimit } from "@ws-kit/zod";
-import { withPubSub, withRateLimit } from "@ws-kit/valibot";
+// Option 2: Via validator convenience re-exports (plugins only)
+import { withPubSub } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/valibot";
 
 // Option 3: Via core
 import { withMessaging, withRpc } from "@ws-kit/core";
@@ -69,7 +69,6 @@ These live in **their own packages**:
 
 ```typescript
 import { withPubSub, usePubSub } from "@ws-kit/pubsub";
-import { withRateLimit, useRateLimit } from "@ws-kit/rate-limit";
 import { withTelemetry, useTelemetry } from "@ws-kit/telemetry"; // Future
 import { withCompression, useCompression } from "@ws-kit/compression"; // Future
 import { withCaching, useCaching } from "@ws-kit/caching"; // Future
@@ -77,9 +76,18 @@ import { withCaching, useCaching } from "@ws-kit/caching"; // Future
 
 #### Middleware & Hooks
 
-These live in **`@ws-kit/middleware`** (future package):
+These live in **their respective packages**:
 
 ```typescript
+// Rate limiting (token bucket via middleware)
+import {
+  rateLimit,
+  keyPerUserPerType,
+  keyPerUserOrIpPerType,
+  perUserKey,
+} from "@ws-kit/rate-limit";
+
+// Authentication, logging, metrics, telemetry
 import { useAuth, useLogging, useMetrics } from "@ws-kit/middleware";
 ```
 
@@ -105,7 +113,7 @@ import { v, message, createRouter, withValibot } from "@ws-kit/valibot";
 
 ### Convenience Re-exports (Optional)
 
-**Validator packages MAY re-export common plugins for convenience**, but **only from canonical sources**:
+**Validator packages MAY re-export common plugins and middleware for convenience**, but **only from canonical sources**. **Adapters are NEVER re-exported** — they must always be imported from their adapter packages to ensure explicit intent (development vs production).
 
 **`@ws-kit/zod` re-exports:**
 
@@ -115,12 +123,6 @@ export { withMessaging, withRpc } from "@ws-kit/plugins";
 
 // From @ws-kit/pubsub
 export { withPubSub, usePubSub } from "@ws-kit/pubsub";
-
-// From @ws-kit/rate-limit
-export { withRateLimit, useRateLimit } from "@ws-kit/rate-limit";
-
-// From @ws-kit/memory (convenience for quick starts)
-export { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory";
 
 // Router factory (canonically from core)
 export { createRouter } from "@ws-kit/core";
@@ -134,11 +136,24 @@ These have no convenience re-exports; users must import from canonical sources:
 
 ```typescript
 // ✗ NOT available from @ws-kit/zod or @ws-kit/valibot
+
+// Rate-limiting (middleware, independent of validation choice)
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit"; // ✓ Must import from @ws-kit/rate-limit
+
+// Other middleware (independent of validation choice)
 import { useAuth } from "@ws-kit/middleware"; // ✓ Must import from @ws-kit/middleware
+import { useLogging } from "@ws-kit/middleware"; // ✓ Must import from @ws-kit/middleware
+
+// Feature plugin middleware (separate from plugins)
 import { usePubSub } from "@ws-kit/pubsub"; // ✓ Must import from @ws-kit/pubsub
+
+// Adapters (always explicit to clarify dev vs prod)
+import { memoryPubSub } from "@ws-kit/memory"; // ✓ Must import from @ws-kit/memory
 import { redisPubSub } from "@ws-kit/redis"; // ✓ Must import from @ws-kit/redis
-import { memoryPubSub } from "@ws-kit/memory"; // ✓ Can also use from @ws-kit/memory
+import { durableObjectsPubSub } from "@ws-kit/cloudflare"; // ✓ Must import from @ws-kit/cloudflare
 ```
+
+**Rationale for adapter exclusion**: Adapters implement backend strategies (in-memory, Redis, Cloudflare Durable Objects). Explicitly importing from their packages makes architectural intent clear. Convenience re-exports would obscure this decision, encouraging ambiguous imports like `import { memoryPubSub } from "@ws-kit/zod"` instead of the clear `import { memoryPubSub } from "@ws-kit/memory"`.
 
 ### Why This Design?
 
@@ -222,12 +237,21 @@ export type { PubSubConfig, PubSubAdapter, PublishResult } from "./types.js";
 - **DX**: New developers often start with validators; lower barrier to entry
 - **Backward Compat**: Existing code importing from `@ws-kit/zod` keeps working
 - **Consistency**: Both validators re-export the same set (no surprises)
+- **Composition**: Plugins are library composition concerns; safe to re-export
 
 ### Why No Middleware Re-exports?
 
-- **Separate Concern**: Middleware is independent of validation strategy
-- **Clarity**: Expecting `useAuth` from validators would be confusing
+- **Separate Concern**: Middleware (including rate-limiting) is independent of validation strategy
+- **Clarity**: `rateLimit`, `useAuth`, `useLogging` are not validation concepts
 - **Future**: New middleware can be added without validator changes
+- **Consistency**: Rate-limiting joins other middleware in canonical packages, not validators
+
+### Why No Adapter Re-exports?
+
+- **Explicit Intent**: Importing from adapter packages (`@ws-kit/memory`, `@ws-kit/redis`) makes dev vs prod decision visible
+- **Clarity**: Code that says `import { redisPubSub } from "@ws-kit/redis"` is self-documenting
+- **Anti-pattern Avoidance**: Prevents confusing imports like `import { redisPubSub } from "@ws-kit/zod"`
+- **Architecture**: Adapters are backend implementation details, separate from composition (plugins/middleware)
 
 ---
 
@@ -244,12 +268,12 @@ import { withMessaging, withRpc } from "@ws-kit/plugins";
 
 // Feature plugins
 import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimit } from "@ws-kit/rate-limit";
 
-// Middleware
+// Middleware (rate-limit is middleware, not plugin)
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { useAuth } from "@ws-kit/middleware";
 
-// Adapters
+// Adapters (always explicit: dev vs prod)
 import { memoryPubSub } from "@ws-kit/memory";
 import { redisPubSub } from "@ws-kit/redis";
 ```
@@ -257,24 +281,29 @@ import { redisPubSub } from "@ws-kit/redis";
 ### Convenience Re-exports (Valid but Secondary)
 
 ```typescript
-// Same as canonical, but via validator
-import {
-  withMessaging,
-  withRpc,
-  withPubSub,
-  withRateLimit,
-  memoryPubSub,
-  createRouter,
-} from "@ws-kit/zod";
+// Plugins available via validator, but middleware and adapters are always canonical
+import { withMessaging, withRpc, withPubSub, createRouter } from "@ws-kit/zod";
+
+// Middleware MUST be imported from their packages (not re-exported)
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
+
+// Adapters MUST be imported from their packages (not re-exported)
+import { memoryPubSub } from "@ws-kit/memory";
+import { redisPubSub } from "@ws-kit/redis";
 ```
 
 ### What Breaks
 
 ```typescript
-// ✗ Middleware NOT re-exported from validators
+// ✗ Rate-limiting NOT re-exported from validators
+import { rateLimit } from "@ws-kit/zod"; // ERROR
+import { keyPerUserPerType } from "@ws-kit/valibot"; // ERROR
+
+// ✗ Other middleware NOT re-exported from validators
 import { useAuth } from "@ws-kit/zod"; // ERROR
 
-// ✗ Adapters NOT available from wrong source
+// ✗ Adapters NEVER re-exported from validators or plugins
+import { memoryPubSub } from "@ws-kit/zod"; // ERROR
 import { redisPubSub } from "@ws-kit/plugins"; // ERROR
 import { redisPubSub } from "@ws-kit/zod"; // ERROR
 ```

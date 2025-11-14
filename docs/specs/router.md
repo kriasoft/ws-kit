@@ -772,10 +772,10 @@ const mainRouter = createRouter<ConnectionData>().merge(router1).merge(router2);
 
 ### Rate Limiting Middleware
 
-Use the rate limiting middleware from `@ws-kit/middleware` to apply token bucket rate limiting with adapter portability:
+Use the rate limiting middleware from `@ws-kit/rate-limit` to apply token bucket rate limiting with adapter portability:
 
 ```typescript
-import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 // Create adapter (memory for dev, Redis for production)
