@@ -10,32 +10,21 @@
 
 Define message contracts with Zod or Valibot, get complete TypeScript inference across server and client. Type-safe RPC, pub/sub, middleware, and error handling out of the box. Plugin-driven architecture for extensibility — swap validators, adapters, and middleware. Runs on Bun, Cloudflare, Node.js, and browsers with testable, composable handlers.
 
-## Requirements
-
-WS-Kit is **ESM-only** and optimized for modern runtimes:
-
-- **Bun 1.0+** (recommended) — native ESM and WebSocket support
-- **Cloudflare Workers/Durable Objects** — native ESM environment
-- **Node.js 18+** (with bundler) — requires Vite, esbuild, or Rollup
-- **Browser** — standard ESM bundler (Webpack, Vite, esbuild)
-
-Not compatible with CommonJS-only projects or legacy Node versions.
-
 ## Features
 
 What you get out of the box (things you'd otherwise build manually):
 
-- **Type-safe routing** — Message handlers with full TypeScript inference from schema to handler
-- **Schema validation** — Automatic request validation with Zod or Valibot; invalid messages rejected before handlers
-- **Request-response** — RPC-style patterns with `ctx.reply()`, `ctx.progress()` (streaming), auto-correlation on client
-- **Broadcasting** — Schema-validated `router.publish()` to topics; subscribers get typed messages
-- **Lifecycle hooks** — `onOpen()`, `onClose()`, `onError()` with full context access
-- **Middleware** — Global or per-handler middleware for auth, rate limiting, logging
-- **Auto-reconnection** — Client-side exponential backoff with configurable timeouts
-- **Offline queueing** — Client queues messages while disconnected; sends on reconnect
-- **Connection data** — Type-safe per-connection state (user ID, session, room, etc.)
-- **Error handling** — Standardized error codes (13 gRPC-aligned codes) with automatic retry inference
-- **Single schema source** — Shared validator packages eliminate dual-package hazards
+- **Full TypeScript inference** — Type-safe from schema to handler, connection data, and errors
+- **Schema validation** — Automatic with Zod or Valibot; rejects invalid messages before handlers
+- **Request-response** — RPC with `ctx.reply()` and `ctx.progress()` for streaming
+- **Broadcasting** — Type-safe pub/sub with no manual serialization
+- **Client resilience** — Auto-reconnect, offline queueing, automatic retry inference
+- **Lifecycle hooks** — `onOpen()`, `onClose()`, `onError()` with full context
+- **Middleware** — Per-handler auth, rate limiting, logging; merge feature routers
+- **Connection state** — Type-safe per-connection data shared across routers
+- **Error handling** — Standardized codes with automatic retry inference
+- **Testing** — Built-in test harness with fake connections, fake clock, and event capture
+- **Plugin architecture** — Swap validators and adapters; zero overhead for unused features
 
 ## Architecture
 
@@ -46,20 +35,29 @@ WS-Kit is a modular monorepo. Mix any validator with any platform:
 - **`@ws-kit/core`** — Platform-agnostic router and type system
 - **`@ws-kit/zod`** / **`@ws-kit/valibot`** — Validator adapters with `createRouter()`
 
+**Plugins:**
+
+- **`@ws-kit/plugins`** — Core framework plugins (`withMessaging`, `withRpc`)
+- **`@ws-kit/pubsub`** — Pub/Sub plugin for broadcasting and subscriptions
+
 **Platform Adapters:**
 
 - **`@ws-kit/bun`** — Bun platform adapter with `serve()` and `createBunHandler()`
-- **`@ws-kit/cloudflare`** — Cloudflare Durable Objects, KV adapter
+- **`@ws-kit/cloudflare`** — Cloudflare Durable Objects adapter
 
 **Client:**
 
 - **`@ws-kit/client`** — Universal WebSocket client (works with any server adapter)
 
-**Extensions:**
+**Middleware & Production Features:**
 
-- **`@ws-kit/middleware`** — Production-ready middleware (rate limiting, auth helpers, logging)
-- **`@ws-kit/memory`** — In-memory pub/sub (local deployments)
-- **`@ws-kit/redis`** — Redis rate limiter and pub/sub (distributed deployments)
+- **`@ws-kit/rate-limit`** — Rate limiting middleware (per-user, per-type bucketing)
+- **`@ws-kit/middleware`** — Additional middleware (auth helpers, logging, telemetry)
+
+**Adapters for Distributed Deployments:**
+
+- **`@ws-kit/memory`** — In-memory pub/sub and rate limiting (local/single-instance)
+- **`@ws-kit/redis`** — Redis pub/sub and rate limiting (multi-instance deployments)
 
 ## Patterns & Advanced Use Cases
 
