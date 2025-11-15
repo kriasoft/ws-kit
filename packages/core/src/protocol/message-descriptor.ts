@@ -6,10 +6,14 @@
  *
  * Discriminators:
  * - kind: "event" | "rpc" → router.on() vs router.rpc()
- * - response: undefined | MessageDescriptor → event vs RPC
+ * - response: MessageDescriptor → only for RPC; validated at registration
  * - type: literal string → handler lookup key
  * - version (optional): rolling upgrades
  * - __runtime (optional): brand flag (usually "ws-kit-schema")
+ *
+ * Invariants enforced at RouteTable.register():
+ * - RPC must have a response descriptor
+ * - Event must not have a response descriptor
  */
 
 export interface MessageDescriptor {
@@ -30,9 +34,30 @@ export function assertMessageDescriptor(
   if (
     typeof obj !== "object" ||
     obj === null ||
-    typeof (obj as any).type !== "string" ||
-    !["event", "rpc"].includes((obj as any).kind)
+    typeof (obj as unknown as Record<string, unknown>).type !== "string" ||
+    !["event", "rpc"].includes((obj as unknown as Record<string, unknown>).kind)
   ) {
     throw new TypeError("Invalid MessageDescriptor");
+  }
+
+  const desc = obj as Record<string, unknown>;
+
+  // Validate type is non-empty string
+  if ((desc.type as string).length === 0) {
+    throw new TypeError("Invalid MessageDescriptor.type: must not be empty");
+  }
+
+  // Validate optional fields if present. Event/RPC invariant is enforced
+  // at route registration time (RouteTable.register), not here.
+  if (desc.version !== undefined && typeof desc.version !== "number") {
+    throw new TypeError(
+      `Invalid MessageDescriptor.version: expected number | undefined, got ${typeof desc.version}`,
+    );
+  }
+
+  if (desc.__runtime !== undefined && typeof desc.__runtime !== "string") {
+    throw new TypeError(
+      `Invalid MessageDescriptor.__runtime: expected string | undefined, got ${typeof desc.__runtime}`,
+    );
   }
 }

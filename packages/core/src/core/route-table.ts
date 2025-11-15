@@ -8,6 +8,7 @@
 
 import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
+import { assertMessageDescriptor } from "../protocol/message-descriptor";
 import type { RouteEntry } from "./types";
 
 export interface RouteTableOptions {
@@ -27,13 +28,48 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
 
   /**
    * Register a handler for a message type.
+   * Validates schema shape, kind literal, and event/RPC invariants.
    * Throws if type already registered (use merge() for conflict handling).
    */
   register(schema: MessageDescriptor, entry: RouteEntry<TContext>): this {
     const type = schema?.type;
-    if (typeof type !== "string" || type.length === 0) {
-      throw new Error(`Invalid schema.type: ${String(type)}`);
+
+    // Validate schema structure: checks type (non-empty), kind ("event"|"rpc"), and optional fields.
+    // Rejects unknown kind values (e.g., "Rpc", "rPc") before invariant checks.
+    try {
+      assertMessageDescriptor(schema);
+    } catch (err) {
+      throw new Error(
+        `Invalid schema for type "${type}": ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
+
+    // Enforce event/RPC invariant at registration time (fail-fast).
+    // RPC descriptors must have a response; events must not.
+    // Catches schema misconfiguration before system boots.
+    if (schema.kind === "rpc") {
+      if (!schema.response) {
+        throw new Error(
+          `RPC schema for type "${type}" must have a response descriptor.`,
+        );
+      }
+      // Validate response is itself a valid MessageDescriptor.
+      // Prevents downstream code from reading undefined properties.
+      try {
+        assertMessageDescriptor(schema.response);
+      } catch (err) {
+        throw new Error(
+          `RPC schema for type "${type}" has invalid response descriptor: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    if (schema.kind === "event" && schema.response !== undefined) {
+      throw new Error(
+        `Event schema for type "${type}" must not have a response descriptor.`,
+      );
+    }
+
     if (this.handlers.has(type)) {
       throw new Error(
         `Handler already registered for type "${type}". Use merge() with onConflict if needed.`,
@@ -73,6 +109,8 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
 
   /**
    * Merge another route table into this one with conflict resolution.
+   * Assumes entries in both tables were validated at registration time.
+   * Only use with tables created via register(), merge(), or mount().
    *
    * @param other - Route table to merge
    * @param opts.onConflict - Resolution strategy:
@@ -108,6 +146,8 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
   /**
    * Mount another route table with a prefix.
    * All message types from the other route table are prefixed with `prefix + type`.
+   * Assumes entries in other table were validated at registration time.
+   * Only use with tables created via register(), merge(), or mount().
    *
    * @param prefix - Prefix to add (e.g., "auth." → "auth.LOGIN", "auth.REGISTER")
    * @param other - Route table to mount
