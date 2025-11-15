@@ -281,7 +281,7 @@ All adapters treat reconnection as a **new connection**:
 // ⚠️ IMPORTANT: No automatic subscription recovery
 serve(router, {
   onClose(ctx) {
-    console.log(`User ${ctx.ws.data?.userId} disconnected`);
+    console.log(`User ${ctx.data?.userId} disconnected`);
     // Subscriptions are cleaned up by adapter
   },
 });
@@ -457,7 +457,7 @@ const router = createRouter<AppData>();
 // Join: subscribe to room updates
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data?.userId ?? "anonymous";
+  const userId = ctx.data?.userId ?? "anonymous";
 
   await ctx.topics.subscribe(`room:${roomId}`);
   ctx.assignData({ userId });
@@ -472,9 +472,9 @@ router.on(JoinRoom, async (ctx) => {
 
 // Send: broadcast to subscribers
 router.on(SendMessage, (ctx) => {
-  const userId = ctx.ws.data?.userId ?? "anonymous";
+  const userId = ctx.data?.userId ?? "anonymous";
   // Room ID comes from subscription context or connection data
-  const roomId = "general"; // In real app, track via ctx.ws.data
+  const roomId = "general"; // In real app, track via ctx.data
 
   router.publish(`room:${roomId}`, RoomBroadcast, {
     roomId,
@@ -882,7 +882,7 @@ await redis.connect();
 const router = createRouter().use(
   rateLimit({
     limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
-    key: (ctx) => `user:${ctx.ws.data.userId}`,
+    key: (ctx) => `user:${ctx.data.userId}`,
   }),
 );
 ```

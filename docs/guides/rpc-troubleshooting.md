@@ -206,7 +206,7 @@ function generateIdempotencyKey(ctx: RpcContext<any>): string {
     .update(stableStringify(ctx.payload))
     .digest("hex");
 
-  return `${ctx.ws.data?.userId}:${ctx.type}:${hash}`;
+  return `${ctx.data?.userId}:${ctx.type}:${hash}`;
 }
 
 // Middleware pattern for idempotency
@@ -317,7 +317,7 @@ const client = createClient(wsUrl, {
 ```typescript
 router.use((ctx, next) => {
   if (ctx.isRpc) {
-    console.log(`RPC ${ctx.type} from ${ctx.ws.data?.userId}`);
+    console.log(`RPC ${ctx.type} from ${ctx.data?.userId}`);
   }
   return next();
 });

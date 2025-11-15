@@ -65,13 +65,13 @@ interface ServerMessage<T = unknown> extends ClientMessage<T> {
 When a client connects, the router:
 
 - Generates a unique `clientId` (UUID v7)
-- Stores connection metadata in `ws.data`
+- Initializes connection data via `ConnectionData` interface (optional, via module augmentation)
 - Calls your `onOpen` handler
 
 ```typescript
 router.onOpen((ctx) => {
-  // ctx.ws.data.clientId is always available (UUID v7)
-  console.log(`Client ${ctx.ws.data.clientId} connected`);
+  // ctx.clientId is always available (UUID v7)
+  console.log(`Client ${ctx.clientId} connected`);
 });
 ```
 
@@ -96,7 +96,7 @@ Metadata injection occurs **after validation**, ensuring server values (`clientI
 router.on(ChatMessage, async (ctx) => {
   // ctx provides everything you need:
   // - ctx.ws: The WebSocket instance
-  // - ctx.ws.data.clientId: Client identifier (UUID v7, auto-generated)
+  // - ctx.clientId: Client identifier (UUID v7, auto-generated)
   // - ctx.type: Message type literal from schema
   // - ctx.meta: Validated metadata (timestamp, correlationId, custom fields)
   // - ctx.payload: Validated message data (conditional - only if schema defines it)
@@ -120,7 +120,7 @@ When a client disconnects:
 ```typescript
 router.onClose((ctx) => {
   console.log(
-    `Client ${ctx.ws.data.clientId} disconnected: ${ctx.code} ${ctx.reason || "N/A"}`,
+    `Client ${ctx.clientId} disconnected: ${ctx.code} ${ctx.reason || "N/A"}`,
   );
   // Clean up resources, notify other clients, etc.
 });
@@ -160,7 +160,7 @@ const router = createRouter<AppData>();
 
 // Global middleware: runs for all messages
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
@@ -169,7 +169,7 @@ router.use((ctx, next) => {
 
 // Per-route middleware: runs only for specific message
 router.use(SendMessage, (ctx, next) => {
-  if (isRateLimited(ctx.ws.data?.userId)) {
+  if (isRateLimited(ctx.data?.userId)) {
     ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return;
   }
@@ -188,7 +188,7 @@ router.on(SendMessage, (ctx) => {
 - **Per-route middleware** — `router.use(schema, middleware)` runs only for specific messages
 - **Execution order** — Global → per-route → handler
 - **Control flow** — Call `next()` to continue; omit to skip handler
-- **Context mutation** — Middleware can update `ctx.ws.data` via `ctx.assignData()`
+- **Context mutation** — Middleware can update `ctx.data` via `ctx.assignData()`
 - **Error handling** — Call `ctx.error()` to reject and stop execution
 
 See [Middleware Guide](./middleware.md) and ADR-008 for complete documentation.
@@ -328,7 +328,7 @@ interface EventMessageContext<TPayload, TData = unknown> {
     data?: unknown,
     options?: ErrorOptions,
   ): void; // Send typed error
-  assignData(partial: Partial<TData>): void; // Merge partial data into ctx.ws.data
+  assignData(partial: Partial<TData>): void; // Merge partial data into ctx.data
   topics: {
     subscribe(topic: string): Promise<void>; // Subscribe to a topic
     unsubscribe(topic: string): Promise<void>; // Unsubscribe from a topic
@@ -361,13 +361,13 @@ type MessageContext<TPayload, TData = unknown> =
 **Key points:**
 
 - **Type safety**: Use `if (ctx.isRpc)` to discriminate between event and RPC handlers and access RPC-specific methods
-- **Client identity**: Access via `ctx.ws.data.clientId` (auto-generated UUID v7, not `ctx.clientId`)
+- **Client identity**: Access via `ctx.clientId` (auto-generated UUID v7, not `ctx.clientId`)
 - **Metadata injection**: `ctx.meta.clientId` and `ctx.meta.receivedAt` are server-injected after validation (security boundary—prevents client spoofing)
 - **Timestamps**: Use `ctx.receivedAt` for server logic (rate limiting, ordering, TTL, auditing); use `ctx.meta.timestamp` only for UI display (untrusted client clock)
 - **Subscriptions**: `await ctx.topics.subscribe(topic)` and `await ctx.topics.unsubscribe(topic)` for PubSub
 - **Publishing**: `await ctx.publish(topic, schema, payload)` broadcasts to subscribers (1-to-many), or use `await router.publish()` outside handlers
 - **Sending**: `ctx.send(schema, payload)` sends to current connection only (1-to-1)
-- **Custom data**: Access `ctx.ws.data` directly, or use `ctx.assignData()` to merge partial updates
+- **Custom data**: Access `ctx.data` directly, or use `ctx.assignData()` to merge partial updates
 - **RPC only** (`ctx.isRpc === true`): Use `ctx.reply(schema, data)` for terminal response, `ctx.progress(data)` for non-terminal updates, `ctx.abortSignal` for cancellation
 
 ## Request-Response Pattern (RPC)
@@ -516,7 +516,7 @@ The router provides two timestamps with different trust levels:
 ```typescript
 router.on(ChatMessage, (ctx) => {
   // Rate limiting with server timestamp
-  const lastMessageTime = messageLog.get(ctx.ws.data.clientId);
+  const lastMessageTime = messageLog.get(ctx.clientId);
   if (lastMessageTime && ctx.receivedAt - lastMessageTime < 1000) {
     ctx.error(
       "RESOURCE_EXHAUSTED",
@@ -524,7 +524,7 @@ router.on(ChatMessage, (ctx) => {
     );
     return;
   }
-  messageLog.set(ctx.ws.data.clientId, ctx.receivedAt);
+  messageLog.set(ctx.clientId, ctx.receivedAt);
 
   // Store both for different purposes
   await saveMessage({

@@ -109,7 +109,7 @@ const router = createRouter<WebSocketData>({
 });
 
 router.onClose((ctx) => {
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
 
   const user = connectedUsers.get(clientId);
   if (user) {
@@ -128,7 +128,7 @@ router.onClose((ctx) => {
 
 // Join handler - new user connects
 router.on(JoinMessage, (ctx) => {
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
 
   const { username } = ctx.payload; // ✅ Fully typed, no assertion needed
 
@@ -153,7 +153,7 @@ router.on(JoinMessage, (ctx) => {
 
 // Chat message handler
 router.on(ChatMessage, async (ctx) => {
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
 
   const user = connectedUsers.get(clientId);
   if (!user) return;

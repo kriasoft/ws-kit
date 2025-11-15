@@ -89,7 +89,7 @@ router.use(async (ctx, next) => {
   if (!ctx.isRpc || !ctx.meta.idempotencyKey) return next();
 
   // Scope: (tenant, user, rpc-type, key) to prevent cross-user replays
-  const key = `${ctx.ws.data.tenant}:${ctx.ws.data.userId}:${ctx.type}:${ctx.meta.idempotencyKey}`;
+  const key = `${ctx.data.tenant}:${ctx.data.userId}:${ctx.type}:${ctx.meta.idempotencyKey}`;
 
   const cached = await idempotencyStorage.get(key);
   if (cached) {
@@ -135,7 +135,7 @@ Example:
 ```typescript
 // Multi-tenant scenario: prevent user B from re-using user A's idempotency key
 // Server middleware:
-const key = `${ctx.ws.data.tenantId}:${ctx.ws.data.userId}:${ctx.type}:${ctx.meta.idempotencyKey}`;
+const key = `${ctx.data.tenantId}:${ctx.data.userId}:${ctx.type}:${ctx.meta.idempotencyKey}`;
 ```
 
 ## Alternatives Considered

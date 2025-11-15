@@ -24,7 +24,7 @@ const router = createRouter<AppData>();
 
 // Authentication check for all messages except login
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
@@ -65,7 +65,7 @@ const SendMessage = message("SEND_MESSAGE", { text: z.string() });
 const rateLimiter = new Map<string, { count: number; resetAt: number }>();
 
 router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.ws.data?.userId || "anon";
+  const userId = ctx.data?.userId || "anon";
   const now = Date.now();
   const state = rateLimiter.get(userId);
 
@@ -85,7 +85,7 @@ router.use(SendMessage, (ctx, next) => {
 
 router.on(SendMessage, (ctx) => {
   // Rate limiting already checked by middleware
-  console.log(`Message from ${ctx.ws.data?.userId}: ${ctx.payload.text}`);
+  console.log(`Message from ${ctx.data?.userId}: ${ctx.payload.text}`);
 });
 ```
 
@@ -101,7 +101,7 @@ const router = createRouter<AppData>();
 
 // Global: authentication check
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
@@ -112,7 +112,7 @@ router.use((ctx, next) => {
 const AdminMessage = message("ADMIN_ACTION", { action: z.string() });
 
 router.use(AdminMessage, (ctx, next) => {
-  if (!ctx.ws.data?.roles?.includes("admin")) {
+  if (!ctx.data?.roles?.includes("admin")) {
     ctx.error("PERMISSION_DENIED", "Admin access required");
     return;
   }
@@ -139,8 +139,8 @@ router.use((ctx, next) => {
 });
 
 router.on(SomeMessage, (ctx) => {
-  const requestId = (ctx.ws.data as any).requestId;
-  const receivedTime = (ctx.ws.data as any).receivedTime;
+  const requestId = (ctx.data as any).requestId;
+  const receivedTime = (ctx.data as any).receivedTime;
   console.log(`Request ${requestId} received at ${receivedTime}`);
 });
 ```
@@ -165,7 +165,7 @@ router.use(QueryMessage, (ctx, next) => {
 
 router.on(QueryMessage, (ctx) => {
   // Query is pre-validated
-  const query = (ctx.ws.data as any).query;
+  const query = (ctx.data as any).query;
   const results = database.search(query);
   ctx.send(QueryResultsMessage, { results });
 });
@@ -198,7 +198,7 @@ router.use(async (ctx, next) => {
 
 ## Context Mutation
 
-Middleware can modify `ctx.ws.data` using `ctx.assignData()`. This is useful for:
+Middleware can modify `ctx.data` using `ctx.assignData()`. This is useful for:
 
 - Attaching computed values (request IDs, timestamps)
 - Parsing and validating complex structures
@@ -212,9 +212,9 @@ router.use((ctx, next) => {
   return next();
 });
 
-// In any handler, ctx.ws.data.requestId is available
+// In any handler, ctx.data.requestId is available
 router.on(SomeMessage, (ctx) => {
-  const { requestId } = ctx.ws.data as any;
+  const { requestId } = ctx.data as any;
 });
 ```
 
@@ -229,7 +229,7 @@ Handle synchronous errors with try-catch:
 ```typescript
 router.use((ctx, next) => {
   try {
-    const data = JSON.parse(ctx.ws.data?.rawData || "{}");
+    const data = JSON.parse(ctx.data?.rawData || "{}");
     ctx.assignData(data);
   } catch (err) {
     ctx.error("INVALID_ARGUMENT", "Malformed data");
@@ -246,7 +246,7 @@ Catch async errors to prevent unhandled rejections:
 ```typescript
 router.use(async (ctx, next) => {
   try {
-    const allowed = await checkPermission(ctx.ws.data?.userId);
+    const allowed = await checkPermission(ctx.data?.userId);
     if (!allowed) {
       ctx.error("PERMISSION_DENIED", "Access denied");
       return;
@@ -303,7 +303,7 @@ Middleware is easier to test independently:
 const testRouter = createRouter<AppData>();
 
 testRouter.use((ctx, next) => {
-  if (!ctx.ws.data?.userId) {
+  if (!ctx.data?.userId) {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }

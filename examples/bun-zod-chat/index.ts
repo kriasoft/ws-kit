@@ -97,7 +97,7 @@ const router = createRouter<WebSocketData>().plugin(withZod());
 
 // Authentication middleware - validates user exists before handling message
 router.use((ctx, next) => {
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
   const user = users.get(clientId);
 
   // User must exist to process messages
@@ -117,7 +117,7 @@ router.use((ctx, next) => {
 // =======================
 
 router.onOpen(async (ctx) => {
-  const clientId = ctx.ws.data?.clientId || crypto.randomUUID();
+  const clientId = ctx.data?.clientId || crypto.randomUUID();
 
   // Create user record
   users.set(clientId, {
@@ -136,7 +136,7 @@ router.onOpen(async (ctx) => {
 });
 
 router.onClose(async (ctx) => {
-  const clientId = ctx.ws.data?.clientId || "";
+  const clientId = ctx.data?.clientId || "";
   const user = users.get(clientId);
 
   if (user) {
@@ -184,7 +184,7 @@ router.onError((error: WsKitError) => {
 // =======================
 
 router.on(JoinRoomMessage, async (ctx) => {
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
   const user = users.get(clientId);
   const { room } = ctx.payload;
 
@@ -223,7 +223,7 @@ router.on(JoinRoomMessage, async (ctx) => {
 });
 
 router.on(SendMessageMessage, async (ctx) => {
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
   const user = users.get(clientId);
   const { text } = ctx.payload;
 
@@ -249,7 +249,7 @@ router.on(SendMessageMessage, async (ctx) => {
 });
 
 router.on(LeaveRoomMessage, async (ctx) => {
-  const { clientId } = ctx.ws.data;
+  const { clientId } = ctx.data;
   const user = users.get(clientId);
 
   if (!user || user.rooms.size === 0) {

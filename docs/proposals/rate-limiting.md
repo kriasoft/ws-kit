@@ -87,7 +87,7 @@ Rate limiting **is possible today** without any changes:
 const rateLimiter = new Map<string, number[]>();
 
 router.use((ctx, next) => {
-  const userId = ctx.ws.data?.userId || "anon";
+  const userId = ctx.data?.userId || "anon";
   const now = Date.now();
   const timestamps = rateLimiter.get(userId) ?? [];
   const recentCount = timestamps.filter((t) => now - t < 1000).length;
@@ -125,10 +125,10 @@ type AppData = { userId?: string; messageCount?: number };
 
 router.use((ctx, next) => {
   ctx.assignData({
-    messageCount: (ctx.ws.data.messageCount ?? 0) + 1,
+    messageCount: (ctx.data.messageCount ?? 0) + 1,
   });
 
-  if (ctx.ws.data.messageCount > 1000) {
+  if (ctx.data.messageCount > 1000) {
     ctx.error("RESOURCE_EXHAUSTED", "Connection limit reached");
     return;
   }
@@ -141,7 +141,7 @@ router.use((ctx, next) => {
 
 ```typescript
 router.onClose((ctx) => {
-  rateLimiter.delete(ctx.ws.data?.userId);
+  rateLimiter.delete(ctx.data?.userId);
 });
 ```
 
@@ -268,7 +268,7 @@ const store = memoryStore({ clock: { now: () => fakeTime.current } });
 const limiter = rateLimit({
   store,
   policy: { capacity: 10, tokensPerSecond: 1 },
-  key: (ctx) => `user:${ctx.ws.data?.userId}`,
+  key: (ctx) => `user:${ctx.data?.userId}`,
   cost: () => 1,
 });
 
@@ -399,8 +399,8 @@ Three named key functions ship by default; choose based on your app's needs:
  * one brusty RPC from starving others is important.
  */
 export function keyPerUserPerType(ctx: IngressContext): string {
-  const tenant = ctx.ws.data?.tenantId ?? "public";
-  const user = ctx.ws.data?.userId ?? "anon";
+  const tenant = ctx.data?.tenantId ?? "public";
+  const user = ctx.data?.userId ?? "anon";
   return `rl:${tenant}:${user}:${ctx.type}`;
 }
 ```
@@ -414,8 +414,8 @@ export function keyPerUserPerType(ctx: IngressContext): string {
  * Differentiate cost via weight config; all operations share the same user ceiling.
  */
 export function perUserKey(ctx: IngressContext): string {
-  const tenant = ctx.ws.data?.tenantId ?? "public";
-  const user = ctx.ws.data?.userId ?? "anon";
+  const tenant = ctx.data?.tenantId ?? "public";
+  const user = ctx.data?.userId ?? "anon";
   return `rl:${tenant}:${user}`;
 }
 ```
@@ -429,8 +429,8 @@ export function perUserKey(ctx: IngressContext): string {
  * Falls back to IP if user ID is not available, ensuring all traffic is limited.
  */
 export function keyPerUserOrIpPerType(ctx: IngressContext): string {
-  const tenant = ctx.ws.data?.tenantId ?? "public";
-  const identifier = ctx.ws.data?.userId ?? ctx.ip ?? "anon";
+  const tenant = ctx.data?.tenantId ?? "public";
+  const identifier = ctx.data?.userId ?? ctx.ip ?? "anon";
   return `rl:${tenant}:${identifier}:${ctx.type}`;
 }
 ```
@@ -571,8 +571,8 @@ All examples use safe IngressContext fields (no payload access):
 ```typescript
 // Safe: User + tenant + route (recommended)
 key: (ctx) => {
-  const tenantId = ctx.ws.data?.tenantId ?? "public";
-  const userId = ctx.ws.data?.userId ?? "anon";
+  const tenantId = ctx.data?.tenantId ?? "public";
+  const userId = ctx.data?.userId ?? "anon";
   const route = ctx.type;
   return `rt:${tenantId}:${userId}:${route}`;
 };
@@ -609,11 +609,11 @@ cost: (ctx) => {
 
   // Option C: Different tiers (use cost, not fractional discounts)
   // Differentiate via separate limiters or scaled policy for premium users
-  const tier = ctx.ws.data?.tier ?? "free";
+  const tier = ctx.data?.tier ?? "free";
   return { free: 2, basic: 1, pro: 1 }[tier];
 
   // ❌ Not allowed: non-integer
-  // return ctx.ws.data?.isPremium ? 0.5 : 1;  // ERROR: 0.5 is not an integer
+  // return ctx.data?.isPremium ? 0.5 : 1;  // ERROR: 0.5 is not an integer
 
   // ❌ Not allowed: payload not validated yet
   // return ctx.payload?.items?.length ?? 1;  // ERROR: ctx.payload undefined
@@ -623,7 +623,7 @@ cost: (ctx) => {
 **Why IngressContext, not full Ctx?** Rate limiting runs _before_ schema validation. To prevent accidental dependencies on unvalidated payload, only parsed fields are available:
 
 - ✅ `ctx.type` — message type (extracted from frame)
-- ✅ `ctx.ws.data` — app connection state (from authenticate)
+- ✅ `ctx.data` — app connection state (from authenticate)
 - ✅ `ctx.meta.receivedAt` — server timestamp
 - ✅ `ctx.id`, `ctx.ip` — connection metadata
 - ❌ `ctx.payload` — not schema-validated (would be brittle)
@@ -638,7 +638,7 @@ const freeLimiter = rateLimit({
     tokensPerSecond: 10,
     prefix: "free:",
   }),
-  key: (ctx) => `user:${ctx.ws.data?.userId}`,
+  key: (ctx) => `user:${ctx.data?.userId}`,
   cost: () => 1,
 });
 
@@ -649,13 +649,13 @@ const premiumLimiter = rateLimit({
     tokensPerSecond: 100,
     prefix: "premium:",
   }),
-  key: (ctx) => `user:${ctx.ws.data?.userId}`,
+  key: (ctx) => `user:${ctx.data?.userId}`,
   cost: () => 1,
 });
 
 // Apply conditionally based on tier
 router.use((ctx, next) => {
-  if (ctx.ws.data?.isPremium) {
+  if (ctx.data?.isPremium) {
     return premiumLimiter(ctx, next);
   }
   return freeLimiter(ctx, next);
@@ -814,7 +814,7 @@ Rate limiting by IP **behind a load balancer or CDN is broken**. All users appea
 key: (ctx) => `rt:${ctx.ip}`; // All traffic → same limit
 
 // ✅ CORRECT: Use authenticated user ID
-key: (ctx) => `rt:${ctx.ws.data?.userId ?? "anon"}`;
+key: (ctx) => `rt:${ctx.data?.userId ?? "anon"}`;
 
 // ✅ CORRECT: If IP-based is required, read trusted header
 // (Requires load balancer or CDN to set correctly)
@@ -835,7 +835,7 @@ key: (ctx) => `rt:${trustedClientIp(ctx)}`;
 key: (ctx) => `rt:${Date.now()}:${ctx.id}`;
 
 // ✅ BOUNDED: Aggregate to user/tenant
-key: (ctx) => `rt:${ctx.ws.data?.userId}`;
+key: (ctx) => `rt:${ctx.data?.userId}`;
 
 // Redis adapter auto-calculates TTL: 2x refill window (minimum 1 minute)
 // Example: capacity=10, tokensPerSecond=1 → TTL = max(20 * 1000, 60_000) = 60s
@@ -1645,7 +1645,7 @@ If your app currently does manual rate limiting in middleware, the migration is 
 
 ```typescript
 router.use((ctx, next) => {
-  const userId = ctx.ws.data?.userId ?? "anon";
+  const userId = ctx.data?.userId ?? "anon";
   const count = requestCounts.get(userId) ?? 0;
   if (count >= 10) {
     ctx.error("RESOURCE_EXHAUSTED", "Too many requests");

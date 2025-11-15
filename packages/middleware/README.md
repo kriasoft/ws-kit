@@ -196,7 +196,7 @@ cost: (ctx) => {
 
 // Different limits per tier
 cost: (ctx) => {
-  const tier = ctx.ws.data?.tier ?? "free";
+  const tier = ctx.data?.tier ?? "free";
   return { free: 2, basic: 1, pro: 1 }[tier];
 };
 ```
@@ -252,7 +252,7 @@ const premiumLimiter = rateLimit({
 });
 
 router.use((ctx, next) => {
-  const isPremium = ctx.ws.data?.isPremium ?? false;
+  const isPremium = ctx.data?.isPremium ?? false;
   const limiter = isPremium ? premiumLimiter : freeLimiter;
   return limiter(ctx, next);
 });
@@ -290,7 +290,7 @@ serve(router, {
 const requestCounts = new Map<string, number>();
 
 router.use((ctx, next) => {
-  const userId = ctx.ws.data?.userId ?? "anon";
+  const userId = ctx.data?.userId ?? "anon";
   const count = requestCounts.get(userId) ?? 0;
 
   if (count >= 100) {

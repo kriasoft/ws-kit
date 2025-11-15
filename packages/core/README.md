@@ -34,12 +34,11 @@ Both patterns work equally well — choose based on your preference.
 import { createRouter } from "@ws-kit/core";
 import { withZod } from "@ws-kit/zod"; // or withValibot from @ws-kit/valibot
 
-const router = createRouter<{ userId?: string }>()
-  .plugin(withZod()); // Add validation plugin for full features
+const router = createRouter<{ userId?: string }>().plugin(withZod()); // Add validation plugin for full features
 
 // Register an event handler (with validation)
 router.on(schema, (ctx) => {
-  ctx.ws.data; // { userId?: string }
+  ctx.data; // { userId?: string }
   ctx.type; // Literal from schema
   ctx.payload; // Typed payload (available with validation plugin)
 });

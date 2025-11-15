@@ -1751,9 +1751,9 @@ const ChatMessage = message(
 );
 
 router.on(SendChat, (ctx) => {
-  const result = await ctx.publish(`room:${ctx.ws.data.roomId}`, ChatMessage, {
+  const result = await ctx.publish(`room:${ctx.data.roomId}`, ChatMessage, {
     text: ctx.payload.text,
-    userId: ctx.ws.data.userId, // Include sender identity
+    userId: ctx.data.userId, // Include sender identity
   });
 
   if (!result.ok && result.retryable) {
@@ -1795,7 +1795,7 @@ router.on(JoinRoom, async (ctx) => {
   // Broadcast to all room members
   const result = await ctx.publish(`room:${roomId}`, UserJoined, {
     roomId,
-    userId: ctx.ws.data.userId || "anon",
+    userId: ctx.data.userId || "anon",
   });
 
   if (result.ok) {
@@ -1806,7 +1806,7 @@ router.on(JoinRoom, async (ctx) => {
 });
 
 router.onClose((ctx) => {
-  const roomId = ctx.ws.data.roomId;
+  const roomId = ctx.data.roomId;
 
   if (roomId) {
     // Unsubscribe from room
@@ -1816,7 +1816,7 @@ router.onClose((ctx) => {
     router
       .publish(`room:${roomId}`, UserLeft, {
         roomId,
-        userId: ctx.ws.data.userId || "anon",
+        userId: ctx.data.userId || "anon",
       })
       .catch((err) => {
         logger.error(`Failed to publish user-left (${err})`);
@@ -1853,7 +1853,7 @@ router.on(UpdateSubscriptions, async (ctx, { desired }) => {
 
   // Single analytics event
   analytics.track("subscriptions_changed", {
-    userId: ctx.ws.data.userId,
+    userId: ctx.data.userId,
     added,
     removed,
     total: result.total,
@@ -1889,7 +1889,7 @@ router.on(JoinMultipleRooms, async (ctx, { roomIds }) => {
       op: "subscribeMany",
       topics,
       count: result.added,
-      userId: ctx.ws.data.userId,
+      userId: ctx.data.userId,
       timestamp: Date.now(),
     })
     .catch((err) => {
@@ -1930,8 +1930,8 @@ interface TenantPubSubPolicy {
 
 router.use(async (ctx, next) => {
   // Load policy once per connection (lazy on first use)
-  if (!ctx.ws.data.tenantPolicy) {
-    const tenantId = ctx.ws.data.tenantId;
+  if (!ctx.data.tenantPolicy) {
+    const tenantId = ctx.data.tenantId;
     ctx.assignData({
       tenantPolicy: await db.policies.findByTenant(tenantId),
     });
@@ -1939,19 +1939,19 @@ router.use(async (ctx, next) => {
 
   // Apply loaded policy
   return usePubSub({
-    normalize: (topic) => ctx.ws.data.tenantPolicy?.normalize?.(topic) ?? topic,
+    normalize: (topic) => ctx.data.tenantPolicy?.normalize?.(topic) ?? topic,
 
     authorizeSubscribe: (ctx, topic) =>
-      ctx.ws.data.tenantPolicy?.authorizeSubscribe?.(ctx, topic) ?? true,
+      ctx.data.tenantPolicy?.authorizeSubscribe?.(ctx, topic) ?? true,
 
     authorizePublish: (ctx, topic) =>
-      ctx.ws.data.tenantPolicy?.authorizePublish?.(ctx, topic) ?? true,
+      ctx.data.tenantPolicy?.authorizePublish?.(ctx, topic) ?? true,
 
     onSubscribe: (ctx, topic) =>
-      ctx.ws.data.tenantPolicy?.onSubscribe?.(ctx, topic),
+      ctx.data.tenantPolicy?.onSubscribe?.(ctx, topic),
 
     onUnsubscribe: (ctx, topic) =>
-      ctx.ws.data.tenantPolicy?.onUnsubscribe?.(ctx, topic),
+      ctx.data.tenantPolicy?.onUnsubscribe?.(ctx, topic),
   })(ctx, next);
 });
 ```
@@ -1970,7 +1970,7 @@ router.use(async (ctx, next) => {
 if (policyChanged) {
   ctx.invalidatePubSubAuth?.();
   // Re-load on next operation
-  ctx.ws.data.tenantPolicy = undefined;
+  ctx.data.tenantPolicy = undefined;
 }
 ```
 

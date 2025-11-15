@@ -401,13 +401,13 @@ describe("Type inference in createRouter handlers", () => {
       const AuthSchema = message("AUTH", { token: v.string() });
 
       dataRouter.on(AuthSchema, (ctx) => {
-        // ctx.ws.data should be typed as UserData
-        expectTypeOf(ctx.ws.data).toMatchTypeOf<UserData>();
+        // ctx.data should be typed as UserData
+        expectTypeOf(ctx.data).toMatchTypeOf<UserData>();
 
-        const userId = ctx.ws.data?.userId;
+        const userId = ctx.data?.userId;
         expectTypeOf(userId).toEqualTypeOf<string | undefined>();
 
-        const roles = ctx.ws.data?.roles;
+        const roles = ctx.data?.roles;
         expectTypeOf(roles).toEqualTypeOf<string[] | undefined>();
       });
     });

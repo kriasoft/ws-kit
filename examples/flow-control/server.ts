@@ -16,9 +16,9 @@ const router = createRouter().plugin(withZod());
 const queues = new Map<string, string[]>();
 
 router.on(SendDataMessage, (ctx) => {
-  const queue = queues.get(ctx.ws.data.clientId) || [];
-  if (!queues.has(ctx.ws.data.clientId)) {
-    queues.set(ctx.ws.data.clientId, queue);
+  const queue = queues.get(ctx.clientId) || [];
+  if (!queues.has(ctx.clientId)) {
+    queues.set(ctx.clientId, queue);
   }
 
   if (queue.length >= QUEUE_CAPACITY) {
@@ -38,7 +38,7 @@ router.on(SendDataMessage, (ctx) => {
     queue.push(ctx.payload.data);
   }
 
-  ctx.send(DataAckMessage, { id: ctx.ws.data.clientId });
+  ctx.send(DataAckMessage, { id: ctx.clientId });
 });
 
 serve(router, { port: 3000 });

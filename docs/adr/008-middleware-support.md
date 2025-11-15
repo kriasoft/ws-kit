@@ -15,7 +15,7 @@ router.on(LoginMessage, (ctx) => {
 });
 
 router.on(SecureMessage, (ctx) => {
-  if (!ctx.ws.data?.userId) {
+  if (!ctx.data?.userId) {
     ctx.send(ErrorMessage, { code: "UNAUTHENTICATED" });
     return;
   }
@@ -23,7 +23,7 @@ router.on(SecureMessage, (ctx) => {
 });
 
 router.on(AnotherSecureMessage, (ctx) => {
-  if (!ctx.ws.data?.userId) {
+  if (!ctx.data?.userId) {
     ctx.send(ErrorMessage, { code: "UNAUTHENTICATED" });
     return;
   }
@@ -131,7 +131,7 @@ export class WebSocketRouter<TData> {
 
 ```typescript
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler by not calling next()
   }
@@ -145,8 +145,8 @@ router.on(LoginMessage, (ctx) => {
 
 router.on(SecureMessage, (ctx) => {
   // Auth already checked by middleware
-  // ctx.ws.data.userId is guaranteed to exist
-  console.log(`Secure message from ${ctx.ws.data.userId}`);
+  // ctx.data.userId is guaranteed to exist
+  console.log(`Secure message from ${ctx.data.userId}`);
 });
 ```
 
@@ -176,7 +176,7 @@ router.use((ctx, next) => {
 const rateLimiter = new Map<string, { count: number; resetAt: number }>();
 
 router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.ws.data?.userId || "anon";
+  const userId = ctx.data?.userId || "anon";
   const now = Date.now();
   const state = rateLimiter.get(userId);
 
@@ -217,7 +217,7 @@ router.use(QueryMessage, (ctx, next) => {
 });
 
 router.on(QueryMessage, (ctx) => {
-  const query = (ctx.ws.data as any)?.query; // Pre-validated by middleware
+  const query = (ctx.data as any)?.query; // Pre-validated by middleware
   const results = database.search(query);
   ctx.send(QueryResultsMessage, { results });
 });
@@ -280,7 +280,7 @@ router.use((ctx, next) => {
 
 ```typescript
 router.use(async (ctx, next) => {
-  const allowed = await checkPermission(ctx.ws.data?.userId);
+  const allowed = await checkPermission(ctx.data?.userId);
   if (!allowed) {
     ctx.error("PERMISSION_DENIED", "Access denied");
     return;
@@ -304,7 +304,7 @@ type Middleware<TData> = (
 
 ### Modifying Context
 
-Middleware can modify `ctx.ws.data` for handlers to access:
+Middleware can modify `ctx.data` for handlers to access:
 
 ```typescript
 router.use((ctx, next) => {
@@ -316,7 +316,7 @@ router.use((ctx, next) => {
 });
 
 router.on(SomeMessage, (ctx) => {
-  const elapsed = Date.now() - (ctx.ws.data as any).startedAt;
+  const elapsed = Date.now() - (ctx.data as any).startedAt;
   console.log(`Handler took ${elapsed}ms`);
 });
 ```
@@ -328,7 +328,7 @@ router.on(SomeMessage, (ctx) => {
 ```typescript
 router.use((ctx, next) => {
   try {
-    const userId = JSON.parse(ctx.ws.data?.rawUserId);
+    const userId = JSON.parse(ctx.data?.rawUserId);
     ctx.assignData({ userId });
   } catch (err) {
     ctx.error("INVALID_ARGUMENT", "Invalid user ID format");
@@ -343,7 +343,7 @@ router.use((ctx, next) => {
 ```typescript
 router.use(async (ctx, next) => {
   try {
-    const allowed = await checkPermission(ctx.ws.data?.userId);
+    const allowed = await checkPermission(ctx.data?.userId);
     if (!allowed) {
       ctx.error("PERMISSION_DENIED", "Access denied");
       return;
@@ -424,7 +424,7 @@ Wrap handlers in middleware:
 
 ```typescript
 const withAuth = (handler) => (ctx) => {
-  if (!ctx.ws.data?.userId) {
+  if (!ctx.data?.userId) {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }

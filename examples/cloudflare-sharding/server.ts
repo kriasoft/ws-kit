@@ -40,7 +40,7 @@ const router = createRouter<ConnectionData>();
 // Join room: subscribe to scoped channel
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data?.userId || "anonymous";
+  const userId = ctx.data?.userId || "anonymous";
 
   // Subscribe to room topic (broadcasts only within this DO instance)
   await ctx.topics.subscribe(`room:${roomId}`);
@@ -56,11 +56,11 @@ router.on(JoinRoom, async (ctx) => {
 
 // Send message: broadcast to room subscribers
 router.on(RoomMessage, (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
-  const userId = ctx.ws.data?.userId || "anonymous";
+  const roomId = ctx.data?.roomId;
+  const userId = ctx.data?.userId || "anonymous";
 
   if (!roomId) {
-    ctx.error("NOT_FOUND", "Not in a room");
+    ctx.send(ErrorMessage, { code: "NOT_FOUND", message: "Not in a room" });
     return;
   }
 
@@ -73,7 +73,7 @@ router.on(RoomMessage, (ctx) => {
 
 // Leave room: cleanup subscription
 router.on(LeaveRoom, async (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
+  const roomId = ctx.data?.roomId;
   if (roomId) {
     await ctx.topics.unsubscribe(`room:${roomId}`);
   }

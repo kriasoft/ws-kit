@@ -7,7 +7,7 @@
  * These tests verify that:
  * 1. Global middleware has access to all message types
  * 2. Per-route middleware is correctly typed for specific message schemas
- * 3. Middleware can modify ctx.ws.data with type safety
+ * 3. Middleware can modify ctx.data with type safety via ctx.assignData()
  * 4. router composition with merge preserves message union types
  * 5. Composed routers maintain proper type intersection
  *
@@ -42,7 +42,7 @@ describe("Global middleware typing", () => {
     expectTypeOf(middleware).toBeFunction();
   });
 
-  it("should allow modifying ws.data in global middleware", () => {
+  it("should allow modifying ctx.data in global middleware", () => {
     interface AppData {
       userId?: string;
       roles?: string[];
@@ -52,12 +52,12 @@ describe("Global middleware typing", () => {
     type GlobalMiddleware = Middleware<AppData>;
 
     const authMiddleware: GlobalMiddleware = (ctx, next) => {
-      // Should be able to modify ws.data
-      if (!ctx.ws.data.userId) {
-        ctx.ws.data.isAuthenticated = false;
+      // Should be able to modify ctx.data via assignData
+      if (!ctx.data.userId) {
+        ctx.assignData({ isAuthenticated: false });
         return;
       }
-      ctx.ws.data.isAuthenticated = true;
+      ctx.assignData({ isAuthenticated: true });
       return next();
     };
 
@@ -103,8 +103,10 @@ describe("Per-route middleware typing", () => {
 
     // Per-route middleware for specific message can still modify generic data
     const requestTracker: RequestMiddleware = (ctx, next) => {
-      ctx.ws.data.requestId = ctx.meta?.correlationId || "unknown";
-      ctx.ws.data.startTime = Date.now();
+      ctx.assignData({
+        requestId: ctx.meta?.correlationId || "unknown",
+        startTime: Date.now(),
+      });
       return next();
     };
 
@@ -129,7 +131,7 @@ describe("Per-route middleware typing", () => {
 
     const requireAdmin: AuthorizationMiddleware = (ctx, next) => {
       const hasAdminPermission =
-        ctx.ws.data.user?.permissions.includes("admin") ?? false;
+        ctx.data.user?.permissions.includes("admin") ?? false;
 
       if (!hasAdminPermission) {
         ctx.error("PERMISSION_DENIED", "Admin access required");
@@ -158,13 +160,13 @@ describe("Middleware chain typing", () => {
     type AuthMiddleware = Middleware<ChainedAppData>;
 
     const authenticate: AuthMiddleware = (ctx, next) => {
-      ctx.ws.data.isAuthenticated = true;
+      ctx.assignData({ isAuthenticated: true });
       return next();
     };
 
     const authorize: AuthMiddleware = (ctx, next) => {
-      if (ctx.ws.data.isAuthenticated) {
-        ctx.ws.data.isAuthorized = true;
+      if (ctx.data.isAuthenticated) {
+        ctx.assignData({ isAuthorized: true });
       }
       return next();
     };
@@ -249,12 +251,12 @@ describe("Router composition preserves message union types", () => {
     type Router2Middleware = Middleware<SharedAppData>;
 
     const router1Auth: Router1Middleware = (ctx, next) => {
-      expectTypeOf(ctx.ws.data.userId).toBeString();
+      expectTypeOf(ctx.data.userId).toBeString();
       return next();
     };
 
     const router2Auth: Router2Middleware = (ctx, next) => {
-      expectTypeOf(ctx.ws.data.sessionId).toBeString();
+      expectTypeOf(ctx.data.sessionId).toBeString();
       return next();
     };
 
@@ -336,22 +338,22 @@ describe("Context modification with types", () => {
     type ProgressMiddleware = Middleware<ProgressiveData>;
 
     const step1: ProgressMiddleware = (ctx, next) => {
-      ctx.ws.data.step1 = "done";
-      expectTypeOf(ctx.ws.data.step1).toEqualTypeOf<string | undefined>();
+      ctx.assignData({ step1: "done" });
+      expectTypeOf(ctx.data.step1).toEqualTypeOf<string | undefined>();
       return next();
     };
 
     const step2: ProgressMiddleware = (ctx, next) => {
       // Previous step may have set step1
-      const prev = ctx.ws.data.step1;
+      const prev = ctx.data.step1;
       expectTypeOf(prev).toEqualTypeOf<string | undefined>();
 
-      ctx.ws.data.step2 = 42;
+      ctx.assignData({ step2: 42 });
       return next();
     };
 
     const step3: ProgressMiddleware = (ctx, next) => {
-      ctx.ws.data.step3 = true;
+      ctx.assignData({ step3: true });
       return next();
     };
 
@@ -370,11 +372,11 @@ describe("Context modification with types", () => {
     type ConditionalMiddleware = Middleware<ConditionalData>;
 
     const accessControl: ConditionalMiddleware = (ctx, next) => {
-      if (ctx.ws.data.requiresAuth && !ctx.ws.data.isAdmin) {
-        ctx.ws.data.canAccess = false;
+      if (ctx.data.requiresAuth && !ctx.data.isAdmin) {
+        ctx.assignData({ canAccess: false });
         return; // Skip handler
       }
-      ctx.ws.data.canAccess = true;
+      ctx.assignData({ canAccess: true });
       return next();
     };
 

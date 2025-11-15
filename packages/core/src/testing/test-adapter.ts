@@ -8,7 +8,11 @@
 
 import type { ConnectionData } from "../context/base-context";
 import type { RouterImpl } from "../internal";
-import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
+import type {
+  AdapterWebSocket,
+  PlatformAdapter,
+  ServerWebSocket,
+} from "../ws/platform-adapter";
 import { TestWebSocket, type ConnectionState } from "./test-websocket";
 import type { OutgoingFrame } from "./types";
 

@@ -187,7 +187,7 @@ Access in handlers:
 
 ```typescript
 router.on(SomeSchema, (ctx) => {
-  const { clientId, connectedAt } = ctx.ws.data;
+  const { clientId, connectedAt } = ctx.data;
   // Use clientId for logging, userId for auth, etc.
 });
 ```
@@ -259,7 +259,7 @@ Called when a WebSocket connection is established:
 
 ```typescript
 router.onOpen(async (ctx) => {
-  const { clientId } = ctx.ws.data;
+  const { clientId } = ctx.data;
   console.log(`[${clientId}] Connected`);
 
   // Subscribe to channels
@@ -276,7 +276,7 @@ Called on the first message to authenticate the connection:
 
 ```typescript
 router.onAuth(async (ctx) => {
-  const token = ctx.ws.data.token; // From custom auth
+  const token = ctx.data.token; // From custom auth
   if (!token) return false; // Close connection
 
   // Verify token...
@@ -291,7 +291,7 @@ Called for each message matching a schema:
 ```typescript
 router.on(LoginSchema, async (ctx) => {
   // ctx.payload has type-safe data
-  // ctx.ws.data has connection metadata
+  // ctx.data has connection metadata
   // ctx.send() to reply with messages
 
   const { username, password } = ctx.payload;
@@ -312,7 +312,7 @@ Called when the connection closes:
 
 ```typescript
 router.onClose(async (ctx) => {
-  const { clientId, userId } = ctx.ws.data;
+  const { clientId, userId } = ctx.data;
   console.log(`[${clientId}] Disconnected (${ctx.code}: ${ctx.reason})`);
 
   // Clean up: remove from rooms, notify others, etc.
@@ -325,7 +325,7 @@ Called when an error occurs:
 
 ```typescript
 router.onError((error, ctx) => {
-  console.error(`[${ctx?.ws.data.clientId}] Error:`, error.message);
+  console.error(`[${ctx?.data.clientId}] Error:`, error.message);
 });
 ```
 
@@ -358,7 +358,7 @@ const rooms = new Map<string, Set<string>>();
 
 router.on(JoinRoomMessage, async (ctx) => {
   const { room } = ctx.payload;
-  const { clientId } = ctx.ws.data;
+  const { clientId } = ctx.data;
 
   // Subscribe to room
   await ctx.topics.subscribe(`room:${room}`);
@@ -374,8 +374,8 @@ router.on(JoinRoomMessage, async (ctx) => {
 
 router.on(SendMessageMessage, async (ctx) => {
   const { text } = ctx.payload;
-  const { clientId } = ctx.ws.data;
-  const room = (ctx.ws.data as any).room || "general"; // Set during JOIN
+  const { clientId } = ctx.data;
+  const room = (ctx.data as any).room || "general"; // Set during JOIN
 
   // Broadcast to all in room using schema
   await router.publish(`room:${room}`, BroadcastMessage, {
@@ -385,8 +385,8 @@ router.on(SendMessageMessage, async (ctx) => {
 });
 
 router.onClose((ctx) => {
-  const { clientId } = ctx.ws.data;
-  const room = (ctx.ws.data as any).room;
+  const { clientId } = ctx.data;
+  const room = (ctx.data as any).room;
 
   if (room && rooms.has(room)) {
     rooms.get(room)!.delete(clientId);
@@ -461,9 +461,9 @@ const router = createRouter<CustomData>({
   platform: createBunAdapter(),
 });
 
-// Handler context has typed ws.data
+// Handler context has typed ctx.data
 router.on(SomeSchema, (ctx) => {
-  const role = ctx.ws.data.role; // "admin" | "user"
+  const role = ctx.data.role; // "admin" | "user"
 });
 ```
 

@@ -35,7 +35,7 @@ const router = createRouter()
       hooks: {
         normalizeTopic: (topic) => topic.toLowerCase(),
         authorize: async (action, topic, ctx) => {
-          if (action === "subscribe" && !ctx.ws.data?.userId) {
+          if (action === "subscribe" && !ctx.data?.userId) {
             throw new Error("Unauthorized");
           }
         },

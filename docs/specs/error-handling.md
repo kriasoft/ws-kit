@@ -318,8 +318,8 @@ Use `retryAfterMs` to provide clients with deterministic retry timing:
 ```typescript
 router.rpc(QueryData, async (ctx) => {
   // Rate limit allows retry after cooldown
-  if (isRateLimited(ctx.ws.data.userId)) {
-    const retryMs = getRetryDelay(ctx.ws.data.userId);
+  if (isRateLimited(ctx.data.userId)) {
+    const retryMs = getRetryDelay(ctx.data.userId);
     ctx.error("RESOURCE_EXHAUSTED", "Rate limited, please retry", undefined, {
       retryable: true,
       retryAfterMs: retryMs, // e.g., 1250
@@ -337,7 +337,7 @@ Use `retryAfterMs: null` to signal that the operation cannot be retried under th
 ```typescript
 router.rpc(ExpensiveQuery, async (ctx) => {
   const cost = calculateOperationCost(ctx.payload);
-  const capacity = getRateLimitCapacity(ctx.ws.data.userId);
+  const capacity = getRateLimitCapacity(ctx.data.userId);
 
   // Operation cost exceeds capacity; impossible under policy
   if (cost > capacity) {
@@ -409,7 +409,7 @@ Per-message authentication checks send `UNAUTHENTICATED` errors and keep the con
 ```typescript
 // Default: non-fatal, connection stays open
 router.use(ProtectedMessage, (ctx, next) => {
-  if (!ctx.ws.data?.userId) {
+  if (!ctx.data?.userId) {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Connection stays open
   }
@@ -436,7 +436,7 @@ Most handlers should **not** close connections. The library automatically closes
 
 ```typescript
 router.use(SendMessage, (ctx, next) => {
-  if (isRateLimited(ctx.ws.data?.userId)) {
+  if (isRateLimited(ctx.data?.userId)) {
     // Send error message first
     ctx.error("RESOURCE_EXHAUSTED", "Too many requests");
 

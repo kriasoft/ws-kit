@@ -66,7 +66,7 @@ router.on(JoinRoom, async (ctx) => {
 
   // Broadcast to all room subscribers (type-safe!)
   await router.publish(ctx.payload.roomId, RoomUpdate, {
-    userId: ctx.ws.data.userId || "anonymous",
+    userId: ctx.data.userId || "anonymous",
     action: "joined",
     messageCount: 1,
   });
@@ -74,9 +74,9 @@ router.on(JoinRoom, async (ctx) => {
 
 // Handle messages with full type inference
 router.on(SendMessage, async (ctx) => {
-  const roomId = ctx.ws.data?.roomId;
+  const roomId = ctx.data?.roomId;
   await router.publish(roomId, RoomUpdate, {
-    userId: ctx.ws.data?.userId || "anonymous",
+    userId: ctx.data?.userId || "anonymous",
     action: "joined",
     messageCount: 2, // In real app, track actual count
   });

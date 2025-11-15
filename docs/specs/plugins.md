@@ -366,7 +366,7 @@ const router = createRouter().plugin(
     adapter: redisRateLimiter(redis),
     capacity: 1000,
     tokensPerSecond: 50,
-    key: (ctx) => `user:${ctx.ws.data.userId}`, // Per-user limit
+    key: (ctx) => `user:${ctx.data.userId}`, // Per-user limit
   }),
 );
 ```
@@ -375,13 +375,13 @@ const router = createRouter().plugin(
 
 ```typescript
 // Per-connection (default)
-key: (ctx) => ctx.ws.data.clientId;
+key: (ctx) => ctx.clientId;
 
 // Per-user
-key: (ctx) => `user:${ctx.ws.data.userId}`;
+key: (ctx) => `user:${ctx.data.userId}`;
 
 // Per-user-per-type
-key: (ctx) => `user:${ctx.ws.data.userId}:${ctx.type}`;
+key: (ctx) => `user:${ctx.data.userId}:${ctx.type}`;
 ```
 
 **Type Effects**:
@@ -772,14 +772,14 @@ const router = createRouter().plugin(withValidation()).plugin(withRpc());
    .plugin(withRateLimit({
      capacity: 100,
      tokensPerSecond: 5,
-     key: (ctx) => ctx.ws.data.apiKey,
+     key: (ctx) => ctx.data.apiKey,
    }))
 
    // Relaxed (authenticated user)
    .plugin(withRateLimit({
      capacity: 1000,
      tokensPerSecond: 50,
-     key: (ctx) => `user:${ctx.ws.data.userId}`,
+     key: (ctx) => `user:${ctx.data.userId}`,
    }))
    ```
 

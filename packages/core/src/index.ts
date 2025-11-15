@@ -80,7 +80,11 @@ export type {
 export { isPublishError } from "./core/types";
 
 // Platform adapter contract
-export type { PlatformAdapter, ServerWebSocket } from "./ws/platform-adapter";
+export type {
+  AdapterWebSocket,
+  PlatformAdapter,
+  ServerWebSocket,
+} from "./ws/platform-adapter";
 
 // Useful type utilities (capability-gated context types)
 export type {

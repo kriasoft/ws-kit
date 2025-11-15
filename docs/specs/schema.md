@@ -253,7 +253,9 @@ Handlers receive validated messages plus server-provided context:
 ```typescript
 // Handler context
 {
-  ws: ServerWebSocket<Data>,       // Connection with ws.data.clientId
+  ws: ServerWebSocket,              // Opaque transport (see ADR-033)
+  clientId: string,                 // UUID v7 connection identity
+  data: ConnectionData,             // Custom connection state (via module augmentation)
   type: "MESSAGE_TYPE",             // Message type literal
   meta: {                           // Validated client metadata
     correlationId?: string,
@@ -270,8 +272,8 @@ Handlers receive validated messages plus server-provided context:
 
 **Connection identity** (NOT in message `meta`):
 
-- `ctx.ws.data.clientId`: Generated during WebSocket upgrade (UUID v7)
-- Access in handlers via `ctx.ws.data.clientId` (always present, type-safe)
+- `ctx.clientId`: Generated during WebSocket upgrade (UUID v7)
+- Access in handlers via `ctx.clientId` (always present, type-safe)
 
 **Receive timestamp** (NOT in message `meta`):
 
@@ -300,7 +302,7 @@ This is the **canonical table** for timestamp usage across all specs. All other 
 
 **Reserved Server-Only Meta Keys**: {#Reserved-Server-Only-Meta-Keys}
 
-- `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
+- `clientId`: Connection identity (access via `ctx.clientId`)
 - `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
 These keys are stripped during normalization before validation (security boundary). Extended meta schemas MUST NOT define these keys (schema creation will throw an error). See docs/specs/validation.md#normalization-rules for complete implementation details.
@@ -309,7 +311,7 @@ These keys are stripped during normalization before validation (security boundar
 
 - Messages without payload MUST NOT include the `payload` key. Validators MUST reject messages with unexpected `payload` (strict mode).
 - Clients MAY omit `meta` entirely; router normalizes to `{}`.
-- `clientId` is connection state (`ctx.ws.data`), not message state (`ctx.meta`).
+- `clientId` is connection state (`ctx.data`), not message state (`ctx.meta`).
 
 ### Why Payload Is Not Optional
 
@@ -683,5 +685,5 @@ router.on(SomeMessage, (ctx) => {
 1. **Export-with-helpers pattern** — Use `message()` helper from `@ws-kit/zod` or `@ws-kit/valibot` (see ADR-007, docs/specs/rules.md#import-patterns)
 2. **Client-side validation** — Schemas MUST NOT require server-only fields (see docs/specs/rules.md#messaging)
 3. **Strict schemas** — Reject unknown keys at all levels (see docs/specs/schema.md#Strict-Schemas)
-4. **Connection identity** — Access via `ctx.ws.data.clientId`, not `ctx.meta` (see docs/specs/rules.md#state-layering)
+4. **Connection identity** — Access via `ctx.clientId`, not `ctx.meta` (see docs/specs/rules.md#state-layering)
 5. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see docs/specs/schema.md#Which-timestamp-to-use)

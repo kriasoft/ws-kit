@@ -93,7 +93,7 @@ const router = createRouter()
       adapter: redisRateLimiter(redis),
       capacity: 1000,
       tokensPerSecond: 50,
-      key: (ctx) => `user:${ctx.ws.data.userId}`,
+      key: (ctx) => `user:${ctx.data.userId}`,
     }),
   );
 
@@ -132,7 +132,7 @@ const router = createRouter()
       adapter: redisRateLimiter(redis),
       capacity: 1000,
       tokensPerSecond: 50,
-      key: (ctx) => ctx.ws.data.clientId,
+      key: (ctx) => ctx.clientId,
     }),
   );
 

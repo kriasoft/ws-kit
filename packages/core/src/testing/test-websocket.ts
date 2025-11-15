@@ -7,16 +7,16 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
-import type { ServerWebSocket } from "../ws/platform-adapter";
+import type { AdapterWebSocket } from "../ws/platform-adapter";
 import type { OutgoingFrame } from "./types";
 
 /**
- * In-memory ServerWebSocket that records all sent messages.
+ * In-memory AdapterWebSocket that records all sent messages.
  */
-export class TestWebSocket implements ServerWebSocket {
+export class TestWebSocket implements AdapterWebSocket {
   readonly clientId: string;
   readyState: "CONNECTING" | "OPEN" | "CLOSING" | "CLOSED" = "OPEN";
-  readonly initialData?: Record<string, unknown>;
+  initialData?: Record<string, unknown>;
   private sentMessages: OutgoingFrame[] = [];
   private sentRaw: (string | ArrayBuffer)[] = [];
 

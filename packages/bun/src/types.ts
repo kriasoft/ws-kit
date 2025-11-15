@@ -72,7 +72,12 @@ export type BunWebSocketData<T = unknown> = WebSocketData<T> & {
 /**
  * Type alias for Bun's ServerWebSocket for convenience.
  *
- * Maps to the core ServerWebSocket interface for type safety.
+ * This is a local type in @ws-kit/bun only and should not be imported elsewhere.
+ * The core ServerWebSocket interface is intentionally non-generic to stay platform-agnostic.
+ * Per-connection state lives in ctx.data (via module augmentation of ConnectionData).
+ *
+ * This type is useful for Bun-specific application code that needs typed access to
+ * the platform-specific ws.data, but the router only uses plain ServerWebSocket.
  */
 export type BunWebSocket<TData = unknown> = BunServerWebSocket<TData>;
 

@@ -157,14 +157,14 @@ describe("Valibot router composition with merge", () => {
 
       const authRouter = createRouter<AppData>();
       authRouter.on(AuthSchema, (ctx) => {
-        expectTypeOf(ctx.ws.data.userId).toEqualTypeOf<string | undefined>();
-        expectTypeOf(ctx.ws.data.roles).toEqualTypeOf<string[] | undefined>();
+        expectTypeOf(ctx.data.userId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.data.roles).toEqualTypeOf<string[] | undefined>();
       });
 
       const chatRouter = createRouter<AppData>();
       chatRouter.on(ChatSchema, (ctx) => {
-        expectTypeOf(ctx.ws.data.userId).toEqualTypeOf<string | undefined>();
-        expectTypeOf(ctx.ws.data.roles).toEqualTypeOf<string[] | undefined>();
+        expectTypeOf(ctx.data.userId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.data.roles).toEqualTypeOf<string[] | undefined>();
       });
 
       const mainRouter = createRouter<AppData>();
@@ -173,7 +173,7 @@ describe("Valibot router composition with merge", () => {
       // Main router handlers should have same AppData type
       const StatusSchema = message("STATUS");
       mainRouter.on(StatusSchema, (ctx) => {
-        expectTypeOf(ctx.ws.data).toMatchTypeOf<AppData>();
+        expectTypeOf(ctx.data).toMatchTypeOf<AppData>();
       });
     });
 
@@ -185,14 +185,14 @@ describe("Valibot router composition with merge", () => {
 
       const router1 = createRouter<SessionData>();
       router1.use((ctx, next) => {
-        ctx.ws.data.sessionId = "session-123";
+        ctx.assignData({ sessionId: "session-123" });
         return next();
       });
 
       const router2 = createRouter<SessionData>();
       router2.use((ctx, next) => {
-        if (ctx.ws.data.sessionId) {
-          ctx.ws.data.isValid = true;
+        if (ctx.data.sessionId) {
+          ctx.assignData({ isValid: true });
         }
         return next();
       });
@@ -201,8 +201,8 @@ describe("Valibot router composition with merge", () => {
       mainRouter.merge(router1).merge(router2);
 
       mainRouter.use((ctx, next) => {
-        expectTypeOf(ctx.ws.data.sessionId).toEqualTypeOf<string | undefined>();
-        expectTypeOf(ctx.ws.data.isValid).toEqualTypeOf<boolean | undefined>();
+        expectTypeOf(ctx.data.sessionId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.data.isValid).toEqualTypeOf<boolean | undefined>();
         return next();
       });
     });
@@ -401,22 +401,22 @@ describe("Valibot router composition with merge", () => {
       // Router 1: Tracking middleware + handler
       const queryRouter = createRouter<TrackingData>();
       queryRouter.use((ctx, next) => {
-        ctx.ws.data.requestId = Math.random().toString();
+        ctx.assignData({ requestId: Math.random().toString() });
         return next();
       });
       queryRouter.on(QuerySchema, (ctx) => {
-        expectTypeOf(ctx.ws.data.requestId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.data.requestId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.payload.sql).toBeString();
       });
 
       // Router 2: Logging middleware + different handler
       const resultRouter = createRouter<TrackingData>();
       resultRouter.use((ctx, next) => {
-        console.log(ctx.ws.data.requestId);
+        console.log(ctx.data.requestId);
         return next();
       });
       resultRouter.on(ResultSchema, (ctx) => {
-        expectTypeOf(ctx.ws.data.requestId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.data.requestId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.payload.rows).toBeNumber();
       });
 
@@ -427,7 +427,7 @@ describe("Valibot router composition with merge", () => {
       // Can use new handlers with inherited data type
       const NewSchema = message("NEW_QUERY", { sql: v.pipe(v.string()) });
       mainRouter.on(NewSchema, (ctx) => {
-        expectTypeOf(ctx.ws.data.requestId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(ctx.data.requestId).toEqualTypeOf<string | undefined>();
       });
     });
   });

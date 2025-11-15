@@ -187,7 +187,7 @@ export function isSubscribed(
 export function createTopics<
   TContext extends { clientId: string } = { clientId: string },
 >(
-  ws: ServerWebSocket<TContext>,
+  ws: ServerWebSocket & Record<string, unknown>,
   options?: {
     maxTopicsPerConnection?: number;
     validator?: TopicValidator;
@@ -235,7 +235,7 @@ export class OptimisticTopics<
 > implements Topics
 {
   private readonly subscriptions = new Set<string>();
-  private readonly ws: ServerWebSocket<TContext>;
+  private readonly ws: ServerWebSocket & Record<string, unknown>;
   private readonly maxTopicsPerConnection: number;
   private readonly customValidator: TopicValidator | undefined;
   private readonly inflight = new Map<string, Promise<void>>();
@@ -255,7 +255,7 @@ export class OptimisticTopics<
    * for context-aware authorization, normalization, and lifecycle tracking.
    */
   constructor(
-    ws: ServerWebSocket<TContext>,
+    ws: ServerWebSocket & Record<string, unknown>,
     maxTopicsPerConnection = Infinity,
     customValidator?: TopicValidator,
   ) {

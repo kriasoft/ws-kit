@@ -77,10 +77,10 @@ export default {
 
 ### Identity & Reserved Keys (Critical for Security)
 
-- **NEVER** access `clientId` via `ctx.meta.clientId` — server generates it; use `ctx.ws.data.clientId` instead → docs/specs/validation.md#normalization-rules
+- **NEVER** access `clientId` via `ctx.meta.clientId` — server generates it; use `ctx.clientId` instead → docs/specs/validation.md#normalization-rules
 - **NEVER** allow clients to set reserved keys (`clientId`, `receivedAt`) — routers strip them during normalization → docs/specs/validation.md#normalization-rules
 - **NEVER** trust client-provided `receivedAt` timestamps — use `ctx.receivedAt` for authoritative server time → docs/specs/schema.md#Which-timestamp-to-use
-- **ALWAYS** access identity via `ctx.ws.data.clientId` in handlers and middleware → docs/specs/router.md#Type-Safe-Sending
+- **ALWAYS** access identity via `ctx.clientId` in handlers and middleware → docs/specs/router.md#Type-Safe-Sending
 
 ---
 
@@ -102,10 +102,10 @@ export default {
 
 ### Connection & Context
 
-- **ALWAYS** access identity via `ctx.ws.data.clientId` → docs/specs/validation.md#Reserved-Meta-Keys
+- **ALWAYS** access identity via `ctx.clientId` → docs/specs/validation.md#Reserved-Meta-Keys
 - **ALWAYS** use `ctx.receivedAt` for server logic → docs/specs/schema.md#Which-timestamp-to-use
 - **ALWAYS** use `ctx.assignData(partial)` to merge connection data updates (write-partial pattern) → docs/specs/router.md#Modifying-Connection-Data
-- **NEVER** mutate `ctx.ws.data` directly; use `assignData()` → docs/specs/router.md#Modifying-Connection-Data
+- **NEVER** mutate `ctx.data` directly; use `assignData()` → docs/specs/router.md#Modifying-Connection-Data
 
 ### Type System
 
@@ -139,7 +139,7 @@ export default {
   - `onError(error, ctx)` — Centralized error handling
   - `onBroadcast(message, topic)` — Track broadcast events
 - **ALWAYS** unsubscribe in `onClose()` → docs/specs/pubsub.md#9.7-Room-Management
-- **ALWAYS** store topic IDs in `ctx.ws.data` → docs/specs/pubsub.md#9.7-Room-Management
+- **ALWAYS** store topic IDs in `ctx.data` → docs/specs/pubsub.md#9.7-Room-Management
 - **NEVER** throw in lifecycle hooks; errors are caught and logged → ADR-009
 
 ### Pub/Sub Operations
@@ -199,7 +199,7 @@ Accept these TypeScript violations for better DX:
 
 ## State Layering {#state-layering}
 
-### Connection State (`ctx.ws.data`)
+### Connection State (`ctx.data`)
 
 - `clientId`: Generated during upgrade (UUID v7), NOT in message `meta`
 - Custom session data (userId, roles, etc.)
@@ -220,7 +220,7 @@ Accept these TypeScript violations for better DX:
 
 **CANONICAL LIST** (see docs/specs/validation.md#normalization-rules for implementation):
 
-- `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
+- `clientId`: Connection identity (access via `ctx.clientId`)
 - `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
 **Enforcement:**
@@ -289,7 +289,7 @@ See docs/specs/client.md#Multiple-Handlers for client multi-handler semantics.
 
 - **Use `merge()`** for feature module composition
 - **Pass auth/session data during `upgrade()`**
-- **Store connection metadata in `ctx.ws.data`** for lifecycle cleanup
+- **Store connection metadata in `ctx.data`** for lifecycle cleanup
 
 ---
 

@@ -85,18 +85,18 @@ const router = createRouter<ConnectionData>();
 
 ```typescript
 router.on(SomeMessage, (ctx) => {
-  // ✅ ctx.ws.data is fully typed as ConnectionData
-  const userId = ctx.ws.data.userId; // string | undefined
-  const roles = ctx.ws.data.roles; // string[] | undefined
+  // ✅ ctx.data is fully typed as ConnectionData
+  const userId = ctx.data.userId; // string | undefined
+  const roles = ctx.data.roles; // string[] | undefined
 });
 
 router.onClose((ctx) => {
   // ✅ Still correctly typed
-  const userId = ctx.ws.data.userId; // string | undefined
+  const userId = ctx.data.userId; // string | undefined
 });
 ```
 
-This is a **TypeScript language limitation** (not a design shortcoming). The one-line generic annotation provides complete type safety throughout your application.
+The one-line generic annotation provides complete type safety throughout your application.
 
 ### Ambient ConnectionData (Optional: Large Applications)
 
@@ -264,7 +264,7 @@ Use **`router.rpc()`** (or message schemas with `response` field) for:
 // ✅ Event: fire-and-forget notification
 router.on(UserLoggedIn, (ctx) => {
   router.publish("notifications", NotificationMessage, {
-    text: `User ${ctx.ws.data?.userId} logged in`,
+    text: `User ${ctx.data?.userId} logged in`,
   });
 });
 
@@ -314,16 +314,17 @@ router.on<Schema extends MessageSchemaType>(
 
 ```typescript
 type MessageContext<Schema, Data> = {
-  ws: ServerWebSocket<Data>; // Connection (ws.data.clientId always present)
+  ws: ServerWebSocket; // Connection (opaque transport)
   type: Schema["shape"]["type"]["value"]; // Message type literal
   meta: z.infer<Schema["shape"]["meta"]>; // Validated client metadata
   payload: z.infer<Schema["shape"]["payload"]>; // Only if schema defines it
   receivedAt: number; // Server receive timestamp (Date.now())
+  data: Data; // Connection-specific data (type-safe)
 
   // All handlers
   send: SendFunction; // Type-safe send to current connection (1-to-1, fire-and-forget)
   error: ErrorFunction; // Type-safe error responses (see ADR-009)
-  assignData: AssignDataFunction; // Merge partial data into ctx.ws.data
+  assignData: AssignDataFunction; // Merge partial data into ctx.data
   topics: {
     subscribe: (topic: string) => Promise<void>; // Subscribe to a topic
     unsubscribe: (topic: string) => Promise<void>; // Unsubscribe from a topic
@@ -342,7 +343,8 @@ type MessageContext<Schema, Data> = {
 
 **Server-provided context fields**:
 
-- `ctx.ws.data.clientId`: Connection identity (UUID v7, generated during upgrade)
+- `ctx.clientId`: Connection identity (UUID v7, generated during upgrade) — available via module augmentation on ConnectionData
+- `ctx.data.*`: Custom connection state (module augmentation defines shape)
 - `ctx.receivedAt`: Server receive timestamp (milliseconds since epoch)
 - `ctx.deadline`: Derived from `meta.timeoutMs` (RPC only)
 - `ctx.isRpc`: True if message has response schema (see ADR-015)
@@ -399,7 +401,7 @@ type IngressContext<Data = unknown> = {
 
 - ❌ `ctx.payload` — not available (schema not validated yet)
 - ❌ `ctx.meta.correlationId` — only populated for RPC after routing
-- ✅ `ctx.type`, `ctx.ws.data`, `ctx.meta.receivedAt` — all available
+- ✅ `ctx.type`, `ctx.data`, `ctx.meta.receivedAt` — all available
 
 ## RPC Wire Format (Success and Error)
 
@@ -533,7 +535,7 @@ Middleware runs before handlers and can modify context or skip execution:
 // Global middleware (runs for all messages)
 router.use((ctx, next) => {
   // Runs before any handler
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
@@ -543,7 +545,7 @@ router.use((ctx, next) => {
 // Per-route middleware (runs only for specific message type)
 router.use(SendMessage, (ctx, next) => {
   // Rate limiting
-  if (isRateLimited(ctx.ws.data?.userId)) {
+  if (isRateLimited(ctx.data?.userId)) {
     ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return; // Skip handler
   }
@@ -587,7 +589,7 @@ graph TD
 ```typescript
 router.use(async (ctx, next) => {
   // Acquire lock before continuing
-  const lock = await acquireLock(ctx.ws.data?.userId);
+  const lock = await acquireLock(ctx.data?.userId);
   try {
     await next(); // Wait for handler to complete
     // Handle post-processing
@@ -599,7 +601,7 @@ router.use(async (ctx, next) => {
 
 **Context and Side Effects:**
 
-- **Context Mutation**: Middleware may mutate `ctx.ws.data` (via `ctx.assignData()`) and handlers see updates
+- **Context Mutation**: Middleware may mutate `ctx.data` (via `ctx.assignData()`) and handlers see updates
 - **Error Handling**: Middleware can call `ctx.error()` to reject (connection closes) or throw to trigger `onError` hook
 - **Same Context Fields**: Middleware sees the same context type and fields as handlers
 
@@ -624,7 +626,7 @@ const router = createRouter<ConnectionData>();
 
 // Global middleware: require authentication
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && !["LOGIN", "REGISTER"].includes(ctx.type)) {
+  if (!ctx.data?.userId && !["LOGIN", "REGISTER"].includes(ctx.type)) {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Handler is skipped
   }
@@ -633,7 +635,7 @@ router.use((ctx, next) => {
 
 // Per-route middleware: admin-only check for dangerous operations
 router.use(DeleteMessage, (ctx, next) => {
-  if (!ctx.ws.data?.roles?.includes("admin")) {
+  if (!ctx.data?.roles?.includes("admin")) {
     ctx.error("PERMISSION_DENIED", "Admin access required");
     return;
   }
@@ -650,18 +652,13 @@ router.on(DeleteMessage, (ctx) => {
 
 ```typescript
 router.onOpen(async (ctx) => {
-  // ctx: { ws, send, topics: { subscribe, unsubscribe } }
-  console.log("Client connected:", ctx.ws.data.clientId);
+  // ctx: { ws, send, topics: { subscribe, unsubscribe }, data, clientId }
+  console.log("Client connected:", ctx.clientId);
 });
 
 router.onClose(async (ctx) => {
-  // ctx: { ws, code, reason, send, topics: { subscribe, unsubscribe } }
-  console.log(
-    "Client disconnected:",
-    ctx.ws.data.clientId,
-    ctx.code,
-    ctx.reason,
-  );
+  // ctx: { ws, code, reason, send, topics: { subscribe, unsubscribe }, data, clientId }
+  console.log("Client disconnected:", ctx.clientId, ctx.code, ctx.reason);
 });
 ```
 
@@ -683,7 +680,8 @@ type WebSocketData<T> = {
 **Connection identity**:
 
 - `clientId` is generated during upgrade (UUID v7, time-ordered)
-- Accessible via `ctx.ws.data.clientId` in all handlers
+- Accessible via `ctx.clientId` in all handlers and lifecycle callbacks
+- May also be accessed via module augmentation: `ctx.data.clientId` if added to ConnectionData
 - NOT included in message `meta` (connection state, not message state)
 
 ### Route Composition
@@ -912,9 +910,9 @@ type ChatData = ConnectionData & { roomId?: string };
 const router = createRouter<ChatData>();
 
 router.on(SecureMessage, (ctx) => {
-  const userId = ctx.ws.data.userId; // ✅ Typed (string)
-  const roles = ctx.ws.data.roles; // ✅ Typed (string[])
-  const clientId = ctx.ws.data.clientId; // ✅ Always present (auto-added)
+  const userId = ctx.data.userId; // ✅ Typed (string)
+  const roles = ctx.data.roles; // ✅ Typed (string[])
+  const clientId = ctx.clientId; // ✅ Always present (auto-added)
   const receivedAt = ctx.receivedAt; // ✅ Server timestamp
 });
 
@@ -934,7 +932,7 @@ serve(router, {
 });
 ```
 
-**Note**: `clientId` is automatically generated and added to `ctx.ws.data` during WebSocket upgrade—you don't need to include it in your type definition.
+**Note**: `clientId` is automatically generated and available on all context objects during WebSocket lifetime—you don't need to include it in your ConnectionData type definition.
 
 ## Modifying Connection Data
 
@@ -952,14 +950,14 @@ const router = createRouter<ConnectionData>();
 
 router.on(LoginMessage, (ctx) => {
   const user = authenticate(ctx.payload);
-  // Merge new fields into ctx.ws.data
+  // Merge new fields into ctx.data
   ctx.assignData({ userId: user.id, roles: user.roles });
 });
 
 router.on(SecureMessage, (ctx) => {
   // Later handlers see the updated data
-  const userId = ctx.ws.data.userId; // ✅ Now available
-  const roles = ctx.ws.data.roles; // ✅ Now available
+  const userId = ctx.data.userId; // ✅ Now available
+  const roles = ctx.data.roles; // ✅ Now available
 });
 ```
 
@@ -1007,13 +1005,13 @@ serve(router, {
 
   onOpen(ctx) {
     // Called after connection is authenticated
-    console.log(`User ${ctx.ws.data?.userId} connected`);
+    console.log(`User ${ctx.data?.userId} connected`);
     ctx.send(WelcomeMessage, { greeting: "Welcome!" });
   },
 
   onClose(ctx) {
     // Called after connection closes
-    console.log(`User ${ctx.ws.data?.userId} disconnected (code: ${ctx.code})`);
+    console.log(`User ${ctx.data?.userId} disconnected (code: ${ctx.code})`);
   },
 
   onError(error, ctx) {
@@ -1205,7 +1203,7 @@ This is the **recommended approach** for all production deployments.
 
 > See docs/specs/rules.md for complete rules. Critical for routing:
 
-1. **Connection identity** — Access via `ctx.ws.data.clientId`, never `ctx.meta` (see docs/specs/rules.md#state-layering)
+1. **Connection identity** — Access via `ctx.clientId`, never `ctx.meta` (see docs/specs/rules.md#state-layering)
 2. **Server timestamp** — Use `ctx.receivedAt` for authoritative time (see docs/specs/schema.md#Which-timestamp-to-use)
 3. **Payload typing** — `ctx.payload` exists only when schema defines it (see ADR-001)
 4. **Type-safe errors** — Use `ctx.error()` with discriminated union error codes (see ADR-009 for design rationale)

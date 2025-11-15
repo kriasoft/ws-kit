@@ -181,7 +181,7 @@ const rooms = new Map<string, Set<string>>();
 const router = createRouter<AppData>();
 
 router.onOpen((ctx) => {
-  console.log(`Client ${ctx.ws.data.clientId} connected`);
+  console.log(`Client ${ctx.clientId} connected`);
   ctx.send(Welcome, { message: "Connected to chat server" });
 });
 
@@ -197,7 +197,7 @@ router.on(JoinRoom, async (ctx) => {
   }
 
   // Add user to room
-  rooms.get(roomId)!.add(ctx.ws.data.clientId);
+  rooms.get(roomId)!.add(ctx.clientId);
 
   // Subscribe to room broadcasts
   await ctx.topics.subscribe(roomId);
@@ -214,7 +214,7 @@ router.on(SendMessage, async (ctx) => {
 
   // Broadcast message to room
   await router.publish(roomId, NewMessage, {
-    username: ctx.ws.data.username || "Anonymous",
+    username: ctx.data.username || "Anonymous",
     text,
   });
 });
@@ -223,14 +223,14 @@ router.on(LeaveRoom, async (ctx) => {
   const { roomId } = ctx.payload;
 
   // Remove from room
-  rooms.get(roomId)?.delete(ctx.ws.data.clientId);
+  rooms.get(roomId)?.delete(ctx.clientId);
 
   // Unsubscribe
   await ctx.topics.unsubscribe(roomId);
 
   // Notify others
   await router.publish(roomId, UserLeft, {
-    username: ctx.ws.data.username || "Anonymous",
+    username: ctx.data.username || "Anonymous",
     userCount: rooms.get(roomId)?.size || 0,
   });
 });
@@ -238,8 +238,8 @@ router.on(LeaveRoom, async (ctx) => {
 router.onClose((ctx) => {
   // Clean up user from all rooms
   for (const [roomId, users] of rooms) {
-    if (users.has(ctx.ws.data.clientId)) {
-      users.delete(ctx.ws.data.clientId);
+    if (users.has(ctx.clientId)) {
+      users.delete(ctx.clientId);
     }
   }
 });
@@ -292,7 +292,7 @@ const router = createRouter<AppData>();
 
 // Global middleware: require authentication for protected messages
 router.use((ctx, next) => {
-  if (!ctx.ws.data.authenticated) {
+  if (!ctx.data.authenticated) {
     ctx.error("UNAUTHENTICATED", "Authentication required");
     return;
   }
@@ -301,7 +301,7 @@ router.use((ctx, next) => {
 
 // Per-route middleware: admin-only access
 router.use(AdminAction, (ctx, next) => {
-  if (!ctx.ws.data.roles.includes(Role.ADMIN)) {
+  if (!ctx.data.roles.includes(Role.ADMIN)) {
     ctx.error("PERMISSION_DENIED", "Admin access required");
     return;
   }
@@ -310,7 +310,7 @@ router.use(AdminAction, (ctx, next) => {
 
 router.on(AdminAction, async (ctx) => {
   const { action, targetUserId } = ctx.payload;
-  console.log(`Admin ${ctx.ws.data.userId} executed: ${action}`);
+  console.log(`Admin ${ctx.data.userId} executed: ${action}`);
 
   // Handle admin actions
   switch (action) {
@@ -382,7 +382,7 @@ const rateLimits = new Map<string, number[]>();
 const router = createRouter();
 
 router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.ws.data.clientId;
+  const userId = ctx.clientId;
   const now = Date.now();
   const windowStart = now - 60000; // 60 second window
 
@@ -542,15 +542,13 @@ const router = createRouter<AppData>({
 });
 
 router.onOpen((ctx) => {
-  console.log(`Client ${ctx.ws.data.clientId} connected`);
+  console.log(`Client ${ctx.clientId} connected`);
   ctx.assignData({ lastSeen: Date.now() });
 });
 
 router.onClose((ctx) => {
-  const duration = Date.now() - (ctx.ws.data.lastSeen || 0);
-  console.log(
-    `Client ${ctx.ws.data.clientId} disconnected after ${duration}ms`,
-  );
+  const duration = Date.now() - (ctx.data.lastSeen || 0);
+  console.log(`Client ${ctx.clientId} disconnected after ${duration}ms`);
 });
 
 serve(router, { port: 3000 });

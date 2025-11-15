@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
+import { type AdapterWebSocket } from "@ws-kit/core";
 import * as uuid from "uuid";
 import type {
   DurableObjectHandler,
@@ -121,22 +122,27 @@ export function createDurableObjectHandler<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (server as any).accept?.();
 
-        // Attach our data to the server WebSocket
+        // Wrap server WebSocket to conform to core interface
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const serverWs = server as any as ServerWebSocket<TContext>;
-        serverWs.data = wsData;
+        const serverWs = server as any as ServerWebSocket;
 
         connectionCount++;
 
         // Set up handlers
         try {
-          // Validate clientId was set during upgrade
-          if (!serverWs.data?.clientId) {
+          // Validate clientId was set
+          if (!wsData?.clientId) {
             console.error("[ws] WebSocket missing clientId in data, closing");
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (server as any).close(1008, "Missing client ID");
             return new Response("Missing client ID", { status: 400 });
           }
+
+          // Seed router's context with Cloudflare data via initialData
+          // (router will merge this into ctx.data during handleOpen)
+          const adapterWs = serverWs as AdapterWebSocket;
+          adapterWs.initialData = wsData;
+
           // Call router's open handler via the object to preserve 'this' binding.
           // This ensures routers with ordinary methods (not arrow functions) work correctly.
           await router.websocket.open(serverWs);
