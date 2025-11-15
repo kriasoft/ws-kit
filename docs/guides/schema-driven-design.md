@@ -163,7 +163,7 @@ Helpers are still appropriate for:
 // ✅ Helpers work great for middleware
 export function setupLogging(router: Router<AppData>) {
   router.use(async (ctx, next) => {
-    console.log(`[${ctx.type}] from ${ctx.ws.data.clientId}`);
+    console.log(`[${ctx.type}] from ${ctx.clientId}`);
     await next();
   });
 }
@@ -317,7 +317,7 @@ export async function handleJoinRoom(
 ) {
   const { roomId } = ctx.payload; // ✅ Inferred: string
   await ctx.topics.subscribe(`room:${roomId}`);
-  ctx.send(UserJoined, { roomId, userId: ctx.ws.data.clientId });
+  ctx.send(UserJoined, { roomId, userId: ctx.clientId });
 }
 
 export async function handleSendMessage(
@@ -326,7 +326,7 @@ export async function handleSendMessage(
   const { roomId, text } = ctx.payload; // ✅ Inferred: both strings
   await ctx.publish(`room:${roomId}`, NewMessage, {
     roomId,
-    userId: ctx.ws.data.clientId,
+    userId: ctx.clientId,
     text,
   });
 }
@@ -343,10 +343,10 @@ export function createChatRouter<TData extends WebSocketData>() {
     .on(JoinRoom, handleJoinRoom)
     .on(SendMessage, handleSendMessage)
     .onClose((ctx) => {
-      if (ctx.ws.data.roomId) {
-        void ctx.publish(`room:${ctx.ws.data.roomId}`, UserLeft, {
-          roomId: ctx.ws.data.roomId,
-          userId: ctx.ws.data.clientId,
+      if (ctx.data.roomId) {
+        void ctx.publish(`room:${ctx.data.roomId}`, UserLeft, {
+          roomId: ctx.data.roomId,
+          userId: ctx.clientId,
         });
       }
     });
@@ -393,7 +393,7 @@ export function createApp() {
     .merge(createChatRouter<AppData>())
     .merge(createPresenceRouter<AppData>())
     .onOpen((ctx) => {
-      console.log(`Connected: ${ctx.ws.data.userId}`);
+      console.log(`Connected: ${ctx.data.userId}`);
     });
 }
 ```

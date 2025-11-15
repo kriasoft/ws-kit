@@ -263,7 +263,7 @@ const members = new Set<string>();
 
 router.on(JoinRoom, async (ctx) => {
   const { room } = ctx.payload;
-  const { clientId } = ctx.ws.data;
+  const { clientId } = ctx.data;
 
   members.add(clientId!);
   ctx.assignData({ room });
@@ -276,8 +276,8 @@ router.on(JoinRoom, async (ctx) => {
 });
 
 router.on(SendMessage, async (ctx) => {
-  const room = ctx.ws.data.room || "general";
-  const { clientId } = ctx.ws.data;
+  const room = ctx.data.room || "general";
+  const { clientId } = ctx.data;
 
   // Broadcast message using schema
   await router.publish(`room:${room}`, RoomMessage, {

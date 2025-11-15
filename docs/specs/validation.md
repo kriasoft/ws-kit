@@ -234,16 +234,14 @@ try {
 
   // 2. Type check
   if (!parsedMessage.type || typeof parsedMessage.type !== "string") {
-    console.warn(`[${ws.data.clientId}] Invalid message format`);
+    console.warn(`Invalid message format`);
     return;
   }
 
   // 3. Handler lookup
   const handler = messageHandlers.get(parsedMessage.type);
   if (!handler) {
-    console.warn(
-      `[${ws.data.clientId}] No handler for type: ${parsedMessage.type}`,
-    );
+    console.warn(`No handler for type: ${parsedMessage.type}`);
     return;
   }
 
@@ -253,7 +251,7 @@ try {
   // 5. Schema validation (on normalized input)
   const result = validator.safeParse(handler.schema, normalized);
   if (!result.success) {
-    console.error(`[${ws.data.clientId}] Validation failed:`, result.error);
+    console.error(`Validation failed:`, result.error);
     return;
   }
 
@@ -263,7 +261,7 @@ try {
   // 7. Invoke handler
   handler.handler(ctx);
 } catch (error) {
-  console.error(`[${ws.data.clientId}] Handler error:`, error);
+  console.error(`Handler error:`, error);
 }
 ```
 
@@ -363,7 +361,7 @@ See docs/specs/schema.md#Strict-Schemas for implementation requirements.
 
 **Reserved Server-Only Meta Keys**:
 
-- `clientId`: Connection identity (access via `ctx.ws.data.clientId`)
+- `clientId`: Connection identity (access via `ctx.clientId`)
 - `receivedAt`: Server receive timestamp (access via `ctx.receivedAt`)
 
 **Rationale**:
@@ -396,12 +394,12 @@ function buildContext<T>(
 
 **Server-provided context fields**:
 
-- `ctx.ws.data.clientId`: Connection identity (UUID v7, set during upgrade)
+- `ctx.clientId`: Connection identity (UUID v7, set during upgrade)
 - `ctx.receivedAt`: Server receive timestamp (milliseconds since epoch)
 
 **Why not inject into `meta`**:
 
-- `clientId` is connection state, not message state (already in `ctx.ws.data`)
+- `clientId` is connection state, not message state (already in `ctx.data`)
 - `receivedAt` is server ingress time; separate from optional `ctx.meta.timestamp` (producer time)
 - Keeps message schema clean and client-side validatable
 

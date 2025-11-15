@@ -291,8 +291,8 @@ Define custom logic for other isolation strategies:
 const limiter = rateLimit({
   limiter,
   key: (ctx) => {
-    const userId = ctx.ws.data?.userId;
-    const tier = ctx.ws.data?.tier ?? "free";
+    const userId = ctx.data?.userId;
+    const tier = ctx.data?.tier ?? "free";
     return `rl:${tier}:${userId}:${ctx.type}`;
   },
 });
@@ -305,7 +305,7 @@ const limiter = rateLimit({
 - `ctx.type` — Message type
 - `ctx.id` — Connection ID
 - `ctx.ip` — Client IP (empty at middleware layer; use router integration)
-- `ctx.ws.data` — Connection data from authenticate()
+- `ctx.data` — Connection data from authenticate()
 - `ctx.meta.receivedAt` — Server timestamp
 
 **Unsafe fields** (not available before schema validation):
@@ -359,7 +359,7 @@ const premiumLimiter = rateLimit({
 
 // Route-specific middleware selection
 router.use((ctx, next) => {
-  if (ctx.ws.data?.isPremium) {
+  if (ctx.data?.isPremium) {
     return premiumLimiter(ctx, next);
   }
   return freeLimiter(ctx, next);
@@ -566,7 +566,7 @@ const proLimiter = rateLimit({
 });
 
 router.use((ctx, next) => {
-  const tier = ctx.ws.data?.tier ?? "free";
+  const tier = ctx.data?.tier ?? "free";
 
   if (tier === "pro") {
     return proLimiter(ctx, next);

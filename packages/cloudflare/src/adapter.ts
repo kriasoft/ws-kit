@@ -53,10 +53,12 @@ export function createDurableObjectAdapter(): PlatformAdapter {
  */
 export function toDurableObjectServerWebSocket<TData = unknown>(
   ws: unknown,
-): ServerWebSocket<TData> {
+): ServerWebSocket {
   // Verify the interface at compile time
   // At runtime, this is a no-op—we just return the WebSocket as-is
-  return ws as ServerWebSocket<TData>;
+  // Note: The generic TData parameter is only for source compatibility.
+  // Core's ServerWebSocket is intentionally non-generic (per ADR-033).
+  return ws as ServerWebSocket;
 }
 
 /**
@@ -67,7 +69,7 @@ export function toDurableObjectServerWebSocket<TData = unknown>(
  */
 export function isDurableObjectServerWebSocket<TData = unknown>(
   ws: unknown,
-): ws is ServerWebSocket<TData> {
+): ws is ServerWebSocket {
   if (!ws || typeof ws !== "object") return false;
 
   const socket = ws as Record<string, unknown>;

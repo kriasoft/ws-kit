@@ -92,10 +92,13 @@ class DeltaSyncServer {
 
     router.on(UpdateMessage, async (ctx) => {
       const { patch, clientReqId } = ctx.payload;
-      const participantId = ctx.ws.data?.participantId as string;
+      const participantId = ctx.data?.participantId as string;
 
       if (!participantId) {
-        ctx.error("UNAUTHENTICATED", "No participant ID");
+        ctx.send(ErrorMessage, {
+          code: "UNAUTHENTICATED",
+          message: "No participant ID",
+        });
         return;
       }
 
@@ -111,7 +114,7 @@ class DeltaSyncServer {
     });
 
     router.on(LeaveMessage, async (ctx) => {
-      const participantId = ctx.ws.data?.participantId as string;
+      const participantId = ctx.data?.participantId as string;
 
       if (!participantId) return;
 
@@ -126,7 +129,7 @@ class DeltaSyncServer {
 
     // Heartbeat to detect stale connections
     router.on(message("HEARTBEAT"), async (ctx) => {
-      const participantId = ctx.ws.data?.participantId as string | undefined;
+      const participantId = ctx.data?.participantId as string | undefined;
       if (participantId) {
         const client = this.clients.get(participantId);
         if (client) {
@@ -137,13 +140,13 @@ class DeltaSyncServer {
 
     // Setup connection lifecycle
     router.onOpen((ctx) => {
-      console.log(`[OPEN] ${ctx.ws.data?.clientId}`);
+      console.log(`[OPEN] ${ctx.data?.clientId}`);
       // Will join when client sends JOIN message
     });
 
     router.onClose((ctx) => {
       // Clean up on disconnect
-      const participantId = ctx.ws.data?.participantId as string;
+      const participantId = ctx.data?.participantId as string;
       if (participantId) {
         console.log(`[CLOSE] ${participantId}`);
         this.clients.delete(participantId);

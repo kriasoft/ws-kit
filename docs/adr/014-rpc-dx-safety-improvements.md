@@ -114,8 +114,8 @@ const hash = crypto
   .digest("hex");
 
 const key = idempotencyKey({
-  tenant: ctx.ws.data?.tenantId,
-  user: ctx.ws.data?.userId,
+  tenant: ctx.data?.tenantId,
+  user: ctx.data?.userId,
   type: ctx.type,
   hash,
 });

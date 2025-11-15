@@ -11,7 +11,7 @@ Router needs a method name for partial connection data updates in handlers and m
 **Reasoning:**
 
 - Aligns with `Object.assign()` — standard JavaScript pattern all developers know
-- Implementation uses `Object.assign(ctx.ws.data, partial)` internally, so name matches reality
+- Implementation uses `Object.assign(ctx.data, partial)` internally, so name matches reality
 - No semantic confusion with HTTP PATCH (RFC 6902 uses operations array, not simple object merge)
 - Clearly indicates partial updates are supported (unlike "set" which implies full replacement)
 - Natural fit with TypeScript's `Partial<T>` type signature

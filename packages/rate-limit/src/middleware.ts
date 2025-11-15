@@ -41,8 +41,8 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    * @example
    * // Fair per-user per-message-type isolation (works at middleware layer)
    * key: (ctx) => {
-   *   const tenant = ctx.ws.data?.tenantId ?? "public";
-   *   const user = ctx.ws.data?.userId ?? "anon";
+   *   const tenant = ctx.data?.tenantId ?? "public";
+   *   const user = ctx.data?.userId ?? "anon";
    *   return `rl:${tenant}:${user}:${ctx.type}`;
    * }
    */
@@ -63,12 +63,12 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    * @example
    * // Differentiate by user tier (with separate limiters per tier)
    * cost: (ctx) => {
-   *   const tier = ctx.ws.data?.tier ?? "free";
+   *   const tier = ctx.data?.tier ?? "free";
    *   return { free: 2, basic: 1, pro: 1 }[tier];
    * }
    *
    * ❌ NOT ALLOWED: Non-integer or non-positive
-   * cost: (ctx) => ctx.ws.data?.isPremium ? 0.5 : 1  // ERROR
+   * cost: (ctx) => ctx.data?.isPremium ? 0.5 : 1  // ERROR
    * cost: (ctx) => -1  // ERROR
    */
   cost?: (ctx: IngressContext<TData>) => number;
@@ -136,7 +136,7 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
       type: ctx.type,
       id: ctx.meta.clientId,
       ip: "", // Not available: IP is set during socket setup, not message processing
-      ws: { data: ctx.ws.data },
+      ws: { data: ctx.data as TData }, // Connection data (from ctx.data, not ctx.ws)
       meta: { receivedAt: ctx.receivedAt },
     };
 

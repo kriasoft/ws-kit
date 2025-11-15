@@ -37,8 +37,8 @@ authRouter.on(LoginMessage, (ctx) => {
 // Chat router
 const chatRouter = createRouter<ConnectionData>();
 chatRouter.on(SendMessageMessage, (ctx) => {
-  const userId = ctx.ws.data?.userId;
-  const roomId = "general"; // or from ctx.ws.data?.roomId
+  const userId = ctx.data?.userId;
+  const roomId = "general"; // or from ctx.data?.roomId
   console.log(`Message from ${userId}: ${ctx.payload.text}`);
 
   // Broadcast to topic subscribers (use ctx.publish for convenience)
@@ -70,7 +70,7 @@ const router = createRouter<ConnectionData>();
 
 // Global middleware: authentication check
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
@@ -84,7 +84,7 @@ const RateLimitMessage = message("RATE_LIMIT_MESSAGE", {
 });
 
 router.use(RateLimitMessage, (ctx, next) => {
-  const userId = ctx.ws.data?.userId || "anon";
+  const userId = ctx.data?.userId || "anon";
   const count = (rateLimiter.get(userId) || 0) + 1;
 
   if (count > 10) {
@@ -97,7 +97,7 @@ router.use(RateLimitMessage, (ctx, next) => {
 });
 
 router.on(RateLimitMessage, (ctx) => {
-  console.log(`Message from ${ctx.ws.data?.userId}: ${ctx.payload.text}`);
+  console.log(`Message from ${ctx.data?.userId}: ${ctx.payload.text}`);
 });
 ```
 
@@ -119,7 +119,7 @@ router.use((ctx, next) => {
   // ctx.type is available ("LOGIN", "QUERY", etc.)
   if (ctx.type === "SENSITIVE_OP") {
     // Require authentication for sensitive operations
-    if (!ctx.ws.data?.userId) {
+    if (!ctx.data?.userId) {
       ctx.error("UNAUTHENTICATED", "Authentication required");
       return;
     }
@@ -315,10 +315,10 @@ Now throughout your app, omit the generic type:
 const router = createRouter();
 
 router.on(SecureMessage, (ctx) => {
-  // ✅ ctx.ws.data is properly typed
-  const userId = ctx.ws.data?.userId; // string | undefined
-  const email = ctx.ws.data?.email; // string | undefined
-  const roles = ctx.ws.data?.roles; // string[] | undefined
+  // ✅ ctx.data is properly typed
+  const userId = ctx.data?.userId; // string | undefined
+  const email = ctx.data?.email; // string | undefined
+  const roles = ctx.data?.roles; // string[] | undefined
 });
 ```
 
@@ -445,7 +445,7 @@ const router = createRouter<AppData>();
 
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data?.userId;
+  const userId = ctx.data?.userId;
 
   // Store room ID and subscribe to topic
   ctx.assignData({ roomId });
@@ -668,7 +668,7 @@ Always verify authentication early in middleware before processing untrusted dat
 router.use((ctx, next) => {
   // Reject unauthenticated requests for sensitive message types
   const isSensitive = ["DELETE_ACCOUNT", "TRANSFER_FUNDS"].includes(ctx.type);
-  if (isSensitive && !ctx.ws.data?.userId) {
+  if (isSensitive && !ctx.data?.userId) {
     ctx.error("UNAUTHENTICATED", "Authentication required");
     return;
   }
@@ -851,7 +851,7 @@ Implement per-client or per-user rate limits using middleware:
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
 
 router.use((ctx, next) => {
-  const key = ctx.ws.data?.userId || ctx.ws.clientId;
+  const key = ctx.data?.userId || ctx.ws.clientId;
   const now = Date.now();
   const limit = rateLimits.get(key);
 

@@ -277,14 +277,14 @@ const router = createRouter(); // ✅ Uses ConnectionData automatically
 const authRouter = createRouter(); // ✅ Same type
 
 router.use((ctx, next) => {
-  // ✅ ctx.ws.data has merged ConnectionData type
-  const userId = ctx.ws.data?.userId; // string | undefined
+  // ✅ ctx.data has merged ConnectionData type
+  const userId = ctx.data?.userId; // string | undefined
   return next();
 });
 
 router.on(SecureMessage, (ctx) => {
   // ✅ Full type safety without explicit <AppData> generic
-  const username = ctx.ws.data?.username; // string | undefined
+  const username = ctx.data?.username; // string | undefined
 });
 ```
 

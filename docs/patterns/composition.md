@@ -53,7 +53,7 @@ export async function handleJoinRoom(
   ctx.assignData({ roomId });
   ctx.send(NewMessage, {
     roomId,
-    userId: ctx.ws.data.clientId,
+    userId: ctx.clientId,
     text: "Joined room",
     timestamp: Date.now(),
   });
@@ -65,7 +65,7 @@ export async function handleSendMessage(
   const { roomId, text } = ctx.payload; // ✅ Fully typed
   await ctx.publish(`room:${roomId}`, NewMessage, {
     roomId,
-    userId: ctx.ws.data.clientId,
+    userId: ctx.clientId,
     text,
     timestamp: Date.now(),
   });
@@ -80,11 +80,11 @@ export function createChatRouter<TData extends ChatData>() {
     .on(JoinRoom, handleJoinRoom)
     .on(SendMessage, handleSendMessage)
     .onClose((ctx) => {
-      const roomId = ctx.ws.data.roomId as string | undefined;
+      const roomId = ctx.data.roomId as string | undefined;
       if (roomId) {
         void ctx.publish(`room:${roomId}`, NewMessage, {
           roomId,
-          userId: ctx.ws.data.clientId,
+          userId: ctx.clientId,
           text: "Left room",
           timestamp: Date.now(),
         });
@@ -112,17 +112,17 @@ export function createAppRouter() {
   return createRouter<AppData>()
     .use(async (ctx, next) => {
       // Global middleware: auth, logging, etc.
-      console.log(`[${ctx.type}] from ${ctx.ws.data.clientId}`);
+      console.log(`[${ctx.type}] from ${ctx.clientId}`);
       await next();
     })
     .merge(createChatRouter<AppData>())
     .merge(createPresenceRouter<AppData>())
     .merge(createNotificationsRouter<AppData>())
     .onOpen((ctx) => {
-      console.log(`Client connected: ${ctx.ws.data.clientId}`);
+      console.log(`Client connected: ${ctx.clientId}`);
     })
     .onClose((ctx) => {
-      console.log(`Client disconnected: ${ctx.ws.data.clientId}`);
+      console.log(`Client disconnected: ${ctx.clientId}`);
     });
 }
 
@@ -185,7 +185,7 @@ export function createAdminRouter<TData>() {
   return createRouter<TData>()
     .use(async (ctx, next) => {
       // Admin auth check
-      if (ctx.ws.data.role !== "admin") {
+      if (ctx.data.role !== "admin") {
         return ctx.error("PERMISSION_DENIED", "Admin only");
       }
       await next();

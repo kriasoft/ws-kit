@@ -40,8 +40,8 @@ export interface RateLimitContext extends Record<string, unknown> {
  * @example
  * // For apps that use organizationId instead of tenantId:
  * function customKey(ctx: IngressContext<AppData>): string {
- *   const org = ctx.ws.data.organizationId ?? "public";
- *   const user = ctx.ws.data.userId ?? "anon";
+ *   const org = ctx.data.organizationId ?? "public";
+ *   const user = ctx.data.userId ?? "anon";
  *   return `rl:${org}:${user}:${ctx.type}`;
  * }
  *
@@ -51,8 +51,8 @@ export function keyPerUserPerType<
   TData extends WebSocketData & RateLimitContext = WebSocketData &
     RateLimitContext,
 >(ctx: IngressContext<TData>): string {
-  const tenant = ctx.ws.data.tenantId ?? "public";
-  const user = ctx.ws.data.userId ?? "anon";
+  const tenant = ctx.data.tenantId ?? "public";
+  const user = ctx.data.userId ?? "anon";
   return `rl:${tenant}:${user}:${ctx.type}`;
 }
 
@@ -77,8 +77,8 @@ export function perUserKey<
   TData extends WebSocketData & RateLimitContext = WebSocketData &
     RateLimitContext,
 >(ctx: IngressContext<TData>): string {
-  const tenant = ctx.ws.data.tenantId ?? "public";
-  const user = ctx.ws.data.userId ?? "anon";
+  const tenant = ctx.data.tenantId ?? "public";
+  const user = ctx.data.userId ?? "anon";
   return `rl:${tenant}:${user}`;
 }
 
@@ -113,9 +113,9 @@ export function keyPerUserOrIpPerType<
   TData extends WebSocketData & RateLimitContext = WebSocketData &
     RateLimitContext,
 >(ctx: IngressContext<TData>): string {
-  const tenant = ctx.ws.data.tenantId ?? "public";
+  const tenant = ctx.data.tenantId ?? "public";
   // NOTE: ctx.ip is always "" at middleware layer (post-validation)
   // This falls back to "anon", so all unauthenticated traffic shares one bucket
-  const identifier = ctx.ws.data.userId ?? ctx.ip ?? "anon";
+  const identifier = ctx.data.userId ?? ctx.ip ?? "anon";
   return `rl:${tenant}:${identifier}:${ctx.type}`;
 }

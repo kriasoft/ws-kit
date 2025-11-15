@@ -336,7 +336,7 @@ on<Schema extends MessageSchemaType>(
 ```typescript
 router.on(ChatMessage, (ctx) => {
   // ctx.payload is fully typed
-  console.log(`Message from ${ctx.ws.data.userId}: ${ctx.payload.text}`);
+  console.log(`Message from ${ctx.data.userId}: ${ctx.payload.text}`);
 
   // Publish to room subscribers
   ctx.publish(`room:${ctx.payload.roomId}`, ChatMessage, ctx.payload);
@@ -433,7 +433,7 @@ use<Schema extends MessageSchemaType>(
 ```typescript
 // Global authentication middleware
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
@@ -442,7 +442,7 @@ router.use((ctx, next) => {
 
 // Per-route rate limiting
 router.use(SendMessage, (ctx, next) => {
-  if (isRateLimited(ctx.ws.data?.userId)) {
+  if (isRateLimited(ctx.data?.userId)) {
     ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
     return;
   }
@@ -483,17 +483,17 @@ type ErrorHandler<TData> = (
 
 ```typescript
 router.onOpen((ctx) => {
-  console.log(`Client ${ctx.ws.data.clientId} connected`);
+  console.log(`Client ${ctx.clientId} connected`);
   ctx.send(WelcomeMessage, { text: "Welcome!" });
 });
 
 router.onClose((ctx) => {
-  console.log(`Client ${ctx.ws.data.clientId} disconnected: ${ctx.code}`);
+  console.log(`Client ${ctx.clientId} disconnected: ${ctx.code}`);
 });
 
 router.onAuth((ctx) => {
   // Return false to reject connection
-  return ctx.ws.data?.userId !== undefined;
+  return ctx.data?.userId !== undefined;
 });
 
 router.onError((error, ctx) => {
@@ -971,11 +971,11 @@ unsubscribe(topic: string): Promise<void>;
 ```typescript
 router.on(JoinRoom, async (ctx) => {
   await ctx.topics.subscribe(`room:${ctx.payload.roomId}`);
-  ctx.ws.data.currentRoom = ctx.payload.roomId;
+  ctx.data.currentRoom = ctx.payload.roomId;
 });
 
 router.on(LeaveRoom, async (ctx) => {
-  await ctx.topics.unsubscribe(`room:${ctx.ws.data.currentRoom}`);
+  await ctx.topics.unsubscribe(`room:${ctx.data.currentRoom}`);
 });
 ```
 
@@ -1646,7 +1646,7 @@ router.onError((error, ctx) => {
     message: error.message,
     details: error.details,
     cause: error.originalError, // Access wrapped error
-    clientId: ctx.ws.data?.clientId,
+    clientId: ctx.data?.clientId,
   });
 });
 ```
@@ -1685,8 +1685,8 @@ declare module "@ws-kit/core" {
 const router = createRouter(); // Automatically uses ConnectionData
 
 router.on(SecureMessage, (ctx) => {
-  // ctx.ws.data is properly typed with userId, roles, tenant
-  const userId = ctx.ws.data?.userId;
+  // ctx.data is properly typed with userId, roles, tenant
+  const userId = ctx.data?.userId;
 });
 ```
 
@@ -1731,12 +1731,12 @@ interface WebSocketData<T = unknown> {
 } & T
 ```
 
-**Access via `ctx.ws.data`:**
+**Access via `ctx.data`:**
 
 ```typescript
 router.on(SecureMessage, (ctx) => {
-  const userId = ctx.ws.data?.userId;
-  const clientId = ctx.ws.data.clientId; // Always present
+  const userId = ctx.data?.userId;
+  const clientId = ctx.clientId; // Always present
 });
 ```
 
@@ -1820,7 +1820,7 @@ router.onError((error, ctx) => {
     code: error.code,
     message: error.message,
     details: error.details,
-    clientId: ctx.ws.data?.clientId,
+    clientId: ctx.data?.clientId,
   });
 });
 ```
@@ -1830,7 +1830,7 @@ router.onError((error, ctx) => {
 ```typescript
 // ✅ Global authentication middleware
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
@@ -1840,7 +1840,7 @@ router.use((ctx, next) => {
 // ✅ Per-route rate limiting
 const rateLimiter = new Map<string, number>();
 router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.ws.data?.userId || "anon";
+  const userId = ctx.data?.userId || "anon";
   const count = (rateLimiter.get(userId) || 0) + 1;
   if (count > 10) {
     ctx.error("RESOURCE_EXHAUSTED", "Too many messages");

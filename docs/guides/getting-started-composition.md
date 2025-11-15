@@ -53,7 +53,7 @@ export async function handleJoinRoom(
   ctx: MessageContext<typeof JoinRoom, ChatAppData>,
 ) {
   const { roomId } = ctx.payload; // ✅ Inferred as string
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
 
   console.log(`${clientId} joined ${roomId}`);
 
@@ -68,7 +68,7 @@ export async function handleSendMessage(
   ctx: MessageContext<typeof SendMessage, ChatAppData>,
 ) {
   const { roomId, text } = ctx.payload; // ✅ Inferred as string
-  const clientId = ctx.ws.data.clientId;
+  const clientId = ctx.clientId;
 
   // Broadcast to all subscribers
   await ctx.publish(`room:${roomId}`, MessageReceived, {
@@ -95,9 +95,9 @@ export function createChatRouter<TData extends ChatData = ChatData>() {
     .on(JoinRoom, handleJoinRoom)
     .on(SendMessage, handleSendMessage)
     .onClose((ctx) => {
-      const roomId = ctx.ws.data.roomId as string | undefined;
+      const roomId = ctx.data.roomId as string | undefined;
       if (roomId) {
-        console.log(`${ctx.ws.data.clientId} left ${roomId}`);
+        console.log(`${ctx.clientId} left ${roomId}`);
       }
     });
 }
@@ -138,7 +138,7 @@ export function createPresenceRouter<
 >() {
   return createRouter<TData>()
     .onOpen((ctx) => {
-      const userId = ctx.ws.data.userId;
+      const userId = ctx.data.userId;
       if (userId) {
         // Broadcast user came online
         void ctx.publish("global", UserOnline, {
@@ -148,7 +148,7 @@ export function createPresenceRouter<
       }
     })
     .onClose((ctx) => {
-      const userId = ctx.ws.data.userId;
+      const userId = ctx.data.userId;
       if (userId) {
         // Broadcast user went offline
         void ctx.publish("global", UserOffline, {
@@ -183,7 +183,7 @@ export function createAppRouter() {
     createRouter<AppData>()
       // Global middleware can go here
       .use(async (ctx, next) => {
-        console.log(`[${ctx.type}] from ${ctx.ws.data.clientId}`);
+        console.log(`[${ctx.type}] from ${ctx.clientId}`);
         await next();
       })
       // Compose features

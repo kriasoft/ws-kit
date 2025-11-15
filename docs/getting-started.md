@@ -88,7 +88,7 @@ router.on(JoinRoom, async (ctx) => {
 
 router.on(ChatMessage, async (ctx) => {
   const { text, roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId || "anonymous";
+  const userId = ctx.data.userId || "anonymous";
 
   // Broadcast to room subscribers
   await ctx.publish(roomId, ChatMessage, {
@@ -106,10 +106,10 @@ serve(router, {
     return token ? { userId: "user_123" } : undefined;
   },
   onOpen(ctx) {
-    console.log(`Client ${ctx.ws.data.userId} connected`);
+    console.log(`Client ${ctx.data.userId} connected`);
   },
   async onClose(ctx) {
-    const { roomId, userId } = ctx.ws.data;
+    const { roomId, userId } = ctx.data;
     console.log(`Client ${userId} disconnected from ${roomId}`);
 
     if (roomId) {
@@ -118,7 +118,7 @@ serve(router, {
   },
   // Optional: handle connection errors
   onError(ctx, err) {
-    console.error(`Connection error for ${ctx.ws.data.userId}:`, err.message);
+    console.error(`Connection error for ${ctx.data.userId}:`, err.message);
   },
 });
 

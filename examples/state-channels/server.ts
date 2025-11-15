@@ -19,8 +19,8 @@ const clientStates = new Map<
 const stateHistory: { seq: number; payload: unknown }[] = [];
 
 router.use((ctx, next) => {
-  if (!clientStates.has(ctx.ws.data.clientId)) {
-    clientStates.set(ctx.ws.data.clientId, {
+  if (!clientStates.has(ctx.clientId)) {
+    clientStates.set(ctx.clientId, {
       lastClientSeq: 0,
       lastServerSeq: 0,
     });
@@ -30,7 +30,7 @@ router.use((ctx, next) => {
 
 router.on(StateUpdateMessage, (ctx) => {
   const clientSeq = ctx.payload.seq;
-  const clientState = clientStates.get(ctx.ws.data.clientId);
+  const clientState = clientStates.get(ctx.clientId);
   if (!clientState) return;
 
   // Detect gap

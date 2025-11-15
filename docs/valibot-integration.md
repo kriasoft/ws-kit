@@ -152,13 +152,13 @@ router.on(JoinRoom, async (ctx) => {
   const { roomId, username } = ctx.payload;
 
   // Update connection data
-  ctx.ws.data.username = username;
+  ctx.data.username = username;
 
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new Set());
   }
 
-  rooms.get(roomId)!.add(ctx.ws.data.clientId);
+  rooms.get(roomId)!.add(ctx.clientId);
   await ctx.topics.subscribe(roomId);
 
   ctx.publish(roomId, UserJoined, {
@@ -171,7 +171,7 @@ router.on(SendMessage, (ctx) => {
   // Find which room this user is in
   let userRoomId: string | undefined;
   for (const [roomId, users] of rooms.entries()) {
-    if (users.has(ctx.ws.data.clientId)) {
+    if (users.has(ctx.clientId)) {
       userRoomId = roomId;
       break;
     }
@@ -179,7 +179,7 @@ router.on(SendMessage, (ctx) => {
 
   if (userRoomId) {
     ctx.publish(userRoomId, NewMessage, {
-      username: ctx.ws.data.username || "Anonymous",
+      username: ctx.data.username || "Anonymous",
       text: ctx.payload.text,
     });
   }

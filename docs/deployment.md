@@ -72,7 +72,7 @@ const router = createRouter<AppData>();
 
 // Middleware: require auth for protected messages
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.authenticated && ctx.type !== "AUTH") {
+  if (!ctx.data?.authenticated && ctx.type !== "AUTH") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
@@ -118,10 +118,10 @@ serve(router, {
     console.error(`Error in ${ctx?.type}:`, error);
   },
   onOpen(ctx) {
-    console.log(`User ${ctx.ws.data?.userId} connected`);
+    console.log(`User ${ctx.data?.userId} connected`);
   },
   onClose(ctx) {
-    console.log(`User ${ctx.ws.data?.userId} disconnected`);
+    console.log(`User ${ctx.data?.userId} disconnected`);
   },
 });
 
@@ -148,7 +148,7 @@ const AuthMessage = message("AUTH", {
 const router = createRouter<AppData>();
 
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "AUTH") {
+  if (!ctx.data?.userId && ctx.type !== "AUTH") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return;
   }
@@ -249,7 +249,7 @@ Implement per-user rate limiting in middleware with backoff hints:
 const rateLimiters = new Map<string, { count: number; resetAt: number }>();
 
 router.use((ctx, next) => {
-  const userId = ctx.ws.data?.userId || "anonymous";
+  const userId = ctx.data?.userId || "anonymous";
   const now = Date.now();
   const limit = rateLimiters.get(userId);
 
@@ -410,7 +410,7 @@ const logger = pino({
 router.onOpen((ctx) => {
   logger.info({
     event: "ws_connect",
-    userId: ctx.ws.data?.userId,
+    userId: ctx.data?.userId,
     timestamp: new Date().toISOString(),
   });
 });
@@ -418,7 +418,7 @@ router.onOpen((ctx) => {
 router.use((ctx, next) => {
   logger.debug({
     event: "ws_message",
-    userId: ctx.ws.data?.userId,
+    userId: ctx.data?.userId,
     type: ctx.type,
     size: JSON.stringify(ctx.payload).length,
   });
@@ -428,7 +428,7 @@ router.use((ctx, next) => {
 router.onClose((ctx) => {
   logger.info({
     event: "ws_disconnect",
-    userId: ctx.ws.data?.userId,
+    userId: ctx.data?.userId,
   });
 });
 ```

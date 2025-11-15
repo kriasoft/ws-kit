@@ -183,7 +183,7 @@ router.on(UpdateUserMessage, (ctx) => {
   }
 
   // Continue with update
-  updateUserInDB(ctx.ws.data?.userId, ctx.payload);
+  updateUserInDB(ctx.data?.userId, ctx.payload);
 });
 ```
 
@@ -280,13 +280,13 @@ serve(router, {
   },
 
   onOpen(ctx) {
-    console.log(`Connection opened for userId ${ctx.ws.data?.userId}`);
+    console.log(`Connection opened for userId ${ctx.data?.userId}`);
     // Send welcome message
     ctx.send(WelcomeMessage, { greeting: "Welcome!" });
   },
 
   onClose(ctx) {
-    console.log(`Connection closed for userId ${ctx.ws.data?.userId}`);
+    console.log(`Connection closed for userId ${ctx.data?.userId}`);
     // Cleanup (rooms, subscriptions, etc.)
   },
 });
@@ -314,7 +314,7 @@ serve(router, {
 ```typescript
 serve(router, {
   onOpen(ctx) {
-    const userId = ctx.ws.data?.userId;
+    const userId = ctx.data?.userId;
     console.log(`[OPEN] User ${userId} connected`);
 
     // Send welcome message
@@ -336,8 +336,8 @@ serve(router, {
 ```typescript
 serve(router, {
   onClose(ctx) {
-    const userId = ctx.ws.data?.userId;
-    const duration = Date.now() - (ctx.ws.data as any).connectedAt;
+    const userId = ctx.data?.userId;
+    const duration = Date.now() - (ctx.data as any).connectedAt;
     console.log(`[CLOSE] User ${userId} disconnected after ${duration}ms`);
 
     // Clean up resources
@@ -476,7 +476,7 @@ router.on(ProcessMessage, (ctx) => {
 ```typescript
 router.use((ctx, next) => {
   try {
-    const allowed = checkAccess(ctx.ws.data?.userId);
+    const allowed = checkAccess(ctx.data?.userId);
     if (!allowed) {
       ctx.error("PERMISSION_DENIED", "Access denied");
       return; // Skip handler

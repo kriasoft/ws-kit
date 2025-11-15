@@ -55,12 +55,10 @@ export function createChatRouter<TContext extends ChatData = ChatData>() {
     // Handler 1: User joins a room
     .on(JoinRoom, async (c) => {
       const { roomId } = c.payload; // ✅ Inferred as string from schema
-      const clientId = c.ws.data?.clientId;
+      const clientId = c.clientId;
 
       // Store roomId in connection data for use in onClose handler
-      if (c.ws.data) {
-        c.ws.data.roomId = roomId;
-      }
+      c.assignData({ roomId });
 
       console.log(`Client ${clientId} joined room: ${roomId}`);
 
@@ -83,7 +81,7 @@ export function createChatRouter<TContext extends ChatData = ChatData>() {
     // Handler 2: User sends a message to the room
     .on(SendMessage, async (c) => {
       const { roomId, text } = c.payload; // ✅ Inferred as string from schema
-      const clientId = c.ws.data?.clientId;
+      const clientId = c.clientId;
       console.log(`Message from ${clientId} in room ${roomId}: ${text}`);
 
       // Broadcast message to all subscribers in the room
@@ -97,8 +95,8 @@ export function createChatRouter<TContext extends ChatData = ChatData>() {
 
     // Lifecycle hook: User disconnected
     .onClose((c) => {
-      const clientId = c.ws.data?.clientId;
-      const roomId = c.ws.data?.roomId as string | undefined;
+      const clientId = c.clientId;
+      const roomId = c.data?.roomId as string | undefined;
 
       console.log(`Connection closed: ${clientId}`);
 

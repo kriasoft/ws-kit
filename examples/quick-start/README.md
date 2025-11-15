@@ -195,13 +195,13 @@ chatRouter.on(JoinRoom, async (c) => {
   // Send acknowledgement to this client only
   c.send(UserJoined, {
     roomId,
-    userId: c.ws.data.clientId,
+    userId: c.clientId,
   });
 
   // Broadcast to all subscribers
   await chatRouter.publish(`room:${roomId}`, UserJoined, {
     roomId,
-    userId: c.ws.data.clientId,
+    userId: c.clientId,
   });
 });
 ```
@@ -212,7 +212,8 @@ Key patterns:
 - `c.send()` — send to current connection only
 - `c.publish()` — broadcast to topic subscribers
 - `c.topics.subscribe()` — join a topic
-- `c.ws.data` — connection metadata (e.g., clientId, roomId)
+- `c.data` — connection metadata (e.g., clientId, roomId)
+- `c.clientId` — connection identity (always available)
 
 ### Server Setup (`index.ts`)
 

@@ -13,8 +13,11 @@ import type { ServerWebSocket as BunServerWebSocket } from "bun";
  * **Note**: This wrapper has no runtime overhead—it's purely for TypeScript
  * type checking. At runtime, we pass through to Bun's native WebSocket.
  *
- * @param ws - Bun's ServerWebSocket instance
- * @returns The same WebSocket (no-op at runtime) with core interface type
+ * This function is for Bun-specific application code. The router itself receives
+ * platform-specific WebSockets and handles the adaptation internally.
+ *
+ * @param ws - Bun's ServerWebSocket instance (can have generic TData)
+ * @returns The same WebSocket (no-op at runtime) cast to core's non-generic ServerWebSocket
  */
 export function toBunServerWebSocket<TData = unknown>(
   ws: BunServerWebSocket<TData>,

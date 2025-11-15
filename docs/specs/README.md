@@ -51,7 +51,7 @@ When specs reference the same concept, the canonical source takes precedence:
 
 **Identity & Time:**
 
-- **Connection Identity**: `ctx.ws.data.clientId` (UUID v7, set during upgrade); transport-layer state, not message state (docs/specs/schema.md#Why-clientId-is-not-in-meta)
+- **Connection Identity**: `ctx.data.clientId` (UUID v7, set during upgrade via adapter `initialData`); lives in canonical context data, not on `ctx.ws` (docs/specs/schema.md#Why-clientId-is-not-in-meta)
 - **Producer Time**: `meta.timestamp` (client clock, optional, may be skewed); for UI display only (docs/specs/schema.md#Which-timestamp-to-use)
 - **Authoritative Time**: `ctx.receivedAt` (server clock, captured at ingress); use for all server logic (docs/specs/schema.md#Which-timestamp-to-use)
 - **Origin Tracking**: Include sender identity in payload or meta for audit and access control (docs/specs/pubsub.md#9.6-Origin-Tracking)
@@ -163,7 +163,7 @@ For complete rationale and design decisions, see **[ADR-032: Canonical Imports D
 
 // Handler receives (validated + server context)
 ctx = {
-  ws,                    // Connection (ws.data.clientId always present)
+  ws,                    // Opaque transport (send/close/readyState only)
   type: "MESSAGE_TYPE",
   meta: { ... },         // Validated client metadata
   payload: { ... },      // Only exists if schema defines it
@@ -216,7 +216,7 @@ For detailed working examples, see **[router.md](./router.md)** and **[getting s
 | **Router setup**   | ALWAYS use `createRouter<TData>()` with explicit generic                       | `router.md#Creating-a-Router`         |
 | **Runtime**        | ALWAYS use explicit `runtime` option in production or platform-specific import | `rules.md#runtime-selection`, ADR-006 |
 | **Validation**     | NEVER re-validate in handlers                                                  | `rules.md#validation-flow`            |
-| **Identity**       | ALWAYS use `ctx.ws.data.clientId`, never `ctx.meta`                            | `rules.md#state-layering`             |
+| **Identity**       | ALWAYS use `ctx.data.clientId`, never `ctx.meta`                               | `rules.md#state-layering`             |
 | **Timestamps**     | ALWAYS use `ctx.receivedAt` for server logic                                   | `schema.md#Which-timestamp-to-use`    |
 | **Reserved keys**  | NEVER set `clientId`, `receivedAt` from client                                 | `validation.md#normalization-rules`   |
 | **Errors**         | ALWAYS use `ctx.error()` for client errors; log with `clientId`                | `rules.md#error-handling`             |

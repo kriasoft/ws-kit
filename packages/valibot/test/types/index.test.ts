@@ -320,8 +320,8 @@ describe("@ws-kit/valibot - Type Tests", () => {
       const SecureMessage = message("SECURE", { action: v.string() });
 
       router.on(SecureMessage, (ctx) => {
-        expectTypeOf(ctx.ws.data).toHaveProperty("userId");
-        expectTypeOf(ctx.ws.data).toHaveProperty("roles");
+        expectTypeOf(ctx.data).toHaveProperty("userId");
+        expectTypeOf(ctx.data).toHaveProperty("roles");
       });
     });
 
@@ -346,7 +346,7 @@ describe("@ws-kit/valibot - Type Tests", () => {
 
       router.onError((err, ctx) => {
         if (ctx) {
-          expectTypeOf(ctx.ws.data).toHaveProperty("userId");
+          expectTypeOf(ctx.data).toHaveProperty("userId");
         }
       });
     });

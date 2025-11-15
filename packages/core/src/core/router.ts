@@ -25,7 +25,7 @@ import type { ContextEnhancer } from "../internal";
 import { PluginHost } from "../plugin/manager";
 import type { Plugin } from "../plugin/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { ServerWebSocket } from "../ws/platform-adapter";
+import type { AdapterWebSocket, ServerWebSocket } from "../ws/platform-adapter";
 import { RouteTable } from "./route-table";
 import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols";
 import type {
@@ -765,10 +765,11 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
 
     // Merge initial context data provided by the adapter (e.g., from headers, auth).
     // This runs before lifecycle.handleOpen, so onOpen handlers and plugins see seeded data.
-    // Type guard: Some adapters may not set initialData; check before accessing.
-    if ("initialData" in ws && ws.initialData) {
+    // Cast to AdapterWebSocket to access adapter-only initialData field.
+    const adapterWs = ws as AdapterWebSocket;
+    if (adapterWs.initialData) {
       const ctx = this.getOrInitData(ws);
-      Object.assign(ctx, ws.initialData);
+      Object.assign(ctx, adapterWs.initialData);
     }
 
     // Notify plugins (e.g., pubsub for client tracking)

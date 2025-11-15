@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
+import { type AdapterWebSocket } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
 import * as uuid from "uuid";
 import type {
@@ -149,16 +150,24 @@ export function createBunHandler<
       /**
        * Called when a WebSocket connection is successfully established.
        */
-      async open(
-        ws: ServerWebSocket<BunWebSocketData<TContext>>,
-      ): Promise<void> {
+      async open(ws: ServerWebSocket): Promise<void> {
         try {
+          // Cast to Bun's typed WebSocket to access platform-specific data
+          const bunWs = ws as any as import("bun").ServerWebSocket<
+            BunWebSocketData<TContext>
+          >;
+
           // Ensure ws has the clientId from the data
-          if (!ws.data?.clientId) {
+          if (!bunWs.data?.clientId) {
             console.error("[ws] WebSocket missing clientId in data, closing");
             ws.close(1008, "Missing client ID");
             return;
           }
+
+          // Seed router's context with Bun data via initialData
+          // (router will merge this into ctx.data during handleOpen)
+          const adapterWs = ws as AdapterWebSocket;
+          adapterWs.initialData = bunWs.data;
 
           // Call router's open handler via the object to preserve 'this' binding.
           // This ensures routers with ordinary methods (not arrow functions) work correctly.
@@ -166,7 +175,7 @@ export function createBunHandler<
 
           // Call onOpen hook (after connection is established and authenticated)
           try {
-            options?.onOpen?.({ ws });
+            options?.onOpen?.({ ws: bunWs as any });
           } catch (error) {
             console.error("[ws] Error in onOpen hook:", error);
           }
@@ -183,10 +192,7 @@ export function createBunHandler<
       /**
        * Called when a message is received from the client.
        */
-      async message(
-        ws: ServerWebSocket<BunWebSocketData<TContext>>,
-        data: string | Buffer,
-      ): Promise<void> {
+      async message(ws: ServerWebSocket, data: string | Buffer): Promise<void> {
         try {
           // Call router's message handler via the object to preserve 'this' binding.
           // This ensures routers with ordinary methods (not arrow functions) work correctly.
@@ -201,7 +207,7 @@ export function createBunHandler<
        * Called when the WebSocket connection is closed.
        */
       async close(
-        ws: ServerWebSocket<BunWebSocketData<TContext>>,
+        ws: ServerWebSocket,
         code: number,
         reason?: string,
       ): Promise<void> {
@@ -227,7 +233,7 @@ export function createBunHandler<
        * Used for backpressure handling. Not implemented here, but can be
        * extended if needed for custom write buffer management.
        */
-      drain(ws: ServerWebSocket<BunWebSocketData<TContext>>): void {
+      drain(ws: ServerWebSocket): void {
         // Backpressure handling (optional)
         // Called when ws.send() buffers are flushed
         // Can be used to resume message processing if it was paused

@@ -251,7 +251,7 @@ export function withMyPlugin(options?: Options) {
 }
 
 // For test harness and test utilities
-import { wrapTestRouter } from "@ws-kit/core/test";
+import { wrapTestRouter } from "@ws-kit/core/testing";
 
 const testRouter = wrapTestRouter(router);
 // testRouter has all test-specific methods: connect(), getMessages(), etc.
@@ -313,9 +313,8 @@ router.on(TestMessage, (ctx) => {
   // Client's timestamp in meta is optional (client's clock, untrusted)
   expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
 
-  // Connection identity is always present in ws.data
-  expectTypeOf(ctx.ws.data).toHaveProperty("clientId");
-  expectTypeOf(ctx.ws.data.clientId).toBeString();
+  // Connection identity is always present as ctx.clientId (UUID v7)
+  expectTypeOf(ctx.clientId).toBeString();
 
   expectTypeOf(ctx.send).toBeFunction();
 });
