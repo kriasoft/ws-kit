@@ -2,417 +2,340 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Basic usage tests covering real-world patterns.
+ * Basic usage tests covering router fundamentals.
  *
- * Tests fundamental messaging patterns using the actual router (no mocks):
- * - Fire-and-forget messaging (send within handler)
- * - Request-response pattern (RPC with reply)
- * - Broadcasting (publish to topic subscribers)
- * - Topic subscriptions
- *
- * All tests directly test the router API without TestRouter infrastructure.
+ * Tests fundamental messaging patterns using TestRouter:
+ * - Router setup and handler composition
+ * - Fire-and-forget messaging (handler execution)
+ * - Request-response pattern (RPC handling)
+ * - Context operations (middleware, error handling)
+ * - Real-world scenarios (chat, e-commerce)
  */
 
-import { memoryPubSub } from "@ws-kit/memory";
-import { withPubSub } from "@ws-kit/pubsub";
-import { createRouter, message, rpc, withZod, z } from "@ws-kit/zod";
+import type { MessageDescriptor } from "@ws-kit/core";
+import { createRouter } from "@ws-kit/core";
+import { test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 
-describe("basic usage patterns (no mocks)", () => {
-  describe("router.publish() - broadcasting", () => {
-    it("should publish message to a topic", async () => {
-      const ChatMessage = message("CHAT", {
-        text: z.string(),
-      });
+// For tests that don't need validation, use plain MessageDescriptor
+const createSimpleRouter = () => createRouter();
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      // Register a simple event handler
-      router.on(ChatMessage, async (ctx) => {
-        // Handler can publish to topics
-        await ctx.publish("lobby", ChatMessage, {
-          text: `Received: ${ctx.payload.text}`,
-        });
-      });
-
-      // Test publishing directly from router
-      const result = await router.publish("general", ChatMessage, {
-        text: "Hello world",
-      });
-
-      expect(result.ok).toBe(true);
+describe("basic usage patterns", () => {
+  describe("router configuration and composition", () => {
+    it("should create router instance", () => {
+      const router = createSimpleRouter();
+      expect(router).toBeDefined();
     });
 
-    it("should support multiple topic subscriptions", async () => {
-      const Update = message("UPDATE", { message: z.string() });
+    it("should support handler chaining", async () => {
+      const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
+      const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
+      const Message3: MessageDescriptor = { type: "MSG3", kind: "event" };
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      const calls: string[] = [];
 
-      // Test direct publish to multiple topics
-      const result1 = await router.publish("topic1", Update, {
-        message: "hello",
+      const tr = test.createTestRouter({
+        create: () =>
+          createSimpleRouter()
+            .on(Message1, () => {
+              calls.push("m1");
+            })
+            .on(Message2, () => {
+              calls.push("m2");
+            })
+            .on(Message3, () => {
+              calls.push("m3");
+            }),
       });
-      const result2 = await router.publish("topic2", Update, {
-        message: "hello",
+
+      const conn = await tr.connect();
+      conn.send("MSG1", { data: "test1" });
+      conn.send("MSG2", { data: "test2" });
+      conn.send("MSG3", { data: "test3" });
+      await tr.flush();
+
+      expect(calls).toEqual(["m1", "m2", "m3"]);
+      await tr.close();
+    });
+
+    it("should register message and RPC-like handlers together", async () => {
+      const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
+      const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
+
+      const calls: string[] = [];
+
+      const tr = test.createTestRouter({
+        create: () =>
+          createSimpleRouter()
+            .on(Message1, (ctx) => {
+              calls.push("handler1");
+            })
+            .on(Message2, (ctx) => {
+              calls.push("handler2");
+            }),
       });
 
-      expect(result1.ok).toBe(true);
-      expect(result2.ok).toBe(true);
+      const conn = await tr.connect();
+      conn.send("MSG1", { text: "hello" });
+      conn.send("MSG2", { msg: "test" });
+      await tr.flush();
+
+      expect(calls).toEqual(["handler1", "handler2"]);
+      await tr.close();
     });
   });
 
-  describe("handler registration and execution", () => {
-    it("should execute handler for registered message type", async () => {
-      const TestMessage = message("TEST", { value: z.string() });
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+  describe("fire-and-forget messaging", () => {
+    it("should execute handler for sent message", async () => {
+      const TestMessage: MessageDescriptor = { type: "TEST", kind: "event" };
+
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
+      });
 
       let handlerCalled = false;
-      let receivedPayload: any = null;
 
-      router.on(TestMessage, (ctx) => {
+      tr.on(TestMessage, (ctx) => {
         handlerCalled = true;
-        receivedPayload = ctx.payload;
       });
 
-      // We can verify the handler is registered by checking the router state
-      expect(handlerCalled).toBe(false);
-      receivedPayload = null;
+      const conn = await tr.connect();
+      conn.send("TEST", { value: "hello" });
+      await tr.flush();
 
-      // Note: Direct testing without TestRouter requires manual event dispatch
-      // which is implementation-specific. Instead, test the public API:
-      // - Router configuration is valid
-      // - No errors on registration
-      expect(router).toBeDefined();
+      expect(handlerCalled).toBe(true);
+      await tr.close();
     });
 
-    it("should support handler chaining", () => {
-      const Message1 = message("MSG1", { data: z.string() });
-      const Message2 = message("MSG2", { data: z.string() });
-      const Message3 = message("MSG3", { data: z.string() });
+    // NOTE: Message sending via ctx.send() (high-level API) is tested in the
+    // features/ directory (e.g., messaging/send-basic.test.ts). This basic usage
+    // test file focuses on handler routing and composition patterns without
+    // requiring validator or messaging plugins.
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }))
-        .on(Message1, (ctx) => {
-          // Handler logic
-        })
-        .on(Message2, (ctx) => {
-          // Another handler
-        })
-        .on(Message3, (ctx) => {
-          // Yet another handler
-        });
+    it("should route different message types to correct handlers", async () => {
+      const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
+      const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
 
-      expect(router).toBeDefined();
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
+      });
+
+      const calls: string[] = [];
+
+      tr.on(Message1, () => {
+        calls.push("msg1");
+      });
+      tr.on(Message2, () => {
+        calls.push("msg2");
+      });
+
+      const conn = await tr.connect();
+      conn.send("MSG1", { text: "a" });
+      conn.send("MSG2", { text: "b" });
+      conn.send("MSG1", { text: "c" });
+      await tr.flush();
+
+      expect(calls).toEqual(["msg1", "msg2", "msg1"]);
+      await tr.close();
     });
   });
 
-  describe("RPC pattern", () => {
-    it("should register RPC handler", async () => {
-      const GetUser = rpc("GET_USER", { id: z.string() }, "USER_RESPONSE", {
-        id: z.string(),
-        name: z.string(),
+  describe("request-response pattern", () => {
+    it("should handle RPC-like request messages", async () => {
+      const Request: MessageDescriptor = { type: "REQ", kind: "rpc" };
+
+      const calls: string[] = [];
+
+      const tr = test.createTestRouter({
+        create: () =>
+          createSimpleRouter().on(Request, (ctx) => {
+            calls.push("handler");
+          }),
       });
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      const conn = await tr.connect();
+      conn.send("REQ", { text: "test" });
+      await tr.flush();
 
-      router.rpc(GetUser, (ctx) => {
-        ctx.reply({
-          id: ctx.payload.id,
-          name: "Alice",
-        });
-      });
-
-      expect(router).toBeDefined();
+      expect(calls).toContain("handler");
+      await tr.close();
     });
 
-    it("should support multiple RPC handlers", () => {
-      const DoubleValue = rpc(
-        "DOUBLE_VALUE",
-        { value: z.number() },
-        "VALUE_RESULT",
-        { result: z.number() },
-      );
-      const Echo = rpc("ECHO", { text: z.string() }, "ECHO_REPLY", {
-        reply: z.string(),
+    // NOTE: RPC responses via ctx.reply() (high-level API) are tested in the
+    // features/ directory (e.g., rpc/reply-basic.test.ts). This basic usage
+    // test focuses on handler routing without requiring RPC plugin.
+
+    it("should handle multiple sequential request messages", async () => {
+      const SequentialRequest: MessageDescriptor = {
+        type: "REQ_SEQ",
+        kind: "rpc",
+      };
+
+      const calls: string[] = [];
+
+      const tr = test.createTestRouter({
+        create: () =>
+          createSimpleRouter().on(SequentialRequest, (ctx) => {
+            const payload = ctx.data as { id: number };
+            calls.push(`request-${payload.id}`);
+          }),
       });
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }))
-        .rpc(DoubleValue, (ctx) => {
-          ctx.reply({ result: ctx.payload.value * 2 });
-        })
-        .rpc(Echo, (ctx) => {
-          ctx.reply({ reply: `Echo: ${ctx.payload.text}` });
-        });
+      const conn = await tr.connect();
+      conn.send("REQ_SEQ", { id: 1 });
+      conn.send("REQ_SEQ", { id: 2 });
+      conn.send("REQ_SEQ", { id: 3 });
+      await tr.flush();
 
-      expect(router).toBeDefined();
-    });
-  });
-
-  describe("pubsub and subscriptions", () => {
-    it("should create router with pubsub plugin", async () => {
-      const Message = message("MSG", { text: z.string() });
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.on(Message, async (ctx) => {
-        // Handler can use pubsub features
-        await ctx.topics.subscribe("general");
-        await ctx.publish("general", Message, { text: ctx.payload.text });
-      });
-
-      expect(router).toBeDefined();
-    });
-
-    it("should support topic operations in handlers", () => {
-      const Subscribe = message("SUBSCRIBE", { channel: z.string() });
-      const Unsubscribe = message("UNSUBSCRIBE", { channel: z.string() });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router
-        .on(Subscribe, async (ctx) => {
-          await ctx.topics.subscribe(ctx.payload.channel);
-        })
-        .on(Unsubscribe, async (ctx) => {
-          await ctx.topics.unsubscribe(ctx.payload.channel);
-        });
-
-      expect(router).toBeDefined();
+      expect(calls).toHaveLength(3);
+      await tr.close();
     });
   });
-
   describe("context operations", () => {
-    it("should handle context.send() within handlers", () => {
-      const Incoming = message("INCOMING", { value: z.string() });
-      const Outgoing = message("OUTGOING", { value: z.string() });
+    it("should access context properties in handlers", async () => {
+      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.on(Incoming, (ctx) => {
-        // Handler can send messages via ctx.send()
-        ctx.send(Outgoing, { value: ctx.payload.value });
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
       });
 
-      expect(router).toBeDefined();
-    });
-
-    it("should handle context.publish() within handlers", () => {
-      const Message = message("MSG", { text: z.string() });
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.on(Message, async (ctx) => {
-        // Handler can publish to topics
-        const result = await ctx.publish("general", Message, {
-          text: ctx.payload.text,
-        });
-        expect(result).toBeDefined();
+      const captured: string[] = [];
+      tr.on(Message, (ctx) => {
+        captured.push(ctx.type);
       });
 
-      expect(router).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("MSG", { name: "Alice", age: 30 });
+      await tr.flush();
+
+      expect(captured).toEqual(["MSG"]);
+      await tr.close();
     });
 
-    it("should handle context.reply() in RPC handlers", () => {
-      const GetData = rpc("GET", { id: z.string() }, "DATA", {
-        id: z.string(),
-        value: z.string(),
+    it("should support middleware with use()", async () => {
+      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
       });
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      const calls: string[] = [];
 
-      router.rpc(GetData, (ctx) => {
-        // RPC handlers can reply with responses
-        ctx.reply({
-          id: ctx.payload.id,
-          value: "response",
-        });
+      tr.use((ctx, next) => {
+        calls.push("middleware");
+        return next();
       });
 
-      expect(router).toBeDefined();
-    });
-  });
+      tr.on(Message, (ctx) => {
+        calls.push("handler");
+      });
 
-  describe("composition and middleware", () => {
-    it("should support use() for middleware-like composition", () => {
-      const Input = message("INPUT", { value: z.string() });
-      const Output = message("OUTPUT", { value: z.string() });
+      const conn = await tr.connect();
+      conn.send("MSG", { text: "test" });
+      await tr.flush();
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }))
-        .use(Input, async (ctx, next) => {
-          // Middleware can intercept and transform
-          await next();
-        })
-        .on(Output, (ctx) => {
-          // Regular handler
-        });
-
-      expect(router).toBeDefined();
+      expect(calls).toEqual(["middleware", "handler"]);
+      await tr.close();
     });
 
-    it("should support router chaining for cleaner API", () => {
-      const Message1 = message("MSG1", { text: z.string() });
-      const Message2 = message("MSG2", { text: z.string() });
-      const Message3 = message("MSG3", { text: z.string() });
+    it("should capture handler errors", async () => {
+      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
 
-      // Router API supports chaining for fluent composition
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }))
-        .on(Message1, (ctx) => {
-          // Handle Message1
-        })
-        .on(Message2, (ctx) => {
-          // Handle Message2
-        })
-        .on(Message3, (ctx) => {
-          // Handle Message3
-        });
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
+      });
 
-      expect(router).toBeDefined();
-    });
+      tr.on(Message, () => {
+        throw new Error("Handler error");
+      });
 
-    it("should support error handlers", () => {
-      const Message = message("MSG", { value: z.string() });
+      const conn = await tr.connect();
+      conn.send("MSG", { text: "test" });
+      await tr.flush();
 
-      const errors: unknown[] = [];
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }))
-        .on(Message, (ctx) => {
-          // Handler
-        })
-        .onError((err) => {
-          errors.push(err);
-        });
-
-      expect(router).toBeDefined();
-      expect(errors).toBeDefined();
+      const errors = tr.capture.errors();
+      expect(errors.length).toBeGreaterThan(0);
+      expect((errors[0] as Error).message).toBe("Handler error");
+      await tr.close();
     });
   });
 
   describe("real-world chat scenario", () => {
-    it("should support complete chat flow API", () => {
-      // Message types
-      const Join = message("JOIN", { room: z.string(), user: z.string() });
-      const Message = message("MESSAGE", { text: z.string() });
-      const Leave = message("LEAVE", {});
-      const UserJoined = message("USER_JOINED", { user: z.string() });
-      const UserLeft = message("USER_LEFT", { user: z.string() });
-      const ChatMessage = message("CHAT", {
-        user: z.string(),
-        text: z.string(),
+    it("should support complete chat flow", async () => {
+      const Join: MessageDescriptor = { type: "JOIN", kind: "event" };
+      const ChatMsg: MessageDescriptor = { type: "CHAT", kind: "event" };
+      const Leave: MessageDescriptor = { type: "LEAVE", kind: "event" };
+
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
       });
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      const events: string[] = [];
 
-      // Join handler: subscribe and notify others
-      router.on(Join, async (ctx) => {
-        const { room, user } = ctx.payload;
-        await ctx.topics.subscribe(room);
-        await ctx.publish(room, UserJoined, { user });
+      tr.on(Join, (ctx) => {
+        events.push("join");
       });
 
-      // Message handler: broadcast to room
-      router.on(Message, async (ctx) => {
-        const room = "general"; // Would come from connection context in real app
-        await ctx.publish(room, ChatMessage, {
-          user: "current-user",
-          text: ctx.payload.text,
-        });
+      tr.on(ChatMsg, (ctx) => {
+        events.push("chat");
       });
 
-      // Leave handler: unsubscribe and notify
-      router.on(Leave, async (ctx) => {
-        const room = "general"; // Would come from connection context
-        await ctx.topics.unsubscribe(room);
-        await ctx.publish(room, UserLeft, { user: "current-user" });
+      tr.on(Leave, (ctx) => {
+        events.push("leave");
       });
 
-      expect(router).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("JOIN", { room: "general", user: "Alice" });
+      conn.send("CHAT", { user: "Alice", text: "Hello!" });
+      conn.send("LEAVE");
+      await tr.flush();
+
+      expect(events).toEqual(["join", "chat", "leave"]);
+      await tr.close();
     });
 
-    it("should support e-commerce API patterns", () => {
-      // Product catalog
-      const GetProduct = rpc(
-        "GET_PRODUCT",
-        { id: z.string() },
-        "PRODUCT_DATA",
-        { id: z.string(), name: z.string(), price: z.number() },
-      );
+    it("should support e-commerce patterns", async () => {
+      const ViewProduct: MessageDescriptor = {
+        type: "VIEW_PRODUCT",
+        kind: "event",
+      };
+      const AddToCart: MessageDescriptor = {
+        type: "ADD_TO_CART",
+        kind: "event",
+      };
+      const Checkout: MessageDescriptor = {
+        type: "CHECKOUT",
+        kind: "event",
+      };
 
-      // Shopping cart
-      const AddToCart = message("ADD_TO_CART", {
-        productId: z.string(),
-        quantity: z.number(),
-      });
-      const CartUpdated = message("CART_UPDATED", {
-        items: z.array(
-          z.object({ productId: z.string(), quantity: z.number() }),
-        ),
+      const tr = test.createTestRouter({
+        create: createSimpleRouter,
       });
 
-      // Checkout
-      const CheckoutRequest = rpc(
-        "CHECKOUT",
-        {
-          items: z.array(
-            z.object({ productId: z.string(), quantity: z.number() }),
-          ),
-        },
-        "ORDER_CONFIRMED",
-        { orderId: z.string(), total: z.number() },
-      );
+      const events: string[] = [];
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      tr.on(ViewProduct, (ctx) => {
+        events.push("view");
+      });
 
-      router
-        .rpc(GetProduct, (ctx) => {
-          ctx.reply({
-            id: ctx.payload.id,
-            name: "Sample Product",
-            price: 99.99,
-          });
-        })
-        .on(AddToCart, (ctx) => {
-          ctx.send(CartUpdated, { items: [ctx.payload] });
-        })
-        .rpc(CheckoutRequest, (ctx) => {
-          const total = ctx.payload.items.reduce(
-            (sum, item) => sum + 99.99 * item.quantity,
-            0,
-          );
-          ctx.reply({
-            orderId: `ORD-${Date.now()}`,
-            total,
-          });
-        });
+      tr.on(AddToCart, (ctx) => {
+        events.push("add");
+      });
 
-      expect(router).toBeDefined();
+      tr.on(Checkout, (ctx) => {
+        events.push("checkout");
+        // Sending responses via ctx.send() requires messaging plugin,
+        // tested in features/ directory
+      });
+
+      const conn = await tr.connect();
+      conn.send("VIEW_PRODUCT", { id: "prod-1" });
+      conn.send("ADD_TO_CART", { productId: "prod-1", quantity: 2 });
+      conn.send("CHECKOUT", { items: [{ productId: "prod-1", quantity: 2 }] });
+      await tr.flush();
+
+      expect(events).toEqual(["view", "add", "checkout"]);
+      await tr.close();
     });
   });
 });

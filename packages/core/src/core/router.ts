@@ -697,7 +697,11 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
     receivedAt?: number;
   }): Promise<MinimalContext<TContext>> {
     const data = this.getOrInitData(params.ws);
-    const ctx: MinimalContext<TContext> = {
+    const ctx: MinimalContext<TContext> & {
+      payload?: unknown;
+      meta?: Record<string, unknown>;
+      receivedAt?: number;
+    } = {
       clientId: params.clientId,
       ws: params.ws,
       type: params.type,
@@ -707,6 +711,16 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
         Object.assign(data, partial);
       },
     };
+
+    if ("payload" in params) {
+      ctx.payload = params.payload;
+    }
+
+    ctx.meta = params.meta ?? {};
+
+    if (params.receivedAt !== undefined) {
+      ctx.receivedAt = params.receivedAt;
+    }
 
     // Run enhancers in priority order, with conflict detection in dev mode
     const prevKeys = new Set(Object.keys(ctx));
