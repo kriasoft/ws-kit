@@ -184,7 +184,7 @@ Better: Accept only `RpcSchema`, let TypeScript reject invalid schemas upfront w
 **Signature:**
 
 ```typescript
-// @ws-kit/core/src/plugins/messaging.ts
+// @ws-kit/plugins/src/messaging/types.ts
 
 export interface SendOptions {
   signal?: AbortSignal; // Cancel before send
@@ -294,7 +294,7 @@ export function preserveCorrelationId(
 **Signature:**
 
 ```typescript
-// @ws-kit/core/src/plugins/rpc.ts
+// @ws-kit/plugins/src/rpc/types.ts
 
 export interface ReplyOptions extends SendOptions {
   // Inherits: signal, waitFor, meta
@@ -624,9 +624,9 @@ const router = createRouter<ConnectionData>()
 
 ### Phase 3: Testing
 
-- `packages/core/test/plugins/messaging.test.ts` — send/publish options, correlation, sanitization
-- `packages/core/test/plugins/rpc.test.ts` — reply guard, error response, progress throttling
-- `packages/zod/test/validation.test.ts` — inbound/outgoing validation, error handling
+- `packages/plugins/test/messaging/` — send/publish options, correlation, sanitization
+- `packages/plugins/test/rpc/` — reply guard, error response, progress throttling
+- `packages/zod/test/` — inbound/outgoing validation, error handling
 - Type inference tests in `packages/*/test/types/`
 
 ### Phase 4: Documentation
@@ -802,32 +802,31 @@ packages/valibot/src/
 └── index.ts
 ```
 
-**Proposed:**
+**Implemented:**
 
 ```
-packages/core/src/plugins/
-├── messaging.ts       (~100 LOC)
-├── rpc.ts            (~120 LOC)
-└── index.ts          (exports)
-
-packages/core/src/utils/
-├── meta.ts           (sanitizeMeta, preserveCorrelationId)
-├── throttle.ts       (shouldThrottle)
-└── index.ts
+packages/plugins/src/
+├── messaging/
+│   ├── index.ts       (~100 LOC, withMessaging())
+│   └── types.ts       (SendOptions, etc.)
+├── rpc/
+│   ├── index.ts       (~120 LOC, withRpc())
+│   └── types.ts       (ReplyOptions, ProgressOptions, etc.)
+└── index.ts           (exports)
 
 packages/zod/src/
-├── validation.ts     (~120 LOC, only Zod-specific)
-├── schema.ts         (message/rpc builders)
-├── types.ts          (InferPayload, etc.—unchanged)
-├── adapter.ts        (ValidatorAdapter impl)
-└── index.ts          (re-exports core plugins)
+├── plugin.ts          (~150 LOC, withZod validator plugin + helpers)
+├── runtime.ts         (Zod-specific validation logic)
+├── internal.ts        (shared utilities)
+├── types.ts           (InferPayload, InferMessage, etc.)
+└── index.ts           (re-exports: z, message, rpc, createRouter, withZod, plugin helpers)
 
 packages/valibot/src/
-├── validation.ts     (~120 LOC, only Valibot-specific)
-├── schema.ts
-├── types.ts
-├── adapter.ts
-└── index.ts
+├── plugin.ts          (~150 LOC, withValibot validator plugin + helpers)
+├── runtime.ts         (Valibot-specific validation logic)
+├── internal.ts        (shared utilities)
+├── types.ts           (InferPayload, InferMessage, etc.)
+└── index.ts           (re-exports: v, message, rpc, createRouter, withValibot, plugin helpers)
 ```
 
 ### Code Examples
@@ -855,9 +854,17 @@ if (result.data.payload !== undefined) {
 }
 ```
 
-**Proposed** (in validation.ts ~40 LOC):
+**Implemented** (in plugin.ts and runtime.ts):
+
+The validation logic is distributed across the validator plugin packages:
+
+- `plugin.ts` (~150 LOC): Sets up the validation middleware, error handling, and plugin API
+- `runtime.ts` (~80 LOC): Contains the actual Zod/Valibot-specific parsing logic
+
+Core pattern (simplified):
 
 ```typescript
+// In runtime.ts: extract and validate payload schema
 const payloadSchema = getPayloadSchema(schema);
 const result = payloadSchema.safeParse(ctx.payload);
 if (!result.success) {
@@ -876,7 +883,7 @@ ctx.payload = result.data;
 await next();
 ```
 
-Cleaner: errors routed via core error handling, no ceremony.
+Cleaner: errors routed via core error handling, no ceremony. See `packages/zod/src/runtime.ts` and `packages/valibot/src/runtime.ts` for actual implementations.
 
 ### One-Shot Reply Guard
 

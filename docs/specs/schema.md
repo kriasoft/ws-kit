@@ -447,6 +447,67 @@ Progress updates are sent as internal control messages (reserved type `$ws:rpc-p
 - Progress updates optional; client may skip them
 - Automatic correlation tracking with one-shot guard
 
+## MessageDescriptor Validation Contract
+
+**MessageDescriptors are generated for you.** When you use `message()` / `rpc()` helpers, the validator plugin attaches a `MessageDescriptor` to your schema. You don't normally construct descriptors directly, but the router still validates them at registration time to catch schema configuration mistakes early.
+
+### The Contract
+
+When you register a schema with `router.on()` or `router.rpc()`, the router validates that your descriptor conforms to a strict contract:
+
+| You Call                      | Descriptor Must Be                                                        | If Violated                                                   |
+| ----------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `router.on(schema, handler)`  | Event: `kind: "event"` with no `response`                                 | Throws: "Event schema... must not have a response descriptor" |
+| `router.rpc(schema, handler)` | RPC: `kind: "rpc"` with valid `response` descriptor                       | Throws: "RPC schema... must have a response descriptor"       |
+| Any registration              | `type` non-empty string, `kind` literal `"event"\|"rpc"` (case-sensitive) | Throws: "Invalid schema for type..."                          |
+| RPC with response             | Response is itself a valid `MessageDescriptor`                            | Throws: "...has invalid response descriptor"                  |
+
+The `message()` helper generates descriptors for you automatically based on whether you provide a `response` field. Typically you won't think about `kind` — you just use the right API (`.on()` for events, `.rpc()` for RPCs):
+
+```typescript
+// ✅ Event (no response, use router.on)
+const PingEvent = message("PING");
+router.on(PingEvent, (ctx) => {});
+
+// ✅ RPC (response required, use router.rpc)
+const GetUser = message("GET_USER", {
+  payload: { id: z.string() },
+  response: { name: z.string() },
+});
+router.rpc(GetUser, (ctx) => {
+  ctx.reply({ name: "Alice" });
+});
+```
+
+### Common Mistakes
+
+```typescript
+// ❌ Event with response → doesn't make sense
+const BadEvent = message("EVENT", {
+  data: z.string(),
+  response: { status: z.string() }, // ❌ Events don't respond
+});
+router.on(BadEvent, handler);
+// Error: Event schema for type "EVENT" must not have a response descriptor.
+
+// ❌ RPC without response → how does client know when it's done?
+const BadRpc = message("REQUEST", { id: z.string() });
+router.rpc(BadRpc, handler);
+// Error: RPC schema for type "REQUEST" must have a response descriptor.
+
+// ❌ Empty type (even descriptors built by hand)
+const Empty = { type: "", kind: "event" } as any;
+router.on(Empty, handler);
+// Error: Invalid schema for type "": type must not be empty
+
+// ❌ Case-sensitive kind check
+const CaseIssue = { type: "MSG", kind: "Rpc" } as any; // Must be lowercase
+router.rpc(CaseIssue, handler);
+// Error: Invalid schema for type "MSG": ...
+```
+
+**Why strict validation?** The router validates at registration time (before your server starts) so you catch configuration bugs immediately, not buried in a runtime error message hours later.
+
 ## Type Inference
 
 Schemas are fully type-inferrable at compile time. Use type extractors to work with individual components:

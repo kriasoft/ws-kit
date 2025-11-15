@@ -90,6 +90,7 @@ export default {
 
 - **ALWAYS** follow validation flow (Parse → Type Check → Lookup → Normalize → Validate → Middleware → Handler) → docs/specs/validation.md#Flow
 - **ALWAYS** normalize before validate (strip reserved keys BEFORE schema) → docs/specs/validation.md#normalization-rules
+- **ALWAYS** register RPC schemas with a response descriptor; events MUST NOT declare a response → docs/specs/schema.md#messagedescriptor-validation-contract
 
 ### Middleware
 
