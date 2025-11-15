@@ -88,6 +88,69 @@ const ChatMessage = message("CHAT", {
 });
 ```
 
+## Validation Errors & Recovery
+
+The router validates message schemas when you register them with `router.on()` or `router.rpc()`. This validation happens at startup (before your server starts), so you catch schema mistakes immediately.
+
+### RPC Must Have Response
+
+An RPC schema must declare what it returns — the client needs to know when the request is complete.
+
+```typescript
+// ❌ WRONG: RPC without response
+const GetUser = message("GET_USER", { id: z.string() });
+router.rpc(GetUser, (ctx) => {});
+// Error: RPC schema for type "GET_USER" must have a response descriptor.
+
+// ✅ CORRECT: RPC with response
+const GetUser = message("GET_USER", {
+  payload: { id: z.string() },
+  response: { name: z.string() },
+});
+router.rpc(GetUser, (ctx) => {
+  ctx.reply({ name: "Alice" });
+});
+```
+
+### Events Must Not Have Response
+
+An event is fire-and-forget — the sender doesn't wait for a reply.
+
+```typescript
+// ❌ WRONG: Event with response (contradiction)
+const ChatMsg = message("CHAT", {
+  text: z.string(),
+  response: { status: z.string() },
+});
+router.on(ChatMsg, (ctx) => {});
+// Error: Event schema for type "CHAT" must not have a response descriptor.
+
+// ✅ CORRECT: Event without response
+const ChatMsg = message("CHAT", { text: z.string() });
+router.on(ChatMsg, (ctx) => {
+  // Fire-and-forget — no reply needed
+});
+```
+
+### Type Must Be Non-Empty String
+
+Every schema needs a non-empty `type` field for routing.
+
+```typescript
+// ❌ WRONG: Empty type
+const BadMsg = message("", { data: z.string() });
+router.on(BadMsg, handler);
+// Error: Invalid schema for type "": type must not be empty
+
+// ✅ CORRECT: Clear, non-empty type
+const GoodMsg = message("DATA_UPDATE", { data: z.string() });
+router.on(GoodMsg, handler);
+```
+
+**When you'll see these errors:** At application startup, when route registration runs. Fix the schema definition and restart — no runtime protocol changes needed.
+
+For the complete MessageDescriptor contract, see [docs/specs/schema.md#messagedescriptor-validation-contract](./specs/schema.md#messagedescriptor-validation-contract).
+
 ## Schema Validation Features
 
 ### String Validation

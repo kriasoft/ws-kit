@@ -102,33 +102,36 @@ const router = createRouter()
 
 ## Core Plugins
 
-### `withValidation(validator?)`
+### Validation Plugins
 
-**Location**: `@ws-kit/core/src/plugins/validation`
+**Location**: `@ws-kit/zod` and `@ws-kit/valibot` (validator adapters)
 
 **Purpose**: Enable type-safe schema validation and payload type inference in handlers.
 
-**Configuration**:
+Validation is provided by validator adapter plugins rather than a standalone plugin. Choose your validator:
+
+**Example (Zod)**:
 
 ```typescript
-interface ValidationConfig {
-  validator?: ValidatorAdapter; // Custom validator; if omitted, no validation
-}
-```
+import { createRouter, withZod } from "@ws-kit/zod";
+import { message } from "@ws-kit/zod";
 
-**Effects**:
-
-- Enables `message()` helpers from validator packages
-- Adds type-safe `ctx.payload` inference based on schema
-- Validates incoming messages against handler schemas
-- Adds `ctx.error()` for validation error responses
-
-**Example (via Zod validator)**:
-
-```typescript
-const router = createRouter().plugin(withValidation(withZodValidator()));
+const router = createRouter().plugin(withZod());
 
 router.on(message("PING", { text: z.string() }), (ctx) => {
+  ctx.payload.text; // ✅ Inferred as string
+});
+```
+
+**Example (Valibot)**:
+
+```typescript
+import { createRouter, withValibot } from "@ws-kit/valibot";
+import { message } from "@ws-kit/valibot";
+
+const router = createRouter().plugin(withValibot());
+
+router.on(message("PING", { text: v.string() }), (ctx) => {
   ctx.payload.text; // ✅ Inferred as string
 });
 ```
@@ -139,6 +142,7 @@ router.on(message("PING", { text: z.string() }), (ctx) => {
 interface ContextWithValidation {
   payload: TPayload; // Type inferred from schema
   error(code: string, message: string, details?: unknown): void | Promise<void>;
+  // Plus messaging and RPC methods (composed from withMessaging, withRpc)
 }
 ```
 

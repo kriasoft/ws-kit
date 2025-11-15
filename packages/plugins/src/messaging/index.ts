@@ -22,11 +22,11 @@
 
 import type {
   ConnectionData,
+  MessageDescriptor,
   MinimalContext,
 } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
-import type { MessageDescriptor } from "@ws-kit/core/protocol/message-descriptor";
 import type { SendOptions } from "./types";
 
 /**

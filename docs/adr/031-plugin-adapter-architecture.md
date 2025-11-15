@@ -60,23 +60,20 @@ We needed a **plugin-adapter split**: plugins = framework features (live in core
 
 ```
 @ws-kit/core/src
-├── plugins/                    # Framework features (validator-agnostic)
-│   ├── messaging/
-│   │   ├── index.ts           # withMessaging() plugin
-│   │   └── types.ts           # SendOptions, etc.
-│   ├── rpc/
-│   │   ├── index.ts           # withRpc() plugin
-│   │   └── types.ts           # ReplyOptions, ProgressOptions, RpcContext
-│   ├── pubsub/
-│   │   ├── index.ts           # withPubSub() plugin
-│   │   └── types.ts           # PubSubAdapter interface, types
-│   ├── rate-limit/
-│   │   ├── index.ts           # withRateLimit() plugin
-│   │   └── types.ts           # RateLimiterAdapter interface
-│   └── validation/
-│       ├── index.ts           # withValidation() plugin (generic)
-│       └── types.ts           # ValidatorAdapter interface
-└── index.ts                   # Re-exports: all plugins
+├── capabilities/               # Capability contracts (core only)
+├── plugin/                     # Plugin system (definePlugin, etc)
+├── context/                    # Context types and base context
+├── core/                       # Router implementation
+└── index.ts                    # Core API exports
+
+@ws-kit/plugins/src             # Framework feature plugins (validator-agnostic)
+├── messaging/
+│   ├── index.ts               # withMessaging() plugin
+│   └── types.ts               # SendOptions, etc.
+├── rpc/
+│   ├── index.ts               # withRpc() plugin
+│   └── types.ts               # ReplyOptions, ProgressOptions, RpcContext
+└── index.ts                   # Re-exports: withMessaging, withRpc
 
 @ws-kit/zod & @ws-kit/valibot/src
 └── index.ts                   # Re-exports core plugins (convenience)
@@ -245,12 +242,15 @@ Move from validator plugins to core (`@ws-kit/core/src/`):
 
 ### Phase 2: Create Core Plugins
 
-Add to `@ws-kit/core/src/plugins/`:
+Implemented in `@ws-kit/plugins/src/`:
 
 - `messaging/index.ts` + `types.ts` — `withMessaging()` (~100 LOC)
 - `rpc/index.ts` + `types.ts` — `withRpc()` (~120 LOC)
-- `pubsub/index.ts` + `types.ts` — `withPubSub()` (~100 LOC)
-- `rate-limit/index.ts` + `types.ts` — `withRateLimit()` (~80 LOC)
+
+Additional plugins in feature packages:
+
+- `@ws-kit/pubsub/src/` — `withPubSub()` (~100 LOC)
+- `@ws-kit/rate-limit/src/` — `withRateLimit()` (~80 LOC)
 
 Each plugin gets its own subdirectory with implementation and types.
 
