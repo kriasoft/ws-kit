@@ -31,16 +31,19 @@ export interface MessageDescriptor {
 export function assertMessageDescriptor(
   obj: unknown,
 ): asserts obj is MessageDescriptor {
-  if (
-    typeof obj !== "object" ||
-    obj === null ||
-    typeof (obj as unknown as Record<string, unknown>).type !== "string" ||
-    !["event", "rpc"].includes((obj as unknown as Record<string, unknown>).kind)
-  ) {
+  if (typeof obj !== "object" || obj === null) {
     throw new TypeError("Invalid MessageDescriptor");
   }
 
   const desc = obj as Record<string, unknown>;
+
+  if (
+    typeof desc.type !== "string" ||
+    typeof desc.kind !== "string" ||
+    !["event", "rpc"].includes(desc.kind)
+  ) {
+    throw new TypeError("Invalid MessageDescriptor");
+  }
 
   // Validate type is non-empty string
   if ((desc.type as string).length === 0) {
