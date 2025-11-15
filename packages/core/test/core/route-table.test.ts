@@ -54,20 +54,136 @@ describe("RouteTable", () => {
 
       // Test empty string
       expect(() => table.register(createMessageDescriptor(""), entry)).toThrow(
-        "Invalid schema.type:",
+        /Invalid schema/,
       );
 
       // Test undefined
       const badSchema = { kind: "event" } as MessageDescriptor;
-      expect(() => table.register(badSchema, entry)).toThrow(
-        "Invalid schema.type:",
-      );
+      expect(() => table.register(badSchema, entry)).toThrow(/Invalid schema/);
 
       // Test null (via descriptor with null type)
       const nullSchema: any = { type: null, kind: "event" };
-      expect(() => table.register(nullSchema, entry)).toThrow(
-        "Invalid schema.type:",
+      expect(() => table.register(nullSchema, entry)).toThrow(/Invalid schema/);
+    });
+
+    it("should reject unknown kind values (e.g., 'Rpc', 'rPc')", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Case-sensitive kind check
+      const invalidKind: any = { type: "REQUEST", kind: "Rpc" };
+      expect(() => table.register(invalidKind, entry)).toThrow(
+        /Invalid schema for type "REQUEST"/,
       );
+    });
+
+    it("should enforce RPC invariant: RPC must have response descriptor", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // RPC without response should throw
+      const rpcSchema: any = { type: "REQUEST", kind: "rpc" };
+      expect(() => table.register(rpcSchema, entry)).toThrow(
+        'RPC schema for type "REQUEST" must have a response descriptor.',
+      );
+    });
+
+    it("should reject RPC with invalid response descriptor (non-descriptor value)", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // RPC with response: true (not a descriptor)
+      const rpcSchema: any = { type: "REQUEST", kind: "rpc", response: true };
+      expect(() => table.register(rpcSchema, entry)).toThrow(
+        /RPC schema for type "REQUEST" has invalid response descriptor/,
+      );
+    });
+
+    it("should reject RPC with response missing required fields", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Response missing kind
+      const rpcSchema: any = {
+        type: "REQUEST",
+        kind: "rpc",
+        response: { type: "RESPONSE" },
+      };
+      expect(() => table.register(rpcSchema, entry)).toThrow(
+        /RPC schema for type "REQUEST" has invalid response descriptor/,
+      );
+    });
+
+    it("should reject RPC with response having invalid field types", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Response with invalid version type
+      const rpcSchema: any = {
+        type: "REQUEST",
+        kind: "rpc",
+        response: { type: "RESPONSE", kind: "event", version: "bad" },
+      };
+      expect(() => table.register(rpcSchema, entry)).toThrow(
+        /RPC schema for type "REQUEST" has invalid response descriptor/,
+      );
+    });
+
+    it("should reject RPC with response having empty type", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Response with empty type string
+      const rpcSchema: any = {
+        type: "REQUEST",
+        kind: "rpc",
+        response: { type: "", kind: "event" },
+      };
+      expect(() => table.register(rpcSchema, entry)).toThrow(
+        /RPC schema for type "REQUEST" has invalid response descriptor/,
+      );
+    });
+
+    it("should enforce event invariant: event must not have response descriptor", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Event with response should throw
+      const eventSchema: any = {
+        type: "EVENT",
+        kind: "event",
+        response: { type: "RESPONSE", kind: "event" },
+      };
+      expect(() => table.register(eventSchema, entry)).toThrow(
+        'Event schema for type "EVENT" must not have a response descriptor.',
+      );
+    });
+
+    it("should accept valid RPC with response descriptor", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Valid RPC with response
+      const rpcSchema: any = {
+        type: "REQUEST",
+        kind: "rpc",
+        response: { type: "RESPONSE", kind: "event" },
+      };
+      expect(() => table.register(rpcSchema, entry)).not.toThrow();
+      expect(table.has("REQUEST")).toBe(true);
+    });
+
+    it("should accept valid event without response descriptor", () => {
+      const table = new RouteTable<unknown>();
+      const entry = createRouteEntry();
+
+      // Valid event without response
+      const eventSchema: MessageDescriptor = {
+        type: "NOTIFY",
+        kind: "event",
+      };
+      expect(() => table.register(eventSchema, entry)).not.toThrow();
+      expect(table.has("NOTIFY")).toBe(true);
     });
   });
 
