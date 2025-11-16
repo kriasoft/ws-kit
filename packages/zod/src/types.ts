@@ -50,6 +50,7 @@ export interface BrandedSchema<
 /**
  * Extract payload type from a branded schema.
  * Returns never if no payload is defined.
+ * Handles both pre-inferred value types and legacy raw Zod schemas.
  *
  * @example
  * ```typescript
@@ -63,13 +64,20 @@ export type InferPayload<S extends { readonly [SchemaTag]?: any }> = S extends {
   ? B extends { readonly payload: infer P }
     ? P extends never
       ? never
-      : P
+      : P extends ZodRawShape | ZodObject<any>
+        ? P extends ZodRawShape
+          ? { [K in keyof P]: P[K] extends ZodType<infer U> ? U : never }
+          : P extends ZodObject<any>
+            ? z.infer<P>
+            : never
+        : P
     : never
   : never;
 
 /**
  * Extract response type from a branded RPC schema.
  * Returns never if no response is defined.
+ * Handles both pre-inferred value types and legacy raw Zod schemas.
  *
  * @example
  * ```typescript
@@ -90,7 +98,7 @@ export type InferResponse<S extends { readonly [SchemaTag]?: any }> =
             : P extends ZodObject<any>
               ? z.infer<P>
               : never
-          : never
+          : P
       : never
     : never;
 

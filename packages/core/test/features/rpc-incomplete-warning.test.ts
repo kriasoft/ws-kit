@@ -17,7 +17,6 @@
  */
 
 import { test } from "@ws-kit/core";
-import type { RpcContext } from "@ws-kit/core";
 import { createRouter, message, rpc, withZod, z } from "@ws-kit/zod";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
@@ -227,7 +226,7 @@ describe("RPC Incomplete Handler Warning", () => {
       await tr.close();
     });
 
-    it("should not warn when async handler eventually replies", async () => {
+    it("should handle warnings correctly for truly async handlers", async () => {
       const TestRpc = rpc(
         "ASYNC_WITH_REPLY",
         { id: z.string() },
@@ -239,7 +238,7 @@ describe("RPC Incomplete Handler Warning", () => {
         create: () => {
           const router = createRouter().plugin(withZod());
           router.rpc(TestRpc, async (ctx) => {
-            // Truly async handler that awaits before replying
+            // Handler that replies immediately in async context
             await Promise.resolve();
             ctx.reply({ value: "delayed" });
           });
@@ -251,14 +250,17 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("ASYNC_WITH_REPLY", { id: "123" });
+      // Wait for response to fully complete
       await conn.drain();
+      // Add small delay to ensure async handlers complete
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // Handler is async and eventually calls reply, so no warning should occur
+      // Check that handler completed with reply (no incomplete RPC warning)
       const warnings = warnCalls.slice(initialWarnCount);
       const incompleteWarnings = warnings.filter((msg) =>
         msg.includes("completed without calling ctx.reply() or ctx.error()"),
       );
-      expect(incompleteWarnings.length).toBe(0);
+      expect(incompleteWarnings).toHaveLength(0);
 
       await tr.close();
     });
@@ -269,42 +271,42 @@ describe("RPC Incomplete Handler Warning", () => {
   // ———————————————————————————————————————————————————————————————————————————
 
   describe("Configuration: warnIncompleteRpc flag", () => {
-    // TODO: Implement warnIncompleteRpc configuration in withZod() plugin
-    // This test is commented out until the feature is implemented
-    // it("should not warn when warnIncompleteRpc is disabled", async () => {
-    //   const TestRpc = rpc(
-    //     "NO_WARN_DISABLED",
-    //     { id: z.string() },
-    //     "NO_WARN_RESPONSE",
-    //     { value: z.string() },
-    //   );
-    //
-    //   const tr = test.createTestRouter({
-    //     create: () => {
-    //       // Pass warnIncompleteRpc: false to the withZod() plugin
-    //       const router = createRouter().plugin(withZod({ warnIncompleteRpc: false }));
-    //       router.rpc(TestRpc, () => {
-    //         // Don't reply (should not warn because warnings are disabled)
-    //       });
-    //       return router;
-    //     },
-    //   });
-    //
-    //   const conn = await tr.connect();
-    //   const initialWarnCount = warnCalls.length;
-    //
-    //   conn.send("NO_WARN_DISABLED", { id: "test" });
-    //   await conn.drain();
-    //
-    //   // Should not have warning even though handler didn't reply
-    //   const warnings = warnCalls.slice(initialWarnCount);
-    //   const incompleteWarnings = warnings.filter((msg) =>
-    //     msg.includes("completed without calling ctx.reply() or ctx.error()"),
-    //   );
-    //   expect(incompleteWarnings.length).toBe(0);
-    //
-    //   await tr.close();
-    // });
+    // TODO: Enable this test once warnIncompleteRpc option is implemented in withZod()
+    it.skip("should not warn when warnIncompleteRpc is disabled", async () => {
+      const TestRpc = rpc(
+        "NO_WARN_DISABLED",
+        { id: z.string() },
+        "NO_WARN_RESPONSE",
+        { value: z.string() },
+      );
+
+      const tr = test.createTestRouter({
+        create: () => {
+          // TODO: Once warnIncompleteRpc is implemented in withZod(), change to:
+          // const router = createRouter().plugin(withZod({ warnIncompleteRpc: false }));
+          const router = createRouter().plugin(withZod());
+          router.rpc(TestRpc, () => {
+            // Handler doesn't reply - no warning should occur since flag is disabled
+          });
+          return router;
+        },
+      });
+
+      const conn = await tr.connect();
+      const initialWarnCount = warnCalls.length;
+
+      conn.send("NO_WARN_DISABLED", { id: "test" });
+      await conn.drain();
+
+      // Should have no warnings because warnIncompleteRpc is disabled
+      const warnings = warnCalls.slice(initialWarnCount);
+      const incompleteWarnings = warnings.filter((msg) =>
+        msg.includes("completed without calling ctx.reply() or ctx.error()"),
+      );
+      expect(incompleteWarnings).toHaveLength(0);
+
+      await tr.close();
+    });
 
     it("should warn by default (when warnIncompleteRpc is not specified)", async () => {
       const TestRpc = rpc(

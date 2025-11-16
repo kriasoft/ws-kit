@@ -45,6 +45,21 @@ const STANDARD_META_FIELDS = {
 const RESERVED_META_KEYS = new Set(["clientId", "receivedAt"]);
 
 /**
+ * Helper type to infer actual types from ZodRawShape or ZodObject.
+ * Converts each Zod schema in a shape to its inferred type.
+ *
+ * @internal
+ */
+type InferPayloadShape<P extends ZodRawShape | ZodObject<any> | undefined> =
+  P extends undefined
+    ? never
+    : P extends ZodRawShape
+      ? { [K in keyof P]: P[K] extends ZodType<infer U> ? U : never }
+      : P extends ZodObject<any>
+        ? z.infer<P>
+        : never;
+
+/**
  * Creates a strict Zod root message schema.
  * Supports two forms: object-oriented (primary) and positional (compact).
  *
@@ -77,7 +92,7 @@ export function message<
 }): ZodObject<any> &
   BrandedSchema<
     T,
-    P extends undefined ? never : P,
+    P extends undefined ? never : InferPayloadShape<P>,
     never,
     M extends ZodRawShape
       ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
@@ -101,7 +116,7 @@ export function message<
 ): ZodObject<any> &
   BrandedSchema<
     T,
-    P extends undefined ? never : P,
+    P extends undefined ? never : InferPayloadShape<P>,
     never,
     M extends ZodRawShape
       ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
@@ -125,7 +140,7 @@ export function message<
 ): ZodObject<any> &
   BrandedSchema<
     T,
-    P extends undefined ? never : P,
+    P extends undefined ? never : InferPayloadShape<P>,
     never,
     M extends ZodRawShape
       ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
@@ -219,7 +234,7 @@ export function message<
   return root as ZodObject<any> &
     BrandedSchema<
       T,
-      P extends undefined ? never : P,
+      P extends undefined ? never : InferPayloadShape<P>,
       never,
       M extends ZodRawShape
         ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
@@ -284,8 +299,8 @@ export function rpc<
 }): ZodObject<any> &
   BrandedSchema<
     ReqT,
-    ReqP extends undefined ? never : ReqP,
-    ResP extends undefined ? never : ResP,
+    ReqP extends undefined ? never : InferPayloadShape<ReqP>,
+    ResP extends undefined ? never : InferPayloadShape<ResP>,
     ReqM extends ZodRawShape
       ? { [K in keyof ReqM]: ReqM[K] extends ZodType<infer U> ? U : never }
       : {}
@@ -294,7 +309,7 @@ export function rpc<
     readonly response: ZodObject<any> &
       BrandedSchema<
         ResT,
-        ResP extends undefined ? never : ResP,
+        ResP extends undefined ? never : InferPayloadShape<ResP>,
         never,
         ResM extends ZodRawShape
           ? { [K in keyof ResM]: ResM[K] extends ZodType<infer U> ? U : never }
@@ -324,13 +339,18 @@ export function rpc<
 ): ZodObject<any> &
   BrandedSchema<
     ReqT,
-    ReqP extends undefined ? never : ReqP,
-    ResP extends undefined ? never : ResP,
+    ReqP extends undefined ? never : InferPayloadShape<ReqP>,
+    ResP extends undefined ? never : InferPayloadShape<ResP>,
     {}
   > & {
     readonly kind: "rpc";
     readonly response: ZodObject<any> &
-      BrandedSchema<ResT, ResP extends undefined ? never : ResP, never, {}> & {
+      BrandedSchema<
+        ResT,
+        ResP extends undefined ? never : InferPayloadShape<ResP>,
+        never,
+        {}
+      > & {
         readonly kind: "event";
         readonly __zod_payload: ResP;
         readonly __descriptor: { readonly type: ResT };
@@ -370,13 +390,18 @@ export function rpc<
 ): ZodObject<any> &
   BrandedSchema<
     ReqT,
-    ReqP extends undefined ? never : ReqP,
-    ResP extends undefined ? never : ResP,
+    ReqP extends undefined ? never : InferPayloadShape<ReqP>,
+    ResP extends undefined ? never : InferPayloadShape<ResP>,
     {}
   > & {
     readonly kind: "rpc";
     readonly response: ZodObject<any> &
-      BrandedSchema<ResT, ResP extends undefined ? never : ResP, never, {}> & {
+      BrandedSchema<
+        ResT,
+        ResP extends undefined ? never : InferPayloadShape<ResP>,
+        never,
+        {}
+      > & {
         readonly kind: "event";
         readonly __zod_payload: ResP;
         readonly __descriptor: { readonly type: ResT };

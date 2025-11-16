@@ -168,6 +168,29 @@ interface WithValibotValidationAPI<
   readonly validation: true;
 
   /**
+   * Register an event handler with type-safe payload inference.
+   * Automatically infers context type from schema without explicit casting.
+   * @param schema Fire-and-forget message schema
+   * @param handler Event handler function with inferred context type
+   * @example
+   * const ChatMsg = message("CHAT", { text: v.string() });
+   * router.on(ChatMsg, (ctx) => {
+   *   // ctx is automatically typed as EventContext<TContext, { text: string }>
+   *   expectTypeOf(ctx.payload).toEqualTypeOf<{ text: string }>();
+   *   ctx.send(ResponseMsg, { reply: "Got it" });
+   * });
+   */
+  on<S extends AnySchema>(
+    schema: S,
+    handler: (
+      ctx: import("@ws-kit/core").EventContext<
+        TContext,
+        S extends AnySchema ? InferPayload<S> : never
+      >,
+    ) => void | Promise<void>,
+  ): any; // Returns Router<TContext, any>
+
+  /**
    * Register an RPC handler with request-response pattern.
    * Automatically infers context type from schema without explicit casting.
    * @param schema RPC message schema with request and response types
@@ -209,6 +232,9 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
       // These provide ctx.send(), ctx.reply(), ctx.error(), ctx.progress()
       router.plugin(coreWithMessaging<TContext>());
       router.plugin(coreWithRpc<TContext>());
+
+      // Capture the original on method before it gets overwritten by this plugin
+      const coreOn = router.on.bind(router);
 
       // Step 2: Get plugin API for registering validation middleware
       const api = getRouterPluginAPI(router);
@@ -505,6 +531,20 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
         { priority: 100 }, // Higher priority (after core plugins)
       );
 
+      // Type-safe event handler method with automatic payload type inference
+      const onMethod = <S extends AnySchema>(
+        schema: S,
+        handler: (
+          ctx: import("@ws-kit/core").EventContext<
+            TContext,
+            S extends AnySchema ? InferPayload<S> : never
+          >,
+        ) => void | Promise<void>,
+      ) => {
+        // Delegate to core's on() method with type-safe handler
+        return coreOn(schema as any, handler as any);
+      };
+
       // Type-safe RPC handler method with automatic context type inference
       const rpcMethod = <S extends AnySchema>(
         schema: S & { response?: AnySchema },
@@ -520,13 +560,14 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
             : never,
         ) => void | Promise<void>,
       ) => {
-        // Use the standard on() method but mark it internally as RPC-capable
-        return router.on(schema as any, handler as any);
+        // Use the core on() method but mark it internally as RPC-capable
+        return coreOn(schema as any, handler as any);
       };
 
       // Return the plugin API extensions with capability marker
       return {
         validation: true as const,
+        on: onMethod,
         rpc: rpcMethod,
       };
     },
