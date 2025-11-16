@@ -9,8 +9,8 @@
  */
 
 export interface LimitsConfig {
-  maxPending?: number;       // Default: unbounded
-  maxPayloadBytes?: number;  // Default: unbounded
+  maxPending?: number; // Default: unbounded
+  maxPayloadBytes?: number; // Default: unbounded
 }
 
 /**

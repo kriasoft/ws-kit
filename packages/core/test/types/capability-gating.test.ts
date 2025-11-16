@@ -12,7 +12,13 @@
  * Run with `bun tsc --noEmit` to verify types.
  */
 
-import type { Router, MessageDescriptor, MinimalContext, EventContext, RpcContext } from "../../src/index";
+import type {
+  Router,
+  MessageDescriptor,
+  MinimalContext,
+  EventContext,
+  RpcContext,
+} from "../../src/index";
 
 describe("capability gating (types)", () => {
   // Test 1: BaseRouter without plugins has no rpc, publish, subscribe
@@ -20,7 +26,10 @@ describe("capability gating (types)", () => {
     const router: Router<{ userId: string }> = null as any;
 
     // @ts-expect-error rpc is not available without validation plugin
-    router.rpc({} as MessageDescriptor & { response: MessageDescriptor }, (ctx) => {});
+    router.rpc(
+      {} as MessageDescriptor & { response: MessageDescriptor },
+      (ctx) => {},
+    );
 
     // @ts-expect-error publish is not available without pubsub plugin
     router.publish("topic", {} as MessageDescriptor, {});
@@ -30,23 +39,31 @@ describe("capability gating (types)", () => {
   {
     const withValidation = (r: Router<any>) => {
       const enhanced = Object.assign(r, {
-        rpc: (schema: MessageDescriptor & { response: MessageDescriptor }, handler: any) => r,
+        rpc: (
+          schema: MessageDescriptor & { response: MessageDescriptor },
+          handler: any,
+        ) => r,
       }) as Router<any, { validation: true }>;
       (enhanced as any).__caps = { validation: true };
       return enhanced;
     };
 
-    const router: Router<{ userId: string }, { validation: true }> = null as any;
+    const router: Router<{ userId: string }, { validation: true }> =
+      null as any;
 
     // Should not error - rpc is available
-    router.rpc({} as MessageDescriptor & { response: MessageDescriptor }, (ctx) => {});
+    router.rpc(
+      {} as MessageDescriptor & { response: MessageDescriptor },
+      (ctx) => {},
+    );
   }
 
   // Test 3: After pubsub plugin, publish method is available
   {
     const withPubSub = (r: Router<any>) => {
       const enhanced = Object.assign(r, {
-        publish: (topic: string, schema: MessageDescriptor, payload: unknown) => Promise.resolve(),
+        publish: (topic: string, schema: MessageDescriptor, payload: unknown) =>
+          Promise.resolve(),
         subscriptions: { list: () => [], has: (topic: string) => false },
       }) as Router<any, { pubsub: true }>;
       (enhanced as any).__caps = { pubsub: true };
@@ -67,10 +84,15 @@ describe("capability gating (types)", () => {
     ctxBase.payload;
 
     // With validation: payload available
-    const ctxEvent: EventContext<{ userId: string }, { name: string }> = null as any;
+    const ctxEvent: EventContext<{ userId: string }, { name: string }> =
+      null as any;
     const payload: { name: string } = ctxEvent.payload;
 
-    const ctxRpc: RpcContext<{ userId: string }, { id: string }, { success: boolean }> = null as any;
+    const ctxRpc: RpcContext<
+      { userId: string },
+      { id: string },
+      { success: boolean }
+    > = null as any;
     const rpcPayload: { id: string } = ctxRpc.payload;
   }
 
@@ -104,7 +126,10 @@ describe("capability gating (types)", () => {
   {
     const withValidation = (r: Router<any>) => {
       const enhanced = Object.assign(r, {
-        rpc: (schema: MessageDescriptor & { response: MessageDescriptor }, handler: any) => enhanced,
+        rpc: (
+          schema: MessageDescriptor & { response: MessageDescriptor },
+          handler: any,
+        ) => enhanced,
       }) as Router<any, { validation: true }>;
       (enhanced as any).__caps = { validation: true };
       return enhanced;
@@ -114,7 +139,10 @@ describe("capability gating (types)", () => {
     const withValidated = withValidation(router);
 
     // Type is preserved through chaining
-    withValidated.rpc({} as MessageDescriptor & { response: MessageDescriptor }, (ctx) => {});
+    withValidated.rpc(
+      {} as MessageDescriptor & { response: MessageDescriptor },
+      (ctx) => {},
+    );
     withValidated.on({} as MessageDescriptor, (ctx) => {});
     withValidated.use(async (ctx, next) => {
       await next();

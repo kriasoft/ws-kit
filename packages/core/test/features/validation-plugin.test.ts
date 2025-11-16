@@ -25,7 +25,10 @@ describe("Validation Plugin - Capability Gating", () => {
   it("should have rpc() method after validation plugin", () => {
     // Create a mock validation plugin
     const withMockValidation = (r: Router<any, any>) => {
-      const rpcMethod = (schema: MessageDescriptor & { response: MessageDescriptor }, handler: any) => {
+      const rpcMethod = (
+        schema: MessageDescriptor & { response: MessageDescriptor },
+        handler: any,
+      ) => {
         return r.on(schema, handler);
       };
 
@@ -44,7 +47,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
   it("should allow rpc handler registration after validation plugin", () => {
     const withMockValidation = (r: Router<any, any>) => {
-      const rpcMethod = (schema: MessageDescriptor & { response: MessageDescriptor }, handler: any) => {
+      const rpcMethod = (
+        schema: MessageDescriptor & { response: MessageDescriptor },
+        handler: any,
+      ) => {
         return r.on(schema, handler);
       };
 
@@ -76,7 +82,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
   it("should track capability from validation plugin", () => {
     const withMockValidation = (r: Router<any, any>) => {
-      const rpcMethod = (schema: MessageDescriptor & { response: MessageDescriptor }, handler: any) => {
+      const rpcMethod = (
+        schema: MessageDescriptor & { response: MessageDescriptor },
+        handler: any,
+      ) => {
         return r.on(schema, handler);
       };
 
@@ -116,7 +125,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
   it("should maintain fluent interface after plugin", () => {
     const withMockValidation = (r: Router<any, any>) => {
-      const rpcMethod = (schema: MessageDescriptor & { response: MessageDescriptor }, handler: any) => {
+      const rpcMethod = (
+        schema: MessageDescriptor & { response: MessageDescriptor },
+        handler: any,
+      ) => {
         return r.on(schema, handler);
       };
 

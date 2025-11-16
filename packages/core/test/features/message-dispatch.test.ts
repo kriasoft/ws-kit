@@ -110,7 +110,10 @@ describe("handleMessage - Message Dispatch", () => {
       errorMsg = String(err);
     });
 
-    const largeMessage = JSON.stringify({ type: "TEST", payload: "x".repeat(100) });
+    const largeMessage = JSON.stringify({
+      type: "TEST",
+      payload: "x".repeat(100),
+    });
     await limitedRouter.handleMessage(ws, largeMessage);
     expect(errorCalled).toBe(true);
     expect(errorMsg.toLowerCase()).toContain("exceed");
