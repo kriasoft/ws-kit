@@ -99,7 +99,7 @@ router.on(Message, async (ctx) => {
   ctx.publish(topic, schema, data); // Broadcast to topic subscribers (1-to-many)
   await ctx.topics.subscribe(topic); // Subscribe to topic (async)
   await ctx.topics.unsubscribe(topic); // Unsubscribe from topic (async)
-  ctx.getData(key); // Access typed connection data
+  ctx.data; // Access typed connection data
   ctx.assignData(partial); // Update connection data
 });
 

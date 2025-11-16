@@ -302,72 +302,34 @@ serve(router, { port: 3000 });
 
 ## Connection Lifecycle
 
-Connections go through several phases: upgrade → open → message(s) → close. The adapter fires sync-only hooks at each phase for observability.
-
-### Lifecycle Hooks
-
-**Before a connection is established:**
+Connections go through phases: authenticate → upgrade → open → message(s) → close. Sync-only hooks fire at each phase for observability:
 
 ```typescript
 const { fetch, websocket } = createBunHandler(router, {
   authenticate: async (req) => {
-    // Called during HTTP upgrade
-    // Return undefined to reject, object to accept
+    // Verify auth; return undefined to reject, object to accept
     const token = req.headers.get("authorization");
-    if (!token) return undefined;
-    return { userId: "user_123" };
+    return token ? { userId: "user_123" } : undefined;
   },
-});
-```
-
-**After upgrade succeeds:**
-
-```typescript
-const { fetch, websocket } = createBunHandler(router, {
   onOpen: ({ data }) => {
-    // Called when WebSocket connection is established
     console.log(`Connected: ${data.clientId}`);
   },
-});
-```
-
-**For each message:**
-
-```typescript
-const LoginMessage = message("LOGIN", {
-  username: z.string(),
-  password: z.string(),
-});
-
-router.on(LoginMessage, (ctx) => {
-  // ctx.payload has validated message data
-  // ctx.data has connection metadata (userId, clientId, connectedAt)
-  const { username, password } = ctx.payload;
-  // Handle login...
-});
-```
-
-**When connection closes:**
-
-```typescript
-const { fetch, websocket } = createBunHandler(router, {
   onClose: ({ data }) => {
-    // Called when WebSocket closes
     console.log(`Disconnected: ${data.clientId}`);
-    // Clean up resources
+  },
+  onError: (error, evt) => {
+    console.error(`Error in ${evt.type}:`, error.message);
   },
 });
 ```
 
-**On errors:**
+**Handlers** receive validated messages with full connection context:
 
 ```typescript
-const { fetch, websocket } = createBunHandler(router, {
-  onError: (error, ctx) => {
-    // Called for errors in any phase
-    // Sync-only hook for logging/telemetry
-    console.error(`Error in ${ctx.type}:`, error.message);
-  },
+router.on(LoginMessage, (ctx) => {
+  const { username, password } = ctx.payload; // From schema
+  const { userId, clientId } = ctx.data; // From auth or defaults
+  // Handle login...
 });
 ```
 
@@ -479,72 +441,56 @@ For exact performance benchmarks, see [Bun's WebSocket documentation](https://bu
 
 ## Key Concepts
 
-### Connection Data (`ctx.data`)
+### Connection Data
 
-Per [ADR-033](../docs/adr/033-opaque-transport-canonical-connection-data.md), all connection state lives in `ctx.data`. This is the canonical source of truth:
-
-**Automatic fields:**
-
-- `clientId: string` — UUID v7, unique per connection
-- `connectedAt: number` — Timestamp when connection was established
-
-**Custom fields** (from `authenticate` return value):
+All connection state lives in `ctx.data` (see ADR-033 for details). Automatic fields are always available; custom fields come from the `authenticate` hook:
 
 ```typescript
 declare module "@ws-kit/core" {
   interface ConnectionData {
     userId?: string;
-    userName?: string;
     roles?: string[];
   }
 }
 
 router.on(SomeMessage, (ctx) => {
-  // Read automatic fields
-  const { clientId, connectedAt } = ctx.data;
-
-  // Read custom fields from auth
-  const { userId, roles } = ctx.data;
-
-  // Update with ctx.assignData()
-  ctx.assignData({ roles: ["admin"] });
+  const { clientId, connectedAt } = ctx.data; // Automatic
+  const { userId, roles } = ctx.data; // Custom (from auth)
+  ctx.assignData({ roles: ["admin"] }); // Update
 });
 ```
 
-### Opaque Transport (`ctx.ws`)
+**Automatic fields:**
 
-The WebSocket is treated as opaque transport—only for send/close/readyState:
+- `clientId: string` — Unique per connection
+- `connectedAt: number` — Timestamp when upgraded
+
+### Opaque Transport
+
+The WebSocket (`ctx.ws`) is used only for low-level transport operations:
 
 ```typescript
-router.on(SomeMessage, (ctx) => {
-  // ✓ Correct: use ctx.ws for transport
-  ctx.ws.send(data);
-  ctx.ws.close(1000);
-  const state = ctx.ws.readyState;
+ctx.ws.send(data); // Low-level send
+ctx.ws.close(1000); // Close with code
+const state = ctx.ws.readyState; // Check state
 
-  // ✗ Wrong: don't access platform-specific fields
-  // (ctx.ws as any).data  ← Use ctx.data instead
-});
+// Don't access platform-specific fields; use ctx.data instead
 ```
 
 ## TypeScript Support
 
-Full TypeScript support with:
-
-- Generic `TData` type parameter for custom connection data
-- Type inference from message schemas (with Zod or Valibot)
-- Strict handler typing to prevent runtime errors
+Full type inference from schema to handler context. Use module augmentation to define connection data once, shared across all routers:
 
 ```typescript
-type CustomData = { userId: string; role: "admin" | "user" };
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    role?: "admin" | "user";
+  }
+}
 
-const router = createRouter<CustomData>({
-  platform: createBunAdapter(),
-});
-
-// Handler context has typed ctx.data
 router.on(SomeSchema, (ctx) => {
-  const role = ctx.data.role; // "admin" | "user"
+  const role = ctx.data.role; // Fully typed: "admin" | "user" | undefined
 });
 ```
 

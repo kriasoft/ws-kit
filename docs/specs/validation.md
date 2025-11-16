@@ -378,7 +378,8 @@ See docs/specs/schema.md#Strict-Schemas for implementation requirements.
 // shared/context.ts
 function buildContext<T>(
   validated: T,
-  ws: ServerWebSocket<WebSocketData<any>>,
+  ws: ServerWebSocket,  // Per ADR-033: opaque transport only
+  connectionData: any,  // Connection state from adapter's initialData
   receivedAt: number  // Captured at message ingress (before parsing)
 ): MessageContext<...> {
   return {
