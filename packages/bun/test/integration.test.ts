@@ -202,17 +202,17 @@ describe("@ws-kit/bun integration tests", () => {
       expect(asyncAuthCalled).toBe(true);
     });
 
-    it("should return 500 when upgrade fails", async () => {
+    it("should return 400 when upgrade fails", async () => {
       const { fetch } = createBunHandler(router);
 
       const mockServer = {
-        upgrade: () => null, // Simulate upgrade failure
+        upgrade: () => false, // Simulate upgrade failure
       };
 
       const req = new Request("ws://localhost/ws");
       const response = await fetch(req, mockServer as any);
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(400);
     });
   });
 

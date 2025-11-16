@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { keyPerUserPerType, perUserKey, rateLimit, type IngressContext } from "@ws-kit/rate-limit";
+import {
+  keyPerUserPerType,
+  perUserKey,
+  rateLimit,
+  type IngressContext,
+} from "@ws-kit/rate-limit";
 import { describe, expect, it } from "bun:test";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
@@ -35,11 +40,15 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {
-          throw new Error("INVALID_ARGUMENT: Rate limit cost must be a positive integer");
+          throw new Error(
+            "INVALID_ARGUMENT: Rate limit cost must be a positive integer",
+          );
         },
       } as any;
 
@@ -63,9 +72,11 @@ describe("Rate Limit Middleware", () => {
       let nextCalled = false;
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -101,9 +112,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {
           errorCalled = true;
         },
@@ -132,9 +145,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {
           errorCalled = true;
         },
@@ -170,9 +185,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -211,9 +228,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -245,9 +264,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -270,9 +291,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -299,9 +322,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -326,9 +351,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -363,9 +390,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -397,9 +426,11 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
@@ -430,17 +461,21 @@ describe("Rate Limit Middleware", () => {
 
       const mockCtx1 = {
         type: "TEST",
-        meta: { clientId: "client-1" },
-        ws: { data: { userId: "user-1", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-1",
+        data: { userId: "user-1", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 
       const mockCtx2 = {
         type: "TEST",
-        meta: { clientId: "client-2" },
-        ws: { data: { userId: "user-2", tenantId: "tenant-1" } },
-        receivedAt: Date.now(),
+        clientId: "client-2",
+        data: { userId: "user-2", tenantId: "tenant-1" },
+        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+        assignData: () => {},
+        extensions: new Map(),
         error: () => {},
       } as any;
 

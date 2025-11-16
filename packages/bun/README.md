@@ -13,12 +13,12 @@ Bun platform adapter for WS-Kit, leveraging Bun's native high-performance WebSoc
 
 ## What This Package Provides
 
-- **`createBunAdapter()`**: Factory returning a `PlatformAdapter` for use with `WebSocketRouter`
+- **`createBunPubSub(server)`**: Factory returning a `PubSubAdapter` for use with `withPubSub()` plugin
 - **`BunPubSub`**: Native implementation leveraging Bun's `server.publish()` for zero-copy broadcasting
 - **`createBunHandler(router)`**: Factory returning `{ fetch, websocket }` for `Bun.serve()` integration
 - **UUID v7 client ID generation**: Time-ordered unique identifiers for every connection
 - **Authentication support**: Custom auth functions during WebSocket upgrade
-- **Connection metadata**: Automatic `clientId` and `connectedAt` tracking
+- **Connection metadata**: Automatic `clientId` and `connectedAt` tracking via `ctx.data`
 
 ## Platform Advantages Leveraged
 
@@ -50,7 +50,7 @@ bun add valibot @ws-kit/valibot
 
 ## Quick Start
 
-### High-Level API (Recommended)
+### Basic Example
 
 ```typescript
 import { serve } from "@ws-kit/bun";
@@ -60,17 +60,8 @@ import { z, createRouter, message } from "@ws-kit/zod";
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Create router with optional heartbeat configuration
-const router = createRouter({
-  heartbeat: {
-    intervalMs: 30_000, // Ping every 30 seconds
-    timeoutMs: 5_000, // Wait 5 seconds for pong
-    onStaleConnection(clientId, ws) {
-      console.log(`Connection ${clientId} is stale, closing...`);
-      ws.close();
-    },
-  },
-});
+// Create router
+const router = createRouter();
 
 // Register handlers
 router.on(PingMessage, (ctx) => {
@@ -82,28 +73,53 @@ serve(router, {
   port: 3000,
   authenticate(req) {
     // Optional: verify auth token and return user data
-    return {};
+    const token = req.headers.get("authorization");
+    return token ? { userId: "user_123" } : undefined;
   },
+});
+```
+
+### With Pub/Sub Plugin
+
+For broadcasting to multiple subscribers:
+
+```typescript
+import { serve } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createBunPubSub } from "@ws-kit/bun";
+
+const server = Bun.serve({
+  port: 3000,
+  fetch() {
+    return new Response("WebSocket only");
+  },
+  websocket: {},
+});
+
+const router = createRouter().plugin(
+  withPubSub({ adapter: createBunPubSub(server) }),
+);
+
+router.on(MessageSchema, async (ctx) => {
+  // Broadcast to all subscribers
+  await router.publish("notifications", ResponseSchema, { text: "Hello" });
 });
 ```
 
 ### Low-Level API (Advanced)
 
-For more control over server configuration, use the low-level API:
+For more control over server configuration:
 
 ```typescript
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
+import { createBunHandler } from "@ws-kit/bun";
 import { z, createRouter, message } from "@ws-kit/zod";
-
-// Create router with Bun platform adapter
-const router = createRouter({
-  platform: createBunAdapter(),
-});
 
 // Define and register handlers
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
+const router = createRouter();
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: ctx.payload.text });
 });
@@ -132,24 +148,22 @@ Bun.serve({
 
 ## API Reference
 
-### `createBunAdapter()`
+### `createBunPubSub(server)`
 
-Returns a `PlatformAdapter` for use with `createRouter()`.
-
-```typescript
-const adapter = createBunAdapter();
-const router = createRouter({ platform: adapter });
-```
-
-### `createBunAdapterWithServer(server)`
-
-Pre-configure the adapter with a Bun Server instance for immediate PubSub setup.
+Create a Pub/Sub adapter for use with the `withPubSub()` plugin.
 
 ```typescript
-const server = await Bun.serve({ fetch: ..., websocket: ... });
-const adapter = createBunAdapterWithServer(server);
-const router = createRouter({ platform: adapter });
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createBunPubSub } from "@ws-kit/bun";
+
+const server = Bun.serve({ fetch: ..., websocket: ... });
+const adapter = createBunPubSub(server);
+const router = createRouter()
+  .plugin(withPubSub({ adapter }));
 ```
+
+**Note:** Bun's pub/sub is process-scoped. For multi-instance clusters, use `@ws-kit/redis`.
 
 ### `createBunHandler(router, options?)`
 
@@ -216,9 +230,24 @@ Messages published to a channel are received by all connections subscribed to th
 
 ### Single Bun Instance
 
-In Bun, `router.publish(channel)` broadcasts to **all WebSocket connections in the current process** subscribed to that channel.
+In Bun, `router.publish(topic)` broadcasts to **all WebSocket connections in the current process** subscribed to that topic.
 
 ```typescript
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createBunPubSub } from "@ws-kit/bun";
+
+const server = Bun.serve({
+  fetch() {
+    return new Response("");
+  },
+  websocket: {},
+});
+
+const router = createRouter().plugin(
+  withPubSub({ adapter: createBunPubSub(server) }),
+);
+
 // This broadcasts to connections in THIS process only
 const NotificationMessage = message("NOTIFICATION", { message: z.string() });
 await router.publish("notifications", NotificationMessage, {
@@ -232,15 +261,17 @@ For deployments with multiple Bun processes behind a load balancer, use `@ws-kit
 
 ```typescript
 import { createClient } from "redis";
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 
 const redis = createClient();
 await redis.connect();
 
-const router = createRouter({
-  pubsub: redisPubSub(redis),
-});
+const router = createRouter().plugin(
+  withPubSub({ adapter: redisPubSub(redis) }),
+);
 
 // Now publishes across ALL instances
 const NotificationMessage = message("NOTIFICATION", { message: z.string() });
@@ -331,11 +362,21 @@ router.onError((error, ctx) => {
 
 ## Examples
 
-### Chat Application
+### Chat Application with Pub/Sub
 
 ```typescript
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { z, createRouter, message } from "@ws-kit/zod";
+import { createBunHandler } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createBunPubSub } from "@ws-kit/bun";
+import { z, message } from "@ws-kit/zod";
+
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    room?: string;
+  }
+}
 
 // Message schemas
 const JoinRoomMessage = message("ROOM:JOIN", { room: z.string() });
@@ -348,10 +389,17 @@ const BroadcastMessage = message("ROOM:BROADCAST", {
   text: z.string(),
 });
 
-// Router
-const router = createRouter({
-  platform: createBunAdapter(),
+const server = Bun.serve({
+  fetch() {
+    return new Response("");
+  },
+  websocket: {},
 });
+
+// Router with pub/sub
+const router = createRouter().plugin(
+  withPubSub({ adapter: createBunPubSub(server) }),
+);
 
 // Track rooms
 const rooms = new Map<string, Set<string>>();
@@ -359,6 +407,9 @@ const rooms = new Map<string, Set<string>>();
 router.on(JoinRoomMessage, async (ctx) => {
   const { room } = ctx.payload;
   const { clientId } = ctx.data;
+
+  // Update connection data
+  ctx.assignData({ room });
 
   // Subscribe to room
   await ctx.topics.subscribe(`room:${room}`);
@@ -374,8 +425,7 @@ router.on(JoinRoomMessage, async (ctx) => {
 
 router.on(SendMessageMessage, async (ctx) => {
   const { text } = ctx.payload;
-  const { clientId } = ctx.data;
-  const room = (ctx.data as any).room || "general"; // Set during JOIN
+  const { clientId, room } = ctx.data;
 
   // Broadcast to all in room using schema
   await router.publish(`room:${room}`, BroadcastMessage, {
@@ -385,8 +435,7 @@ router.on(SendMessageMessage, async (ctx) => {
 });
 
 router.onClose((ctx) => {
-  const { clientId } = ctx.data;
-  const room = (ctx.data as any).room;
+  const { clientId, room } = ctx.data;
 
   if (room && rooms.has(room)) {
     rooms.get(room)!.delete(clientId);
@@ -398,7 +447,7 @@ const { fetch, websocket } = createBunHandler(router);
 Bun.serve({
   fetch(req) {
     if (new URL(req.url).pathname === "/ws") {
-      return fetch(req);
+      return fetch(req, server);
     }
     return new Response("Not Found", { status: 404 });
   },
@@ -415,36 +464,47 @@ Bun.serve({
 
 Benchmarks based on typical payloads (~1KB JSON). Actual performance depends on hardware, payload size, and network conditions.
 
-## Migration from Old API
+## Key Concepts
 
-If migrating from the legacy `bun-ws-router`:
+### Connection Data (`ctx.data`)
+
+Per ADR-033, all connection state lives in `ctx.data`. This is the canonical source of truth:
 
 ```typescript
-// Old pattern
-const ws = new WebSocketRouter();
-ws.merge(chatRouter);
-Bun.serve({
-  fetch: (req, server) => ws.upgrade(req, { server }),
-  websocket: ws.websocket,
-});
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    userName?: string;
+    roles?: string[];
+  }
+}
 
-// New pattern
-const router = createRouter({
-  platform: createBunAdapter(),
-});
-router.on(MessageSchema, (ctx) => {
-  /* ... */
-});
-const { fetch, websocket } = createBunHandler(router);
-Bun.serve({
-  fetch(req, server) {
-    return fetch(req, server);
-  },
-  websocket,
+router.on(SomeMessage, (ctx) => {
+  // Read from ctx.data
+  console.log(`User: ${ctx.data.userId}`);
+
+  // Update with ctx.assignData()
+  ctx.assignData({ roles: ["admin"] });
+
+  // Never try to access ws.data (it's opaque transport)
 });
 ```
 
-See [Migration Guide](../../docs/migration-guide.md) for detailed steps.
+### Opaque Transport (`ctx.ws`)
+
+The WebSocket is treated as opaque transport—only for send/close/readyState:
+
+```typescript
+router.on(SomeMessage, (ctx) => {
+  // ✓ Correct: use ctx.ws for transport
+  ctx.ws.send(data);
+  ctx.ws.close(1000);
+  const state = ctx.ws.readyState;
+
+  // ✗ Wrong: don't access platform-specific fields
+  // (ctx.ws as any).data  ← Use ctx.data instead
+});
+```
 
 ## TypeScript Support
 

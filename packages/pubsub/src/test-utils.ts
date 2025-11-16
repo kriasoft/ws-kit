@@ -127,7 +127,10 @@ export class TestPubSub implements PubSubAdapter {
     onRemote: (envelope: PublishEnvelope) => void | Promise<void>,
   ): (() => void | Promise<void>) | Promise<() => void | Promise<void>> {
     const result = this.wrapped.start?.(onRemote);
-    return result ?? undefined;
+    if (!result) {
+      return Promise.resolve(() => {});
+    }
+    return result;
   }
 
   // Test-specific helpers

@@ -11,12 +11,6 @@ import type { RateLimiter } from "@ws-kit/rate-limit";
 import { keyPerUserOrIpPerType } from "./keys";
 
 // Type aliases for clarity
-type IngressContext<T extends ConnectionData = ConnectionData> =
-  MinimalContext<T>;
-type MessageContext<
-  P = unknown,
-  T extends ConnectionData = ConnectionData,
-> = EventContext<T, P>;
 type WebSocketData = ConnectionData;
 
 /**
@@ -46,7 +40,7 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    *   return `rl:${tenant}:${user}:${ctx.type}`;
    * }
    */
-  key?: (ctx: IngressContext<TData>) => string;
+  key?: (ctx: MinimalContext<TData>) => string;
 
   /**
    * Cost function to calculate token cost for this request.
@@ -71,7 +65,7 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    * cost: (ctx) => ctx.data?.isPremium ? 0.5 : 1  // ERROR
    * cost: (ctx) => -1  // ERROR
    */
-  cost?: (ctx: IngressContext<TData>) => number;
+  cost?: (ctx: MinimalContext<TData>) => number;
 }
 
 /**
@@ -115,37 +109,13 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
 ): Middleware<TData> {
   const { limiter, key = keyPerUserOrIpPerType, cost: costFn } = options;
 
-  return async (
-    ctx: MessageContext<unknown, TData>,
-    next: () => void | Promise<void>,
-  ) => {
-    // Create ingress context for rate limiting
-    //
-    // EXECUTION TIMING: This middleware runs at step 6 of the ingress pipeline (post-validation).
-    // The proposal specifies step 3 (pre-validation) for better security and efficiency.
-    //
-    // KEY LIMITATION: IP is not available here. It's populated by platform adapters during
-    // socket setup (before request processing), not during message handling. Key functions
-    // that rely on IP (like keyPerUserOrIpPerType) will always see ip="", so they fall back
-    // to userId or "anon".
-    //
-    // CONSEQUENCE: Rate limiting can provide per-user fairness but not per-IP protection for
-    // unauthenticated traffic. This is safe (all anonymous users share "anon" bucket) but
-    // not the IP-based isolation described in the proposal.
-    const ingressCtx: IngressContext<TData> = {
-      type: ctx.type,
-      id: ctx.meta.clientId,
-      ip: "", // Not available: IP is set during socket setup, not message processing
-      ws: { data: ctx.data as TData }, // Connection data (from ctx.data, not ctx.ws)
-      meta: { receivedAt: ctx.receivedAt },
-    };
-
+  return async (ctx: MinimalContext<TData>, next: () => Promise<void>) => {
     // Compute cost
-    const cost = costFn?.(ingressCtx) ?? 1;
+    const cost = costFn?.(ctx) ?? 1;
 
     // Validate cost is a positive integer
     if (!Number.isInteger(cost) || cost <= 0) {
-      ctx.error(
+      (ctx as any).error(
         "INVALID_ARGUMENT",
         "Rate limit cost must be a positive integer",
       );
@@ -153,7 +123,7 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
     }
 
     // Compute key
-    const rateLimitKey = key(ingressCtx);
+    const rateLimitKey = key(ctx);
 
     // Atomically consume tokens
     const decision = await limiter.consume(rateLimitKey, cost);
@@ -184,8 +154,6 @@ export function rateLimit<TData extends WebSocketData = WebSocketData>(
     await next();
   };
 }
-
-export type { IngressContext } from "@ws-kit/core";
 export type {
   Policy,
   RateLimitDecision,

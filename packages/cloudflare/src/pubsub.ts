@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PubSub } from "@ws-kit/core";
-
 /**
  * Cloudflare Durable Object Pub/Sub implementation using BroadcastChannel.
  *
@@ -32,7 +30,7 @@ import type { PubSub } from "@ws-kit/core";
  * - No serialization overhead: Direct JavaScript objects
  * - Automatic cleanup: Subscriptions cleaned up when connections close
  */
-export class DurablePubSub implements PubSub {
+export class DurablePubSub {
   private subscriptions = new Map<
     string,
     Set<(message: unknown) => void | Promise<void>>

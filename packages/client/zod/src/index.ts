@@ -38,15 +38,19 @@ export { message, rpc, z } from "@ws-kit/zod";
 /**
  * Options for send() method with typed meta field inference.
  */
-interface SendOptions<S extends ZodMessageSchema> {
-  meta?: InferMeta<S>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface SendOptions<S extends any = ZodMessageSchema> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta?: InferMeta<any>;
   correlationId?: string;
 }
 
 /**
  * Options for request() method with typed meta field inference.
  */
-interface RequestOptions<S extends ZodMessageSchema> extends SendOptions<S> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface RequestOptions<S extends any = ZodMessageSchema>
+  extends SendOptions<S> {
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -75,50 +79,55 @@ export interface ZodWebSocketClient
    * Register typed message handler.
    * Handler receives fully typed message inferred from schema.
    */
-  on<S extends ZodMessageSchema>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on<S extends any>(
     schema: S,
-    handler: (msg: InferMessage<S>) => void,
+    handler: (msg: InferMessage<any>) => void,
   ): () => void;
 
   /**
    * Send message with payload (schema defines payload field).
    * Payload type inferred from schema, required at compile time.
    */
-  send<S extends ZodMessageSchema>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  send<S extends any>(
     schema: S,
-    payload: InferPayload<S>,
+    payload: InferPayload<any>,
     opts?: SendOptions<S>,
-  ): InferPayload<S> extends never ? never : boolean;
+  ): InferPayload<any> extends never ? never : boolean;
 
   /**
    * Send message without payload (schema has no payload field).
    * Payload parameter omitted at compile time.
    */
-  send<S extends ZodMessageSchema>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  send<S extends any>(
     schema: S,
     opts?: SendOptions<S>,
-  ): InferPayload<S> extends never ? boolean : never;
+  ): InferPayload<any> extends never ? boolean : never;
 
   /**
    * Request/response with typed reply (with payload).
    * Payload type inferred from schema, required at compile time.
    */
-  request<S extends ZodMessageSchema, R extends ZodMessageSchema>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  request<S extends any, R extends any>(
     schema: S,
-    payload: InferPayload<S>,
+    payload: InferPayload<any>,
     reply: R,
     opts?: RequestOptions<S>,
-  ): InferPayload<S> extends never ? never : Promise<InferMessage<R>>;
+  ): InferPayload<any> extends never ? never : Promise<InferMessage<any>>;
 
   /**
    * Request/response with typed reply (no payload).
    * Payload parameter omitted at compile time.
    */
-  request<S extends ZodMessageSchema, R extends ZodMessageSchema>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  request<S extends any, R extends any>(
     schema: S,
     reply: R,
     opts?: RequestOptions<S>,
-  ): InferPayload<S> extends never ? Promise<InferMessage<R>> : never;
+  ): InferPayload<any> extends never ? Promise<InferMessage<any>> : never;
 
   /**
    * Hook for unhandled message types.

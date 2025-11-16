@@ -30,7 +30,9 @@ export interface UpgradeOptions<TData = unknown> {
 /**
  * Options for creating a Bun WebSocket handler.
  */
-export interface BunHandlerOptions<TData = unknown> {
+export interface BunHandlerOptions<
+  TData extends Record<string, unknown> = Record<string, unknown>,
+> {
   /** Custom authentication function */
   authenticate?: (
     req: Request,
@@ -64,7 +66,9 @@ export interface BunHandlerOptions<TData = unknown> {
  *
  * Extends core WebSocketData with Bun-specific properties.
  */
-export type BunWebSocketData<T = unknown> = WebSocketData<T> & {
+export type BunWebSocketData<
+  T extends Record<string, unknown> = Record<string, unknown>,
+> = WebSocketData<T> & {
   /** Connection timestamp (when upgrade was accepted) */
   connectedAt: number;
 };
@@ -84,13 +88,21 @@ export type BunWebSocket<TData = unknown> = BunServerWebSocket<TData>;
 /**
  * Return type of createBunHandler factory.
  */
-export interface BunHandler<TData = unknown> {
-  /** Fetch handler for HTTP upgrade requests */
+export interface BunHandler<
+  TData extends Record<string, unknown> = Record<string, unknown>,
+> {
+  /**
+   * Fetch handler for HTTP upgrade requests.
+   *
+   * Returns undefined after a successful server.upgrade (Bun has sent 101 response).
+   * Returns a Response on upgrade failure or server errors.
+   * This follows Bun's semantics: don't return a Response after a successful upgrade.
+   */
   fetch: (
     req: Request,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     server: import("bun").Server<any>,
-  ) => Response | Promise<Response>;
+  ) => Response | void | Promise<Response | void>;
 
   /** WebSocket handler for Bun.serve */
   websocket: import("bun").WebSocketHandler<BunWebSocketData<TData>>;

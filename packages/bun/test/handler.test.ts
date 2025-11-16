@@ -104,7 +104,11 @@ describe("createBunHandler", () => {
 
     await handler.websocket.message(mockWs, message);
 
-    expect(mockRouter.handleMessage).toHaveBeenCalledWith(mockWs, message);
+    // The handler converts Buffer to ArrayBuffer internally
+    const callArgs = mockRouter.handleMessage.mock.calls[0];
+    expect(mockRouter.handleMessage).toHaveBeenCalledTimes(1);
+    expect(callArgs[0]).toBe(mockWs);
+    expect(callArgs[1]).toBeInstanceOf(ArrayBuffer);
   });
 
   it("should close WebSocket if open fails", async () => {
@@ -200,25 +204,27 @@ describe("createBunHandler", () => {
       expect(callArgs[1]?.headers?.["x-client-id"]).toBeDefined();
     });
 
-    it("should return upgrade result on success", async () => {
+    it("should return undefined on successful upgrade", async () => {
       const handler = createBunHandler(mockRouter);
       const req = new Request("ws://localhost/ws");
 
       const result = await handler.fetch(req, mockServer);
 
-      expect(result).toBeDefined();
-      expect(result.ok).toBe(true);
+      // After successful upgrade, Bun has sent 101 response.
+      // Return undefined to signal the request is handled.
+      expect(result).toBeUndefined();
     });
 
-    it("should return 500 response on upgrade failure", async () => {
+    it("should return 400 response on upgrade failure", async () => {
       const handler = createBunHandler(mockRouter);
-      mockServer.upgrade.mockImplementation(() => null);
+      mockServer.upgrade.mockImplementation(() => false);
 
       const req = new Request("ws://localhost/ws");
       const result = await handler.fetch(req, mockServer);
 
+      // Upgrade failed (e.g., missing Upgrade header)
       expect(result).toBeInstanceOf(Response);
-      expect(result.status).toBe(500);
+      expect(result.status).toBe(400);
     });
 
     it("should support custom authentication", async () => {

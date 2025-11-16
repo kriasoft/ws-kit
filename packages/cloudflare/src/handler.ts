@@ -103,7 +103,7 @@ export function createDurableObjectHandler<
         resourceId,
         connectedAt: Date.now(),
         ...(customData || {}),
-      } as DurableObjectWebSocketData<TContext>;
+      } as unknown as DurableObjectWebSocketData<TContext>;
 
       try {
         // Create a WebSocketPair (available in Cloudflare Workers)

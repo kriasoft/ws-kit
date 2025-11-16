@@ -4,8 +4,8 @@
 /**
  * @ws-kit/bun - Bun WebSocket server adapter
  *
- * Bun-specific platform adapter providing:
- * - `createBunAdapter()` factory for PlatformAdapter integration
+ * Bun-specific adapter providing:
+ * - `createBunPubSub()` factory for Bun Pub/Sub integration via plugins
  * - `BunPubSub` class implementing native server.publish() broadcasting
  * - `createBunHandler()` factory for Bun.serve integration
  * - `serve()` high-level convenience function for starting a server
@@ -20,30 +20,21 @@
  * serve(router, { port: 3000 });
  * ```
  *
- * @example Low-level (advanced usage)
+ * @example With Pub/Sub plugin
  * ```typescript
- * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
  * import { createRouter } from "@ws-kit/zod";
+ * import { withPubSub } from "@ws-kit/pubsub";
+ * import { createBunPubSub, createBunHandler } from "@ws-kit/bun";
  *
- * const router = createRouter({
- *   platform: createBunAdapter(),
- * });
+ * const server = Bun.serve({...});
+ * const router = createRouter()
+ *   .plugin(withPubSub({ adapter: createBunPubSub(server) }));
  *
  * const { fetch, websocket } = createBunHandler(router);
- *
- * Bun.serve({
- *   fetch(req, server) {
- *     if (new URL(req.url).pathname === "/ws") {
- *       return fetch(req, server);
- *     }
- *     return new Response("Not Found", { status: 404 });
- *   },
- *   websocket,
- * });
  * ```
  */
 
-export { createBunAdapter, createBunAdapterWithServer } from "./adapter.js";
+export { createBunPubSub } from "./adapter.js";
 export { BunPubSub } from "./pubsub.js";
 export { createBunHandler, createDefaultBunFetch } from "./handler.js";
 export { toBunServerWebSocket, isBunServerWebSocket } from "./websocket.js";
