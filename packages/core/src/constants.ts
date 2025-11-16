@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Global constants: default values, reserved prefixes, internal flags.
  */
@@ -21,7 +24,9 @@ export const SYSTEM_MESSAGE_TYPES = {
 } as const;
 
 // Reserved meta keys (set by server, cannot be overridden by client)
+// clientId: assigned by server when connection opens (prevents spoofing)
+// receivedAt: assigned by server at message ingress (authoritative timestamp, prevents clock-skew attacks)
 export const RESERVED_META_KEYS = new Set([
-  "timestamp",
-  "correlationId",
+  "clientId",
+  "receivedAt",
 ]) as ReadonlySet<string>;

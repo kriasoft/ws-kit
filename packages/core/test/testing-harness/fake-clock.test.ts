@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect } from "bun:test";
-import { FakeClock } from "../../src/testing";
+import { FakeClock } from "@ws-kit/core/testing";
+import { describe, expect, it } from "bun:test";
 
 describe("FakeClock", () => {
   describe("Basic time control", () => {
@@ -90,7 +90,7 @@ describe("FakeClock", () => {
       expect(calls).toEqual([1, 1]);
 
       await clock.tick(300);
-      expect(calls).toEqual([1, 1, 1, 1]);
+      expect(calls).toEqual([1, 1, 1, 1, 1]);
     });
 
     it("should support clearInterval", async () => {
@@ -108,7 +108,7 @@ describe("FakeClock", () => {
       expect(calls).toEqual([1]); // No second call
     });
 
-    it("should allow clearing and clearing another interval mid-execution", async () => {
+    it("should allow clearing an interval mid-execution", async () => {
       const clock = new FakeClock();
       const calls: number[] = [];
 

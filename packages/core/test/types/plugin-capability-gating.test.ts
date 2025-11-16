@@ -6,9 +6,9 @@
  * Verifies that TypeScript enforces compile-time safety.
  */
 
+import { createRouter } from "../../src/core/createRouter";
 import type { Router } from "../../src/core/router";
 import type { Plugin } from "../../src/plugin/types";
-import { createRouter } from "../../src/core/createRouter";
 
 // Mock plugins for type testing
 const mockValidationPlugin: Plugin<any, { validation: true }> = (router) => {

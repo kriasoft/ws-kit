@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Clock abstraction for deterministic testing.
  * FakeClock allows complete control over time in tests.
@@ -160,10 +163,10 @@ export class FakeClock implements Clock {
   }
 
   private async runDueTimers(): Promise<void> {
-    // Record the initial time; only run timers that were due BEFORE advancing
+    // Record the initial time; only run timers that were due at or before current time
     const runUntil = this.now_;
 
-    while (this.queue.length > 0 && this.queue[0]!.dueAt < runUntil) {
+    while (this.queue.length > 0 && this.queue[0]!.dueAt <= runUntil) {
       const timer = this.queue.shift()!;
 
       // Skip if timer was cleared

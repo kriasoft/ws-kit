@@ -93,14 +93,33 @@ export interface TestConnection<
 }
 
 /**
+ * Connection info returned by getConnectionInfo().
+ */
+export interface ConnectionInfo {
+  /**
+   * HTTP headers from the connection (if provided during connect).
+   */
+  headers?: Record<string, string>;
+}
+
+/**
  * Capture helpers for assertions.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface TestCapture<TContext extends ConnectionData = ConnectionData> {
   /**
    * Get all errors caught by router.onError().
+   * Returns unknown[] because the router may emit any error type.
+   * For type-safe error assertions, use assertErrors().
    */
   errors(): readonly unknown[];
+
+  /**
+   * Get errors narrowed to Error instances.
+   * Filters to only Error objects, making assertions on messages safer.
+   * Returns readonly Error[] for type-safe assertions.
+   */
+  assertErrors(): readonly Error[];
 
   /**
    * Get all messages published via router.publish() (if pubsub enabled).
@@ -137,6 +156,12 @@ export interface TestRouter<TContext extends ConnectionData = ConnectionData>
     data?: Partial<TContext>;
     headers?: Record<string, string>;
   }): Promise<TestConnection<TContext>>;
+
+  /**
+   * Get connection info (headers, etc.) by client ID.
+   * Useful for testing authentication and header-based flows.
+   */
+  getConnectionInfo(clientId: string): ConnectionInfo;
 
   /**
    * Capture helpers for assertions.

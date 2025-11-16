@@ -22,7 +22,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -70,7 +70,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -116,7 +116,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -165,7 +165,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -207,7 +207,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -252,7 +252,7 @@ describe("Middleware", () => {
         calls.push("handler_after");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -297,7 +297,7 @@ describe("Middleware", () => {
         handlerUserId = ctx.ws.data.userId;
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -343,7 +343,7 @@ describe("Middleware", () => {
         step2 = ctx.ws.data.step2;
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -387,7 +387,7 @@ describe("Middleware", () => {
         // Should not reach here
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -429,7 +429,7 @@ describe("Middleware", () => {
         // Should not reach here
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -515,7 +515,7 @@ describe("Middleware", () => {
         throw new Error("Test error");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: (msg: string) => {
@@ -553,7 +553,7 @@ describe("Middleware", () => {
         throw new Error("Specific error message");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: (msg: string) => {
@@ -588,7 +588,7 @@ describe("Middleware", () => {
         throw new Error("Test error");
       });
 
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: (msg: string) => {
@@ -628,7 +628,7 @@ describe("Middleware", () => {
       });
 
       const sentMessages: string[] = [];
-      const wsHandler = router._core.websocket;
+      const wsHandler = router.websocket;
       const mockWs = {
         data: { clientId: "test-123" },
         send: (msg: string) => {

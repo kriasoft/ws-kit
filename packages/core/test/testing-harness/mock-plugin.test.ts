@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect } from "bun:test";
-import { createRouter } from "../../src/index.js";
-import { mockPlugin } from "../../src/testing/index.js";
-import type { MessageDescriptor } from "../../src/protocol/message-descriptor.js";
+import type { ConnectionData, MessageDescriptor } from "@ws-kit/core";
+import { createRouter } from "@ws-kit/core";
+import { mockPlugin } from "@ws-kit/core/testing";
+import { describe, expect, it } from "bun:test";
 
 describe("mockPlugin", () => {
   it("should create a mock plugin with specified extensions", () => {
@@ -12,17 +12,16 @@ describe("mockPlugin", () => {
       testMethod(): string;
     }
 
-    const mockTestPlugin = mockPlugin<unknown, MockAPI>({
+    const mockTestPlugin = mockPlugin<ConnectionData, MockAPI>({
       testMethod: () => "mocked",
     });
 
-    const router = createRouter().plugin(mockTestPlugin);
+    const router = createRouter<ConnectionData>().plugin(mockTestPlugin);
 
-    // @ts-expect-error - mockPlugin creates minimal types
     expect(router.testMethod()).toBe("mocked");
   });
 
-  it("should support multiple mock properties", () => {
+  it("should support multiple mock properties", async () => {
     interface MockPubSubAPI {
       publish: (topic: string) => Promise<{ ok: boolean }>;
       topics: { list: () => string[] };
@@ -30,7 +29,7 @@ describe("mockPlugin", () => {
 
     const publishCalls: string[] = [];
 
-    const mockPubSub = mockPlugin<unknown, MockPubSubAPI>({
+    const mockPubSub = mockPlugin<ConnectionData, MockPubSubAPI>({
       publish: async (topic) => {
         publishCalls.push(topic);
         return { ok: true };
@@ -40,14 +39,11 @@ describe("mockPlugin", () => {
       },
     });
 
-    const router = createRouter().plugin(mockPubSub);
+    const router = createRouter<ConnectionData>().plugin(mockPubSub);
 
-    // @ts-expect-error - mockPlugin creates minimal types
-    router.publish("test-topic").then(() => {
-      expect(publishCalls).toContain("test-topic");
-    });
+    await router.publish("test-topic");
 
-    // @ts-expect-error - mockPlugin creates minimal types
+    expect(publishCalls).toContain("test-topic");
     expect(router.topics.list()).toContain("topic1");
   });
 
@@ -56,13 +52,13 @@ describe("mockPlugin", () => {
       customMethod(): void;
     }
 
-    const mockPlugin1 = mockPlugin<unknown, MockAPI>({
+    const mockPlugin1 = mockPlugin<ConnectionData, MockAPI>({
       customMethod: () => {
         // no-op
       },
     });
 
-    const router = createRouter().plugin(mockPlugin1);
+    const router = createRouter<ConnectionData>().plugin(mockPlugin1);
 
     // Router base methods should still be available
     expect(typeof router.on).toBe("function");
@@ -80,24 +76,32 @@ describe("mockPlugin", () => {
 
     const rpcCalls: any[] = [];
 
-    const mockValidation = mockPlugin<unknown, ValidationAPI>({
+    const mockValidation = mockPlugin<ConnectionData, ValidationAPI>({
       rpc: (schema, handler) => {
         rpcCalls.push({ schema, handler });
-        // For mock, just return router-like object
-        return {};
+        // Return a chainable router-like object for method chaining
+        const mockRouter = {
+          on: () => mockRouter,
+          use: () => mockRouter,
+          plugin: () => mockRouter,
+        };
+        return mockRouter;
       },
     });
 
-    const router = createRouter().plugin(mockValidation);
+    const router = createRouter<ConnectionData>().plugin(mockValidation);
 
-    // @ts-expect-error - minimal mock
     const mockSchema = { type: "TEST", response: {} };
     const mockHandler = () => {};
 
-    // @ts-expect-error - minimal mock
-    router.rpc(mockSchema, mockHandler);
+    // @ts-expect-error - rpc method is mock-provided and not a standard router method
+    const result = router.rpc(mockSchema, mockHandler);
 
     expect(rpcCalls).toHaveLength(1);
     expect(rpcCalls[0].schema.type).toBe("TEST");
+    // Verify the mock returns a chainable object
+    expect(typeof result.on).toBe("function");
+    expect(typeof result.use).toBe("function");
+    expect(typeof result.plugin).toBe("function");
   });
 });

@@ -5,11 +5,11 @@
  * This test validates the fix for the critical bug where connection data was not persisted.
  */
 
+import { createRouter } from "@ws-kit/core";
+import { test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
-import { createTestRouter } from "../../src/testing";
 
-interface TestAppData {
+interface TestAppData extends Record<string, unknown> {
   userId?: string;
   messageCount?: number;
   name?: string;
@@ -18,7 +18,7 @@ interface TestAppData {
 describe("Connection data persistence", () => {
   it("should persist data across multiple messages on same connection", async () => {
     // Create a simple router for testing
-    const router = createTestRouter<TestAppData>({
+    const router = test.createTestRouter<TestAppData>({
       create: () => createRouter<TestAppData>(),
     });
 
@@ -80,7 +80,7 @@ describe("Connection data persistence", () => {
   });
 
   it("should maintain separate data for different connections", async () => {
-    const router = createTestRouter<TestAppData>({
+    const router = test.createTestRouter<TestAppData>({
       create: () => createRouter<TestAppData>(),
     });
 
@@ -143,7 +143,7 @@ describe("Connection data persistence", () => {
   });
 
   it("should initialize connection data on first access", async () => {
-    const router = createTestRouter<TestAppData>({
+    const router = test.createTestRouter<TestAppData>({
       create: () => createRouter<TestAppData>(),
     });
 

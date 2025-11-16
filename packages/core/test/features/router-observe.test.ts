@@ -60,7 +60,7 @@ describe("Router Observer API", () => {
     });
 
     it("should capture connection lifecycle events", async () => {
-      const events: Array<{ event: string; clientId?: string }> = [];
+      const events: { event: string; clientId?: string }[] = [];
       const router = createRouter();
 
       const off = router.observe({
@@ -137,7 +137,7 @@ describe("Router Observer API", () => {
       });
 
       // Trigger first error
-      let conn = await tr.connect();
+      const conn = await tr.connect();
       conn.send("UNKNOWN_1");
       await tr.flush();
 

@@ -17,7 +17,6 @@
 import { memoryPubSub } from "@ws-kit/memory";
 import * as zodModule from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
-import type { RouterImpl } from "../../src/internal";
 import { RouterImpl as RouterImplClass } from "../../src/core/router.js";
 
 const { z, message } = zodModule;

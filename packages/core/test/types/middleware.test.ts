@@ -14,8 +14,8 @@
  * Tests are run via `tsc --noEmit` to verify type safety.
  */
 
-import { describe, it, expectTypeOf } from "bun:test";
 import type { MessageContext, Middleware, WebSocketData } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
 
 // ============================================================================
 // Global Middleware Type Tests

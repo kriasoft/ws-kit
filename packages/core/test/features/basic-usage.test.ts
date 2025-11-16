@@ -142,7 +142,11 @@ describe("basic usage patterns", () => {
 
   describe("request-response pattern", () => {
     it("should handle RPC-like request messages", async () => {
-      const Request: MessageDescriptor = { type: "REQ", kind: "rpc" };
+      const Request: MessageDescriptor = {
+        type: "REQ",
+        kind: "rpc",
+        response: { type: "RES", kind: "event" },
+      };
 
       const calls: string[] = [];
 
@@ -169,6 +173,7 @@ describe("basic usage patterns", () => {
       const SequentialRequest: MessageDescriptor = {
         type: "REQ_SEQ",
         kind: "rpc",
+        response: { type: "RES_SEQ", kind: "event" },
       };
 
       const calls: string[] = [];

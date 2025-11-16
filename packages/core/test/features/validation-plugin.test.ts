@@ -12,9 +12,9 @@
  * - Validation errors flow to router.onError()
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import type { Router, MessageDescriptor } from "../../src/index";
+import type { MessageDescriptor, Router } from "../../src/index";
 
 describe("Validation Plugin - Capability Gating", () => {
   it("should not have rpc() method before plugin", () => {

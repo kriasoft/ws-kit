@@ -18,13 +18,13 @@
  * Related ADRs: ADR-001 (conditional payload), ADR-002 (type overrides), ADR-015 (unified RPC API)
  */
 
-import { describe, it, expectTypeOf } from "bun:test";
 import type {
-  MessageContext,
   EventMessageContext,
+  MessageContext,
   RpcMessageContext,
   WebSocketData,
 } from "@ws-kit/core";
+import { describe, expectTypeOf, it } from "bun:test";
 
 // ============================================================================
 // RPC vs Event Context Type Properties

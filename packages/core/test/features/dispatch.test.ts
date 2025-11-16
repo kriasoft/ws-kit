@@ -11,10 +11,10 @@
  * - Limits enforcement: maxPending
  */
 
+import type { MessageDescriptor } from "@ws-kit/core";
+import { createRouter } from "@ws-kit/core";
+import { test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
-import type { MessageDescriptor } from "../../src/core/types";
-import { createTestRouter } from "../../src/testing";
 
 describe("dispatch pipeline", () => {
   // Helper to create a simple test schema
@@ -29,14 +29,14 @@ describe("dispatch pipeline", () => {
       const router = createRouter();
 
       // Global middleware A
-      router.use(async (ctx, next) => {
+      router.use(async (_ctx, next) => {
         calls.push("global-A:before");
         await next();
         calls.push("global-A:after");
       });
 
       // Global middleware B
-      router.use(async (ctx, next) => {
+      router.use(async (_ctx, next) => {
         calls.push("global-B:before");
         await next();
         calls.push("global-B:after");
@@ -45,7 +45,7 @@ describe("dispatch pipeline", () => {
       // Per-route middleware C
       router
         .route(schema("TEST"))
-        .use(async (ctx, next) => {
+        .use(async (_ctx, next) => {
           calls.push("route-C:before");
           await next();
           calls.push("route-C:after");
@@ -54,7 +54,7 @@ describe("dispatch pipeline", () => {
           calls.push("handler");
         });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -98,7 +98,7 @@ describe("dispatch pipeline", () => {
         // handler
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -125,7 +125,7 @@ describe("dispatch pipeline", () => {
         // dummy handler
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -149,7 +149,7 @@ describe("dispatch pipeline", () => {
         called = true;
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -175,7 +175,7 @@ describe("dispatch pipeline", () => {
         // should never be called
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -203,7 +203,7 @@ describe("dispatch pipeline", () => {
         errors.push(err);
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -234,7 +234,7 @@ describe("dispatch pipeline", () => {
         throw new Error("Handler error");
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -259,7 +259,7 @@ describe("dispatch pipeline", () => {
         errors.push(err);
       });
 
-      router.use(async (ctx, next) => {
+      router.use(async (_ctx, _next) => {
         throw new Error("Middleware error");
       });
 
@@ -267,7 +267,7 @@ describe("dispatch pipeline", () => {
         // won't reach here
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -298,7 +298,7 @@ describe("dispatch pipeline", () => {
         hasSetData = typeof ctx.assignData === "function";
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -313,7 +313,7 @@ describe("dispatch pipeline", () => {
     });
 
     it("provides assignData function in context", async () => {
-      interface AppData {
+      interface AppData extends Record<string, unknown> {
         userId?: string;
         count?: number;
       }
@@ -328,11 +328,11 @@ describe("dispatch pipeline", () => {
         assignDataWasCalled = true;
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter<AppData>({
         create: () => router,
       });
 
-      const conn = await tr.connect<AppData>();
+      const conn = await tr.connect();
       conn.send("UPDATE");
       await conn.drain();
 

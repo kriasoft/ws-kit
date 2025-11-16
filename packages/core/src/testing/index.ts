@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Test harness exports: createTestRouter, wrapTestRouter, FakeClock, and types.
  * Usage: import { test } from "@ws-kit/core" or import * from "@ws-kit/core/testing"
@@ -73,25 +76,26 @@ export { mockPlugin } from "./plugin";
 
 // Type exports
 export type {
-  TestRouter,
-  TestConnection,
-  TestCapture,
+  ConnectionInfo,
   OutgoingFrame,
   PublishRecord,
+  TestCapture,
+  TestConnection,
+  TestRouter,
 } from "./types";
 
 // Act helpers (optional convenience)
 export { act } from "./act";
 
 // Internal exports (for advanced use)
-export { TestWebSocket, type ConnectionState } from "./test-websocket";
 export { InMemoryPlatformAdapter } from "./test-adapter";
+export { TestWebSocket, type ConnectionState } from "./test-websocket";
 
 // Namespace re-export for convenience
-import * as testHarness from "./test-harness";
-import * as fakeClock from "./fake-clock";
 import * as actModule from "./act";
+import * as fakeClock from "./fake-clock";
 import * as pluginModule from "./plugin";
+import * as testHarness from "./test-harness";
 
 export const testing = {
   createTestRouter: testHarness.createTestRouter,

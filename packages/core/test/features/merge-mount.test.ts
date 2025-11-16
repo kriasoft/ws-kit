@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
+import type { MessageDescriptor } from "../../src/protocol/message-descriptor";
 import type { ServerWebSocket } from "../../src/ws/platform-adapter";
-import type { MessageDescriptor } from "../src/protocol/message-descriptor";
 
 /**
  * Mock WebSocket for testing.

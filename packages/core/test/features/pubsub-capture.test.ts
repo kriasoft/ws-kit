@@ -11,11 +11,11 @@
  * Related: test-harness.ts, withPubSub plugin
  */
 
+import { test } from "@ws-kit/core/testing";
 import { memoryPubSub } from "@ws-kit/memory";
 import { withPubSub } from "@ws-kit/pubsub";
 import { createRouter, message, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
-import { createTestRouter } from "../../src/testing/index.js";
 
 // Test messages
 const ChatMessage = message("CHAT_MESSAGE", {
@@ -29,7 +29,7 @@ const Notification = message("NOTIFICATION", {
 describe("Pub/Sub Capture in Test Harness", () => {
   describe("withPubSub() canonical API", () => {
     it("should accept adapter only", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -42,13 +42,13 @@ describe("Pub/Sub Capture in Test Harness", () => {
     });
 
     it("should accept adapter with observer", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
               adapter: memoryPubSub(),
               observer: {
-                onPublish: (rec) => {
+                onPublish: () => {
                   // Observer callback
                 },
               },
@@ -60,7 +60,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
     });
 
     it("should accept limits and topic validation options", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -84,7 +84,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
 
   describe("capture.publishes() — basic publish capture", () => {
     it("should capture published messages", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -109,12 +109,12 @@ describe("Pub/Sub Capture in Test Harness", () => {
       // Verify capture
       const publishes = tr.capture.publishes();
       expect(publishes).toHaveLength(1);
-      expect(publishes[0].topic).toBe("chat-room");
-      expect(publishes[0].payload).toEqual({ text: "hello from handler" });
+      expect(publishes[0]!.topic).toBe("chat-room");
+      expect(publishes[0]!.payload).toEqual({ text: "hello from handler" });
     });
 
     it("should capture multiple publishes", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -139,12 +139,12 @@ describe("Pub/Sub Capture in Test Harness", () => {
 
       const publishes = tr.capture.publishes();
       expect(publishes).toHaveLength(2);
-      expect(publishes[0].payload).toEqual({ body: "notification 1" });
-      expect(publishes[1].payload).toEqual({ body: "notification 2" });
+      expect(publishes[0]!.payload).toEqual({ body: "notification 1" });
+      expect(publishes[1]!.payload).toEqual({ body: "notification 2" });
     });
 
     it("should clear publishes with capture.clear()", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -169,7 +169,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
     });
 
     it("should work with direct router.publish()", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -186,12 +186,12 @@ describe("Pub/Sub Capture in Test Harness", () => {
 
       const publishes = tr.capture.publishes();
       expect(publishes).toHaveLength(1);
-      expect(publishes[0].topic).toBe("announcements");
-      expect(publishes[0].payload).toEqual({ text: "direct publish" });
+      expect(publishes[0]!.topic).toBe("announcements");
+      expect(publishes[0]!.payload).toEqual({ text: "direct publish" });
     });
 
     it("should include meta in captures", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -217,7 +217,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
       await tr.flush();
 
       const publishes = tr.capture.publishes();
-      expect(publishes[0].meta).toEqual({ priority: "high" });
+      expect(publishes[0]!.meta).toEqual({ priority: "high" });
     });
   });
 
@@ -238,7 +238,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
         await ctx.publish("chat", ChatMessage, { text: "test" });
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -268,7 +268,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
         await ctx.publish("chat", ChatMessage, { text: "msg1" });
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -293,7 +293,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
   describe("capture.publishes() — edge cases", () => {
     it("should return empty array when pub/sub not enabled", async () => {
       // Router without pub/sub plugin
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => createRouter<{ userId?: string }>(),
       });
 
@@ -302,7 +302,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
     });
 
     it("should handle failed publishes (excludeSelf)", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -332,7 +332,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
     });
 
     it("should capture disableCapture option works correctly", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -357,7 +357,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
 
   describe("Integration — publish with multiple messages", () => {
     it("should capture sequence of publishes from different handlers", async () => {
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () =>
           createRouter<{ userId?: string }>().plugin(
             withPubSub({
@@ -393,8 +393,8 @@ describe("Pub/Sub Capture in Test Harness", () => {
       // Both should be captured
       const publishes = tr.capture.publishes();
       expect(publishes).toHaveLength(2);
-      expect(publishes[0].payload).toEqual({ text: "notification 1" });
-      expect(publishes[1].payload).toEqual({ body: "notification 2" });
+      expect(publishes[0]!.payload).toEqual({ text: "notification 1" });
+      expect(publishes[1]!.payload).toEqual({ body: "notification 2" });
     });
   });
 });
