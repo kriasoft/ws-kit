@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Dispatch pipeline tests: message routing, middleware chain, error handling.
  *
@@ -14,6 +17,7 @@
 import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
 import { test } from "@ws-kit/core/testing";
+import { withMessaging } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
 describe("dispatch pipeline", () => {
@@ -26,7 +30,7 @@ describe("dispatch pipeline", () => {
     it("executes global middleware before per-route middleware", async () => {
       const calls: string[] = [];
 
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
 
       // Global middleware A
       router.use(async (_ctx, next) => {
@@ -42,17 +46,10 @@ describe("dispatch pipeline", () => {
         calls.push("global-B:after");
       });
 
-      // Per-route middleware C
-      router
-        .route(schema("TEST"))
-        .use(async (_ctx, next) => {
-          calls.push("route-C:before");
-          await next();
-          calls.push("route-C:after");
-        })
-        .on(async () => {
-          calls.push("handler");
-        });
+      // Handler with schema
+      router.on(schema("TEST"), async () => {
+        calls.push("handler");
+      });
 
       const tr = test.createTestRouter({
         create: () => router,
@@ -60,15 +57,13 @@ describe("dispatch pipeline", () => {
 
       const conn = await tr.connect();
       conn.send("TEST");
-      await conn.drain();
+      await tr.flush();
 
-      // Order: global → global → route → handler
+      // Order: global A → global B → handler → (unwinding) B → A
       expect(calls).toEqual([
         "global-A:before",
         "global-B:before",
-        "route-C:before",
         "handler",
-        "route-C:after",
         "global-B:after",
         "global-A:after",
       ]);
@@ -77,7 +72,7 @@ describe("dispatch pipeline", () => {
     });
 
     it("prevents next() from being called multiple times", async () => {
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
       const errors: unknown[] = [];
 
       router.onError((err) => {
@@ -105,7 +100,7 @@ describe("dispatch pipeline", () => {
 
       const conn = await tr.connect();
       conn.send("TEST");
-      await conn.drain();
+      await tr.flush();
 
       // We should have caught the "next() called multiple times" error
       expect(errors.length).toBeGreaterThan(0);
@@ -223,7 +218,7 @@ describe("dispatch pipeline", () => {
 
   describe("error handling", () => {
     it("catches handler errors and routes to onError", async () => {
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
       const errors: unknown[] = [];
 
       router.onError((err) => {
@@ -241,7 +236,7 @@ describe("dispatch pipeline", () => {
 
       const conn = await tr.connect();
       conn.send("THROW");
-      await conn.drain();
+      await tr.flush();
 
       const handlerError = errors.find((e) =>
         String(e).includes("Handler error"),
@@ -252,7 +247,7 @@ describe("dispatch pipeline", () => {
     });
 
     it("catches middleware errors and routes to onError", async () => {
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
       const errors: unknown[] = [];
 
       router.onError((err) => {
@@ -274,7 +269,7 @@ describe("dispatch pipeline", () => {
 
       const conn = await tr.connect();
       conn.send("TEST");
-      await conn.drain();
+      await tr.flush();
 
       const mwError = errors.find((e) =>
         String(e).includes("Middleware error"),

@@ -372,8 +372,8 @@ describe("Plugin Enhancer System", () => {
     it("route registry populated after routes registered", () => {
       const TestMessage = {
         type: "TEST_MESSAGE",
-        schema: { type: "object", properties: {} },
-      };
+        kind: "event",
+      } as const;
 
       router.on(TestMessage, () => {});
 

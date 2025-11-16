@@ -86,21 +86,20 @@ describe("Pub/Sub Capture in Test Harness", () => {
     it("should capture published messages", async () => {
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("chat-room", ChatMessage, {
+                text: "hello from handler",
+              });
             }),
-          ),
       });
 
       const conn = await tr.connect({ data: { userId: "user1" } });
-
-      // Register handler that publishes
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("chat-room", ChatMessage, {
-          text: "hello from handler",
-        });
-      });
 
       // Send message to trigger publish
       conn.send("CHAT_MESSAGE", { text: "trigger" });
@@ -111,28 +110,30 @@ describe("Pub/Sub Capture in Test Harness", () => {
       expect(publishes).toHaveLength(1);
       expect(publishes[0]!.topic).toBe("chat-room");
       expect(publishes[0]!.payload).toEqual({ text: "hello from handler" });
+
+      await tr.close();
     });
 
     it("should capture multiple publishes", async () => {
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("notifications", Notification, {
+                body: "notification 1",
+              });
+              await ctx.publish("notifications", Notification, {
+                body: "notification 2",
+              });
             }),
-          ),
       });
 
       const conn = await tr.connect({ data: { userId: "user1" } });
-
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("notifications", Notification, {
-          body: "notification 1",
-        });
-        await ctx.publish("notifications", Notification, {
-          body: "notification 2",
-        });
-      });
 
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
@@ -141,23 +142,25 @@ describe("Pub/Sub Capture in Test Harness", () => {
       expect(publishes).toHaveLength(2);
       expect(publishes[0]!.payload).toEqual({ body: "notification 1" });
       expect(publishes[1]!.payload).toEqual({ body: "notification 2" });
+
+      await tr.close();
     });
 
     it("should clear publishes with capture.clear()", async () => {
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("chat", ChatMessage, { text: "msg1" });
             }),
-          ),
       });
 
       const conn = await tr.connect({ data: { userId: "user1" } });
-
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("chat", ChatMessage, { text: "msg1" });
-      });
 
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
@@ -193,53 +196,56 @@ describe("Pub/Sub Capture in Test Harness", () => {
     it("should include meta in captures", async () => {
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish(
+                "chat",
+                ChatMessage,
+                { text: "msg" },
+                { meta: { priority: "high" } },
+              );
             }),
-          ),
       });
 
       const conn = await tr.connect({ data: { userId: "user1" } });
-
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish(
-          "chat",
-          ChatMessage,
-          { text: "msg" },
-          {
-            meta: { priority: "high" },
-          },
-        );
-      });
 
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
 
       const publishes = tr.capture.publishes();
       expect(publishes[0]!.meta).toEqual({ priority: "high" });
+
+      await tr.close();
     });
   });
 
   describe("capture.publishes() — with router.pubsub.tap()", () => {
     it("should allow manual tap() registration", async () => {
-      const router = createRouter<{ userId?: string }>().plugin(
-        withPubSub({
-          adapter: memoryPubSub(),
-        }),
-      );
-
       const observed: any[] = [];
-      (router as any).pubsub.tap({
-        onPublish: (rec: any) => observed.push(rec),
-      });
-
-      (router as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("chat", ChatMessage, { text: "test" });
-      });
 
       const tr = test.createTestRouter({
-        create: () => router,
+        create: () => {
+          const router = createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("chat", ChatMessage, { text: "test" });
+            });
+
+          (router as any).pubsub.tap({
+            onPublish: (rec: any) => observed.push(rec),
+          });
+
+          return router;
+        },
       });
 
       const conn = await tr.connect();
@@ -249,27 +255,32 @@ describe("Pub/Sub Capture in Test Harness", () => {
       // Both the manual observer and the harness should see it
       expect(observed).toHaveLength(1);
       expect(tr.capture.publishes()).toHaveLength(1);
+
+      await tr.close();
     });
 
     it("should support observer unsubscribe", async () => {
-      const router = createRouter<{ userId?: string }>().plugin(
-        withPubSub({
-          adapter: memoryPubSub(),
-        }),
-      );
-
       const observed: any[] = [];
       const observer = {
         onPublish: (rec: any) => observed.push(rec),
       };
-      const unsub = (router as any).pubsub.tap(observer);
-
-      (router as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("chat", ChatMessage, { text: "msg1" });
-      });
+      let unsub: any;
 
       const tr = test.createTestRouter({
-        create: () => router,
+        create: () => {
+          const router = createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("chat", ChatMessage, { text: "msg1" });
+            });
+
+          unsub = (router as any).pubsub.tap(observer);
+          return router;
+        },
       });
 
       const conn = await tr.connect();
@@ -287,6 +298,8 @@ describe("Pub/Sub Capture in Test Harness", () => {
       expect(observed).toHaveLength(1);
       // But the harness should still capture it
       expect(tr.capture.publishes()).toHaveLength(2);
+
+      await tr.close();
     });
   });
 
@@ -302,26 +315,32 @@ describe("Pub/Sub Capture in Test Harness", () => {
     });
 
     it("should handle failed publishes (excludeSelf)", async () => {
+      let publishResult: any;
+
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              try {
+                publishResult = await ctx.publish(
+                  "chat",
+                  ChatMessage,
+                  { text: "msg" },
+                  { excludeSelf: true },
+                );
+              } catch (e) {
+                // excludeSelf throws per spec
+                publishResult = { ok: false, error: "UNSUPPORTED" };
+              }
             }),
-          ),
       });
 
       const conn = await tr.connect({ data: { userId: "user1" } });
-
-      let publishResult: any;
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        publishResult = await ctx.publish(
-          "chat",
-          ChatMessage,
-          { text: "msg" },
-          { excludeSelf: true },
-        );
-      });
 
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
@@ -329,29 +348,34 @@ describe("Pub/Sub Capture in Test Harness", () => {
       // Failed publishes should NOT be captured
       expect(publishResult.ok).toBe(false);
       expect(tr.capture.publishes()).toHaveLength(0);
+
+      await tr.close();
     });
 
     it("should capture disableCapture option works correctly", async () => {
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("chat", ChatMessage, { text: "msg" });
             }),
-          ),
         capturePubSub: false, // Explicitly disable capture
       });
 
       const conn = await tr.connect();
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("chat", ChatMessage, { text: "msg" });
-      });
 
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
 
       // Capture should be empty because we disabled it
       expect(tr.capture.publishes()).toHaveLength(0);
+
+      await tr.close();
     });
   });
 
@@ -359,28 +383,25 @@ describe("Pub/Sub Capture in Test Harness", () => {
     it("should capture sequence of publishes from different handlers", async () => {
       const tr = test.createTestRouter({
         create: () =>
-          createRouter<{ userId?: string }>().plugin(
-            withPubSub({
-              adapter: memoryPubSub(),
+          createRouter<{ userId?: string }>()
+            .plugin(
+              withPubSub({
+                adapter: memoryPubSub(),
+              }),
+            )
+            .on(ChatMessage, async (ctx: any) => {
+              await ctx.publish("notifications", ChatMessage, {
+                text: "notification 1",
+              });
+            })
+            .on(Notification, async (ctx: any) => {
+              await ctx.publish("notifications", Notification, {
+                body: "notification 2",
+              });
             }),
-          ),
       });
 
       const conn = await tr.connect({ data: { userId: "user1" } });
-
-      // First handler publishes one message
-      (tr as any).on(ChatMessage, async (ctx: any) => {
-        await ctx.publish("notifications", ChatMessage, {
-          text: "notification 1",
-        });
-      });
-
-      // Second handler publishes another
-      (tr as any).on(Notification, async (ctx: any) => {
-        await ctx.publish("notifications", Notification, {
-          body: "notification 2",
-        });
-      });
 
       // Trigger first handler
       conn.send("CHAT_MESSAGE", { text: "trigger1" });
@@ -395,6 +416,8 @@ describe("Pub/Sub Capture in Test Harness", () => {
       expect(publishes).toHaveLength(2);
       expect(publishes[0]!.payload).toEqual({ text: "notification 1" });
       expect(publishes[1]!.payload).toEqual({ body: "notification 2" });
+
+      await tr.close();
     });
   });
 });

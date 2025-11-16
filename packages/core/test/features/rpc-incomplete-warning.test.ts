@@ -66,7 +66,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("SYNC_NO_REPLY", { id: "123" });
-      await conn.drain();
+      await tr.flush();
 
       // Should have warning about incomplete RPC
       const warnings = warnCalls.slice(initialWarnCount);
@@ -101,7 +101,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("ASYNC_NO_REPLY", { id: "456" });
-      await conn.drain();
+      await tr.flush();
 
       // Should have warning
       const warnings = warnCalls.slice(initialWarnCount);
@@ -140,7 +140,7 @@ describe("RPC Incomplete Handler Warning", () => {
 
       // Empty ID triggers early return
       conn.send("EARLY_RETURN", { id: "" });
-      await conn.drain();
+      await tr.flush();
 
       // Should have warning for early return without error
       const warnings = warnCalls.slice(initialWarnCount);
@@ -180,7 +180,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("WITH_REPLY", { id: "789" });
-      await conn.drain();
+      await tr.flush();
 
       // Filter out any warnings that are not about incomplete RPC
       const warnings = warnCalls.slice(initialWarnCount);
@@ -214,7 +214,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("WITH_ERROR", { id: "bad" });
-      await conn.drain();
+      await tr.flush();
 
       // Filter out warnings about incomplete RPC
       const warnings = warnCalls.slice(initialWarnCount);
@@ -251,7 +251,7 @@ describe("RPC Incomplete Handler Warning", () => {
 
       conn.send("ASYNC_WITH_REPLY", { id: "123" });
       // Wait for response to fully complete
-      await conn.drain();
+      await tr.flush();
       // Add small delay to ensure async handlers complete
       await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -296,7 +296,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("NO_WARN_DISABLED", { id: "test" });
-      await conn.drain();
+      await tr.flush();
 
       // Should have no warnings because warnIncompleteRpc is disabled
       const warnings = warnCalls.slice(initialWarnCount);
@@ -330,7 +330,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("DEFAULT_WARN", { id: "test" });
-      await conn.drain();
+      await tr.flush();
 
       // Should warn by default
       const warnings = warnCalls.slice(initialWarnCount);
@@ -370,7 +370,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("DETAILED_WARNING", { id: "test" });
-      await conn.drain();
+      await tr.flush();
 
       // Find the warning message
       const warnings = warnCalls.slice(initialWarnCount);
@@ -406,7 +406,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("SUGGEST_DISABLE", { id: "test" });
-      await conn.drain();
+      await tr.flush();
 
       // Find the warning message
       const warnings = warnCalls.slice(initialWarnCount);
@@ -443,7 +443,7 @@ describe("RPC Incomplete Handler Warning", () => {
       const initialWarnCount = warnCalls.length;
 
       conn.send("EVENT", { data: "test" });
-      await conn.drain();
+      await tr.flush();
 
       // Should not warn for non-RPC messages
       const warnings = warnCalls.slice(initialWarnCount);
@@ -476,7 +476,7 @@ describe("RPC Incomplete Handler Warning", () => {
       // Send multiple RPC requests without replies
       conn.send("MULTI_REQ", { id: "1" });
       conn.send("MULTI_REQ", { id: "2" });
-      await conn.drain();
+      await tr.flush();
 
       // Should have warnings for each request
       const warnings = warnCalls.slice(initialWarnCount);
