@@ -5,8 +5,7 @@
  * @ws-kit/bun - Bun WebSocket server adapter
  *
  * Bun-specific adapter providing:
- * - `createBunPubSub()` factory for Bun Pub/Sub integration via plugins
- * - `BunPubSub` class implementing native server.publish() broadcasting
+ * - `bunPubSub()` factory for Bun Pub/Sub integration via plugins
  * - `createBunHandler()` factory for Bun.serve integration
  * - `serve()` high-level convenience function for starting a server
  * - Zero-copy message broadcasting and native backpressure handling
@@ -24,30 +23,28 @@
  * ```typescript
  * import { createRouter } from "@ws-kit/zod";
  * import { withPubSub } from "@ws-kit/pubsub";
- * import { createBunPubSub, createBunHandler } from "@ws-kit/bun";
+ * import { bunPubSub, createBunHandler } from "@ws-kit/bun";
  *
  * const server = Bun.serve({...});
  * const router = createRouter()
- *   .plugin(withPubSub({ adapter: createBunPubSub(server) }));
+ *   .plugin(withPubSub({ adapter: bunPubSub(server) }));
  *
  * const { fetch, websocket } = createBunHandler(router);
  * ```
  */
 
-export { createBunPubSub } from "./adapter.js";
-export { BunPubSub } from "./pubsub.js";
-export { createBunHandler, createDefaultBunFetch } from "./handler.js";
-export { toBunServerWebSocket, isBunServerWebSocket } from "./websocket.js";
+export { bunPubSub } from "./adapter.js";
+export { createBunHandler } from "./handler.js";
 export { serve } from "./serve.js";
+export { adaptBunWebSocket, isBunWebSocket } from "./websocket.js";
 
 // Export types
+export type { BunServeOptions } from "./serve.js";
 export type {
-  UpgradeOptions,
-  BunHandlerOptions,
-  BunWebSocketData,
-  BunWebSocket,
-  BunHandler,
-  ErrorContext,
   AuthRejection,
+  BunConnectionContext,
+  BunConnectionData,
+  BunErrorEvent,
+  BunHandlerOptions,
+  BunServerHandlers,
 } from "./types.js";
-export type { ServeOptions } from "./serve.js";

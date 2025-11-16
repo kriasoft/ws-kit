@@ -1,40 +1,17 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import type { ConnectionData, WebSocketData } from "@ws-kit/core";
 import type { ServerWebSocket as BunServerWebSocket } from "bun";
-import type { WebSocketData } from "@ws-kit/core";
 
 /**
- * Options for WebSocket upgrade in Bun.
- *
- * Passed to the fetch handler to configure how the connection is upgraded.
- */
-export interface UpgradeOptions<TData = unknown> {
-  /** Bun server instance (required for upgrade) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  server: import("bun").Server<any>;
-
-  /** Custom application data attached to the connection */
-  data?: TData;
-
-  /** HTTP headers to include in the upgrade response */
-  headers?: Record<string, string> | Headers;
-
-  /** Authentication function called during upgrade */
-  authenticate?: (req: Request) => Promise<TData> | TData;
-
-  /** Context passed to auth/handlers (e.g., database connections, env vars) */
-  context?: unknown;
-}
-
-/**
- * Error context passed to onError hook.
+ * Error event passed to onError hook.
  *
  * Per ADR-035: Sync-only hook for logging/telemetry. Flat shape for easy
  * destructuring and future extensibility without breaking existing code.
  * Optional fields allow context availability across all phases.
  */
-export interface ErrorContext {
+export interface BunErrorEvent {
   /** Phase where error occurred: discriminator for logging/routing */
   type: "upgrade" | "open" | "message" | "close";
   /** Client ID: undefined only during upgrade (pre-connection) */
@@ -59,7 +36,7 @@ export interface AuthRejection {
 }
 
 /**
- * Context passed to onOpen/onClose lifecycle hooks.
+ * Connection context passed to onOpen/onClose lifecycle hooks.
  *
  * Per ADR-035: Hooks are primarily for observability and platform-specific
  * lifecycle operations. They are sync-only to prevent promise-handling issues.
@@ -75,20 +52,20 @@ export interface AuthRejection {
  * **Anti-pattern**: Don't put business logic in hooks. Use router handlers
  * or plugins instead. Hooks are for observability and setup/teardown only.
  */
-export interface BunOpenCloseContext<
-  TData extends Record<string, unknown> = Record<string, unknown>,
+export interface BunConnectionContext<
+  TContext extends ConnectionData = ConnectionData,
 > {
   /**
    * Connection metadata; **primary field** for logging and telemetry.
    * Same data available on ctx.data in router handlers.
    */
-  data: BunWebSocketData<TData>;
+  data: BunConnectionData<TContext>;
 
   /**
    * Full Bun ServerWebSocket; **advanced field** for rare platform-specific needs.
    * E.g., check ws.readyState. Not available in router handlers (see ADR-033).
    */
-  ws: BunServerWebSocket<BunWebSocketData<TData>>;
+  ws: BunServerWebSocket<BunConnectionData<TContext>>;
 }
 
 /**
@@ -98,7 +75,7 @@ export interface BunOpenCloseContext<
  * (context propagation, observability) belong in plugins, not here.
  */
 export interface BunHandlerOptions<
-  TData extends Record<string, unknown> = Record<string, unknown>,
+  TContext extends ConnectionData = ConnectionData,
 > {
   /**
    * Custom authentication function.
@@ -114,7 +91,7 @@ export interface BunHandlerOptions<
    */
   authenticate?: (
     req: Request,
-  ) => Promise<TData | undefined> | TData | undefined;
+  ) => Promise<TContext | undefined> | TContext | undefined;
 
   /**
    * HTTP response when authentication fails.
@@ -138,7 +115,7 @@ export interface BunHandlerOptions<
    * Rationale: Consistent observability across all phases without async complexity.
    * Sync ensures no unresolved promises or error suppression.
    */
-  onError?: (error: Error, ctx: ErrorContext) => void;
+  onError?: (error: Error, evt: BunErrorEvent) => void;
 
   /** Called during WebSocket upgrade (before authentication) */
   onUpgrade?: (req: Request) => void;
@@ -165,7 +142,7 @@ export interface BunHandlerOptions<
    *   }
    * },
    */
-  onOpen?: (ctx: BunOpenCloseContext<TData>) => void;
+  onOpen?: (ctx: BunConnectionContext<TContext>) => void;
 
   /**
    * Called when connection closes (after router cleanup).
@@ -179,7 +156,7 @@ export interface BunHandlerOptions<
    *   metrics.decrement('connections');
    * },
    */
-  onClose?: (ctx: BunOpenCloseContext<TData>) => void;
+  onClose?: (ctx: BunConnectionContext<TContext>) => void;
 }
 
 /**
@@ -187,30 +164,20 @@ export interface BunHandlerOptions<
  *
  * Extends core WebSocketData with Bun-specific properties.
  */
-export type BunWebSocketData<
-  T extends Record<string, unknown> = Record<string, unknown>,
-> = WebSocketData<T> & {
+export type BunConnectionData<
+  TContext extends ConnectionData = ConnectionData,
+> = WebSocketData<TContext> & {
   /** Connection timestamp (when upgrade was accepted) */
   connectedAt: number;
 };
 
 /**
- * Type alias for Bun's ServerWebSocket for convenience.
- *
- * This is a local type in @ws-kit/bun only and should not be imported elsewhere.
- * The core ServerWebSocket interface is intentionally non-generic to stay platform-agnostic.
- * Per-connection state lives in ctx.data (via module augmentation of ConnectionData).
- *
- * This type is useful for Bun-specific application code that needs typed access to
- * the platform-specific ws.data, but the router only uses plain ServerWebSocket.
- */
-export type BunWebSocket<TData = unknown> = BunServerWebSocket<TData>;
-
-/**
  * Return type of createBunHandler factory.
+ *
+ * A pair of handlers (fetch and websocket) for use with Bun.serve().
  */
-export interface BunHandler<
-  TData extends Record<string, unknown> = Record<string, unknown>,
+export interface BunServerHandlers<
+  TContext extends ConnectionData = ConnectionData,
 > {
   /**
    * Fetch handler for HTTP upgrade requests.
@@ -227,5 +194,5 @@ export interface BunHandler<
   ) => Response | void | Promise<Response | void>;
 
   /** WebSocket handler for Bun.serve */
-  websocket: import("bun").WebSocketHandler<BunWebSocketData<TData>>;
+  websocket: import("bun").WebSocketHandler<BunConnectionData<TContext>>;
 }

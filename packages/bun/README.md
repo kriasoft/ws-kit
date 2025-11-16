@@ -13,8 +13,7 @@ Bun platform adapter for WS-Kit, leveraging Bun's native high-performance WebSoc
 
 ## What This Package Provides
 
-- **`createBunPubSub(server)`**: Factory returning a `PubSubAdapter` for use with `withPubSub()` plugin
-- **`BunPubSub`**: Native implementation leveraging Bun's `server.publish()` for zero-copy broadcasting
+- **`bunPubSub(server)`**: Factory returning a `PubSubAdapter` for use with `withPubSub()` plugin
 - **`createBunHandler(router)`**: Factory returning `{ fetch, websocket }` for `Bun.serve()` integration
 - **Native UUID client ID generation**: Using Bun's built-in `crypto.randomUUID()` for unique connection identifiers
 - **Authentication support**: Auth gating during WebSocket upgrade (return undefined to reject)
@@ -149,17 +148,17 @@ Bun.serve({
 
 ## API Reference
 
-### `createBunPubSub(server)`
+### `bunPubSub(server)`
 
 Create a Pub/Sub adapter for use with the `withPubSub()` plugin.
 
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/pubsub";
-import { createBunPubSub } from "@ws-kit/bun";
+import { bunPubSub } from "@ws-kit/bun";
 
 const server = Bun.serve({ fetch: ..., websocket: ... });
-const adapter = createBunPubSub(server);
+const adapter = bunPubSub(server);
 const router = createRouter()
   .plugin(withPubSub({ adapter }));
 ```
@@ -175,10 +174,10 @@ Returns `{ fetch, websocket }` handlers for `Bun.serve()`.
 - `authenticate?: (req: Request) => Promise<TData | undefined> | TData | undefined` — Custom auth function called during upgrade. Return `undefined` to reject with configured status (default 401), or an object to merge into connection data and accept.
 - `authRejection?: { status?: number; message?: string }` — Customize rejection response when authenticate returns undefined (default: `{ status: 401, message: "Unauthorized" }`)
 - `clientIdHeader?: string` — Header name for returning client ID (default: `"x-client-id"`)
-- `onError?: (error: Error, ctx: ErrorContext) => void` — Called when errors occur (sync-only, for logging/telemetry)
+- `onError?: (error: Error, evt: BunErrorEvent) => void` — Called when errors occur (sync-only, for logging/telemetry)
 - `onUpgrade?: (req: Request) => void` — Called before upgrade attempt
-- `onOpen?: (ctx: { ws: BunWebSocket; data: BunWebSocketData }) => void` — Called after connection established (sync-only)
-- `onClose?: (ctx: { ws: BunWebSocket; data: BunWebSocketData }) => void` — Called after connection closed (sync-only)
+- `onOpen?: (ctx: BunConnectionContext) => void` — Called after connection established (sync-only)
+- `onClose?: (ctx: BunConnectionContext) => void` — Called after connection closed (sync-only)
 
 ```typescript
 const { fetch, websocket } = createBunHandler(router, {
@@ -209,10 +208,10 @@ const { fetch, websocket } = createBunHandler(router, {
 All connections automatically include:
 
 ```typescript
-type BunWebSocketData<T> = {
+type BunConnectionData<TContext> = {
   clientId: string; // UUID v7 - unique per connection
   connectedAt: number; // Timestamp in milliseconds
-  // + your custom auth data (T)
+  // + your custom auth data (TContext)
 };
 ```
 
@@ -254,7 +253,7 @@ In Bun, `router.publish(topic)` broadcasts to **all WebSocket connections in the
 ```typescript
 import { createRouter } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/pubsub";
-import { createBunPubSub } from "@ws-kit/bun";
+import { bunPubSub } from "@ws-kit/bun";
 
 const server = Bun.serve({
   fetch() {
@@ -264,7 +263,7 @@ const server = Bun.serve({
 });
 
 const router = createRouter().plugin(
-  withPubSub({ adapter: createBunPubSub(server) }),
+  withPubSub({ adapter: bunPubSub(server) }),
 );
 
 // This broadcasts to connections in THIS process only
@@ -380,7 +379,7 @@ const { fetch, websocket } = createBunHandler(router, {
 import { createBunHandler } from "@ws-kit/bun";
 import { createRouter } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/pubsub";
-import { createBunPubSub } from "@ws-kit/bun";
+import { bunPubSub } from "@ws-kit/bun";
 import { z, message } from "@ws-kit/zod";
 
 declare module "@ws-kit/core" {
@@ -410,7 +409,7 @@ const server = Bun.serve({
 
 // Router with pub/sub
 const router = createRouter().plugin(
-  withPubSub({ adapter: createBunPubSub(server) }),
+  withPubSub({ adapter: bunPubSub(server) }),
 );
 
 // Track rooms
@@ -485,6 +484,7 @@ For exact performance benchmarks, see [Bun's WebSocket documentation](https://bu
 Per [ADR-033](../docs/adr/033-opaque-transport-canonical-connection-data.md), all connection state lives in `ctx.data`. This is the canonical source of truth:
 
 **Automatic fields:**
+
 - `clientId: string` — UUID v7, unique per connection
 - `connectedAt: number` — Timestamp when connection was established
 

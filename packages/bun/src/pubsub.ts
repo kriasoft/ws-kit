@@ -26,16 +26,9 @@ import type { Server } from "bun";
  * For multi-process deployments (load-balanced cluster), each instance has
  * its own scope—use RedisPubSubAdapter for cross-process broadcasting.
  *
- * **Usage**:
- * ```typescript
- * import { createRouter } from "@ws-kit/zod";
- * import { withPubSub } from "@ws-kit/pubsub";
- * import { createBunPubSub } from "@ws-kit/bun";
+ * **Note**: For public API, use `bunPubSub()` factory function instead.
  *
- * const server = Bun.serve({...});
- * const router = createRouter()
- *   .plugin(withPubSub({ adapter: createBunPubSub(server) }));
- * ```
+ * @internal Use `bunPubSub(server)` factory for creating instances.
  */
 export class BunPubSub implements PubSubAdapter {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

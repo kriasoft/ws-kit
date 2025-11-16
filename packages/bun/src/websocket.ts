@@ -5,12 +5,12 @@ import type { ServerWebSocket } from "@ws-kit/core";
 import type { ServerWebSocket as BunServerWebSocket } from "bun";
 
 /**
- * Wraps Bun's ServerWebSocket to ensure it conforms to the core interface.
+ * Adapts Bun's ServerWebSocket to conform to the core interface.
  *
  * Bun's ServerWebSocket already implements all required methods and properties,
- * so this wrapper is primarily for type safety and documentation.
+ * so this adapter is primarily for type safety and documentation.
  *
- * **Note**: This wrapper has no runtime overhead—it's purely for TypeScript
+ * **Note**: This adapter has no runtime overhead—it's purely for TypeScript
  * type checking. At runtime, we pass through to Bun's native WebSocket.
  *
  * This function is for Bun-specific application code. The router itself receives
@@ -19,11 +19,12 @@ import type { ServerWebSocket as BunServerWebSocket } from "bun";
  * @param ws - Bun's ServerWebSocket instance (can have generic TData)
  * @returns The same WebSocket (no-op at runtime) cast to core's non-generic ServerWebSocket
  */
-export function toBunServerWebSocket<TData = unknown>(
+export function adaptBunWebSocket<TData = unknown>(
   ws: BunServerWebSocket<TData>,
 ): ServerWebSocket {
   // Verify the interface at compile time
   // At runtime, this is a no-op—we just return the WebSocket as-is
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const socket: ServerWebSocket = ws as any;
   return socket;
 }
@@ -36,7 +37,7 @@ export function toBunServerWebSocket<TData = unknown>(
  * @param ws - Unknown WebSocket-like object
  * @returns true if ws has Bun ServerWebSocket methods
  */
-export function isBunServerWebSocket<TData = unknown>(
+export function isBunWebSocket<TData = unknown>(
   ws: unknown,
 ): ws is BunServerWebSocket<TData> {
   if (!ws || typeof ws !== "object") return false;

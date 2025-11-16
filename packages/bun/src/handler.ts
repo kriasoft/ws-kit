@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
+import type { ConnectionData, Router, ServerWebSocket } from "@ws-kit/core";
 import { type AdapterWebSocket } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
 import type {
-  BunHandler,
+  BunConnectionData,
+  BunErrorEvent,
   BunHandlerOptions,
-  BunWebSocketData,
-  ErrorContext,
+  BunServerHandlers,
 } from "./types.js";
 
 /**
@@ -31,11 +31,11 @@ function upgradeConnection<TContext extends ConnectionData = ConnectionData>(
   // Merge auth data with automatic fields (clientId, connectedAt).
   // Rationale: Opaque transport pattern (ADR-033) — ws.data is immutable,
   // so we construct it once here with all context.
-  const data: BunWebSocketData<TContext> = {
+  const data: BunConnectionData<TContext> = {
     clientId,
     connectedAt: Date.now(),
     ...(initialData ?? {}),
-  } as unknown as BunWebSocketData<TContext>;
+  } as unknown as BunConnectionData<TContext>;
 
   return server.upgrade(req, {
     data: data as any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -79,7 +79,7 @@ export function createBunHandler<
 >(
   router: Router<TContext>,
   options?: BunHandlerOptions<TContext>,
-): BunHandler<TContext> {
+): BunServerHandlers<TContext> {
   // Per ADR-035: Unwrap typed routers (e.g., from @ws-kit/zod) to access core.
   // Rationale: Ensures low-level API behaves identically to high-level serve().
   // Mirrors serve.ts logic for consistency. Fallback for direct core routers.
@@ -175,7 +175,7 @@ export function createBunHandler<
         options?.onError?.(new Error("WebSocket upgrade failed"), {
           type: "upgrade",
           req,
-        } as ErrorContext);
+        } as BunErrorEvent);
         return new Response("Upgrade failed", { status: 400 });
       } catch (error) {
         // Unexpected error in fetch handler (auth threw, server.upgrade threw, etc.).
@@ -183,7 +183,10 @@ export function createBunHandler<
         console.error("[ws] Error in fetch handler:", error);
         const errorObj =
           error instanceof Error ? error : new Error(String(error));
-        options?.onError?.(errorObj, { type: "upgrade", req } as ErrorContext);
+        options?.onError?.(errorObj, {
+          type: "upgrade",
+          req,
+        } as BunErrorEvent);
         return new Response("Internal server error", { status: 500 });
       }
     },
@@ -199,7 +202,7 @@ export function createBunHandler<
        * Called when a WebSocket connection is successfully established.
        */
       async open(
-        bunWs: import("bun").ServerWebSocket<BunWebSocketData<TContext>>,
+        bunWs: import("bun").ServerWebSocket<BunConnectionData<TContext>>,
       ): Promise<void> {
         try {
           // Sanity check: clientId must be set by fetch/upgradeConnection.
@@ -238,7 +241,7 @@ export function createBunHandler<
             type: "open",
             clientId: bunWs.data?.clientId,
             data: bunWs.data,
-          } as ErrorContext);
+          } as BunErrorEvent);
           try {
             bunWs.close(1011, "Internal server error");
           } catch {
@@ -251,7 +254,7 @@ export function createBunHandler<
        * Called when a message is received from the client.
        */
       async message(
-        bunWs: import("bun").ServerWebSocket<BunWebSocketData<TContext>>,
+        bunWs: import("bun").ServerWebSocket<BunConnectionData<TContext>>,
         data: string | Buffer,
       ): Promise<void> {
         try {
@@ -280,7 +283,7 @@ export function createBunHandler<
             type: "message",
             clientId: bunWs.data?.clientId,
             data: bunWs.data,
-          } as ErrorContext);
+          } as BunErrorEvent);
         }
       },
 
@@ -288,7 +291,7 @@ export function createBunHandler<
        * Called when the WebSocket connection is closed.
        */
       async close(
-        bunWs: import("bun").ServerWebSocket<BunWebSocketData<TContext>>,
+        bunWs: import("bun").ServerWebSocket<BunConnectionData<TContext>>,
         code: number,
         reason?: string,
       ): Promise<void> {
@@ -318,7 +321,7 @@ export function createBunHandler<
             type: "close",
             clientId: bunWs.data?.clientId,
             data: bunWs.data,
-          } as ErrorContext);
+          } as BunErrorEvent);
         }
       },
 
@@ -331,43 +334,10 @@ export function createBunHandler<
        * Can be extended by users if needed for advanced scenarios.
        */
       drain(
-        bunWs: import("bun").ServerWebSocket<BunWebSocketData<TContext>>,
+        bunWs: import("bun").ServerWebSocket<BunConnectionData<TContext>>,
       ): void {
         void bunWs; // Unused; reserved for future backpressure handling
       },
-    } as WebSocketHandler<BunWebSocketData<TContext>>,
+    } as WebSocketHandler<BunConnectionData<TContext>>,
   };
-}
-
-/**
- * Create a simple default fetch handler for WebSocket upgrades.
- *
- * This is a convenience function for the common case where your app
- * only serves WebSocket connections (no HTTP routes).
- *
- * **Usage**:
- * ```typescript
- * import { createBunHandler } from "@ws-kit/bun";
- *
- * const { websocket } = createBunHandler(router);
- * const fetch = createDefaultBunFetch(router);
- *
- * Bun.serve({
- *   fetch,
- *   websocket,
- * });
- * ```
- *
- * This handler:
- * - Upgrades all requests as WebSocket connections
- * - Returns 400 Bad Request if the upgrade fails
- *
- * For routing to specific paths or methods, use `createBunHandler()` and
- * implement your own `fetch` logic.
- */
-export function createDefaultBunFetch<
-  TContext extends ConnectionData = ConnectionData,
->(router: Router<TContext>, options?: BunHandlerOptions<TContext>) {
-  const { fetch } = createBunHandler(router, options);
-  return fetch;
 }

@@ -7,7 +7,7 @@
  * High-level convenience wrapper for serving a router on Bun.
  */
 
-import type { Router, ConnectionData } from "@ws-kit/core";
+import type { ConnectionData, Router } from "@ws-kit/core";
 import type { BunHandlerOptions } from "./types.js";
 
 /**
@@ -17,8 +17,9 @@ import type { BunHandlerOptions } from "./types.js";
  * Per ADR-035, only mechanical options (auth, lifecycle) are supported.
  * Behavioral concerns (context, observability) belong in plugins.
  */
-export interface ServeOptions<TContext extends ConnectionData = ConnectionData>
-  extends BunHandlerOptions<TContext> {
+export interface BunServeOptions<
+  TContext extends ConnectionData = ConnectionData,
+> extends BunHandlerOptions<TContext> {
   /**
    * Port to listen on.
    * @default 3000
@@ -47,7 +48,7 @@ export interface ServeOptions<TContext extends ConnectionData = ConnectionData>
  */
 export async function serve<TContext extends ConnectionData = ConnectionData>(
   router: Router<TContext>,
-  options: ServeOptions<TContext> = {},
+  options: BunServeOptions<TContext> = {},
 ): Promise<void> {
   const { createBunHandler } = await import("./handler.js");
   const { BunPubSub } = await import("./pubsub.js");

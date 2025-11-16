@@ -13,21 +13,19 @@ import { BunPubSub } from "./pubsub.js";
  *
  * **Usage**:
  * ```typescript
- * import { createBunPubSub } from "@ws-kit/bun";
+ * import { bunPubSub } from "@ws-kit/bun";
  * import { createRouter } from "@ws-kit/zod";
  * import { withPubSub } from "@ws-kit/pubsub";
  *
  * const server = await Bun.serve({...});
  * const router = createRouter()
- *   .plugin(withPubSub({ adapter: createBunPubSub(server) }));
- *
- * const { fetch, websocket } = createBunHandler(router);
+ *   .plugin(withPubSub({ adapter: bunPubSub(server) }));
  * ```
  *
  * @param server - Bun Server instance for pub/sub
  * @returns A PubSubAdapter that broadcasts to this Bun instance only
  */
-export function createBunPubSub(
+export function bunPubSub(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server: Server<any>,
 ) {
