@@ -263,4 +263,4 @@ const client = wsClient({ url: "wss://api.example.com/ws" });
 - [Getting Started Guide](./getting-started.md) — Full project setup
 - [Examples](./examples.md) — Real-world code examples
 - [Core Concepts](./core-concepts.md) — Message routing and handler patterns
-- [RPC Specification](./rpc.md) — Request/response protocol details
+- [RPC Specification](./guides/rpc.md) — Request/response protocol details

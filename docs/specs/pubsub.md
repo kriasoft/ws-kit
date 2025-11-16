@@ -2241,7 +2241,7 @@ Planned as `specs/pubsub-redis.md`.
 
 ## 15. Adapter Layer Architecture
 
-**See also**: [ADR-023](../adr/023-pubsub-adapter-split.md), [Migration Guide](../../migration/pubsub-adapter-split.md)
+**See also**: [ADR-023](../adr/023-pubsub-adapter-split.md), [Migration Guide](../migration/pubsub-adapter-split.md)
 
 ### 15.1 Core Responsibility Separation
 
