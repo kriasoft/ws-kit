@@ -3,6 +3,7 @@
 **Status**: ✅ Implemented (2025-11-13)
 
 **See Also**:
+
 - [ADR-028: Plugin Architecture - Final Design](../adr/028-plugin-architecture-final-design.md) — Implementation record
 - [Plugin Author Guide](../plugin-author-guide.md) — Usage patterns and examples
 - Implementation: [commit ea7a80e](https://github.com/kriasoft/ws-kit/commit/ea7a80e3fdfcd19d7b579e885bd9384ee2c90d5b)
@@ -16,6 +17,7 @@ This document captures the strategic and technical rationale for the plugin arch
 **Key Insight**: Decouple capability tracking (runtime concern) from API widening (type-level concern).
 
 **Result**:
+
 - Minimal core type (`Router<TContext, TExtensions>`)
 - Type-safe plugin definition via `definePlugin()`
 - Composable plugins with natural type inference
@@ -75,15 +77,15 @@ All proposals agree:
 
 ### The Three Approaches
 
-| Aspect | Hybrid Registry | Refined Extensions | **Final Form** (Selected) |
-|--------|---|---|---|
-| Core Type Complexity | High (mapped types) | Low (pure union) | **Low (pure union)** |
-| Third-Party Support | Medium (augment) | Medium (definePlugin) | **Medium (definePlugin + optional)** |
-| Type Safety | Medium (cast-dependent) | High (generic constraint) | **High (generic constraint)** |
-| Semantic Capabilities | Yes | No | **Optional (separate layer)** |
-| Runtime Tracking | Via `__caps` | Via Set<string> | **Via Set<string>** |
-| IDE Performance | Degrades (mapped types) | Excellent | **Excellent** |
-| Principle Alignment | Medium | Good | **Excellent** |
+| Aspect                | Hybrid Registry         | Refined Extensions        | **Final Form** (Selected)            |
+| --------------------- | ----------------------- | ------------------------- | ------------------------------------ |
+| Core Type Complexity  | High (mapped types)     | Low (pure union)          | **Low (pure union)**                 |
+| Third-Party Support   | Medium (augment)        | Medium (definePlugin)     | **Medium (definePlugin + optional)** |
+| Type Safety           | Medium (cast-dependent) | High (generic constraint) | **High (generic constraint)**        |
+| Semantic Capabilities | Yes                     | No                        | **Optional (separate layer)**        |
+| Runtime Tracking      | Via `__caps`            | Via `Set<string>`         | **Via `Set<string>`**                |
+| IDE Performance       | Degrades (mapped types) | Excellent                 | **Excellent**                        |
+| Principle Alignment   | Medium                  | Good                      | **Excellent**                        |
 
 ### Why Final Form Was Selected
 
@@ -517,50 +519,17 @@ See code comments and JSDoc in `packages/core/src/plugin/` for naming rationale 
 
 ## Implementation Status
 
-All 5 phases completed (2025-11-13). See [ADR-028: Plugin Architecture - Final Design](../adr/028-plugin-architecture-final-design.md) for detailed implementation records and decisions. Phase 4 includes test utilities like `mockPlugin()` for first-class testability.
-
----
-
-
-## Public API & Import/Export Structure
-
-Export structure overview: `@ws-kit/core` exports core types, `@ws-kit/core/plugin` exports `definePlugin()` helper and optional semantic layer, built-in plugins export their APIs, test utilities available in `@ws-kit/core/testing`. See [ADR-028: Plugin Architecture - Final Design](../adr/028-plugin-architecture-final-design.md) for detailed export structure and implementation details.
-
-Key patterns:
-- Plugin authors use `@ws-kit/core/plugin` → `definePlugin<TContext, TPluginApi>`
-- Plugins check dependencies via `router.pluginHost.hasCapability(name)`
-- Optional semantic types via `RouterWithCapabilities` for teams that want them
-- Third-party plugins use module augmentation to extend `RouterCapabilityAPIs`
-
----
-
-## Design Decisions: Why Each Choice
-
-**Why `@ws-kit/core/plugin`?** Separates plugin authoring concerns from core; IDE-discoverable; allows `definePlugin` prominence.
-
-**Why define APIs in validator/pubsub packages?** Keeps implementation near API definition; decouples from core; each package independently versionable.
-
-**Why module augmentation for third parties?** Standard TypeScript pattern; completely optional; no cost if unused; extensible.
-
-**Why simple `definePlugin` with spread syntax?** No casts needed; TypeScript verifies completeness at compile-time; structural merge is clear and debuggable.
-
-**Why public `pluginHost` getter?** First-class API for dependency checking; hides mutable internals; plugins know where to look; improves testability.
-
----
-
-## Implementation Status
-
 **✅ Fully Implemented** (2025-11-13)
 
 This design has been fully implemented across all 5 phases:
 
-1. ✅ **Phase 1**: Core type simplification (Router<TContext, TExtensions>)
-2. ✅ **Phase 2**: Plugin migration (withZod, withValibot, withPubSub)
-3. ✅ **Phase 3**: Optional semantic layer (RouterCapabilityAPIs, RouterWithCapabilities)
+1. ✅ **Phase 1**: Core type simplification (`Router<TContext, TExtensions>`)
+2. ✅ **Phase 2**: Plugin migration (`withZod`, `withValibot`, `withPubSub`)
+3. ✅ **Phase 3**: Optional semantic layer (`RouterCapabilityAPIs`, `RouterWithCapabilities`)
 4. ✅ **Phase 4**: Comprehensive testing (23+ tests, 100% pass rate)
 5. ✅ **Phase 5**: Documentation (ADR-028, Plugin Author Guide)
 
-See **ADR-028** for implementation details and **Plugin Author Guide** for usage.
+See [ADR-028: Plugin Architecture - Final Design](../adr/028-plugin-architecture-final-design.md) for implementation details and [Plugin Author Guide](../plugin-author-guide.md) for usage.
 
 ---
 
