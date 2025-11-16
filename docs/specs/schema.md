@@ -546,7 +546,8 @@ const router = createRouter<AppData>();
 router.on(JoinRoom, (ctx) => {
   // ctx is fully typed by schema!
   // {
-  //   ws: ServerWebSocket<AppData & { clientId: string }>,
+  //   ws: ServerWebSocket,  // Per ADR-033: opaque transport (send, close, readyState only)
+  //   data: AppData & { clientId: string },  // Connection data (canonical source)
   //   type: "JOIN_ROOM" (literal),
   //   meta: { correlationId?, timestamp?, ... },
   //   payload: { roomId: string },  // ✅ Required (schema defines it)

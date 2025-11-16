@@ -117,10 +117,10 @@ serve(router, {
     return token ? { userId: "u_123" } : undefined;
   },
   onOpen(ctx) {
-    console.log(`Connected: ${ctx.ws.data?.userId}`);
+    console.log(`Connected: ${ctx.data?.userId}`);
   },
   onClose(ctx) {
-    console.log(`Disconnected: ${ctx.ws.data?.userId}`);
+    console.log(`Disconnected: ${ctx.data?.userId}`);
   },
 });
 ```
@@ -191,7 +191,7 @@ import { JoinRoom, SendMessage, UserJoined } from "./schema";
 const chatRouter = createRouter().plugin(withZod()); // ✅ Connection data is automatically typed, validation enabled
 
 chatRouter.on(JoinRoom, async (ctx) => {
-  const userId = ctx.ws.data?.userId; // ✅ Properly typed
+  const userId = ctx.data?.userId; // ✅ Properly typed
   const roomId = ctx.payload.roomId;
   await ctx.topics.subscribe(roomId);
   ctx.send(UserJoined, { roomId, userId: userId || "anonymous" });
@@ -340,7 +340,7 @@ const router = createRouter().plugin(withZod());
 
 // Global middleware for auth checks
 router.use((ctx, next) => {
-  if (!ctx.ws.data?.userId && ctx.type !== "LOGIN") {
+  if (!ctx.data?.userId && ctx.type !== "LOGIN") {
     ctx.error("UNAUTHENTICATED", "Not authenticated");
     return; // Skip handler
   }
@@ -349,8 +349,8 @@ router.use((ctx, next) => {
 
 // Handlers have full type safety
 router.on(SendMessage, (ctx) => {
-  const userId = ctx.ws.data?.userId; // ✅ Type narrowed
-  const email = ctx.ws.data?.email; // ✅ Type narrowed
+  const userId = ctx.data?.userId; // ✅ Type narrowed
+  const email = ctx.data?.email; // ✅ Type narrowed
   console.log(`${email} sent: ${ctx.payload.text}`);
 });
 
@@ -370,15 +370,15 @@ serve(router, {
     }
   },
   onOpen(ctx) {
-    console.log(`User ${ctx.ws.data?.email} connected`);
+    console.log(`User ${ctx.data?.email} connected`);
   },
   onClose(ctx) {
-    console.log(`User ${ctx.ws.data?.email} disconnected`);
+    console.log(`User ${ctx.data?.email} disconnected`);
   },
 });
 ```
 
-The `authenticate` function receives the HTTP upgrade request and returns user data that becomes `ctx.ws.data` in all handlers. If it returns `null` or `undefined`, the connection is rejected.
+The `authenticate` function receives the HTTP upgrade request and returns user data that becomes `ctx.data` in all handlers. If it returns `null` or `undefined`, the connection is rejected.
 
 ## Message Schemas
 
@@ -516,18 +516,16 @@ const router = createRouter().plugin(withZod());
 
 // Handle new connections
 router.onOpen((ctx) => {
-  console.log(`Client connected: ${ctx.ws.data?.userId}`);
+  console.log(`Client connected: ${ctx.data?.userId}`);
 });
 
 // Handle specific message types (fully typed!)
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload; // ✅ Fully typed from schema
-  const userId = ctx.ws.data?.userId;
+  const userId = ctx.data?.userId;
 
   // Store roomId in connection data for later use
-  if (ctx.ws.data) {
-    ctx.ws.data.roomId = roomId;
-  }
+  ctx.assignData({ roomId });
 
   // Subscribe to room broadcasts
   await ctx.topics.subscribe(roomId);
@@ -546,7 +544,7 @@ router.on(JoinRoom, async (ctx) => {
 
 router.on(SendMessage, async (ctx) => {
   const { roomId, text } = ctx.payload; // ✅ Fully typed
-  const userId = ctx.ws.data?.userId;
+  const userId = ctx.data?.userId;
 
   console.log(`[${roomId}] ${userId}: ${text}`);
 
@@ -560,8 +558,8 @@ router.on(SendMessage, async (ctx) => {
 
 // Handle disconnections
 router.onClose((ctx) => {
-  const userId = ctx.ws.data?.userId;
-  const roomId = ctx.ws.data?.roomId;
+  const userId = ctx.data?.userId;
+  const roomId = ctx.data?.roomId;
 
   if (roomId && userId) {
     // Use router.publish() in lifecycle hooks (ctx.publish available in handlers only)
@@ -573,8 +571,8 @@ router.onClose((ctx) => {
 
 **Context Fields:**
 
+- `ctx.data` — Connection data (type-narrowed from module augmentation)
 - `ctx.payload` — Typed payload from schema (✅ fully typed!)
-- `ctx.ws.data` — Connection data (type-narrowed from module augmentation)
 - `ctx.type` — Message type literal (e.g., `"JOIN_ROOM"`)
 - `ctx.meta` — Client metadata (clientId, timestamp)
 - `ctx.send(schema, data)` — Type-safe send to this client only
@@ -609,9 +607,7 @@ router.on(JoinRoom, async (ctx) => {
 
   // Subscribe to room updates
   await ctx.topics.subscribe(roomId);
-  if (ctx.ws.data) {
-    ctx.ws.data.roomId = roomId;
-  }
+  ctx.assignData({ roomId });
 
   console.log(`User joined: ${roomId}`);
 
@@ -635,7 +631,7 @@ router.on(SendMessage, async (ctx) => {
 });
 
 router.onClose((ctx) => {
-  const roomId = ctx.ws.data?.roomId;
+  const roomId = ctx.data?.roomId;
   if (roomId) {
     // Use router.publish() in lifecycle hooks
     void router.publish(roomId, RoomUpdate, {
@@ -761,7 +757,7 @@ You can add error handling middleware or lifecycle hooks:
 // Error handling in connection setup
 router.onOpen((ctx) => {
   try {
-    console.log(`Client ${ctx.ws.data?.clientId} connected`);
+    console.log(`Client ${ctx.data?.clientId} connected`);
   } catch (error) {
     console.error("Error in connection setup:", error);
     ctx.error("INTERNAL", "Failed to set up connection");
@@ -868,7 +864,7 @@ Create custom key functions:
 router.use(
   rateLimit({
     adapter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
-    key: (ctx) => `${ctx.ws.data?.userId}:${ctx.type}`, // Custom keying
+    key: (ctx) => `${ctx.data?.userId}:${ctx.type}`, // Custom keying
     cost: (ctx) => (ctx.type === "ExpensiveOp" ? 10 : 1),
   }),
 );
@@ -898,7 +894,7 @@ const router = createRouter()
 router.on(JoinRoom, async (ctx) => {
   await ctx.topics.subscribe(ctx.payload.roomId);
   await ctx.publish(ctx.payload.roomId, UserJoined, {
-    userId: ctx.ws.data?.userId,
+    userId: ctx.data?.userId,
   });
 });
 
@@ -950,12 +946,10 @@ export function createChatRouter() {
 
   router.on(JoinRoom, async (ctx) => {
     const { roomId } = ctx.payload;
-    const userId = ctx.ws.data?.userId;
+    const userId = ctx.data?.userId;
 
     await ctx.topics.subscribe(roomId);
-    if (ctx.ws.data) {
-      ctx.ws.data.roomId = roomId;
-    }
+    ctx.assignData({ roomId });
 
     ctx.send(UserJoined, { roomId, userId });
     await ctx.publish(roomId, UserJoined, { roomId, userId });

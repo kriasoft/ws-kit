@@ -114,8 +114,8 @@ export function keyPerUserOrIpPerType<
     RateLimitContext,
 >(ctx: IngressContext<TData>): string {
   const tenant = ctx.data.tenantId ?? "public";
-  // NOTE: ctx.ip is always "" at middleware layer (post-validation)
+  // NOTE: IP is not available at middleware layer (post-validation)
   // This falls back to "anon", so all unauthenticated traffic shares one bucket
-  const identifier = ctx.data.userId ?? ctx.ip ?? "anon";
+  const identifier = ctx.data.userId ?? "anon";
   return `rl:${tenant}:${identifier}:${ctx.type}`;
 }

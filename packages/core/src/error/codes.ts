@@ -24,7 +24,10 @@ export interface WsKitErrorData {
   retryable?: boolean;
 }
 
-const ERROR_METADATA: Record<ErrorCode, { message: string; retryable: boolean }> = {
+const ERROR_METADATA: Record<
+  ErrorCode,
+  { message: string; retryable: boolean }
+> = {
   INTERNAL: { message: "Internal server error", retryable: false },
   BAD_REQUEST: { message: "Bad request", retryable: false },
   UNAUTHORIZED: { message: "Unauthorized", retryable: false },

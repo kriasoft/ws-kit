@@ -262,17 +262,11 @@ describe("merge & mount", () => {
       const ws = createMockWebSocket();
 
       // Should not match unprefixed type
-      await main.handleMessage(
-        ws,
-        JSON.stringify({ type: "LOGIN" })
-      );
+      await main.handleMessage(ws, JSON.stringify({ type: "LOGIN" }));
       expect(called).toBe(false);
 
       // Should match prefixed type
-      await main.handleMessage(
-        ws,
-        JSON.stringify({ type: "auth.LOGIN" })
-      );
+      await main.handleMessage(ws, JSON.stringify({ type: "auth.LOGIN" }));
       expect(called).toBe(true);
     });
 
@@ -296,10 +290,7 @@ describe("merge & mount", () => {
 
       const ws = createMockWebSocket();
 
-      await main.handleMessage(
-        ws,
-        JSON.stringify({ type: "api.auth.LOGIN" })
-      );
+      await main.handleMessage(ws, JSON.stringify({ type: "api.auth.LOGIN" }));
       expect(called).toBe(true);
     });
 

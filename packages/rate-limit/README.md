@@ -114,8 +114,8 @@ rateLimit({
 rateLimit({
   limiter,
   key: (ctx) => {
-    const org = ctx.ws.data.organizationId ?? "public";
-    const user = ctx.ws.data.userId ?? "anon";
+    const org = ctx.data.organizationId ?? "public";
+    const user = ctx.data.userId ?? "anon";
     return `rl:${org}:${user}:${ctx.type}`;
   },
 });

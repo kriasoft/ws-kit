@@ -401,7 +401,7 @@ export class OptimisticTopics<
           // WebSocket.OPEN = 1
           throw new PubSubError("CONNECTION_CLOSED", "Connection is not open");
         }
-        this.ws.subscribe(normalizedTopic); // May throw; local state remains unchanged
+        (this.ws as any).subscribe(normalizedTopic); // May throw; local state remains unchanged
       } catch (err) {
         // Re-throw CONNECTION_CLOSED as-is, wrap others as ADAPTER_ERROR
         if (err instanceof PubSubError && err.code === "CONNECTION_CLOSED") {
@@ -533,7 +533,7 @@ export class OptimisticTopics<
     const operation = (async () => {
       // Step 2: ADAPTER FIRST - call platform adapter before mutating local state
       try {
-        this.ws.unsubscribe(normalizedTopic); // May throw; local state remains unchanged
+        (this.ws as any).unsubscribe(normalizedTopic); // May throw; local state remains unchanged
       } catch (err) {
         throw new PubSubError(
           "ADAPTER_ERROR",
@@ -680,7 +680,7 @@ export class OptimisticTopics<
     try {
       for (const topic of newTopics) {
         if (!this.subscriptions.has(topic)) {
-          this.ws.subscribe(topic); // May throw; internal state unchanged
+          (this.ws as any).subscribe(topic); // May throw; internal state unchanged
           successfulTopics.add(topic);
         }
       }
@@ -690,7 +690,7 @@ export class OptimisticTopics<
       const failedRollback = new Set<string>();
       for (const topic of successfulTopics) {
         try {
-          this.ws.unsubscribe(topic);
+          (this.ws as any).unsubscribe(topic);
         } catch {
           // Rollback failure: adapter and local state are now divergent.
           // Track failed rollbacks to surface in error details for monitoring.
@@ -789,7 +789,7 @@ export class OptimisticTopics<
     const successfulTopics = new Set<string>();
     try {
       for (const topic of subscribedTopics) {
-        this.ws.unsubscribe(topic); // May throw; internal state unchanged
+        (this.ws as any).unsubscribe(topic); // May throw; internal state unchanged
         successfulTopics.add(topic);
       }
     } catch (err) {
@@ -798,7 +798,7 @@ export class OptimisticTopics<
       const failedRollback = new Set<string>();
       for (const topic of successfulTopics) {
         try {
-          this.ws.subscribe(topic);
+          (this.ws as any).subscribe(topic);
         } catch {
           // Rollback failure: adapter and local state are now divergent.
           // Track failed rollbacks to surface in error details for monitoring.
@@ -1019,7 +1019,7 @@ export class OptimisticTopics<
       // Try new API first
       if (typeof wsAdapter.isSubscribed === "function") {
         const result = await awaitWithAbort(
-          wsAdapter.isSubscribed(this.ws.clientId, topic),
+          wsAdapter.isSubscribed((this.ws as any).clientId, topic),
           verifySignal,
         );
         return result ? { kind: "subscribed" } : { kind: "unsubscribed" };
@@ -1028,7 +1028,7 @@ export class OptimisticTopics<
       // Fall back to legacy API
       if (typeof wsAdapter.hasTopic === "function") {
         const result = await awaitWithAbort(
-          wsAdapter.hasTopic(topic, this.ws.clientId),
+          wsAdapter.hasTopic(topic, (this.ws as any).clientId),
           verifySignal,
         );
         return result ? { kind: "subscribed" } : { kind: "unsubscribed" };
@@ -1156,7 +1156,7 @@ export class OptimisticTopics<
     }
 
     // If adapter supports replace(), use it directly
-    if (typeof this.ws.replace === "function") {
+    if (typeof (this.ws as any).replace === "function") {
       return this.setWithAdapterSupport(
         toAdd,
         toRemove,
@@ -1200,7 +1200,7 @@ export class OptimisticTopics<
 
     try {
       // Call adapter to replace subscriptions
-      const replace = this.ws.replace as unknown as (
+      const replace = (this.ws as any).replace as unknown as (
         topics: string[],
       ) => Promise<void>;
       await replace(Array.from(this.subscriptions));
@@ -1272,7 +1272,7 @@ export class OptimisticTopics<
         // Step 1: UNSUBSCRIBE FIRST (free up space)
         for (const topic of toRemove) {
           try {
-            this.ws.unsubscribe(topic);
+            (this.ws as any).unsubscribe(topic);
             unsubscribedTopics.add(topic);
           } catch (err) {
             throw new PubSubError(
@@ -1286,7 +1286,7 @@ export class OptimisticTopics<
         // Step 2: SUBSCRIBE SECOND (add new topics to freed space)
         for (const topic of toAdd) {
           try {
-            this.ws.subscribe(topic);
+            (this.ws as any).subscribe(topic);
             subscribedTopics.add(topic);
           } catch (err) {
             throw new PubSubError(
@@ -1303,7 +1303,7 @@ export class OptimisticTopics<
         // Rollback step 1: Unsubscribe newly-added topics (free space first)
         for (const topic of subscribedTopics) {
           try {
-            this.ws.unsubscribe(topic);
+            (this.ws as any).unsubscribe(topic);
           } catch {
             failedRollback.add(topic);
           }
@@ -1312,7 +1312,7 @@ export class OptimisticTopics<
         // Rollback step 2: Re-subscribe removed topics (restore removed state)
         for (const topic of unsubscribedTopics) {
           try {
-            this.ws.subscribe(topic);
+            (this.ws as any).subscribe(topic);
           } catch {
             failedRollback.add(topic);
           }

@@ -27,10 +27,7 @@
  * See ADR-030 for design rationale and ADR-031 for plugin-adapter architecture.
  */
 
-import type {
-  ConnectionData,
-  MinimalContext,
-} from "@ws-kit/core";
+import type { ConnectionData, MinimalContext } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
 import type { ProgressOptions, ReplyOptions } from "./types";

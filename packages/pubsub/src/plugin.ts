@@ -116,8 +116,8 @@ interface WithPubSubAPI {
    * Topic introspection and subscription management.
    */
   topics: {
-    list(): readonly string[];
-    has(topic: string): boolean;
+    list(): readonly string[] | Promise<readonly string[]>;
+    has(topic: string): boolean | Promise<boolean>;
   };
 }
 
@@ -261,7 +261,7 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
       const envelope: PublishEnvelope = {
         topic,
         payload,
-        type: schema.type || schema.name, // Schema name for observability
+        type: schema.type, // Schema type for observability
         ...(opts?.meta && { meta: opts.meta }), // Pass through optional metadata
       };
 
@@ -415,14 +415,6 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
 
     // Return the plugin API extensions with capability marker
     return {
-      pubsub: true as const,
-      publish,
-      topics,
-      // Lifecycle and testing utilities (same property name as marker, but extends it at runtime)
-      // Type system treats this as WithPubSubAPI, but runtime provides the methods
-      ...(undefined as any as {
-        pubsub: { tap: any; init: any; shutdown: any };
-      }),
       pubsub: {
         /**
          * Register an observer for pub/sub operations (testing, instrumentation).
@@ -497,6 +489,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
           stop = null;
         },
       },
+      publish,
+      topics,
     };
   });
 }

@@ -13,11 +13,18 @@ export class TelemetryBridge {
     this.observers.push(observer);
   }
 
-  async notifyMessage(meta: { type: string; size: number; ts: number }): Promise<void> {
+  async notifyMessage(meta: {
+    type: string;
+    size: number;
+    ts: number;
+  }): Promise<void> {
     // Placeholder: call all observer.onMessage handlers
   }
 
-  async notifyError(err: unknown, meta?: Record<string, unknown>): Promise<void> {
+  async notifyError(
+    err: unknown,
+    meta?: Record<string, unknown>,
+  ): Promise<void> {
     // Placeholder: call all observer.onError handlers
   }
 

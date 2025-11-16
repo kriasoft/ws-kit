@@ -13,12 +13,11 @@ Bun platform adapter for WS-Kit, leveraging Bun's native high-performance WebSoc
 
 ## What This Package Provides
 
-- **`createBunAdapter()`**: Factory returning a `PlatformAdapter` for use with `WebSocketRouter`
-- **`BunPubSub`**: Native implementation leveraging Bun's `server.publish()` for zero-copy broadcasting
+- **`bunPubSub(server)`**: Factory returning a `PubSubAdapter` for use with `withPubSub()` plugin
 - **`createBunHandler(router)`**: Factory returning `{ fetch, websocket }` for `Bun.serve()` integration
-- **UUID v7 client ID generation**: Time-ordered unique identifiers for every connection
-- **Authentication support**: Custom auth functions during WebSocket upgrade
-- **Connection metadata**: Automatic `clientId` and `connectedAt` tracking
+- **Native UUID client ID generation**: Using Bun's built-in `crypto.randomUUID()` for unique connection identifiers
+- **Authentication support**: Auth gating during WebSocket upgrade (return undefined to reject)
+- **Connection metadata**: Automatic `clientId` and `connectedAt` tracking via `ctx.data`
 
 ## Platform Advantages Leveraged
 
@@ -45,12 +44,11 @@ bun add valibot @ws-kit/valibot
 ## Dependencies
 
 - `@ws-kit/core` (required) — Core router and types
-- `uuid` (required) — For UUID v7 client ID generation
 - `@types/bun` (peer) — TypeScript types for Bun (only in TypeScript projects)
 
 ## Quick Start
 
-### High-Level API (Recommended)
+### Basic Example
 
 ```typescript
 import { serve } from "@ws-kit/bun";
@@ -60,17 +58,8 @@ import { z, createRouter, message } from "@ws-kit/zod";
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
-// Create router with optional heartbeat configuration
-const router = createRouter({
-  heartbeat: {
-    intervalMs: 30_000, // Ping every 30 seconds
-    timeoutMs: 5_000, // Wait 5 seconds for pong
-    onStaleConnection(clientId, ws) {
-      console.log(`Connection ${clientId} is stale, closing...`);
-      ws.close();
-    },
-  },
-});
+// Create router
+const router = createRouter();
 
 // Register handlers
 router.on(PingMessage, (ctx) => {
@@ -81,29 +70,56 @@ router.on(PingMessage, (ctx) => {
 serve(router, {
   port: 3000,
   authenticate(req) {
-    // Optional: verify auth token and return user data
-    return {};
+    // Verify auth token and return user data
+    // Returning undefined rejects the connection with 401
+    const token = req.headers.get("authorization");
+    if (!token) return undefined; // Reject
+    return { userId: "user_123" }; // Accept
   },
 });
 ```
 
-### Low-Level API (Advanced)
+### With Pub/Sub Plugin
 
-For more control over server configuration, use the low-level API:
+For broadcasting to multiple subscribers:
 
 ```typescript
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { z, createRouter, message } from "@ws-kit/zod";
+import { serve } from "@ws-kit/bun";
+import { createRouter, message } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { z } from "zod";
 
-// Create router with Bun platform adapter
-const router = createRouter({
-  platform: createBunAdapter(),
+const NotificationMessage = message("NOTIFICATION", {
+  text: z.string(),
 });
+
+const router = createRouter().plugin(withPubSub());
+
+router.on(NotificationMessage, async (ctx) => {
+  // Broadcast to all subscribers on the topic
+  await ctx.publish("notifications", NotificationMessage, {
+    text: "Hello everyone!",
+  });
+});
+
+serve(router, { port: 3000 });
+```
+
+**Note**: `serve()` automatically initializes the Bun Pub/Sub adapter. For `createBunHandler()`, you must manually configure the adapter (see low-level API section below).
+
+### Low-Level API (Advanced)
+
+For more control over server configuration:
+
+```typescript
+import { createBunHandler } from "@ws-kit/bun";
+import { z, createRouter, message } from "@ws-kit/zod";
 
 // Define and register handlers
 const PingMessage = message("PING", { text: z.string() });
 const PongMessage = message("PONG", { reply: z.string() });
 
+const router = createRouter();
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: ctx.payload.text });
 });
@@ -132,24 +148,22 @@ Bun.serve({
 
 ## API Reference
 
-### `createBunAdapter()`
+### `bunPubSub(server)`
 
-Returns a `PlatformAdapter` for use with `createRouter()`.
-
-```typescript
-const adapter = createBunAdapter();
-const router = createRouter({ platform: adapter });
-```
-
-### `createBunAdapterWithServer(server)`
-
-Pre-configure the adapter with a Bun Server instance for immediate PubSub setup.
+Create a Pub/Sub adapter for use with the `withPubSub()` plugin.
 
 ```typescript
-const server = await Bun.serve({ fetch: ..., websocket: ... });
-const adapter = createBunAdapterWithServer(server);
-const router = createRouter({ platform: adapter });
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { bunPubSub } from "@ws-kit/bun";
+
+const server = Bun.serve({ fetch: ..., websocket: ... });
+const adapter = bunPubSub(server);
+const router = createRouter()
+  .plugin(withPubSub({ adapter }));
 ```
+
+**Note:** Bun's pub/sub is process-scoped. For multi-instance clusters, use `@ws-kit/redis`.
 
 ### `createBunHandler(router, options?)`
 
@@ -157,16 +171,34 @@ Returns `{ fetch, websocket }` handlers for `Bun.serve()`.
 
 **Options:**
 
-- `authenticate?: (req: Request) => Promise<TData> | TData` — Custom auth function called during upgrade
+- `authenticate?: (req: Request) => Promise<TData | undefined> | TData | undefined` — Custom auth function called during upgrade. Return `undefined` to reject with configured status (default 401), or an object to merge into connection data and accept.
+- `authRejection?: { status?: number; message?: string }` — Customize rejection response when authenticate returns undefined (default: `{ status: 401, message: "Unauthorized" }`)
 - `clientIdHeader?: string` — Header name for returning client ID (default: `"x-client-id"`)
-- `context?: unknown` — Custom context passed to handlers
+- `onError?: (error: Error, evt: BunErrorEvent) => void` — Called when errors occur (sync-only, for logging/telemetry)
+- `onUpgrade?: (req: Request) => void` — Called before upgrade attempt
+- `onOpen?: (ctx: BunConnectionContext) => void` — Called after connection established (sync-only)
+- `onClose?: (ctx: BunConnectionContext) => void` — Called after connection closed (sync-only)
 
 ```typescript
 const { fetch, websocket } = createBunHandler(router, {
   authenticate: async (req) => {
     const token = req.headers.get("authorization");
+    if (!token) return undefined; // Reject with 401
     const user = await validateToken(token);
     return { userId: user.id, role: user.role };
+  },
+  authRejection: { status: 403, message: "Forbidden" }, // Custom rejection
+  onError: (error, ctx) => {
+    console.error(`[ws ${ctx.type}] ${error.message}`, {
+      clientId: ctx.clientId,
+      phase: ctx.type,
+    });
+  },
+  onOpen: ({ data }) => {
+    console.log(`Connection opened: ${data.clientId}`);
+  },
+  onClose: ({ data }) => {
+    console.log(`Connection closed: ${data.clientId}`);
   },
 });
 ```
@@ -176,10 +208,10 @@ const { fetch, websocket } = createBunHandler(router, {
 All connections automatically include:
 
 ```typescript
-type BunWebSocketData<T> = {
+type BunConnectionData<TContext> = {
   clientId: string; // UUID v7 - unique per connection
   connectedAt: number; // Timestamp in milliseconds
-  // + your custom auth data (T)
+  // + your custom auth data (TContext)
 };
 ```
 
@@ -216,9 +248,24 @@ Messages published to a channel are received by all connections subscribed to th
 
 ### Single Bun Instance
 
-In Bun, `router.publish(channel)` broadcasts to **all WebSocket connections in the current process** subscribed to that channel.
+In Bun, `router.publish(topic)` broadcasts to **all WebSocket connections in the current process** subscribed to that topic.
 
 ```typescript
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { bunPubSub } from "@ws-kit/bun";
+
+const server = Bun.serve({
+  fetch() {
+    return new Response("");
+  },
+  websocket: {},
+});
+
+const router = createRouter().plugin(
+  withPubSub({ adapter: bunPubSub(server) }),
+);
+
 // This broadcasts to connections in THIS process only
 const NotificationMessage = message("NOTIFICATION", { message: z.string() });
 await router.publish("notifications", NotificationMessage, {
@@ -232,15 +279,17 @@ For deployments with multiple Bun processes behind a load balancer, use `@ws-kit
 
 ```typescript
 import { createClient } from "redis";
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 
 const redis = createClient();
 await redis.connect();
 
-const router = createRouter({
-  pubsub: redisPubSub(redis),
-});
+const router = createRouter().plugin(
+  withPubSub({ adapter: redisPubSub(redis) }),
+);
 
 // Now publishes across ALL instances
 const NotificationMessage = message("NOTIFICATION", { message: z.string() });
@@ -253,89 +302,54 @@ serve(router, { port: 3000 });
 
 ## Connection Lifecycle
 
-### Open Hook
-
-Called when a WebSocket connection is established:
+Connections go through phases: authenticate → upgrade → open → message(s) → close. Sync-only hooks fire at each phase for observability:
 
 ```typescript
-router.onOpen(async (ctx) => {
-  const { clientId } = ctx.data;
-  console.log(`[${clientId}] Connected`);
-
-  // Subscribe to channels
-  await ctx.topics.subscribe("notifications");
-
-  // Send welcome message
-  ctx.send(WelcomeMessage, { greeting: "Welcome!" });
+const { fetch, websocket } = createBunHandler(router, {
+  authenticate: async (req) => {
+    // Verify auth; return undefined to reject, object to accept
+    const token = req.headers.get("authorization");
+    return token ? { userId: "user_123" } : undefined;
+  },
+  onOpen: ({ data }) => {
+    console.log(`Connected: ${data.clientId}`);
+  },
+  onClose: ({ data }) => {
+    console.log(`Disconnected: ${data.clientId}`);
+  },
+  onError: (error, evt) => {
+    console.error(`Error in ${evt.type}:`, error.message);
+  },
 });
 ```
 
-### Authentication Hook
-
-Called on the first message to authenticate the connection:
+**Handlers** receive validated messages with full connection context:
 
 ```typescript
-router.onAuth(async (ctx) => {
-  const token = ctx.data.token; // From custom auth
-  if (!token) return false; // Close connection
-
-  // Verify token...
-  return true; // Allow further messages
-});
-```
-
-### Message Handler
-
-Called for each message matching a schema:
-
-```typescript
-router.on(LoginSchema, async (ctx) => {
-  // ctx.payload has type-safe data
-  // ctx.data has connection metadata
-  // ctx.send() to reply with messages
-
-  const { username, password } = ctx.payload;
-  const user = await verifyLogin(username, password);
-
-  if (user) {
-    ctx.send(LoginSuccessMessage, { token: user.token });
-  } else {
-    // Use ctx.error() for error responses (not ctx.send() with error message)
-    ctx.error("INVALID_ARGUMENT", "Invalid username or password");
-  }
-});
-```
-
-### Close Hook
-
-Called when the connection closes:
-
-```typescript
-router.onClose(async (ctx) => {
-  const { clientId, userId } = ctx.data;
-  console.log(`[${clientId}] Disconnected (${ctx.code}: ${ctx.reason})`);
-
-  // Clean up: remove from rooms, notify others, etc.
-});
-```
-
-### Error Hook
-
-Called when an error occurs:
-
-```typescript
-router.onError((error, ctx) => {
-  console.error(`[${ctx?.data.clientId}] Error:`, error.message);
+router.on(LoginMessage, (ctx) => {
+  const { username, password } = ctx.payload; // From schema
+  const { userId, clientId } = ctx.data; // From auth or defaults
+  // Handle login...
 });
 ```
 
 ## Examples
 
-### Chat Application
+### Chat Application with Pub/Sub
 
 ```typescript
-import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
-import { z, createRouter, message } from "@ws-kit/zod";
+import { createBunHandler } from "@ws-kit/bun";
+import { createRouter } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { bunPubSub } from "@ws-kit/bun";
+import { z, message } from "@ws-kit/zod";
+
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    room?: string;
+  }
+}
 
 // Message schemas
 const JoinRoomMessage = message("ROOM:JOIN", { room: z.string() });
@@ -348,10 +362,17 @@ const BroadcastMessage = message("ROOM:BROADCAST", {
   text: z.string(),
 });
 
-// Router
-const router = createRouter({
-  platform: createBunAdapter(),
+const server = Bun.serve({
+  fetch() {
+    return new Response("");
+  },
+  websocket: {},
 });
+
+// Router with pub/sub
+const router = createRouter().plugin(
+  withPubSub({ adapter: bunPubSub(server) }),
+);
 
 // Track rooms
 const rooms = new Map<string, Set<string>>();
@@ -359,6 +380,9 @@ const rooms = new Map<string, Set<string>>();
 router.on(JoinRoomMessage, async (ctx) => {
   const { room } = ctx.payload;
   const { clientId } = ctx.data;
+
+  // Update connection data
+  ctx.assignData({ room });
 
   // Subscribe to room
   await ctx.topics.subscribe(`room:${room}`);
@@ -374,8 +398,7 @@ router.on(JoinRoomMessage, async (ctx) => {
 
 router.on(SendMessageMessage, async (ctx) => {
   const { text } = ctx.payload;
-  const { clientId } = ctx.data;
-  const room = (ctx.data as any).room || "general"; // Set during JOIN
+  const { clientId, room } = ctx.data;
 
   // Broadcast to all in room using schema
   await router.publish(`room:${room}`, BroadcastMessage, {
@@ -385,8 +408,7 @@ router.on(SendMessageMessage, async (ctx) => {
 });
 
 router.onClose((ctx) => {
-  const { clientId } = ctx.data;
-  const room = (ctx.data as any).room;
+  const { clientId, room } = ctx.data;
 
   if (room && rooms.has(room)) {
     rooms.get(room)!.delete(clientId);
@@ -398,7 +420,7 @@ const { fetch, websocket } = createBunHandler(router);
 Bun.serve({
   fetch(req) {
     if (new URL(req.url).pathname === "/ws") {
-      return fetch(req);
+      return fetch(req, server);
     }
     return new Response("Not Found", { status: 404 });
   },
@@ -406,66 +428,91 @@ Bun.serve({
 });
 ```
 
-## Performance Characteristics
+## Performance
 
-- **Broadcasts**: ~100,000 msg/sec per instance (depends on payload size)
-- **Connections**: Supports 100,000+ concurrent connections per Bun process
-- **Latency**: <1ms broadcast latency within a process
-- **Backpressure**: Automatic write buffer management
+Bun's native WebSocket implementation provides excellent performance characteristics:
 
-Benchmarks based on typical payloads (~1KB JSON). Actual performance depends on hardware, payload size, and network conditions.
+- **Zero-copy broadcasting** — Uses Bun's `server.publish()` for efficient message distribution
+- **Automatic backpressure** — WebSocket write buffer limits are respected
+- **In-memory pub/sub** — Fast topic subscriptions without external dependencies
+- **Connection limits** — Determined by OS and Bun runtime (typically 10,000+ concurrent connections)
 
-## Migration from Old API
+For exact performance benchmarks, see [Bun's WebSocket documentation](https://bun.sh/docs/api/websockets).
 
-If migrating from the legacy `bun-ws-router`:
+## Key Concepts
+
+### Connection Data
+
+All connection state lives in `ctx.data` (see ADR-033 for details). Automatic fields are always available; custom fields come from the `authenticate` hook:
 
 ```typescript
-// Old pattern
-const ws = new WebSocketRouter();
-ws.merge(chatRouter);
-Bun.serve({
-  fetch: (req, server) => ws.upgrade(req, { server }),
-  websocket: ws.websocket,
-});
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    roles?: string[];
+  }
+}
 
-// New pattern
-const router = createRouter({
-  platform: createBunAdapter(),
-});
-router.on(MessageSchema, (ctx) => {
-  /* ... */
-});
-const { fetch, websocket } = createBunHandler(router);
-Bun.serve({
-  fetch(req, server) {
-    return fetch(req, server);
-  },
-  websocket,
+router.on(SomeMessage, (ctx) => {
+  const { clientId, connectedAt } = ctx.data; // Automatic
+  const { userId, roles } = ctx.data; // Custom (from auth)
+  ctx.assignData({ roles: ["admin"] }); // Update
 });
 ```
 
-See [Migration Guide](../../docs/migration-guide.md) for detailed steps.
+**Automatic fields:**
+
+- `clientId: string` — Unique per connection
+- `connectedAt: number` — Timestamp when upgraded
+
+### Opaque Transport
+
+The WebSocket (`ctx.ws`) is used only for low-level transport operations:
+
+```typescript
+ctx.ws.send(data); // Low-level send
+ctx.ws.close(1000); // Close with code
+const state = ctx.ws.readyState; // Check state
+
+// Don't access platform-specific fields; use ctx.data instead
+```
 
 ## TypeScript Support
 
-Full TypeScript support with:
-
-- Generic `TData` type parameter for custom connection data
-- Type inference from message schemas (with Zod or Valibot)
-- Strict handler typing to prevent runtime errors
+Full type inference from schema to handler context. Use module augmentation to define connection data once, shared across all routers:
 
 ```typescript
-type CustomData = { userId: string; role: "admin" | "user" };
+declare module "@ws-kit/core" {
+  interface ConnectionData {
+    userId?: string;
+    role?: "admin" | "user";
+  }
+}
 
-const router = createRouter<CustomData>({
-  platform: createBunAdapter(),
-});
-
-// Handler context has typed ctx.data
 router.on(SomeSchema, (ctx) => {
-  const role = ctx.data.role; // "admin" | "user"
+  const role = ctx.data.role; // Fully typed: "admin" | "user" | undefined
 });
 ```
+
+## Architecture & Design
+
+### Authentication Gating
+
+Per [ADR-035](../docs/adr/035-bun-adapter-refinement.md), authentication is a critical security boundary:
+
+- **Returning `undefined`** from `authenticate` **rejects** the connection with configured status (default 401)
+- **Returning an object** merges it into `ctx.data` and accepts the connection
+- **Not providing `authenticate`** accepts connections with only automatic fields (`clientId`, `connectedAt`)
+
+This ensures auth is a true gatekeeper, not a side effect.
+
+### Sync-Only Hooks
+
+Error and lifecycle hooks (`onError`, `onOpen`, `onClose`) are **sync-only** for predictability:
+
+- Cannot await promises (no async footguns)
+- Used for observability and logging, not recovery
+- For async cleanup or recovery, use plugins instead
 
 ## Troubleshooting
 
@@ -473,17 +520,45 @@ router.on(SomeSchema, (ctx) => {
 
 Ensure your fetch handler returns the result of `fetch(req, server)` from `createBunHandler()`.
 
+### Authentication rejected
+
+If your connection is rejected with 401, verify:
+
+1. `authenticate` is returning an object (not `undefined`) to accept
+2. Use `authRejection` option to customize the rejection status/message if needed
+
+```typescript
+const { fetch } = createBunHandler(router, {
+  authenticate: (req) => {
+    // ✓ Correct: return {} to accept with no custom data
+    // ✓ Correct: return { userId: "..." } to accept with data
+    // ✗ Wrong: returning undefined still rejects
+    return undefined; // This rejects
+  },
+  authRejection: { status: 403, message: "Forbidden" },
+});
+```
+
 ### Messages not broadcasting
 
 Check that:
 
-1. Sender is subscribed: `await ctx.topics.subscribe("channel")`
-2. Receiver is subscribed to the same channel
-3. For multi-instance: use `@ws-kit/redis`
+1. Router has `withPubSub()` plugin registered
+2. Sender and receiver are subscribed to the same topic: `await ctx.topics.subscribe("channel")`
+3. For multi-instance: use `@ws-kit/redis` instead of Bun's built-in pub/sub
 
 ### Memory leaks
 
-Ensure `router.onClose()` cleans up resources (unsubscribe, remove from rooms, etc.).
+Ensure handlers clean up subscriptions:
+
+```typescript
+router.on(JoinRoomMessage, async (ctx) => {
+  await ctx.topics.subscribe(`room:${room}`);
+});
+
+// Clean up on disconnect (via plugin or external tracking)
+await ctx.topics.unsubscribe(`room:${room}`);
+```
 
 ## Related Packages
 

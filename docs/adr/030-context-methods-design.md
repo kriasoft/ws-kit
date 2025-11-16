@@ -49,7 +49,7 @@ Existing designs create friction:
 
 ### Method Specifications
 
-#### ctx.send(schema, payload, opts?) → void | Promise<boolean>
+#### `ctx.send(schema, payload, opts?)` → `void | Promise<boolean>`
 
 **Purpose**: Send a one-way message to the current connection (unicast, 1-to-1).
 
@@ -117,7 +117,7 @@ ctx.send(Msg, payload, { meta: { timestamp: Date.now() } });
 
 ---
 
-#### ctx.reply(payload, opts?) → void | Promise<void>
+#### `ctx.reply(payload, opts?)` → `void | Promise<void>`
 
 **Purpose**: Send a terminal response in an RPC handler (unicast, 1-to-1, RPC-only).
 
@@ -230,7 +230,7 @@ ctx.reply({ result: "ok" }); // Ignored; only error was sent
 
 ---
 
-#### ctx.error(code, message, details?, opts?) → void | Promise<void>
+#### `ctx.error(code, message, details?, opts?)` → `void | Promise<void>`
 
 **Purpose**: Terminal application-level error response for RPC (symmetric to `.reply()`).
 
@@ -320,7 +320,7 @@ router.rpc(CriticalMsg, async (ctx) => {
 
 ---
 
-#### ctx.progress(update, opts?) → void | Promise<void>
+#### `ctx.progress(update, opts?)` → `void | Promise<void>`
 
 **Purpose**: Send non-terminal updates in an RPC streaming handler (unicast, 1-to-1, RPC-only).
 
@@ -394,7 +394,7 @@ for (const frame of animation) {
 
 ---
 
-#### ctx.publish(topic, schema, payload, opts?) → Promise<PublishResult>
+#### `ctx.publish(topic, schema, payload, opts?)` → `Promise<PublishResult>`
 
 **Purpose**: Broadcast a message to all subscribers of a topic (1-to-many, async, requires PubSub plugin).
 
@@ -545,11 +545,11 @@ This aligns with the pub/sub spec (docs/specs/pubsub.md): state-changing mutatio
 
 #### Async for Broadcast
 
-| Alternative                 | Tradeoff                                                  |
-| --------------------------- | --------------------------------------------------------- |
-| Sync publish                | Blocks entire handler on distributed I/O; unscalable      |
-| Fire-and-forget (no return) | Can't observe success/failure/metrics                     |
-| **Promise<PublishResult>**  | ✅ Non-blocking; apps can opt to await or fire-and-forget |
+| Alternative                  | Tradeoff                                                  |
+| ---------------------------- | --------------------------------------------------------- |
+| Sync publish                 | Blocks entire handler on distributed I/O; unscalable      |
+| Fire-and-forget (no return)  | Can't observe success/failure/metrics                     |
+| **`Promise<PublishResult>`** | ✅ Non-blocking; apps can opt to await or fire-and-forget |
 
 #### No Runtime Throws
 

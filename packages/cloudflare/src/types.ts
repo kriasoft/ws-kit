@@ -8,7 +8,9 @@ import type { WebSocketData } from "@ws-kit/core";
  *
  * Extends core WebSocketData with DO-specific metadata.
  */
-export type DurableObjectWebSocketData<T = unknown> = WebSocketData<T> & {
+export type DurableObjectWebSocketData<
+  T extends Record<string, unknown> = Record<string, unknown>,
+> = WebSocketData<T> & {
   /** Unique resource identifier (room ID, user ID, etc.) */
   resourceId?: string;
 

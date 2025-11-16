@@ -12,7 +12,8 @@ Use explicit `keyof` check to conditionally add `payload` to `MessageContext`:
 
 ```typescript
 export type MessageContext<Schema extends MessageSchemaType, Data> = {
-  ws: ServerWebSocket<Data>;
+  ws: ServerWebSocket; // Per ADR-033: opaque transport (no generics)
+  data: Data; // Connection state (canonical source per ADR-033)
   type: Schema["shape"]["type"]["value"];
   meta: z.infer<Schema["shape"]["meta"]>;
   send: SendFunction;

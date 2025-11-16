@@ -564,6 +564,6 @@ See the built-in plugins for real-world examples:
 
 ## Further Reading
 
-- [ADR-028: Plugin Architecture](../adr/028-plugin-architecture-final-design.md)
+- [ADR-028: Plugin Architecture](./adr/028-plugin-architecture-final-design.md)
 - [Router Specification](./specs/router.md)
 - [Plugin API Specification](./specs/router.md#plugins)

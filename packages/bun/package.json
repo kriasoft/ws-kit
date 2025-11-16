@@ -50,14 +50,16 @@
     "dist"
   ],
   "dependencies": {
-    "@ws-kit/core": "workspace:^",
-    "uuid": "^13.0.0"
+    "@ws-kit/core": "workspace:^"
   },
   "peerDependencies": {
     "@types/bun": ">=1.3.2"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.2"
+    "@types/bun": "^1.3.2",
+    "@ws-kit/memory": "workspace:^",
+    "@ws-kit/pubsub": "workspace:^",
+    "@ws-kit/zod": "workspace:^"
   },
   "engines": {
     "bun": ">=1.3",
@@ -65,5 +67,8 @@
   },
   "publishConfig": {
     "directory": "dist"
+  },
+  "scripts": {
+    "typecheck": "bun tsc -b tsconfig.json && bun tsc -b tsconfig.test.json"
   }
 }

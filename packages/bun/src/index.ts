@@ -4,9 +4,8 @@
 /**
  * @ws-kit/bun - Bun WebSocket server adapter
  *
- * Bun-specific platform adapter providing:
- * - `createBunAdapter()` factory for PlatformAdapter integration
- * - `BunPubSub` class implementing native server.publish() broadcasting
+ * Bun-specific adapter providing:
+ * - `bunPubSub()` factory for Bun Pub/Sub integration via plugins
  * - `createBunHandler()` factory for Bun.serve integration
  * - `serve()` high-level convenience function for starting a server
  * - Zero-copy message broadcasting and native backpressure handling
@@ -20,41 +19,32 @@
  * serve(router, { port: 3000 });
  * ```
  *
- * @example Low-level (advanced usage)
+ * @example With Pub/Sub plugin
  * ```typescript
- * import { createBunAdapter, createBunHandler } from "@ws-kit/bun";
  * import { createRouter } from "@ws-kit/zod";
+ * import { withPubSub } from "@ws-kit/pubsub";
+ * import { bunPubSub, createBunHandler } from "@ws-kit/bun";
  *
- * const router = createRouter({
- *   platform: createBunAdapter(),
- * });
+ * const server = Bun.serve({...});
+ * const router = createRouter()
+ *   .plugin(withPubSub({ adapter: bunPubSub(server) }));
  *
  * const { fetch, websocket } = createBunHandler(router);
- *
- * Bun.serve({
- *   fetch(req, server) {
- *     if (new URL(req.url).pathname === "/ws") {
- *       return fetch(req, server);
- *     }
- *     return new Response("Not Found", { status: 404 });
- *   },
- *   websocket,
- * });
  * ```
  */
 
-export { createBunAdapter, createBunAdapterWithServer } from "./adapter.js";
-export { BunPubSub } from "./pubsub.js";
-export { createBunHandler, createDefaultBunFetch } from "./handler.js";
-export { toBunServerWebSocket, isBunServerWebSocket } from "./websocket.js";
+export { bunPubSub } from "./adapter.js";
+export { createBunHandler } from "./handler.js";
 export { serve } from "./serve.js";
+export { adaptBunWebSocket, isBunWebSocket } from "./websocket.js";
 
 // Export types
+export type { BunServeOptions } from "./serve.js";
 export type {
-  UpgradeOptions,
+  AuthRejection,
+  BunConnectionContext,
+  BunConnectionData,
+  BunErrorEvent,
   BunHandlerOptions,
-  BunWebSocketData,
-  BunWebSocket,
-  BunHandler,
+  BunServerHandlers,
 } from "./types.js";
-export type { ServeOptions } from "./serve.js";

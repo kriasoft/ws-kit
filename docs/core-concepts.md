@@ -460,7 +460,7 @@ const { user } = response.payload;
 
 **Progress updates** (server-side) are streamed without blocking the terminal response. The client consumes them via `for await (const p of call.progress())` before awaiting `call.result()`.
 
-See [RPC Guide](./rpc.md) and ADR-015 for complete RPC documentation.
+See [RPC Guide](./guides/rpc.md) and ADR-015 for complete RPC documentation.
 
 ## Broadcasting and PubSub
 

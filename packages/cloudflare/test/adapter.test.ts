@@ -6,10 +6,10 @@ import {
   createDurableObjectAdapter,
   isDurableObjectServerWebSocket,
 } from "../src/adapter.js";
-import type { PlatformAdapter, PubSub } from "@ws-kit/core";
+import { DurablePubSub } from "../src/pubsub.js";
 
 describe("createDurableObjectAdapter", () => {
-  it("should return a PlatformAdapter", () => {
+  it("should return an object with pubsub and destroy", () => {
     const adapter = createDurableObjectAdapter();
     expect(adapter).toBeDefined();
     expect(typeof adapter).toBe("object");
@@ -36,11 +36,6 @@ describe("createDurableObjectAdapter", () => {
 
     // Should not throw
     await adapter.destroy?.();
-  });
-
-  it("getServerWebSocket should be undefined", () => {
-    const adapter = createDurableObjectAdapter();
-    expect(adapter.getServerWebSocket).toBeUndefined();
   });
 });
 

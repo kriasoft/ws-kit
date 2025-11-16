@@ -12,5 +12,7 @@ export function invariant(
 }
 
 export function unreachable(message?: string): never {
-  throw new Error(`Unreachable: ${message || "code path should not be reached"}`);
+  throw new Error(
+    `Unreachable: ${message || "code path should not be reached"}`,
+  );
 }

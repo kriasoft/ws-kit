@@ -13,7 +13,7 @@ import type { ServerWebSocket } from "../ws/platform-adapter";
 
 export interface HeartbeatConfig {
   intervalMs?: number; // Default: 30_000
-  timeoutMs?: number;  // Default: 5_000
+  timeoutMs?: number; // Default: 5_000
 }
 
 /**

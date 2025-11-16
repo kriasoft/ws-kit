@@ -15,19 +15,13 @@ export interface ValidatorAdapter {
    * Validate incoming message against schema.
    * Returns validated payload or throws ValidationError.
    */
-  validate(
-    schema: MessageDescriptor,
-    raw: unknown,
-  ): unknown;
+  validate(schema: MessageDescriptor, raw: unknown): unknown;
 
   /**
    * Validate outgoing payload against schema.
    * Used by ctx.send(), ctx.reply(), etc. to catch errors early.
    */
-  validateOutgoing(
-    schema: MessageDescriptor,
-    payload: unknown,
-  ): unknown;
+  validateOutgoing(schema: MessageDescriptor, payload: unknown): unknown;
 }
 
 /**

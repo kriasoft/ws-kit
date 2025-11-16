@@ -25,9 +25,12 @@ import { DurablePubSub } from "./pubsub.js";
  * instance because DO doesn't have a global pub/sub like Bun does. Instead,
  * BroadcastChannel provides per-instance communication.
  *
- * @returns A PlatformAdapter suitable for use with WebSocketRouter
+ * @returns Object with pubsub and destroy() for lifecycle management
  */
-export function createDurableObjectAdapter(): PlatformAdapter {
+export function createDurableObjectAdapter(): {
+  pubsub: DurablePubSub;
+  destroy(): Promise<void>;
+} {
   const pubsub = new DurablePubSub();
 
   return {
