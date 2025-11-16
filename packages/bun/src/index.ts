@@ -47,5 +47,7 @@ export type {
   BunWebSocketData,
   BunWebSocket,
   BunHandler,
+  ErrorContext,
+  AuthRejection,
 } from "./types.js";
 export type { ServeOptions } from "./serve.js";

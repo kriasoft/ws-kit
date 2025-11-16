@@ -1,12 +1,9 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PlatformAdapter, PubSub, ServerWebSocket } from "@ws-kit/core";
+import type { PubSub } from "@ws-kit/core";
 import { describe, expectTypeOf, it } from "bun:test";
-import {
-  createBunAdapter,
-  createBunAdapterWithServer,
-} from "../../src/adapter.js";
+import { createBunPubSub } from "../../src/adapter.js";
 import { createBunHandler } from "../../src/handler.js";
 import { BunPubSub } from "../../src/pubsub.js";
 import type {
@@ -16,32 +13,11 @@ import type {
 } from "../../src/types.js";
 
 describe("@ws-kit/bun type tests", () => {
-  describe("createBunAdapter", () => {
-    it("should return PlatformAdapter type", () => {
-      const adapter = createBunAdapter();
-      expectTypeOf(adapter).toMatchTypeOf<PlatformAdapter>();
-    });
-
-    it("should have pubsub as optional", () => {
-      const adapter = createBunAdapter();
-      expectTypeOf(adapter.pubsub).toEqualTypeOf<PubSub | undefined>();
-    });
-
-    it("should have getServerWebSocket as optional", () => {
-      const adapter = createBunAdapter();
-      expectTypeOf(adapter.getServerWebSocket).toEqualTypeOf<
-        ((ws: unknown) => ServerWebSocket) | undefined
-      >();
-    });
-  });
-
-  describe("createBunAdapterWithServer", () => {
-    it("should return PlatformAdapter with pubsub", () => {
+  describe("createBunPubSub", () => {
+    it("should return PubSub", () => {
       const mockServer = { publish: () => {} } as any;
-      const adapter = createBunAdapterWithServer(mockServer);
-
-      expectTypeOf(adapter).toMatchTypeOf<PlatformAdapter>();
-      expectTypeOf(adapter.pubsub).toMatchTypeOf<PubSub>();
+      const pubsub = createBunPubSub(mockServer);
+      expectTypeOf(pubsub).toMatchTypeOf<PubSub>();
     });
   });
 

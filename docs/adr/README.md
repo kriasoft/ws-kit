@@ -37,6 +37,7 @@ This directory contains architectural decisions that shaped ws-kit's design. Eac
 | [032](./032-canonical-imports-design.md)                    | Canonical Imports Design                         | **Final**      | Imports—Each plugin/feature has one canonical source    | [plugins.md](../specs/plugins.md), [canonical-imports.md](../specs/canonical-imports.md) |
 | [033](./033-opaque-transport-canonical-connection-data.md)  | Opaque Transport & Canonical Connection Data     | **Final**      | Core—Platform-agnostic transport, typed connection data | [router.md](../specs/router.md)                                                          |
 | [034](./034-bun-upgrade-return-semantics.md)                | Bun WebSocket Upgrade Return Semantics           | ✅ Implemented | Adapter—Correct fetch response handling for upgrades    | [adapters.md](../specs/adapters.md)                                                      |
+| [035](./035-bun-adapter-refinement.md)                      | Bun Adapter Refinement                           | **Final**      | Adapter—Auth gating, sync hooks, lean API               | [adapters.md](../specs/adapters.md)                                                      |
 
 ## Status Legend
 

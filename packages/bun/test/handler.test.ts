@@ -168,6 +168,70 @@ describe("createBunHandler", () => {
     expect(mockRouter.handleClose).toHaveBeenCalled();
   });
 
+  describe("lifecycle hooks", () => {
+    it("onOpen receives data and ws context", async () => {
+      const onOpen = mock(({ data, ws }) => {
+        expect(data.clientId).toBeDefined();
+        expect(typeof ws.send).toBe("function");
+        expect(typeof ws.close).toBe("function");
+      });
+
+      const handler = createBunHandler(mockRouter, { onOpen });
+      const mockWs = {
+        data: { clientId: "test-id-123", connectedAt: Date.now() },
+        send: mock(() => {}),
+        close: mock(() => {}),
+        readyState: "OPEN",
+      };
+
+      await handler.websocket.open(mockWs);
+      expect(onOpen).toHaveBeenCalledWith({
+        ws: mockWs,
+        data: mockWs.data,
+      });
+    });
+
+    it("onClose receives data and ws context", async () => {
+      const onClose = mock(({ data, ws }) => {
+        expect(data.clientId).toBeDefined();
+        expect(typeof ws.send).toBe("function");
+        expect(typeof ws.close).toBe("function");
+      });
+
+      const handler = createBunHandler(mockRouter, { onClose });
+      const mockWs = {
+        data: { clientId: "test-id-456", connectedAt: Date.now() },
+        send: mock(() => {}),
+        close: mock(() => {}),
+        readyState: "OPEN",
+      };
+
+      await handler.websocket.close(mockWs, 1000);
+      expect(onClose).toHaveBeenCalledWith({
+        ws: mockWs,
+        data: mockWs.data,
+      });
+    });
+
+    it("onOpen hook can access ws.readyState for advanced use", async () => {
+      const onOpen = mock(({ ws }) => {
+        // Advanced: check readyState if needed for Bun-specific logic
+        const state = ws.readyState;
+        expect(state).toBeDefined();
+        expect(typeof state).toBe("string");
+      });
+
+      const handler = createBunHandler(mockRouter, { onOpen });
+      const mockWs = {
+        data: { clientId: "test-id", connectedAt: Date.now() },
+        readyState: "OPEN",
+      };
+
+      await handler.websocket.open(mockWs);
+      expect(onOpen).toHaveBeenCalled();
+    });
+  });
+
   describe("fetch handler", () => {
     it("should call server.upgrade on fetch", async () => {
       const handler = createBunHandler(mockRouter);
@@ -272,6 +336,187 @@ describe("createBunHandler", () => {
 
       expect(connectedAt).toBeGreaterThanOrEqual(beforeFetch);
       expect(connectedAt).toBeLessThanOrEqual(afterFetch);
+    });
+
+    it("should reject authentication with 401 when authenticate returns undefined", async () => {
+      const customAuth = mock(async (req: Request) => undefined);
+
+      const handler = createBunHandler(mockRouter, {
+        authenticate: customAuth,
+      });
+      const req = new Request("ws://localhost/ws");
+
+      const result = await handler.fetch(req, mockServer);
+
+      expect(customAuth).toHaveBeenCalledWith(req);
+      expect(result).toBeInstanceOf(Response);
+      expect(result.status).toBe(401);
+      expect(await result.text()).toBe("Unauthorized");
+      expect(mockServer.upgrade).not.toHaveBeenCalled();
+    });
+
+    it("should reject authentication with custom status and message", async () => {
+      const customAuth = mock(async (req: Request) => undefined);
+
+      const handler = createBunHandler(mockRouter, {
+        authenticate: customAuth,
+        authRejection: { status: 403, message: "Forbidden" },
+      });
+      const req = new Request("ws://localhost/ws");
+
+      const result = await handler.fetch(req, mockServer);
+
+      expect(result).toBeInstanceOf(Response);
+      expect(result.status).toBe(403);
+      expect(await result.text()).toBe("Forbidden");
+      expect(mockServer.upgrade).not.toHaveBeenCalled();
+    });
+
+    it("should accept authentication when empty object is returned", async () => {
+      const customAuth = mock(async (req: Request) => ({}));
+
+      const handler = createBunHandler(mockRouter, {
+        authenticate: customAuth,
+      });
+      const req = new Request("ws://localhost/ws");
+
+      await handler.fetch(req, mockServer);
+
+      expect(customAuth).toHaveBeenCalledWith(req);
+      expect(mockServer.upgrade).toHaveBeenCalled();
+      const callArgs = mockServer.upgrade.mock.calls[0];
+      expect(callArgs[1]?.data?.clientId).toBeDefined();
+    });
+
+    it("should call onError when upgrade fails", async () => {
+      const onError = mock(() => {});
+      const handler = createBunHandler(mockRouter, { onError });
+      mockServer.upgrade.mockImplementation(() => false);
+
+      const req = new Request("ws://localhost/ws");
+      await handler.fetch(req, mockServer);
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const callArgs = onError.mock.calls[0];
+      expect(callArgs[0]).toBeInstanceOf(Error);
+      expect(callArgs[1]?.type).toBe("upgrade");
+    });
+
+    it("should call onError when fetch handler throws", async () => {
+      const onError = mock(() => {});
+      const handler = createBunHandler(mockRouter, { onError });
+      mockServer.upgrade.mockImplementation(() => {
+        throw new Error("Upgrade error");
+      });
+
+      const req = new Request("ws://localhost/ws");
+      const result = await handler.fetch(req, mockServer);
+
+      expect(onError).toHaveBeenCalled();
+      expect(result.status).toBe(500);
+      const callArgs = onError.mock.calls[0];
+      expect(callArgs[0]).toBeInstanceOf(Error);
+      expect(callArgs[1]?.type).toBe("upgrade");
+    });
+  });
+
+  describe("error hooks", () => {
+    it("should call onError when websocket.open throws", async () => {
+      const onError = mock(() => {});
+      const handler = createBunHandler(mockRouter, { onError });
+
+      mockRouter.handleOpen.mockImplementation(() => {
+        throw new Error("Open error");
+      });
+
+      const mockWs = {
+        data: { clientId: "test-id" },
+        close: mock(() => {}),
+      };
+
+      await handler.websocket.open(mockWs);
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const callArgs = onError.mock.calls[0];
+      expect(callArgs[0]).toBeInstanceOf(Error);
+      expect(callArgs[1]?.type).toBe("open");
+      expect(callArgs[1]?.clientId).toBe("test-id");
+      expect(callArgs[1]?.data).toBeDefined();
+    });
+
+    it("should call onError when websocket.message throws", async () => {
+      const onError = mock(() => {});
+      const handler = createBunHandler(mockRouter, { onError });
+
+      mockRouter.handleMessage.mockImplementation(() => {
+        throw new Error("Message error");
+      });
+
+      const mockWs = {
+        data: { clientId: "test-id", userId: "user-1" },
+      };
+
+      await handler.websocket.message(mockWs, '{"type":"PING"}');
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const callArgs = onError.mock.calls[0];
+      expect(callArgs[0]).toBeInstanceOf(Error);
+      expect(callArgs[1]?.type).toBe("message");
+      expect(callArgs[1]?.clientId).toBe("test-id");
+      expect(callArgs[1]?.data?.userId).toBe("user-1");
+    });
+
+    it("should call onError when websocket.close throws", async () => {
+      const onError = mock(() => {});
+      const handler = createBunHandler(mockRouter, { onError });
+
+      mockRouter.handleClose.mockImplementation(() => {
+        throw new Error("Close error");
+      });
+
+      const mockWs = {
+        data: { clientId: "test-id" },
+      };
+
+      await handler.websocket.close(mockWs, 1000, "Normal");
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const callArgs = onError.mock.calls[0];
+      expect(callArgs[0]).toBeInstanceOf(Error);
+      expect(callArgs[1]?.type).toBe("close");
+      expect(callArgs[1]?.clientId).toBe("test-id");
+    });
+  });
+
+  describe("typed router unwrapping", () => {
+    it("should unwrap typed routers via Symbol", async () => {
+      const coreRouterMock = {
+        websocket: {
+          open: mock(async () => {}),
+          message: mock(async () => {}),
+          close: mock(async () => {}),
+        },
+      };
+
+      const typedRouter = {
+        [Symbol.for("ws-kit.core")]: coreRouterMock,
+      };
+
+      const handler = createBunHandler(typedRouter as any);
+      const mockWs = { data: { clientId: "test-id" } };
+
+      await handler.websocket.open(mockWs);
+
+      expect(coreRouterMock.websocket.open).toHaveBeenCalledWith(mockWs);
+    });
+
+    it("should fall back to router if no Symbol.for('ws-kit.core')", async () => {
+      const handler = createBunHandler(mockRouter);
+      const mockWs = { data: { clientId: "test-id" } };
+
+      await handler.websocket.open(mockWs);
+
+      expect(mockRouter.websocket.open).toHaveBeenCalledWith(mockWs);
     });
   });
 });

@@ -4,56 +4,42 @@
 import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
 import { type AdapterWebSocket } from "@ws-kit/core";
 import type { Server, WebSocketHandler } from "bun";
-import * as uuid from "uuid";
 import type {
   BunHandler,
   BunHandlerOptions,
   BunWebSocketData,
+  ErrorContext,
 } from "./types.js";
-const { v7: uuidv7 } = uuid;
 
 /**
- * Internal helper to perform WebSocket upgrade with authentication and context wiring.
+ * Internal helper to perform WebSocket upgrade with precomputed connection data.
  *
- * Returns true if upgrade succeeded (Bun has sent 101 Switching Protocols),
- * false if the request cannot be upgraded (e.g., missing Upgrade header).
+ * Per ADR-035: Separated from auth to isolate concerns.
+ * Auth happens in fetch() → data passed here → upgradeConnection() only wires Bun.
+ *
+ * Returns true if upgrade succeeded (Bun sent 101), false otherwise.
  *
  * @internal
  */
-async function tryUpgrade<TContext extends ConnectionData = ConnectionData>(
+function upgradeConnection<TContext extends ConnectionData = ConnectionData>(
   req: Request,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  server: Server<any>,
-  options: BunHandlerOptions<TContext> | undefined,
-): Promise<boolean> {
-  // Call onUpgrade hook (before authentication)
-  options?.onUpgrade?.(req);
-
-  const clientIdHeader = options?.clientIdHeader ?? "x-client-id";
-
-  // Generate unique client ID (UUID v7 - time-ordered)
-  const clientId = uuidv7();
-
-  // Call user's authentication function if provided
-  const customData: TContext | undefined = options?.authenticate
-    ? await Promise.resolve(options.authenticate(req))
-    : undefined;
-
-  // Prepare connection data with clientId
+  server: Server<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+  clientId: string,
+  initialData: TContext | undefined,
+  clientIdHeader: string,
+): boolean {
+  // Merge auth data with automatic fields (clientId, connectedAt).
+  // Rationale: Opaque transport pattern (ADR-033) — ws.data is immutable,
+  // so we construct it once here with all context.
   const data: BunWebSocketData<TContext> = {
     clientId,
     connectedAt: Date.now(),
-    ...(customData ?? {}),
-  };
+    ...(initialData ?? {}),
+  } as unknown as BunWebSocketData<TContext>;
 
-  // Upgrade connection with initial data.
-  // Returns true if successful, false if not a valid WebSocket request.
   return server.upgrade(req, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: data as any,
-    headers: {
-      [clientIdHeader]: clientId,
-    },
+    data: data as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    headers: { [clientIdHeader]: clientId },
   });
 }
 
@@ -61,7 +47,8 @@ async function tryUpgrade<TContext extends ConnectionData = ConnectionData>(
  * Create Bun WebSocket handlers for use with Bun.serve.
  *
  * Returns a `{ fetch, websocket }` object that can be passed directly to Bun.serve.
- * Accepts both typed routers and core routers.
+ * Accepts both typed routers and core routers. Per ADR-035, this adapter is a mechanical
+ * bridge between Bun's WebSocket API and the router's internal protocol.
  *
  * **Usage**:
  * ```typescript
@@ -77,10 +64,11 @@ async function tryUpgrade<TContext extends ConnectionData = ConnectionData>(
  * **Connection Flow**:
  * 1. HTTP request arrives at Bun.serve fetch handler
  * 2. Your code calls `router.upgrade(req, { server })` or similar
- * 3. Bun upgrades the connection to WebSocket
- * 4. `websocket.open(ws)` → router handles the connection
- * 5. `websocket.message(ws, msg)` → router routes the message
- * 6. `websocket.close(ws, code, reason)` → router handles cleanup
+ * 3. Authentication is performed (if configured)
+ * 4. Bun upgrades the connection to WebSocket
+ * 5. `websocket.open(ws)` → router handles the connection
+ * 6. `websocket.message(ws, msg)` → router routes the message
+ * 7. `websocket.close(ws, code, reason)` → router handles cleanup
  *
  * @param router - TypedRouter or WebSocketRouter instance
  * @param options - Optional handler configuration
@@ -92,19 +80,28 @@ export function createBunHandler<
   router: Router<TContext>,
   options?: BunHandlerOptions<TContext>,
 ): BunHandler<TContext> {
+  // Per ADR-035: Unwrap typed routers (e.g., from @ws-kit/zod) to access core.
+  // Rationale: Ensures low-level API behaves identically to high-level serve().
+  // Mirrors serve.ts logic for consistency. Fallback for direct core routers.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
+
   return {
     /**
      * Fetch handler for HTTP upgrade requests.
      *
      * This handler is called for every HTTP request. Your application code should:
      * 1. Check if the request is a WebSocket upgrade (path, method, headers)
-     * 2. Perform any async authentication (via options.authenticate)
-     * 3. Call this fetch handler or delegate to it
-     * 4. Return the result (undefined on successful upgrade, Response on failure/error)
+     * 2. Call this fetch handler or delegate to it
+     * 3. Return the result (undefined on successful upgrade, Response on failure/error)
      *
      * **Bun Semantics**: After server.upgrade() returns true, Bun has already sent the
      * "101 Switching Protocols" response. Returning undefined signals that the request
      * is fully handled. Returning a Response only on failure is the correct pattern.
+     *
+     * **Authentication**: If `authenticate` is configured and returns `undefined`,
+     * the connection is rejected with a 401 (or configured status). To accept a
+     * connection with minimal data, return an empty object `{}` instead.
      *
      * For a simple example:
      * ```typescript
@@ -126,28 +123,67 @@ export function createBunHandler<
      * });
      * ```
      *
-     * Note on PubSub initialization:
-     * - If router was created with createBunAdapterWithServer(server), BunPubSub is already set
-     * - If router uses MemoryPubSub (default), broadcasts are scoped to this instance only
-     * - For multi-instance clusters, use RedisPubSub or pre-initialize with the server
+     * **Pub/Sub Note**: If the router is passed to `serve()`, Pub/Sub is auto-initialized
+     * with BunPubSub. For custom Pub/Sub backends, use the `withPubSub()` plugin before
+     * creating the handler.
      */
     fetch: async (
       req: Request,
-      server: Server<BunWebSocketData<TContext>>,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      server: Server<any>,
+      // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
     ): Promise<Response | void> => {
       try {
-        const upgraded = await tryUpgrade(req, server, options);
+        const clientIdHeader = options?.clientIdHeader ?? "x-client-id";
+        // Per ADR-035: Use native crypto.randomUUID() — no external deps.
+        // Rationale: Bun has built-in crypto; removes uuid package.
+        const clientId = crypto.randomUUID();
 
-        if (upgraded) {
-          // Upgrade successful — Bun has already sent 101 Switching Protocols.
-          // Return undefined to signal that the request is handled.
-          return;
+        // Per ADR-035: Auth happens here, before upgrade, as a gatekeeper.
+        // Rationale: Single call, predictable semantics, security-critical.
+        const customData = options?.authenticate
+          ? await Promise.resolve(options.authenticate(req))
+          : undefined;
+
+        // Per ADR-035: undefined = reject with configured status (default 401).
+        // Rationale: Aligns implementation with documented behavior.
+        // Return {} or object to accept with minimal or custom data.
+        if (options?.authenticate && customData === undefined) {
+          const rejection = options.authRejection ?? {
+            status: 401,
+            message: "Unauthorized",
+          };
+          const status = rejection.status ?? 401;
+          return new Response(rejection.message, { status });
         }
 
-        // Upgrade failed (likely not a valid WebSocket request, e.g., missing Upgrade header)
+        // Per ADR-034: Upgrade with precomputed data; don't return Response after success.
+        // Rationale: After server.upgrade() returns true, Bun sent 101.
+        // Returning undefined signals Bun that request is fully handled.
+        const upgraded = upgradeConnection(
+          req,
+          server,
+          clientId,
+          customData,
+          clientIdHeader,
+        );
+
+        if (upgraded) return; // Success: no Response needed
+
+        // Upgrade failed (not a WebSocket request, missing headers, etc.).
+        // Call onError for observability before returning 400.
+        options?.onError?.(new Error("WebSocket upgrade failed"), {
+          type: "upgrade",
+          req,
+        } as ErrorContext);
         return new Response("Upgrade failed", { status: 400 });
       } catch (error) {
+        // Unexpected error in fetch handler (auth threw, server.upgrade threw, etc.).
+        // Log and notify onError hook, then return 500.
         console.error("[ws] Error in fetch handler:", error);
+        const errorObj =
+          error instanceof Error ? error : new Error(String(error));
+        options?.onError?.(errorObj, { type: "upgrade", req } as ErrorContext);
         return new Response("Internal server error", { status: 500 });
       }
     },
@@ -156,7 +192,7 @@ export function createBunHandler<
      * WebSocket handler for Bun.serve.
      *
      * Bun calls these methods as WebSocket lifecycle events occur.
-     * This handler binds those events to the router's internal message processing.
+     * This handler binds those events to the core router's internal message processing.
      */
     websocket: {
       /**
@@ -166,37 +202,47 @@ export function createBunHandler<
         bunWs: import("bun").ServerWebSocket<BunWebSocketData<TContext>>,
       ): Promise<void> {
         try {
-          // Ensure ws has the clientId from the data
+          // Sanity check: clientId must be set by fetch/upgradeConnection.
+          // Rationale: Guards against misconfigured server or missing data flow.
           if (!bunWs.data?.clientId) {
             console.error("[ws] WebSocket missing clientId in data, closing");
             bunWs.close(1008, "Missing client ID");
             return;
           }
 
-          // Cast to AdapterWebSocket to access mutable initialData field
-          // (following ADR-033 opaque transport pattern)
+          // Per ADR-033 (opaque transport): Set initialData so router can merge into ctx.data.
+          // Rationale: Router uses initialData to populate ctx.data during handleOpen.
+          // This is the canonical connection data flow.
           const ws = bunWs as unknown as AdapterWebSocket;
-
-          // Seed router's context with Bun data via initialData
-          // (router will merge this into ctx.data during handleOpen)
           ws.initialData = bunWs.data;
 
-          // Call router's open handler via the object to preserve 'this' binding.
-          // This ensures routers with ordinary methods (not arrow functions) work correctly.
-          await router.websocket.open(ws);
+          // Call core router's handler using call() to preserve 'this' binding.
+          // Rationale: Supports routers with instance methods (not just arrow functions).
+          await coreRouter.websocket.open(ws);
 
-          // Call onOpen hook (after connection is established and authenticated)
+          // Per ADR-035: Call onOpen hook after successful open (sync, for side effects).
+          // Rationale: Separate from error hook — success and error are distinct flows.
+          // Note: Pass both ws and data per BunOpenCloseContext; types now match runtime.
           try {
-            options?.onOpen?.({ ws: bunWs });
+            options?.onOpen?.({ ws: bunWs, data: bunWs.data });
           } catch (error) {
             console.error("[ws] Error in onOpen hook:", error);
           }
         } catch (error) {
+          // Per ADR-035: Call onError hook with 'open' phase context.
+          // Rationale: Sync-only hook for logging. Don't suppress error.
           console.error("[ws] Error in open handler:", error);
+          const errorObj =
+            error instanceof Error ? error : new Error(String(error));
+          options?.onError?.(errorObj, {
+            type: "open",
+            clientId: bunWs.data?.clientId,
+            data: bunWs.data,
+          } as ErrorContext);
           try {
             bunWs.close(1011, "Internal server error");
           } catch {
-            // Already closed
+            // Already closed — safe to ignore
           }
         }
       },
@@ -209,21 +255,32 @@ export function createBunHandler<
         data: string | Buffer,
       ): Promise<void> {
         try {
-          // Cast to ServerWebSocket for router
           const ws = bunWs as unknown as ServerWebSocket;
 
-          // Convert Buffer to ArrayBuffer if needed
+          // Convert Buffer to ArrayBuffer for router compatibility.
+          // Rationale: Router expects string | ArrayBuffer; Bun may send Buffer.
+          // Preserve zero-copy semantics by converting only when needed.
           const payload =
             data instanceof Buffer
               ? (new Uint8Array(data).buffer as ArrayBuffer)
               : (data as string | ArrayBuffer);
 
-          // Call router's message handler via the object to preserve 'this' binding.
-          // This ensures routers with ordinary methods (not arrow functions) work correctly.
-          await router.websocket.message(ws, payload);
+          // Per ADR-035: Call coreRouter to delegate to router message handling.
+          // Rationale: Router is responsible for validation, routing, etc.
+          // Adapter just bridges Bun events to router interface.
+          await coreRouter.websocket.message(ws, payload);
         } catch (error) {
+          // Per ADR-035: Log error and call onError hook; don't close connection.
+          // Rationale: Single message error shouldn't kill the connection.
+          // User's error handler decides if closure is needed.
           console.error("[ws] Error in message handler:", error);
-          // Don't close the connection on message errors unless critical
+          const errorObj =
+            error instanceof Error ? error : new Error(String(error));
+          options?.onError?.(errorObj, {
+            type: "message",
+            clientId: bunWs.data?.clientId,
+            data: bunWs.data,
+          } as ErrorContext);
         }
       },
 
@@ -236,37 +293,47 @@ export function createBunHandler<
         reason?: string,
       ): Promise<void> {
         try {
-          // Cast to ServerWebSocket for router
           const ws = bunWs as unknown as ServerWebSocket;
 
-          // Call router's close handler via the object to preserve 'this' binding.
-          // This ensures routers with ordinary methods (not arrow functions) work correctly.
-          await router.websocket.close(ws, code, reason);
+          // Per ADR-035: Call coreRouter.websocket.close for cleanup.
+          // Rationale: Router handles unsubscription, connection cleanup, etc.
+          // Code and reason let router log close reason for debugging.
+          await coreRouter.websocket.close(ws, code, reason);
 
-          // Call onClose hook (after cleanup)
+          // Call onClose hook after router cleanup (not in catch block).
+          // Rationale: Distinguish success (onClose) from error (onError).
+          // Note: Pass both ws and data per BunOpenCloseContext; types now match runtime.
           try {
-            options?.onClose?.({ ws: bunWs });
+            options?.onClose?.({ ws: bunWs, data: bunWs.data });
           } catch (error) {
             console.error("[ws] Error in onClose hook:", error);
           }
         } catch (error) {
+          // Per ADR-035: Log and notify onError on close handler failure.
+          // Rationale: Close failures (cleanup errors) are worth observing.
           console.error("[ws] Error in close handler:", error);
+          const errorObj =
+            error instanceof Error ? error : new Error(String(error));
+          options?.onError?.(errorObj, {
+            type: "close",
+            clientId: bunWs.data?.clientId,
+            data: bunWs.data,
+          } as ErrorContext);
         }
       },
 
       /**
        * Optional: Called when the socket's write buffer has drained.
        *
-       * Used for backpressure handling. Not implemented here, but can be
-       * extended if needed for custom write buffer management.
+       * Per ADR-035: Not implemented; router manages backpressure internally.
+       * Rationale: Adapter is mechanical. Backpressure (flow control) is
+       * router responsibility, not adapter responsibility.
+       * Can be extended by users if needed for advanced scenarios.
        */
       drain(
         bunWs: import("bun").ServerWebSocket<BunWebSocketData<TContext>>,
       ): void {
-        // Backpressure handling (optional)
-        // Called when ws.send() buffers are flushed
-        // Can be used to resume message processing if it was paused
-        void bunWs; // Mark parameter as intentionally unused
+        void bunWs; // Unused; reserved for future backpressure handling
       },
     } as WebSocketHandler<BunWebSocketData<TContext>>,
   };
@@ -280,10 +347,13 @@ export function createBunHandler<
  *
  * **Usage**:
  * ```typescript
- * const { defaultFetch, websocket } = createBunHandler(router);
+ * import { createBunHandler } from "@ws-kit/bun";
+ *
+ * const { websocket } = createBunHandler(router);
+ * const fetch = createDefaultBunFetch(router);
  *
  * Bun.serve({
- *   fetch: defaultFetch,
+ *   fetch,
  *   websocket,
  * });
  * ```
@@ -292,8 +362,8 @@ export function createBunHandler<
  * - Upgrades all requests as WebSocket connections
  * - Returns 400 Bad Request if the upgrade fails
  *
- * For routing to specific paths or methods, use the main fetch handler
- * and implement your own routing logic.
+ * For routing to specific paths or methods, use `createBunHandler()` and
+ * implement your own `fetch` logic.
  */
 export function createDefaultBunFetch<
   TContext extends ConnectionData = ConnectionData,

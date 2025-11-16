@@ -14,6 +14,8 @@ import type { BunHandlerOptions } from "./types.js";
  * Options for the serve function.
  *
  * Extends BunHandlerOptions with Bun-specific server config.
+ * Per ADR-035, only mechanical options (auth, lifecycle) are supported.
+ * Behavioral concerns (context, observability) belong in plugins.
  */
 export interface ServeOptions<TContext extends ConnectionData = ConnectionData>
   extends BunHandlerOptions<TContext> {
@@ -55,19 +57,23 @@ export async function serve<TContext extends ConnectionData = ConnectionData>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
 
+  // Per ADR-035: Pass only mechanical options (auth, lifecycle hooks) to createBunHandler.
+  // Rationale: Adapter should not have behavioral concerns (context, observability).
+  // Those belong in plugins on top of the router, not in the adapter itself.
+  // This keeps the adapter lean and consistent with ADR-031 (plugin-adapter architecture).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlerOptions: any = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    authenticate: options.authenticate as any,
+    authenticate: options.authenticate as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     onError: options.onError,
-    onBroadcast: options.onBroadcast,
     onUpgrade: options.onUpgrade,
     onOpen: options.onOpen,
     onClose: options.onClose,
-    context: options.context,
   };
   if (options.clientIdHeader) {
     handlerOptions.clientIdHeader = options.clientIdHeader;
+  }
+  if (options.authRejection) {
+    handlerOptions.authRejection = options.authRejection;
   }
 
   const { fetch, websocket } = createBunHandler(coreRouter, handlerOptions);
