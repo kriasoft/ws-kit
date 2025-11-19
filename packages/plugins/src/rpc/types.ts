@@ -61,5 +61,5 @@ export interface WithRpcCapability {
    * Marker for capability-gating in type system.
    * @internal
    */
-  readonly rpc: true;
+  readonly __caps: { rpc: true };
 }

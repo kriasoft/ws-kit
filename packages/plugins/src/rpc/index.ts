@@ -57,7 +57,7 @@ interface WithRpcAPI<TContext extends ConnectionData = ConnectionData> {
    * Marker for capability-gating in Router type system.
    * @internal
    */
-  readonly rpc: true;
+  readonly __caps: { rpc: true };
 }
 
 /**
@@ -508,10 +508,10 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
       { priority: 0 },
     );
 
-    // Return plugin API with capability marker
-    return {
-      rpc: true as const,
-    };
+    // Return capability marker for capability gating (non-enumerable to avoid collisions).
+    return Object.create(null, {
+      __caps: { value: { rpc: true as const }, enumerable: true },
+    }) as WithRpcAPI<TContext>;
   });
 }
 

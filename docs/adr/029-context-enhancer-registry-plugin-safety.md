@@ -178,6 +178,12 @@ export class RouterImpl<TContext = unknown> {
 - ✅ **Safe**: Conflict detection in dev mode prevents silent issues
 - ✅ **Powerful**: Priorities allow advanced ordering without DAG complexity
 
+### Amendment (2025-11-19)
+
+- Runtime method overwrites on the router are **forbidden**. Core owns public methods; plugins express capabilities via `__caps` markers only (e.g., `{ validation: true, rpc: true }`), leaving `router.on`/`router.rpc` intact.
+- Capability markers must be **non-invasive**: set a marker object and rely on conditional types for exposure; never reassign existing properties.
+- Internal plugin state (schema descriptors, response schemas) must be stashed on non-enumerable fields (e.g., `ctx.__wskit`) to avoid leaking into user payloads or devtools.
+
 ### 3. Context Stashing (Unifies Namespace)
 
 Add `extensions: Map<string, unknown>` to `MinimalContext`:

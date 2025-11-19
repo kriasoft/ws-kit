@@ -18,13 +18,20 @@
  */
 
 import type { ConnectionData, MinimalContext } from "../context/base-context";
+import type { EventContext } from "../context/event-context";
+import type { RpcContext } from "../context/rpc-context";
 import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
 import type { ContextEnhancer } from "../internal";
 import { PluginHost } from "../plugin/manager";
 import type { Plugin } from "../plugin/types";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
+import type {
+  AnySchema,
+  InferPayload,
+  InferResponse,
+  MessageDescriptor,
+} from "../protocol/schema";
 import type { AdapterWebSocket, ServerWebSocket } from "../ws/platform-adapter";
 import { RouteTable } from "./route-table";
 import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols";
@@ -147,17 +154,21 @@ export type Router<
 
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
- * Only addition: rpc() method (on() already exists in base).
+ * It overloads `on()` and `rpc()` with type-safe handlers.
  * TContext is kept for type alignment with other API interfaces.
  */
-
 export interface ValidationAPI<
   TContext extends ConnectionData = ConnectionData,
 > {
-  rpc(
-    schema: MessageDescriptor & { response: MessageDescriptor },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler: any, // RpcHandler<TContext> (inferred by validation plugin)
+  on<S extends AnySchema>(
+    schema: S,
+    handler: (ctx: EventContext<TContext, InferPayload<S>>) => void,
+  ): this;
+  rpc<S extends AnySchema>(
+    schema: S,
+    handler: (
+      ctx: RpcContext<TContext, InferPayload<S>, InferResponse<S>>,
+    ) => void,
   ): this;
 }
 
@@ -362,11 +373,11 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
    * Each entry has the function, priority (lower runs first), and registration order.
    * @internal
    */
-  private contextEnhancers: Array<{
+  private contextEnhancers: {
     fn: ContextEnhancer<TContext>;
     priority: number;
     order: number;
-  }> = [];
+  }[] = [];
 
   /**
    * Next order for enhancers (for stable registration order).
@@ -461,6 +472,41 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
   }
 
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this {
+    const entry: RouteEntry<TContext> = {
+      schema,
+      middlewares: [],
+      handler,
+    };
+    this.routes.register(schema, entry);
+    return this;
+  }
+
+  /**
+   * Register an RPC handler. Runtime is always available, but the public API is
+   * type-gated by validation plugins via the { validation: true } capability.
+   */
+  rpc(
+    schema: MessageDescriptor & { response?: MessageDescriptor },
+    handler: EventHandler<TContext>,
+  ): this {
+    if (!this.pluginHost.getCapabilities().validation) {
+      throw new Error(
+        "rpc() requires a validation plugin (withZod() or withValibot())",
+      );
+    }
+
+    if (schema.kind !== "rpc") {
+      throw new Error(
+        `Schema kind mismatch for "${schema.type}": expected kind="rpc"`,
+      );
+    }
+
+    if (!schema.response) {
+      throw new Error(
+        `RPC schema for type "${schema.type}" must include a response descriptor`,
+      );
+    }
+
     const entry: RouteEntry<TContext> = {
       schema,
       middlewares: [],

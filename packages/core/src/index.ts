@@ -79,6 +79,19 @@ export type {
 } from "./core/router";
 export { isPublishError } from "./core/types";
 
+// Schema branding/inference (used by validator adapters)
+export type {
+  AnySchema,
+  BrandedSchema,
+  InferMessage,
+  InferMeta,
+  InferPayload,
+  InferResponse,
+  InferType,
+  MessageSchema,
+  RpcSchema,
+} from "./protocol/schema";
+
 // Platform adapter contract
 export type {
   AdapterWebSocket,

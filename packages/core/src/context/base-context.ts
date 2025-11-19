@@ -13,6 +13,7 @@
  * RPC handlers add: reply(payload), progress(payload)
  */
 
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { ServerWebSocket } from "../ws/platform-adapter";
 
 /**
@@ -142,4 +143,21 @@ export function getContextExtension<T>(
   name: string,
 ): T | undefined {
   return ctx.extensions.get(name) as T | undefined;
+}
+
+export interface EventContext<
+  TContext extends ConnectionData = ConnectionData,
+  TPayload = unknown,
+> extends MinimalContext<TContext> {
+  payload: TPayload;
+}
+
+export interface RpcContext<
+  TContext extends ConnectionData = ConnectionData,
+  TPayload = unknown,
+  TResponse = unknown,
+> extends EventContext<TContext, TPayload> {
+  // This is a marker for the response type, not a property.
+  // The actual reply/progress methods will use this type.
+  __response?: TResponse;
 }
