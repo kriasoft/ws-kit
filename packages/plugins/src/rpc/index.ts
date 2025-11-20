@@ -2,31 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * withRpc() plugin: adds request-response (RPC) messaging with streaming support.
+ * withRpc(): Request-response (RPC) messaging with streaming and one-shot semantics.
  *
- * Once plugged, RPC handlers gain:
- * - ctx.reply(payload, opts?) - Terminal response (one-shot)
- * - ctx.progress(update, opts?) - Non-terminal streaming update
+ * Adds ctx.reply() (terminal) and ctx.progress() (non-terminal).
+ * Note: ctx.error() provided by core, available in all contexts.
  *
- * Note: ctx.error() is provided by core and available in all handler types (event, RPC, middleware).
+ * Terminal methods (reply/progress/error) share one-shot guard.
+ * After first terminal call, subsequent calls are no-ops.
+ * Progress can be called multiple times before terminal.
+ * Throttling via {throttleMs} on progress().
+ * Auto-correlation: preserves correlationId in response meta.
  *
- * This plugin is validator-agnostic: validation (if needed) is handled by validator
- * plugins like withZod() or withValibot(). This plugin just handles RPC message
- * envelope construction, one-shot guard enforcement, and throttling.
- *
- * Key semantics:
- * - reply() is "one-shot": subsequent calls are idempotent no-ops
- * - progress() can be called multiple times before terminal (reply/error)
- * - Throttling supported via {throttleMs} on progress()
- * - Auto-correlation via preserving correlationId from inbound meta
- *
- * Message envelopes:
- * - Terminal: { type: (response type), meta: {...}, payload: {...} }
- * - Progress: { type: "$ws:rpc-progress", meta: {...}, payload: {...} }
- * - Error: { type: "RPC_ERROR", meta: {...}, payload: {code, message, details?} } (via core ctx.error)
- *
- * See ADR-030 for design rationale and ADR-031 for plugin-adapter architecture.
- * See ADR-036 for unified error handling in core.
+ * Wire envelopes:
+ * - reply: { type: (response type), meta: {...}, payload: {...} }
+ * - progress: { type: "$ws:rpc-progress", meta, payload }
+ * - error: { type: "RPC_ERROR", meta, payload: {code, message, ...} }
  */
 
 import type { ConnectionData, MinimalContext } from "@ws-kit/core";
@@ -145,24 +135,17 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
         // Track throttle state for progress updates
         let lastProgressTime = 0;
 
-        /**
-         * Guard: ensure we're in an RPC context.
-         * Throws if called outside RPC handlers (type system helps prevent this).
-         */
+        // RPC context guard: throw if reply/progress called outside RPC
         function guardRpc() {
-          const wskit = enhCtx.__wskit;
-          if (!wskit?.response) {
+          if (!enhCtx.__wskit?.response) {
             throw new Error(
-              "ctx.reply() and ctx.progress() are only available in RPC handlers (ctx.error() is available in all handlers)",
+              "ctx.reply() and ctx.progress() only in RPC handlers",
             );
           }
-          return wskit;
+          return enhCtx.__wskit;
         }
 
-        /**
-         * Initialize RPC state for this handler.
-         * Sets up the replied flag and correlation ID for use by core error method.
-         */
+        // Set up RPC state: replied flag, correlationId (shared with core error method)
         function initializeRpcState() {
           if (!enhCtx.__wskit) {
             enhCtx.__wskit = {} as WsKitInternalState;
@@ -177,19 +160,12 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           }
         }
 
-        /**
-         * Extract base metadata from request (preserves correlationId).
-         * Ensures RPC correlation ID is always maintained in responses.
-         */
+        // Extract server meta: auto-preserve correlationId in response
         function baseMeta(context: EnhancedContext): Record<string, unknown> {
-          return {
-            correlationId: context.meta?.correlationId,
-          };
+          return { correlationId: context.meta?.correlationId };
         }
 
-        /**
-         * Store the baseMeta function on __wskit for use by core error method.
-         */
+        // Store meta() function on __wskit for core error method
         function attachBaseMeta() {
           if (!enhCtx.__wskit) {
             enhCtx.__wskit = {} as WsKitInternalState;
@@ -197,10 +173,7 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           enhCtx.__wskit.meta = () => baseMeta(enhCtx);
         }
 
-        /**
-         * Sanitize user-provided meta: strip reserved keys.
-         * Reserved keys: 'type', 'correlationId' (cannot be overridden by user).
-         */
+        // Strip reserved keys (type, correlationId) from user meta
         function sanitizeMeta(
           userMeta: Record<string, unknown> | undefined,
         ): Record<string, unknown> {
@@ -211,53 +184,37 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           return sanitized;
         }
 
-        /**
-         * Check if this progress update should be throttled.
-         * Returns true if throttled (skip send), false if should send.
-         */
+        // Rate-limit progress updates if {throttleMs} set
         function shouldThrottle(throttleMs: number | undefined): boolean {
           if (!throttleMs) return false;
-          const now = Date.now();
-          const timeSinceLastProgress = now - lastProgressTime;
-          if (timeSinceLastProgress >= throttleMs) {
-            lastProgressTime = now;
-            return false; // Don't throttle, send immediately
+          const elapsed = Date.now() - lastProgressTime;
+          if (elapsed >= throttleMs) {
+            lastProgressTime = Date.now();
+            return false;
           }
-          return true; // Throttle, skip this send
+          return true;
         }
 
-        /**
-         * Serialize and send an outbound RPC message via WebSocket.
-         *
-         * Message envelope: { type, meta, payload? }
-         * - type: message type string (response or "$ws:rpc-error" or "$ws:rpc-progress")
-         * - meta: metadata object (auto-preserved correlation, user meta)
-         * - payload: optional message data
-         */
+        // Send RPC message: { type, meta, payload? }
         function sendMessage(
           type: string,
           payload: any,
           meta: Record<string, unknown>,
         ): void {
-          const message = {
-            type,
-            meta,
-            ...(payload !== undefined ? { payload } : {}),
-          };
           try {
-            ctx.ws.send(JSON.stringify(message));
+            ctx.ws.send(
+              JSON.stringify({
+                type,
+                meta,
+                ...(payload !== undefined ? { payload } : {}),
+              }),
+            );
           } catch (err) {
-            // Connection may have closed; error is caught by adapter wrapper
-            // No-op here (fire-and-forget)
+            // Connection closed; no-op (fire-and-forget)
           }
         }
 
-        /**
-         * Extract message/response type from schema.
-         *
-         * For MessageDescriptor: use __descriptor.type, .responseType, or .type field.
-         * For plain objects: use .responseType or .type field.
-         */
+        // Extract response type from schema
         function getResponseType(schema: any): string {
           return (
             schema.__descriptor?.type ||
@@ -267,52 +224,38 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           );
         }
 
-        /**
-         * Initialize RPC state and setup methods
-         */
+        // Initialize RPC state and meta function
         initializeRpcState();
         attachBaseMeta();
 
-        /**
-         * reply(payload, opts?) - Terminal RPC response (one-shot).
-         *
-         * Marks the RPC as complete and sends response payload to client.
-         * Shares one-shot guard with ctx.error(): once either is called, the other is a no-op.
-         * Subsequent reply/error calls are idempotent (no-ops).
-         *
-         * Returns void by default (async enqueue).
-         * With {waitFor} option, returns Promise<void>.
-         */
+        // reply(payload, opts?): Terminal response (one-shot, shared guard with error).
+        // Returns void (async enqueue) by default, Promise<void> with {waitFor}.
         const reply = (
           payload: any,
           opts?: ReplyOptions,
         ): void | Promise<void> => {
           guardRpc();
 
-          // One-shot guard: return immediately if already replied
+          // Skip if already replied (one-shot)
           if (enhCtx.__wskit!.rpc!.replied) {
-            if (opts?.waitFor) {
-              return Promise.resolve();
-            }
-            return undefined;
+            return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
-          // Check if signal is already aborted
+          // Skip if signal aborted
           if (opts?.signal?.aborted) {
             return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
-          // Mark as replied (idempotent guard)
+          // Mark as replied
           enhCtx.__wskit!.rpc!.replied = true;
 
-          // If no waitFor, return void (fire-and-forget)
+          // Fire-and-forget if no waitFor
           if (!opts?.waitFor) {
             setImmediate(() => {
               const wskit = enhCtx.__wskit!;
-              const responseSchema = wskit.response as any;
-              const responseType = getResponseType(responseSchema);
+              const responseType = getResponseType(wskit.response);
 
-              // Construct response message with auto-preserved correlation
+              // Build response: auto-preserve correlation
               const responseMessage = {
                 type: responseType,
                 meta: {
@@ -362,48 +305,33 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           });
         };
 
-        /**
-         * progress(update, opts?) - Non-terminal RPC progress update (streaming).
-         *
-         * Sends progress update without terminating the RPC.
-         * Can be called multiple times before reply() or error().
-         * Calls after a terminal response (reply/error) are idempotent no-ops.
-         * Supports throttling via {throttleMs}.
-         *
-         * Progress message envelope: { type: "$ws:rpc-progress", meta, payload: {...} }
-         *
-         * Returns void by default (async enqueue).
-         * With {waitFor} option, returns Promise<void>.
-         */
+        // progress(update, opts?): Non-terminal update (streaming).
+        // Multiple calls allowed; becomes no-op after reply/error.
+        // Supports {throttleMs} rate-limiting. Returns void (async) or Promise<void> with {waitFor}.
         const progress = (
           update: any,
           opts?: ProgressOptions,
         ): void | Promise<void> => {
           guardRpc();
 
-          // Cannot send progress after a terminal response (reply or error)
+          // Skip if terminal response already sent
           if (enhCtx.__wskit!.rpc!.replied) {
-            if (opts?.waitFor) {
-              return Promise.resolve();
-            }
-            return undefined;
+            return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
-          // Check if signal is already aborted
+          // Skip if aborted
           if (opts?.signal?.aborted) {
             return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
-          // Check if this update should be throttled
+          // Skip if throttled
           if (shouldThrottle(opts?.throttleMs)) {
-            // Throttled: return immediately without sending
             return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
-          // If no waitFor, return void (fire-and-forget)
+          // Fire-and-forget if no waitFor
           if (!opts?.waitFor) {
             setImmediate(() => {
-              // Build control message with auto-preserved correlation
               const progressMessage = {
                 type: "$ws:rpc-progress",
                 meta: {

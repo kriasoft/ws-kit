@@ -4,11 +4,9 @@
 /**
  * Core error handling: `ctx.error()` as a unified primitive.
  *
- * Provides a single, consistent error-sending method available on all message contexts
- * (event handlers, RPC handlers, middleware). Handles both non-RPC ERROR messages and
- * RPC_ERROR with correlation and one-shot semantics.
- *
- * Powered by WsKitError and ERROR_CODE_META for retry inference.
+ * Single error-sending method for all contexts (events, RPC, middleware).
+ * Sends ERROR or RPC_ERROR based on context, with auto-correlation and one-shot semantics for RPC.
+ * Infers retry hints from ERROR_CODE_META; routes all errors through router.onError() asynchronously.
  */
 
 import {
@@ -24,49 +22,32 @@ import type { ConnectionData } from "./base-context";
 import type { WsKitInternalState } from "../internal";
 
 /**
- * Error options for ctx.error() calls.
- *
- * Allows override of inferred retry semantics, explicit backoff hints,
- * and custom metadata for the error response.
+ * Options for ctx.error() calls.
  */
 export interface ErrorOptions {
   /**
-   * Explicitly override inferred retryability.
-   * If not provided, inferred from ERROR_CODE_META for standard codes.
-   * For custom codes, defaults to false.
+   * Override inferred retryability. If omitted, inferred from ERROR_CODE_META.
    */
   retryable?: boolean;
 
   /**
-   * Explicit backoff hint for client retry (milliseconds).
-   * null signals operation impossible under policy (don't retry).
-   * If not provided, inferred from ERROR_CODE_META.suggestBackoffMs.
+   * Client backoff hint (ms). null = don't retry. Defaults to ERROR_CODE_META.suggestBackoffMs.
    */
   retryAfterMs?: number | null;
 
   /**
-   * Original error for logging/observability (WHATWG standard).
-   * Set as WsKitError.cause for structured logging.
+   * Original error for error chain preservation (WHATWG Error.cause).
    */
   cause?: unknown;
 
   /**
-   * Custom metadata to merge into error response envelope.
-   * User-provided metadata is merged with server metadata (correlation, etc.).
-   * Reserved keys (type, correlationId) cannot be overridden.
+   * Custom metadata (merged with server meta). Reserved keys (type, correlationId) are stripped.
    */
   meta?: Record<string, unknown>;
 }
 
 /**
- * Create a WsKitError from ctx.error() arguments.
- *
- * Infers retryable and retryAfterMs from ERROR_CODE_META when code is standard,
- * then applies explicit options overrides.
- *
- * Returns both the error and a flag indicating if retryable was explicitly set
- * (so it can be included in the error payload).
- *
+ * Build WsKitError: infer retry hints from ERROR_CODE_META, apply user overrides.
  * @internal
  */
 function createErrorFromArgs(
@@ -116,34 +97,23 @@ function createErrorFromArgs(
   };
 }
 
-/**
- * Cross-platform async task scheduler.
- * Uses setImmediate in Node.js, setTimeout elsewhere.
- *
- * @internal
- */
+// Cross-platform: setImmediate (Node.js) or setTimeout (browsers)
 const scheduleAsync =
   typeof setImmediate === "function"
     ? setImmediate
     : (fn: () => void) => setTimeout(fn, 0);
 
 /**
- * Create the ctx.error() method for a context.
- *
- * Attached to all message contexts (event, RPC, middleware).
- * Returns void (fire-and-forget, enqueued asynchronously).
- *
- * For RPC contexts, uses shared one-shot flag with reply().
- * For event contexts, allows multiple calls (multiple ERROR messages).
- *
+ * Build ctx.error(): fire-and-forget (void), async enqueue.
+ * RPC: one-shot guard shared with reply(). Event: multiple calls allowed.
+ * All errors route through lifecycle.handleError() asynchronously (non-blocking).
  * @internal
  */
 export function createErrorMethod<TContext extends ConnectionData>(
   ctx: MinimalContext<TContext> & {
     /**
-     * Internal state storage (see WsKitInternalState contract in internal.ts).
-     * Set by core enhancers and plugins to coordinate error handling,
-     * RPC correlation, and metadata propagation.
+     * Internal state: RPC state (replied flag, correlationId), meta() function.
+     * Set by core/plugins for error handling coordination.
      */
     __wskit?: WsKitInternalState;
   },
@@ -155,14 +125,14 @@ export function createErrorMethod<TContext extends ConnectionData>(
   opts?: ErrorOptions,
 ) => void {
   return (code, message, details, opts) => {
-    // Fire-and-forget: enqueue and return immediately
+    // Fire-and-forget: async enqueue, return void immediately
     scheduleAsync(async () => {
       try {
         const isRpc = !!ctx.__wskit?.rpc;
         const rpcState = ctx.__wskit?.rpc;
         const correlationId = rpcState?.correlationId;
 
-        // One-shot guard for RPC
+        // One-shot: skip if already sent (reply/error)
         if (isRpc && rpcState!.replied) {
           return;
         }
@@ -170,7 +140,7 @@ export function createErrorMethod<TContext extends ConnectionData>(
           rpcState!.replied = true;
         }
 
-        // Create WsKitError (infers retry semantics from metadata)
+        // Build error: infer retry hints, apply user overrides
         const { error: err, retryableOverride } = createErrorFromArgs(
           code,
           message,
@@ -179,67 +149,50 @@ export function createErrorMethod<TContext extends ConnectionData>(
           correlationId,
         );
 
-        // Notify lifecycle (all errors flow through here for observability)
-        // Fire non-blocking (don't await; let it run in background)
+        // Route through lifecycle asynchronously (non-blocking)
         lifecycle.handleError(err, ctx).catch((e) => {
-          // Log lifecycle errors but don't let them break error sending
           console.error("[ws-kit] onError handler threw:", e);
         });
 
-        // Convert to payload (safe for client transmission)
+        // Convert to client-safe payload
         let payload = err.toPayload();
-
-        // Apply retryable override if explicitly set by user
         if (retryableOverride !== undefined) {
           payload.retryable = retryableOverride;
         }
 
-        // Construct meta: start with server meta, then user overrides
-        const baseMeta = ctx.__wskit?.meta?.() ?? {};
+        // Build meta: server + correlation + user (reserved keys stripped)
         const meta = {
-          ...baseMeta,
+          ...(ctx.__wskit?.meta?.() ?? {}),
           ...(correlationId ? { correlationId } : {}),
-          // User-provided meta (sanitize reserved keys)
           ...(opts?.meta ? sanitizeUserMeta(opts.meta) : {}),
         };
 
-        // Determine message type based on context
-        const type = isRpc ? "RPC_ERROR" : "ERROR";
-
-        // Send the error message through transport
+        // Auto-select wire type: ERROR for events, RPC_ERROR for RPC
         const envelope = {
-          type,
+          type: isRpc ? "RPC_ERROR" : "ERROR",
           meta,
           ...(payload ? { payload } : {}),
         };
 
         try {
-          const serialized = JSON.stringify(envelope);
-          ctx.ws.send(serialized);
+          ctx.ws.send(JSON.stringify(envelope));
         } catch (serializationErr) {
-          // JSON serialization may fail (circular refs, BigInts) or connection closed.
-          // Fall back to a minimal error message to ensure client gets some response.
+          // Serialization failed (circular refs, BigInts). Fallback: minimal payload.
           try {
-            const fallbackEnvelope = {
-              type,
-              meta,
-              payload: {
-                code: err.code,
-                message: err.message || "An error occurred",
-                // Omit details if serialization failed; focus on essentials
-              },
-            };
-            ctx.ws.send(JSON.stringify(fallbackEnvelope));
+            ctx.ws.send(
+              JSON.stringify({
+                type: envelope.type,
+                meta,
+                payload: { code: err.code, message: err.message || "Error" },
+              }),
+            );
           } catch (fallbackErr) {
-            // Last-resort logging if both attempts fail
+            // Both attempts failed; log only
             if (
               typeof process !== "undefined" &&
               process.env?.NODE_ENV !== "test"
             ) {
-              console.error(
-                "[ws-kit] Failed to send error envelope:",
-                err.toJSON(),
-              );
+              console.error("[ws-kit] Failed to send error:", err.toJSON());
             }
           }
         }
@@ -251,12 +204,7 @@ export function createErrorMethod<TContext extends ConnectionData>(
   };
 }
 
-/**
- * Sanitize user-provided metadata: strip reserved keys that cannot be overridden.
- * Reserved keys: type, correlationId (those are set by the server/RPC layer).
- *
- * @internal
- */
+// Strip reserved keys (type, correlationId) from user meta
 function sanitizeUserMeta(
   userMeta: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -268,20 +216,14 @@ function sanitizeUserMeta(
 }
 
 /**
- * Context enhancer that attaches the core error method.
- *
- * This is a built-in enhancer that runs early to ensure ctx.error is always available,
- * even before plugins like RPC add their enhancements.
- *
- * Requires the lifecycle manager to route errors through observability hooks.
- *
+ * Core error enhancer: attach ctx.error() to all contexts.
+ * Runs early (priority -1000) to ensure availability before plugins.
  * @internal
  */
 export function createCoreErrorEnhancer<TContext extends ConnectionData>(
   lifecycle: LifecycleManager<TContext>,
 ): (ctx: MinimalContext<TContext> & any) => void {
   return (ctx: MinimalContext<TContext> & any) => {
-    // Attach error method with lifecycle
     ctx.error = createErrorMethod(ctx, lifecycle);
   };
 }
