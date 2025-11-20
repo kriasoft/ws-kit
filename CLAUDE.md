@@ -174,6 +174,10 @@ createRouter({
 
 PubSub instance is created only on first use. Apps without broadcasting get zero overhead.
 
+### Publish Validation Coverage
+
+The validation plugin now enforces outbound checks for `ctx.publish()` (send/reply/publish per ADR-025). Router-level `publish()` remains payload-blind by design; rely on validator plugins and handler-side publishing for schema enforcement.
+
 ## Development
 
 ```bash

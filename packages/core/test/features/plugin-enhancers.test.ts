@@ -62,9 +62,11 @@ describe("Plugin Enhancer System", () => {
     it("respects priority order (lower priority runs first)", async () => {
       const order: string[] = [];
 
-      api.addContextEnhancer(() => order.push("low"), { priority: 0 });
-      api.addContextEnhancer(() => order.push("high"), { priority: -100 });
-      api.addContextEnhancer(() => order.push("medium"), { priority: -50 });
+      api.addContextEnhancer(() => void order.push("low"), { priority: 0 });
+      api.addContextEnhancer(() => void order.push("high"), { priority: -100 });
+      api.addContextEnhancer(() => void order.push("medium"), {
+        priority: -50,
+      });
 
       const ctx = await (router as any).createContext({
         clientId: "test-client",
@@ -78,9 +80,9 @@ describe("Plugin Enhancer System", () => {
     it("uses registration order as tiebreaker for same priority", async () => {
       const order: string[] = [];
 
-      api.addContextEnhancer(() => order.push("first"), { priority: 0 });
-      api.addContextEnhancer(() => order.push("second"), { priority: 0 });
-      api.addContextEnhancer(() => order.push("third"), { priority: 0 });
+      api.addContextEnhancer(() => void order.push("first"), { priority: 0 });
+      api.addContextEnhancer(() => void order.push("second"), { priority: 0 });
+      api.addContextEnhancer(() => void order.push("third"), { priority: 0 });
 
       const ctx = await (router as any).createContext({
         clientId: "test-client",
@@ -94,10 +96,10 @@ describe("Plugin Enhancer System", () => {
     it("handles mixed priorities with consistent ordering", async () => {
       const order: string[] = [];
 
-      api.addContextEnhancer(() => order.push("a"), { priority: 0 });
-      api.addContextEnhancer(() => order.push("b"), { priority: -100 });
-      api.addContextEnhancer(() => order.push("c"), { priority: 0 });
-      api.addContextEnhancer(() => order.push("d"), { priority: 100 });
+      api.addContextEnhancer(() => void order.push("a"), { priority: 0 });
+      api.addContextEnhancer(() => void order.push("b"), { priority: -100 });
+      api.addContextEnhancer(() => void order.push("c"), { priority: 0 });
+      api.addContextEnhancer(() => void order.push("d"), { priority: 100 });
 
       const ctx = await (router as any).createContext({
         clientId: "test-client",
@@ -305,7 +307,7 @@ describe("Plugin Enhancer System", () => {
       }
 
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].err).toBeInstanceOf(Error);
+      expect(errors[0]?.err).toBeInstanceOf(Error);
     });
 
     it("continues processing after early enhancer success", async () => {
@@ -417,7 +419,7 @@ describe("Plugin Enhancer System", () => {
       try {
         api.addContextEnhancer((ctx) => {
           // Try to overwrite an existing property
-          ctx.send = async () => {};
+          (ctx as any).send = async () => {};
         });
 
         // Note: ctx.send doesn't exist yet, so this won't actually warn
@@ -441,7 +443,7 @@ describe("Plugin Enhancer System", () => {
         // But extensions key is excluded from warning
       } finally {
         console.warn = originalWarn;
-        process.env.NODE_ENV = originalEnv;
+        process.env.NODE_ENV = originalEnv ?? "development";
       }
     });
 
@@ -473,7 +475,7 @@ describe("Plugin Enhancer System", () => {
         expect(warnings).toHaveLength(0);
       } finally {
         console.warn = originalWarn;
-        process.env.NODE_ENV = originalEnv;
+        process.env.NODE_ENV = originalEnv ?? "development";
       }
     });
   });

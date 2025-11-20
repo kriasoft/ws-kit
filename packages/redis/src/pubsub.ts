@@ -80,8 +80,23 @@ export function redisPubSub(
   return {
     async publish(
       envelope: PublishEnvelope,
-      _opts?: PublishOptions,
+      opts?: PublishOptions,
     ): Promise<PublishResult> {
+      // Redis pub/sub is distributed and can't track per-instance senders.
+      // Reject excludeSelf to guide users toward explicit filtering in handlers.
+      if (opts?.excludeSelf === true) {
+        return {
+          ok: false,
+          error: "UNSUPPORTED",
+          retryable: false,
+          adapter: "RedisPubSub",
+          details: {
+            feature: "excludeSelf",
+            reason: "Distributed adapter has no sender context",
+          },
+        };
+      }
+
       // Publish to broker (fire-and-forget style; errors are async)
       const channel = channelFor(envelope.topic);
       const message = encode(envelope);

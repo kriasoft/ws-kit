@@ -58,7 +58,8 @@ describe("BunPubSub", () => {
     expect(mockServer.publishCalls).toHaveLength(1);
     const [topic, data] = mockServer.publishCalls[0];
     expect(topic).toBe("room:123");
-    expect(data).toBe(JSON.stringify(payload));
+    // When no type/meta, payload is wrapped in envelope structure
+    expect(data).toBe(JSON.stringify({ payload }));
   });
 
   it("should pass through Uint8Array payloads", async () => {
@@ -136,12 +137,16 @@ describe("BunPubSub", () => {
     expect(result.ok).toBe(true);
     expect(mockServer.publishCalls).toHaveLength(1);
 
-    // Verify the actual published data
-    // Note: BunPubSub publishes only the payload as JSON, ignoring type/meta
-    // This is expected behavior since Bun's pub/sub operates at the transport level
+    // Verify the complete envelope is serialized
     const [topic, data] = mockServer.publishCalls[0];
     expect(topic).toBe("events");
-    expect(data).toBe(JSON.stringify({ value: 42 }));
+    expect(data).toBe(
+      JSON.stringify({
+        payload: { value: 42 },
+        type: "COUNTER_UPDATE",
+        meta: { priority: "high" },
+      }),
+    );
   });
 
   it("should be no-op for subscribe", async () => {
@@ -186,7 +191,7 @@ describe("BunPubSub", () => {
     expect(result.ok).toBe(true);
     expect(mockServer.publishCalls).toHaveLength(1);
     const [, data] = mockServer.publishCalls[0];
-    expect(data).toBe("42");
+    expect(data).toBe(JSON.stringify({ payload: 42 }));
   });
 
   it("should serialize arrays to JSON", async () => {
@@ -201,7 +206,7 @@ describe("BunPubSub", () => {
     expect(result.ok).toBe(true);
     expect(mockServer.publishCalls).toHaveLength(1);
     const [, data] = mockServer.publishCalls[0];
-    expect(data).toBe(JSON.stringify(payload));
+    expect(data).toBe(JSON.stringify({ payload }));
   });
 
   it("should handle publish errors gracefully", async () => {

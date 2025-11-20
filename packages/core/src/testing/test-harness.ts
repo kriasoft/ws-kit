@@ -8,8 +8,13 @@
 
 import type { ConnectionData } from "../context/base-context";
 import type { Router } from "../core/router";
-import type { RouterObserver } from "../core/types";
+import type {
+  PublishOptions,
+  PublishResult,
+  RouterObserver,
+} from "../core/types";
 import type { RouterImpl } from "../internal";
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { FakeClock, type Clock } from "./fake-clock";
 import { InMemoryPlatformAdapter } from "./test-adapter";
 import type {
@@ -213,7 +218,22 @@ export function wrapTestRouter<
   }
 
   // Build the TestRouter by mixing router + test methods
+  const publish = (router as any).publish?.bind(router);
   const testRouter = Object.assign(router, {
+    async publish(
+      topic: string,
+      schema: MessageDescriptor,
+      payload: unknown,
+      options?: PublishOptions,
+    ): Promise<PublishResult> {
+      if (typeof publish !== "function") {
+        throw new Error(
+          "router.publish is not available (did you plug in pub/sub?)",
+        );
+      }
+      return publish(topic, schema, payload, options);
+    },
+
     async connect(init?: {
       data?: Partial<TContext>;
       headers?: Record<string, string>;

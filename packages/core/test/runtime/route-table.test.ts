@@ -6,6 +6,9 @@ import { RouteTable } from "../../src/core/route-table";
 import type { MessageDescriptor } from "../../src/protocol/message-descriptor";
 import type { RouteEntry } from "../../src/core/types";
 
+// Test connection data type
+type TestContext = Record<string, unknown>;
+
 // Helper to create test message descriptors
 function createMessageDescriptor(type: string): MessageDescriptor {
   return {
@@ -15,7 +18,7 @@ function createMessageDescriptor(type: string): MessageDescriptor {
 }
 
 // Helper to create test route entries
-function createRouteEntry(): RouteEntry<unknown> {
+function createRouteEntry(): RouteEntry<TestContext> {
   return {
     schema: createMessageDescriptor("TEST"),
     middlewares: [],
@@ -26,7 +29,7 @@ function createRouteEntry(): RouteEntry<unknown> {
 describe("RouteTable", () => {
   describe("register()", () => {
     it("should register a handler and return this for chaining", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const schema = createMessageDescriptor("PING");
       const entry = createRouteEntry();
 
@@ -37,7 +40,7 @@ describe("RouteTable", () => {
     });
 
     it("should throw on duplicate registration", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const schema = createMessageDescriptor("PING");
       const entry = createRouteEntry();
 
@@ -49,7 +52,7 @@ describe("RouteTable", () => {
     });
 
     it("should validate that schema.type is a non-empty string", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Test empty string
@@ -67,7 +70,7 @@ describe("RouteTable", () => {
     });
 
     it("should reject unknown kind values (e.g., 'Rpc', 'rPc')", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Case-sensitive kind check
@@ -78,7 +81,7 @@ describe("RouteTable", () => {
     });
 
     it("should enforce RPC invariant: RPC must have response descriptor", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // RPC without response should throw
@@ -89,7 +92,7 @@ describe("RouteTable", () => {
     });
 
     it("should reject RPC with invalid response descriptor (non-descriptor value)", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // RPC with response: true (not a descriptor)
@@ -100,7 +103,7 @@ describe("RouteTable", () => {
     });
 
     it("should reject RPC with response missing required fields", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Response missing kind
@@ -115,7 +118,7 @@ describe("RouteTable", () => {
     });
 
     it("should reject RPC with response having invalid field types", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Response with invalid version type
@@ -130,7 +133,7 @@ describe("RouteTable", () => {
     });
 
     it("should reject RPC with response having empty type", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Response with empty type string
@@ -145,7 +148,7 @@ describe("RouteTable", () => {
     });
 
     it("should enforce event invariant: event must not have response descriptor", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Event with response should throw
@@ -160,7 +163,7 @@ describe("RouteTable", () => {
     });
 
     it("should accept valid RPC with response descriptor", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Valid RPC with response
@@ -174,7 +177,7 @@ describe("RouteTable", () => {
     });
 
     it("should accept valid event without response descriptor", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
       // Valid event without response
@@ -189,7 +192,7 @@ describe("RouteTable", () => {
 
   describe("get()", () => {
     it("should retrieve a registered handler", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const schema = createMessageDescriptor("PING");
       const entry = createRouteEntry();
 
@@ -200,7 +203,7 @@ describe("RouteTable", () => {
     });
 
     it("should return undefined for unregistered types", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
 
       expect(table.get("NONEXISTENT")).toBeUndefined();
     });
@@ -208,7 +211,7 @@ describe("RouteTable", () => {
 
   describe("has()", () => {
     it("should check if a handler exists", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const schema = createMessageDescriptor("PING");
       const entry = createRouteEntry();
 
@@ -220,7 +223,7 @@ describe("RouteTable", () => {
 
   describe("size()", () => {
     it("should return the number of registered handlers", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
 
       expect(table.size()).toBe(0);
 
@@ -234,7 +237,7 @@ describe("RouteTable", () => {
 
   describe("list()", () => {
     it("should return all registered entries", () => {
-      const table = new RouteTable<unknown>();
+      const table = new RouteTable<TestContext>();
       const pingEntry = createRouteEntry();
       const pongEntry = createRouteEntry();
 
@@ -244,17 +247,17 @@ describe("RouteTable", () => {
       const entries = table.list();
 
       expect(entries).toHaveLength(2);
-      expect(entries[0][0]).toBe("PING");
-      expect(entries[0][1]).toBe(pingEntry);
-      expect(entries[1][0]).toBe("PONG");
-      expect(entries[1][1]).toBe(pongEntry);
+      expect(entries[0]![0]).toBe("PING");
+      expect(entries[0]![1]).toBe(pingEntry);
+      expect(entries[1]![0]).toBe("PONG");
+      expect(entries[1]![1]).toBe(pongEntry);
     });
   });
 
   describe("merge()", () => {
     it("should merge handlers from another table and return this for chaining", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       source.register(createMessageDescriptor("PING"), createRouteEntry());
       source.register(createMessageDescriptor("PONG"), createRouteEntry());
@@ -268,8 +271,8 @@ describe("RouteTable", () => {
     });
 
     it("should throw on conflict with error policy (default)", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const entry1 = createRouteEntry();
       const entry2 = { ...createRouteEntry() };
@@ -283,8 +286,8 @@ describe("RouteTable", () => {
     });
 
     it("should skip existing handler with skip policy", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const originalEntry = createRouteEntry();
       const incomingEntry = { ...createRouteEntry() };
@@ -298,8 +301,8 @@ describe("RouteTable", () => {
     });
 
     it("should replace existing handler with replace policy", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const originalEntry = createRouteEntry();
       const incomingEntry = { ...createRouteEntry() };
@@ -313,9 +316,9 @@ describe("RouteTable", () => {
     });
 
     it("should support method chaining", () => {
-      const table1 = new RouteTable<unknown>();
-      const table2 = new RouteTable<unknown>();
-      const table3 = new RouteTable<unknown>();
+      const table1 = new RouteTable<TestContext>();
+      const table2 = new RouteTable<TestContext>();
+      const table3 = new RouteTable<TestContext>();
 
       table1.register(createMessageDescriptor("MSG1"), createRouteEntry());
       table2.register(createMessageDescriptor("MSG2"), createRouteEntry());
@@ -330,8 +333,8 @@ describe("RouteTable", () => {
 
   describe("mount()", () => {
     it("should prefix all message types and return this for chaining", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       source.register(createMessageDescriptor("LOGIN"), createRouteEntry());
       source.register(createMessageDescriptor("LOGOUT"), createRouteEntry());
@@ -345,8 +348,8 @@ describe("RouteTable", () => {
     });
 
     it("should update schema.type in mounted entries", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const sourceEntry = {
         schema: createMessageDescriptor("LOGIN"),
@@ -363,8 +366,8 @@ describe("RouteTable", () => {
     });
 
     it("should preserve other schema fields when mounting", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const sourceSchema: MessageDescriptor & Record<string, unknown> = {
         type: "LOGIN",
@@ -389,8 +392,8 @@ describe("RouteTable", () => {
     });
 
     it("should throw on conflict with error policy (default)", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       source.register(createMessageDescriptor("LOGIN"), createRouteEntry());
       target.register(
@@ -404,8 +407,8 @@ describe("RouteTable", () => {
     });
 
     it("should skip existing handler with skip policy", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const originalEntry = createRouteEntry();
 
@@ -418,8 +421,8 @@ describe("RouteTable", () => {
     });
 
     it("should replace existing handler with replace policy", () => {
-      const source = new RouteTable<unknown>();
-      const target = new RouteTable<unknown>();
+      const source = new RouteTable<TestContext>();
+      const target = new RouteTable<TestContext>();
 
       const incomingEntry = {
         schema: createMessageDescriptor("LOGIN"),
@@ -441,9 +444,9 @@ describe("RouteTable", () => {
     });
 
     it("should support method chaining", () => {
-      const main = new RouteTable<unknown>();
-      const auth = new RouteTable<unknown>();
-      const chat = new RouteTable<unknown>();
+      const main = new RouteTable<TestContext>();
+      const auth = new RouteTable<TestContext>();
+      const chat = new RouteTable<TestContext>();
 
       auth.register(createMessageDescriptor("LOGIN"), createRouteEntry());
       chat.register(createMessageDescriptor("SEND"), createRouteEntry());

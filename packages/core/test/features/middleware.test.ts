@@ -566,11 +566,12 @@ describe("Middleware", () => {
     });
 
     it("should allow per-route middleware to mutate context", async () => {
-      const router = createRouter<{ step?: number }>();
+      type RouterCtx = { step?: number };
+      const router = createRouter<RouterCtx>();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
       });
-      let handlerData: any = null;
+      let handlerData: RouterCtx | null = null;
 
       router
         .route(TestMessage)
@@ -601,7 +602,7 @@ describe("Middleware", () => {
         }),
       );
 
-      expect(handlerData?.step).toBe(1);
+      expect((handlerData as RouterCtx | null)?.step).toBe(1);
     });
   });
 

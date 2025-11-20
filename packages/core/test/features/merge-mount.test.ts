@@ -13,8 +13,8 @@ function createMockWebSocket(): ServerWebSocket {
   return {
     send: () => {},
     close: () => {},
-    readyState: 1,
-  } as ServerWebSocket;
+    readyState: "OPEN",
+  };
 }
 
 describe("merge & mount", () => {
@@ -46,8 +46,14 @@ describe("merge & mount", () => {
 
       const ws = createMockWebSocket();
 
-      await router1.handleMessage(ws, JSON.stringify({ type: "AUTH_LOGIN" }));
-      await router1.handleMessage(ws, JSON.stringify({ type: "CHAT_SEND" }));
+      await router1.websocket.message(
+        ws,
+        JSON.stringify({ type: "AUTH_LOGIN" }),
+      );
+      await router1.websocket.message(
+        ws,
+        JSON.stringify({ type: "CHAT_SEND" }),
+      );
 
       expect(auth).toBe(true);
       expect(chat).toBe(true);
@@ -97,7 +103,7 @@ describe("merge & mount", () => {
       router1.merge(router2, { onConflict: "skip" });
 
       const ws = createMockWebSocket();
-      await router1.handleMessage(ws, JSON.stringify({ type: "MSG" }));
+      await router1.websocket.message(ws, JSON.stringify({ type: "MSG" }));
 
       // Should use handler from router1 (skip router2)
       expect(from1).toBe(true);
@@ -126,7 +132,7 @@ describe("merge & mount", () => {
       router1.merge(router2, { onConflict: "replace" });
 
       const ws = createMockWebSocket();
-      await router1.handleMessage(ws, JSON.stringify({ type: "MSG" }));
+      await router1.websocket.message(ws, JSON.stringify({ type: "MSG" }));
 
       // Should use handler from router2 (replaced router1)
       expect(from1).toBe(false);
@@ -185,13 +191,13 @@ describe("merge & mount", () => {
       const ws = createMockWebSocket();
 
       // router1 should have its own handler
-      await router1.handleMessage(ws, JSON.stringify({ type: "MSG1" }));
+      await router1.websocket.message(ws, JSON.stringify({ type: "MSG1" }));
       expect(handler1Called).toBe(true);
 
       handler1Called = false;
 
       // router1 should also have router2's handler after merge
-      await router1.handleMessage(ws, JSON.stringify({ type: "MSG2" }));
+      await router1.websocket.message(ws, JSON.stringify({ type: "MSG2" }));
       expect(handler2Called).toBe(true);
     });
 
@@ -232,9 +238,9 @@ describe("merge & mount", () => {
 
       const ws = createMockWebSocket();
 
-      await main.handleMessage(ws, JSON.stringify({ type: "LOGIN" }));
-      await main.handleMessage(ws, JSON.stringify({ type: "SEND" }));
-      await main.handleMessage(ws, JSON.stringify({ type: "NOTIFY" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "LOGIN" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "SEND" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "NOTIFY" }));
 
       expect(authCalled).toBe(true);
       expect(chatCalled).toBe(true);
@@ -262,11 +268,11 @@ describe("merge & mount", () => {
       const ws = createMockWebSocket();
 
       // Should not match unprefixed type
-      await main.handleMessage(ws, JSON.stringify({ type: "LOGIN" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "LOGIN" }));
       expect(called).toBe(false);
 
       // Should match prefixed type
-      await main.handleMessage(ws, JSON.stringify({ type: "auth.LOGIN" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "auth.LOGIN" }));
       expect(called).toBe(true);
     });
 
@@ -290,7 +296,10 @@ describe("merge & mount", () => {
 
       const ws = createMockWebSocket();
 
-      await main.handleMessage(ws, JSON.stringify({ type: "api.auth.LOGIN" }));
+      await main.websocket.message(
+        ws,
+        JSON.stringify({ type: "api.auth.LOGIN" }),
+      );
       expect(called).toBe(true);
     });
 
@@ -323,14 +332,14 @@ describe("merge & mount", () => {
 
       const ws = createMockWebSocket();
 
-      await main.handleMessage(ws, JSON.stringify({ type: "users.GET" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "users.GET" }));
       expect(userCalled).toBe(true);
       expect(postCalled).toBe(false);
 
       userCalled = false;
       postCalled = false;
 
-      await main.handleMessage(ws, JSON.stringify({ type: "posts.GET" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "posts.GET" }));
       expect(userCalled).toBe(false);
       expect(postCalled).toBe(true);
     });
@@ -391,7 +400,7 @@ describe("merge & mount", () => {
       main.mount("auth.", v2, { onConflict: "skip" });
 
       const ws = createMockWebSocket();
-      await main.handleMessage(ws, JSON.stringify({ type: "auth.LOGIN" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "auth.LOGIN" }));
 
       expect(from1).toBe(true);
       expect(from2).toBe(false);
@@ -425,8 +434,8 @@ describe("merge & mount", () => {
 
       const ws = createMockWebSocket();
 
-      await main.handleMessage(ws, JSON.stringify({ type: "auth.LOGIN" }));
-      await main.handleMessage(ws, JSON.stringify({ type: "chat.SEND" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "auth.LOGIN" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "chat.SEND" }));
 
       expect(authCalled).toBe(true);
       expect(chatCalled).toBe(true);
@@ -449,7 +458,7 @@ describe("merge & mount", () => {
       main.mount("", sub);
 
       const ws = createMockWebSocket();
-      await main.handleMessage(ws, JSON.stringify({ type: "MSG" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "MSG" }));
 
       expect(called).toBe(true);
     });
@@ -473,7 +482,7 @@ describe("merge & mount", () => {
       main.merge(module);
 
       const ws = createMockWebSocket();
-      await main.handleMessage(ws, JSON.stringify({ type: "ACTION" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "ACTION" }));
 
       expect(called).toBe(true);
     });
@@ -508,7 +517,7 @@ describe("merge & mount", () => {
       const ws = createMockWebSocket();
 
       // Merge: type unchanged
-      await merge.handleMessage(ws, JSON.stringify({ type: "ACTION" }));
+      await merge.websocket.message(ws, JSON.stringify({ type: "ACTION" }));
       expect(mergeCalled).toBe(true);
       expect(mountCalled).toBe(false);
 
@@ -516,7 +525,10 @@ describe("merge & mount", () => {
       mountCalled = false;
 
       // Mount: type is prefixed
-      await mounted.handleMessage(ws, JSON.stringify({ type: "mod.ACTION" }));
+      await mounted.websocket.message(
+        ws,
+        JSON.stringify({ type: "mod.ACTION" }),
+      );
       expect(mergeCalled).toBe(false);
       expect(mountCalled).toBe(true);
     });
@@ -542,7 +554,7 @@ describe("merge & mount", () => {
       main.merge(sub);
 
       const ws = createMockWebSocket();
-      await main.handleMessage(ws, JSON.stringify({ type: "MSG" }));
+      await main.websocket.message(ws, JSON.stringify({ type: "MSG" }));
 
       // Handler registered via route() should be merged
       expect(handlerCalled).toBe(true);
@@ -577,21 +589,21 @@ describe("merge & mount", () => {
       const ws = createMockWebSocket();
 
       // router2 should still work independently
-      await router2.handleMessage(ws, JSON.stringify({ type: "MSG2" }));
+      await router2.websocket.message(ws, JSON.stringify({ type: "MSG2" }));
       expect(handler2Called).toBe(true);
 
       router1Called = false;
       handler2Called = false;
 
       // router1 should have handler1
-      await router1.handleMessage(ws, JSON.stringify({ type: "MSG1" }));
+      await router1.websocket.message(ws, JSON.stringify({ type: "MSG1" }));
       expect(router1Called).toBe(true);
       expect(handler2Called).toBe(false);
 
       router1Called = false;
 
       // After merge, router1 should also have handler2
-      await router1.handleMessage(ws, JSON.stringify({ type: "MSG2" }));
+      await router1.websocket.message(ws, JSON.stringify({ type: "MSG2" }));
       expect(router1Called).toBe(false);
       expect(handler2Called).toBe(true);
     });

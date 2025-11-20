@@ -40,30 +40,65 @@ export class BunPubSub implements PubSubAdapter {
    * All WebSocket connections subscribed to this topic (via ws.subscribe)
    * will receive the message immediately.
    *
-   * Note: BunPubSub does not track subscribers, so capability is always "unknown".
+   * Note: Bun's native pub/sub is too primitive to support excludeSelf or
+   * track subscriber counts. Both are rejected with UNSUPPORTED errors.
+   * Capability is always "unknown" (can't enumerate subscribers).
    *
    * @param envelope - Validated message with topic, payload, type, meta
-   * @param options - Publish options (partitionKey ignored, excludeSelf not supported)
+   * @param options - Publish options (partitionKey ignored, excludeSelf unsupported)
    */
   async publish(
     envelope: PublishEnvelope,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: PublishOptions,
   ): Promise<PublishResult> {
+    // Bun.ServerWebSocket.publish doesn't support sender filtering.
+    // Reject explicitly to encourage explicit server-side filtering in handlers.
+    if (options?.excludeSelf === true) {
+      return {
+        ok: false,
+        error: "UNSUPPORTED",
+        retryable: false,
+        adapter: "BunPubSub",
+        details: {
+          feature: "excludeSelf",
+          reason: "Bun pub/sub has no sender context",
+        },
+      };
+    }
+
     try {
-      // Serialize message payload
+      // Serialize complete envelope (type, payload, meta) as JSON
+      // to preserve full message structure across pub/sub boundary
       let data: string | ArrayBuffer | Uint8Array;
 
-      if (typeof envelope.payload === "string") {
+      if (
+        typeof envelope.payload === "string" &&
+        !envelope.type &&
+        !envelope.meta
+      ) {
+        // Optimization: if payload is plain string with no type/meta,
+        // send it directly as-is
         data = envelope.payload;
       } else if (
-        envelope.payload instanceof Uint8Array ||
-        envelope.payload instanceof ArrayBuffer
+        envelope.payload instanceof Uint8Array &&
+        !envelope.type &&
+        !envelope.meta
       ) {
+        // Optimization: pass-through binary payload if no envelope metadata
+        data = envelope.payload;
+      } else if (
+        envelope.payload instanceof ArrayBuffer &&
+        !envelope.type &&
+        !envelope.meta
+      ) {
+        // Optimization: pass-through binary payload if no envelope metadata
         data = envelope.payload;
       } else {
-        // JSON-serialize objects and other types
-        data = JSON.stringify(envelope.payload);
+        // General case: serialize full envelope to preserve type and meta
+        const message: Record<string, any> = { payload: envelope.payload };
+        if (envelope.type) message.type = envelope.type;
+        if (envelope.meta) message.meta = envelope.meta;
+        data = JSON.stringify(message);
       }
 
       // Broadcast to all subscribers in this Bun instance

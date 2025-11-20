@@ -12,20 +12,16 @@
  * Reference: ADR-015 (Unified RPC API Design)
  */
 
-import type {
-  EventMessageContext,
-  RpcMessageContext,
-  WebSocketData,
-} from "@ws-kit/core";
+import type { EventContext, RpcContext, WebSocketData } from "@ws-kit/core";
 import { describe, expectTypeOf, it } from "bun:test";
 
 // ============================================================================
-// EventMessageContext.error() Tests
+// EventContext.error() Tests
 // ============================================================================
 
-describe("EventMessageContext.error()", () => {
+describe("EventContext.error()", () => {
   it("should accept standard error codes", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // Standard codes should be assignable
@@ -36,7 +32,7 @@ describe("EventMessageContext.error()", () => {
   });
 
   it("should accept standard code with message", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     expectTypeOf<ErrorMethod>().toBeCallableWith(
@@ -46,7 +42,7 @@ describe("EventMessageContext.error()", () => {
   });
 
   it("should accept standard code with message and details", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     expectTypeOf<ErrorMethod>().toBeCallableWith(
@@ -59,7 +55,7 @@ describe("EventMessageContext.error()", () => {
   });
 
   it("should accept standard code with all options", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     expectTypeOf<ErrorMethod>().toBeCallableWith(
@@ -71,7 +67,7 @@ describe("EventMessageContext.error()", () => {
   });
 
   it("should accept custom literal codes", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // Custom codes should be accepted via generic overload
@@ -83,7 +79,7 @@ describe("EventMessageContext.error()", () => {
     // This is a compile-time test only
     // Custom codes should be accepted and preserve their literal types
     type TestCustomCode = "INVALID_ROOM_NAME";
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // Custom codes should be callable
@@ -92,7 +88,7 @@ describe("EventMessageContext.error()", () => {
   });
 
   it("should have standard codes available for IDE autocomplete", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // Verify all 13 standard codes are accepted
@@ -113,12 +109,12 @@ describe("EventMessageContext.error()", () => {
 });
 
 // ============================================================================
-// RpcMessageContext.error() Tests
+// RpcContext.error() Tests
 // ============================================================================
 
-describe("RpcMessageContext.error()", () => {
+describe("RpcContext.error()", () => {
   it("should accept standard error codes", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Standard codes should be assignable
@@ -128,7 +124,7 @@ describe("RpcMessageContext.error()", () => {
   });
 
   it("should accept custom literal codes", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     expectTypeOf<ErrorMethod>().toBeCallableWith("INVALID_ROOM_ID");
@@ -136,7 +132,7 @@ describe("RpcMessageContext.error()", () => {
   });
 
   it("should accept all parameter combinations", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // All combinations should be callable
@@ -154,7 +150,7 @@ describe("RpcMessageContext.error()", () => {
   });
 
   it("should preserve custom RPC error code types (compile-time)", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Custom RPC codes should be callable
@@ -166,7 +162,7 @@ describe("RpcMessageContext.error()", () => {
   });
 
   it("should have standard codes available for IDE autocomplete", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Verify all 13 standard codes are accepted
@@ -192,7 +188,7 @@ describe("RpcMessageContext.error()", () => {
 
 describe("error() code parameter type", () => {
   it("should accept ErrorCode enum values", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // ErrorCode enum values should be callable
@@ -201,7 +197,7 @@ describe("error() code parameter type", () => {
   });
 
   it("should accept literal string types", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Literals that aren't standard codes should still work
@@ -211,7 +207,7 @@ describe("error() code parameter type", () => {
 
   it("should work with custom AppData types", () => {
     type CustomData = WebSocketData<{ userId: string; role: string }>;
-    type Context = EventMessageContext<any, CustomData>;
+    type Context = EventContext<any, CustomData>;
     type ErrorMethod = Context["error"];
 
     // Custom data types should not affect error method
@@ -232,7 +228,7 @@ describe("error() code parameter type", () => {
 
 describe("Real-world error helper usage patterns", () => {
   it("should support validation error pattern", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // Pattern: validation error with field info
@@ -247,7 +243,7 @@ describe("Real-world error helper usage patterns", () => {
   });
 
   it("should support auth error pattern", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Pattern: auth error with optional details
@@ -262,7 +258,7 @@ describe("Real-world error helper usage patterns", () => {
   });
 
   it("should support rate limiting pattern", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Pattern: rate limit with backoff hint
@@ -275,7 +271,7 @@ describe("Real-world error helper usage patterns", () => {
   });
 
   it("should support impossible-under-policy pattern", () => {
-    type Context = EventMessageContext;
+    type Context = EventContext;
     type ErrorMethod = Context["error"];
 
     // Pattern: operation impossible under policy
@@ -288,7 +284,7 @@ describe("Real-world error helper usage patterns", () => {
   });
 
   it("should support custom domain error pattern", () => {
-    type Context = RpcMessageContext;
+    type Context = RpcContext;
     type ErrorMethod = Context["error"];
 
     // Pattern: custom domain-specific errors

@@ -13,8 +13,8 @@ function createMockWebSocket(): ServerWebSocket {
   return {
     send: () => {},
     close: () => {},
-    readyState: 1,
-  } as ServerWebSocket;
+    readyState: "OPEN",
+  };
 }
 
 describe("handleMessage - Message Dispatch", () => {
@@ -39,7 +39,7 @@ describe("handleMessage - Message Dispatch", () => {
     });
 
     const message = JSON.stringify({ type: "PING" });
-    await router.handleMessage(ws, message);
+    await router.websocket.message(ws, message);
     expect(handled).toBe(true);
   });
 
@@ -52,7 +52,7 @@ describe("handleMessage - Message Dispatch", () => {
       errorMsg = String(err);
     });
 
-    await router.handleMessage(ws, "invalid json {");
+    await router.websocket.message(ws, "invalid json {");
     expect(errorCalled).toBe(true);
     expect(errorMsg.toLowerCase()).toContain("json");
   });
@@ -65,7 +65,7 @@ describe("handleMessage - Message Dispatch", () => {
     });
 
     const message = JSON.stringify({ payload: {} });
-    await router.handleMessage(ws, message);
+    await router.websocket.message(ws, message);
     expect(errorCalled).toBe(true);
   });
 
@@ -77,7 +77,7 @@ describe("handleMessage - Message Dispatch", () => {
     });
 
     const message = JSON.stringify({ type: "__heartbeat" });
-    await router.handleMessage(ws, message);
+    await router.websocket.message(ws, message);
     // System message should be handled, not error
     expect(errorCalled).toBe(false);
   });
@@ -92,7 +92,7 @@ describe("handleMessage - Message Dispatch", () => {
     });
 
     const message = JSON.stringify({ type: "UNKNOWN" });
-    await router.handleMessage(ws, message);
+    await router.websocket.message(ws, message);
     expect(errorCalled).toBe(true);
     expect(errorMsg.toLowerCase()).toContain("no handler");
   });
@@ -114,7 +114,7 @@ describe("handleMessage - Message Dispatch", () => {
       type: "TEST",
       payload: "x".repeat(100),
     });
-    await limitedRouter.handleMessage(ws, largeMessage);
+    await limitedRouter.websocket.message(ws, largeMessage);
     expect(errorCalled).toBe(true);
     expect(errorMsg.toLowerCase()).toContain("exceed");
   });
@@ -133,7 +133,7 @@ describe("handleMessage - Message Dispatch", () => {
 
     const payload = { text: "hello" };
     const message = JSON.stringify({ type: "ECHO", payload });
-    await router.handleMessage(ws, message);
+    await router.websocket.message(ws, message);
 
     expect(receivedPayload).toBeDefined();
     expect((receivedPayload as any).ws).toBe(ws);
@@ -146,7 +146,7 @@ describe("handleMessage - Message Dispatch", () => {
 
     let threwError = false;
     try {
-      await router.handleMessage(ws, message);
+      await router.websocket.message(ws, message);
     } catch (e) {
       threwError = true;
     }

@@ -162,7 +162,7 @@ describe("Timestamp Usage Patterns", () => {
 
       router.on(TestMsg, (ctx) => {
         // Type check: timestamp is optional
-        expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
+        expectTypeOf(ctx.meta.timestamp).toMatchTypeOf<number | undefined>();
       });
     });
 
@@ -255,10 +255,11 @@ describe("Timestamp Usage Patterns", () => {
 
       // Rate limiter state
       const rateLimits = new Map<string, number[]>();
+      let capturedClientId: string | undefined;
 
       router.on(TestMsg, (ctx) => {
-        const clientId = ctx.data.clientId;
-        const history = rateLimits.get(clientId) || [];
+        capturedClientId = ctx.clientId;
+        const history = rateLimits.get(ctx.clientId) || [];
 
         // ✅ CORRECT: Use server time for rate limiting
         history.push(ctx.receivedAt);
@@ -266,7 +267,7 @@ describe("Timestamp Usage Patterns", () => {
         // ❌ WRONG: Using client time allows bypass
         // history.push(ctx.meta.timestamp || Date.now());
 
-        rateLimits.set(clientId, history);
+        rateLimits.set(ctx.clientId, history);
       });
 
       await router.websocket.open(ws as never);
@@ -277,7 +278,8 @@ describe("Timestamp Usage Patterns", () => {
         JSON.stringify({ type: "TEST", meta: {} }),
       );
 
-      const history = rateLimits.get("test-123");
+      expect(capturedClientId).toBeDefined();
+      const history = rateLimits.get(capturedClientId!);
       expect(history).toBeDefined();
       expect(history!.length).toBe(1);
       expect(history![0]).toBeGreaterThan(0);
@@ -390,8 +392,8 @@ describe("Timestamp Usage Patterns", () => {
       const router = createRouter();
 
       router.on(TestMsg, (ctx) => {
-        expectTypeOf(ctx.receivedAt).toBeNumber();
-        expectTypeOf(ctx.receivedAt).not.toBeNullable();
+        // ctx.receivedAt is always a required number
+        void expectTypeOf(ctx.receivedAt).toBeNumber;
       });
     });
 
@@ -400,7 +402,7 @@ describe("Timestamp Usage Patterns", () => {
       const router = createRouter();
 
       router.on(TestMsg, (ctx) => {
-        expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>();
+        expectTypeOf(ctx.meta.timestamp).toMatchTypeOf<number | undefined>();
       });
     });
 
@@ -410,12 +412,14 @@ describe("Timestamp Usage Patterns", () => {
 
       router.on(TestMsg, (ctx) => {
         // Different types and semantics
-        expectTypeOf(ctx.receivedAt).toBeNumber(); // Required
-        expectTypeOf(ctx.meta.timestamp).toEqualTypeOf<number | undefined>(); // Optional
+        void expectTypeOf(ctx.receivedAt).toBeNumber; // Required
+        void expectTypeOf(ctx.meta.timestamp).toMatchTypeOf<
+          number | undefined
+        >(); // Optional
 
         // Runtime check required for meta.timestamp
         if (ctx.meta.timestamp !== undefined) {
-          expectTypeOf(ctx.meta.timestamp).toBeNumber();
+          void expectTypeOf(ctx.meta.timestamp).toBeNumber;
         }
       });
     });

@@ -44,8 +44,22 @@ export function memoryPubSub(): PubSubAdapter {
   return {
     async publish(
       envelope: PublishEnvelope,
-      _opts?: PublishOptions,
+      opts?: PublishOptions,
     ): Promise<PublishResult> {
+      // Memory adapter doesn't track message senders, so excludeSelf can't filter.
+      // Reject to guide users toward explicit filtering in handlers.
+      if (opts?.excludeSelf === true) {
+        return {
+          ok: false,
+          error: "UNSUPPORTED",
+          retryable: false,
+          details: {
+            feature: "excludeSelf",
+            reason: "Memory adapter has no sender context",
+          },
+        };
+      }
+
       const subscribers = topics.get(envelope.topic);
       const matched = subscribers?.size ?? 0;
 
