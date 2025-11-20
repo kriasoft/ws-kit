@@ -2,27 +2,27 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Type inference tests for RPC context vs Event context discriminated union.
+ * Type inference tests for RPC vs Event context type distinction.
  *
- * These tests verify that:
- * 1. RPC context (router.rpc()) has all RPC methods (reply, progress, onCancel, deadline)
- * 2. Event context (router.on()) does NOT have RPC methods
- * 3. isRpc flag properly narrows the context type
- * 4. Payload typing is conditional (present/absent) for both RPC and Event handlers
- * 5. Middleware can use isRpc flag to narrow context
- * 6. Custom validators don't break RPC type inference
+ * These tests verify:
+ * 1. RPC context has request-response methods: reply(), error(), progress()
+ * 2. Event context has fire-and-forget method: send()
+ * 3. Both contexts share MinimalContext base properties
+ * 4. Payload property exists and is typed; when payload type is never, payload is never
+ * 5. Custom connection data types are properly preserved in both contexts
+ * 6. Complex payload structures (unions, nested types) are correctly inferred
  *
  * Tests are compile-time only (no runtime execution).
  * Run via `bun test` to verify type safety.
  *
- * Related ADRs: ADR-001 (conditional payload), ADR-002 (type overrides), ADR-015 (unified RPC API)
+ * Related ADRs: ADR-015 (unified RPC API)
  */
 
 import type {
-  EventMessageContext,
-  MessageContext,
-  RpcMessageContext,
-  WebSocketData,
+  ConnectionData,
+  EventContext,
+  MinimalContext,
+  RpcContext,
 } from "@ws-kit/core";
 import { describe, expectTypeOf, it } from "bun:test";
 
@@ -32,7 +32,7 @@ import { describe, expectTypeOf, it } from "bun:test";
 
 describe("RPC vs Event context type properties", () => {
   it("RPC context should have all RPC-specific methods", () => {
-    type TestRpcContext = RpcMessageContext<any, WebSocketData>;
+    type TestRpcContext = RpcContext<ConnectionData, any>;
 
     // reply() must be present
     expectTypeOf<TestRpcContext>().toHaveProperty("reply");
@@ -40,70 +40,37 @@ describe("RPC vs Event context type properties", () => {
     // progress() must be present
     expectTypeOf<TestRpcContext>().toHaveProperty("progress");
 
-    // onCancel() must be present
-    expectTypeOf<TestRpcContext>().toHaveProperty("onCancel");
-
-    // deadline must be present
-    expectTypeOf<TestRpcContext>().toHaveProperty("deadline");
-
-    // abortSignal must be present
-    expectTypeOf<TestRpcContext>().toHaveProperty("abortSignal");
-
-    // isRpc should be literally true
-    expectTypeOf<TestRpcContext>().toHaveProperty("isRpc");
+    // error() must be present
+    expectTypeOf<TestRpcContext>().toHaveProperty("error");
   });
 
-  it("Event context should NOT have RPC-specific methods", () => {
-    type TestEventContext = EventMessageContext<any, WebSocketData>;
+  it("Event context should have send, not reply", () => {
+    type TestEventContext = EventContext<ConnectionData, any>;
 
-    // These properties should NOT exist on event context
-    // @ts-expect-error - reply should not exist on event context
-    expectTypeOf<TestEventContext>().toHaveProperty("reply");
+    // Event context has send()
+    expectTypeOf<TestEventContext>().toHaveProperty("send");
 
-    // @ts-expect-error - progress should not exist on event context
-    expectTypeOf<TestEventContext>().toHaveProperty("progress");
-
-    // @ts-expect-error - onCancel should not exist on event context
-    expectTypeOf<TestEventContext>().toHaveProperty("onCancel");
-
-    // @ts-expect-error - deadline should not exist on event context
-    expectTypeOf<TestEventContext>().toHaveProperty("deadline");
-
-    // @ts-expect-error - abortSignal should not exist on event context
-    expectTypeOf<TestEventContext>().toHaveProperty("abortSignal");
-
-    // isRpc should be literally false
-    expectTypeOf<TestEventContext>().toHaveProperty("isRpc");
+    // EventContext should not have the reply method that RpcContext has
+    type HasReply = TestEventContext extends { reply: any } ? true : false;
+    expectTypeOf<HasReply>().toEqualTypeOf<false>();
   });
 
   it("both RPC and Event should have common properties", () => {
-    type TestRpcContext = RpcMessageContext<any, WebSocketData>;
-    type TestEventContext = EventMessageContext<any, WebSocketData>;
+    type TestRpcContext = RpcContext<ConnectionData, any>;
+    type TestEventContext = EventContext<ConnectionData, any>;
 
-    // Common properties
-    for (const contextType of [] as any[]) {
-      expectTypeOf<TestRpcContext>().toHaveProperty("ws");
-      expectTypeOf<TestRpcContext>().toHaveProperty("type");
-      expectTypeOf<TestRpcContext>().toHaveProperty("meta");
-      expectTypeOf<TestRpcContext>().toHaveProperty("send");
-      expectTypeOf<TestRpcContext>().toHaveProperty("error");
-      expectTypeOf<TestRpcContext>().toHaveProperty("assignData");
-      expectTypeOf<TestRpcContext>().toHaveProperty("subscribe");
-      expectTypeOf<TestRpcContext>().toHaveProperty("unsubscribe");
-      expectTypeOf<TestRpcContext>().toHaveProperty("publish");
-      expectTypeOf<TestRpcContext>().toHaveProperty("timeRemaining");
+    // Common properties from MinimalContext
+    expectTypeOf<TestRpcContext>().toHaveProperty("ws");
+    expectTypeOf<TestRpcContext>().toHaveProperty("type");
+    expectTypeOf<TestRpcContext>().toHaveProperty("clientId");
+    expectTypeOf<TestRpcContext>().toHaveProperty("data");
+    expectTypeOf<TestRpcContext>().toHaveProperty("assignData");
 
-      expectTypeOf<TestEventContext>().toHaveProperty("ws");
-      expectTypeOf<TestEventContext>().toHaveProperty("type");
-      expectTypeOf<TestEventContext>().toHaveProperty("meta");
-      expectTypeOf<TestEventContext>().toHaveProperty("send");
-      expectTypeOf<TestEventContext>().toHaveProperty("error");
-      expectTypeOf<TestEventContext>().toHaveProperty("assignData");
-      expectTypeOf<TestEventContext>().toHaveProperty("subscribe");
-      expectTypeOf<TestEventContext>().toHaveProperty("unsubscribe");
-      expectTypeOf<TestEventContext>().toHaveProperty("publish");
-      expectTypeOf<TestEventContext>().toHaveProperty("timeRemaining");
-    }
+    expectTypeOf<TestEventContext>().toHaveProperty("ws");
+    expectTypeOf<TestEventContext>().toHaveProperty("type");
+    expectTypeOf<TestEventContext>().toHaveProperty("clientId");
+    expectTypeOf<TestEventContext>().toHaveProperty("data");
+    expectTypeOf<TestEventContext>().toHaveProperty("assignData");
   });
 });
 
@@ -112,86 +79,65 @@ describe("RPC vs Event context type properties", () => {
 // ============================================================================
 
 describe("Payload conditional typing", () => {
-  it("RPC with payload should have payload property", () => {
-    interface RpcWithPayload {
-      type: "GET_USER";
-      payload: { id: string };
-      response: { type: "USER_OK"; payload: { name: string } };
-    }
+  it("RPC with payload should have typed payload property", () => {
+    type TestContext = RpcContext<ConnectionData, { id: string }>;
 
-    type TestContext = RpcMessageContext<RpcWithPayload, WebSocketData>;
-
-    // payload should exist
+    // payload should exist and be properly typed
     expectTypeOf<TestContext>().toHaveProperty("payload");
+    expectTypeOf<TestContext["payload"]>().toEqualTypeOf<{ id: string }>();
   });
 
-  it("RPC without payload should NOT have payload property", () => {
-    interface RpcNoPayload {
-      type: "HEARTBEAT";
-      response: { type: "HEARTBEAT_ACK" };
-    }
+  it("RPC without payload (never) resolves to never", () => {
+    type TestContext = RpcContext<ConnectionData, never>;
 
-    type TestContext = RpcMessageContext<RpcNoPayload, WebSocketData>;
-
-    // payload should not exist
-    // @ts-expect-error - payload should not exist
-    expectTypeOf<TestContext>().toHaveProperty("payload");
+    // When payload type is never, accessing payload yields never
+    expectTypeOf<TestContext["payload"]>().toEqualTypeOf<never>();
   });
 
-  it("Event with payload should have payload property", () => {
-    interface EventWithPayload {
-      type: "USER_LOGGED_IN";
-      payload: { userId: string };
-    }
+  it("Event with payload should have typed payload property", () => {
+    type TestContext = EventContext<ConnectionData, { userId: string }>;
 
-    type TestContext = EventMessageContext<EventWithPayload, WebSocketData>;
-
-    // payload should exist
+    // payload should exist and be properly typed
     expectTypeOf<TestContext>().toHaveProperty("payload");
+    expectTypeOf<TestContext["payload"]>().toEqualTypeOf<{ userId: string }>();
   });
 
-  it("Event without payload should NOT have payload property", () => {
-    interface EventNoPayload {
-      type: "CONNECTION_OPENED";
-    }
+  it("Event without payload (never) resolves to never", () => {
+    type TestContext = EventContext<ConnectionData, never>;
 
-    type TestContext = EventMessageContext<EventNoPayload, WebSocketData>;
-
-    // payload should not exist
-    // @ts-expect-error - payload should not exist
-    expectTypeOf<TestContext>().toHaveProperty("payload");
+    // When payload type is never, accessing payload yields never
+    expectTypeOf<TestContext["payload"]>().toEqualTypeOf<never>();
   });
 });
 
 // ============================================================================
-// Union Type Handling
+// RPC and Event Base Type Contracts
 // ============================================================================
 
-describe("MessageContext union type handling", () => {
-  it("RPC context should be assignable to MessageContext union", () => {
-    type RpcCtx = RpcMessageContext<any, WebSocketData>;
-    type AnyCtx = MessageContext<any, WebSocketData>;
+describe("RPC and Event base type contracts", () => {
+  it("RPC context has request-response methods", () => {
+    type RpcCtx = RpcContext<ConnectionData, any>;
 
-    // RPC should be assignable to union
-    expectTypeOf<RpcCtx>().toMatchTypeOf<AnyCtx>();
+    // RPC-specific methods for request-response pattern
+    expectTypeOf<RpcCtx>().toHaveProperty("reply");
+    expectTypeOf<RpcCtx>().toHaveProperty("error");
+    expectTypeOf<RpcCtx>().toHaveProperty("progress");
   });
 
-  it("Event context should be assignable to MessageContext union", () => {
-    type EventCtx = EventMessageContext<any, WebSocketData>;
-    type AnyCtx = MessageContext<any, WebSocketData>;
+  it("Event context has fire-and-forget method", () => {
+    type EventCtx = EventContext<ConnectionData, any>;
 
-    // Event should be assignable to union
-    expectTypeOf<EventCtx>().toMatchTypeOf<AnyCtx>();
+    // Event-specific method for one-way messaging
+    expectTypeOf<EventCtx>().toHaveProperty("send");
   });
 
-  it("Union should have common properties from both variants", () => {
-    type AnyCtx = MessageContext<any, WebSocketData>;
+  it("Both contexts extend MinimalContext base", () => {
+    type RpcCtx = RpcContext<ConnectionData, any>;
+    type EventCtx = EventContext<ConnectionData, any>;
+    type Base = MinimalContext<ConnectionData>;
 
-    // Union has properties from both RPC and Event
-    expectTypeOf<AnyCtx>().toHaveProperty("ws");
-    expectTypeOf<AnyCtx>().toHaveProperty("send");
-    expectTypeOf<AnyCtx>().toHaveProperty("error");
-    expectTypeOf<AnyCtx>().toHaveProperty("isRpc");
+    expectTypeOf<RpcCtx>().toExtend<Base>();
+    expectTypeOf<EventCtx>().toExtend<Base>();
   });
 });
 
@@ -200,39 +146,27 @@ describe("MessageContext union type handling", () => {
 // ============================================================================
 
 describe("Custom connection data type preservation", () => {
-  it("RPC context preserves custom data type", () => {
-    interface AppData {
-      userId: string;
-      roles: string[];
-    }
+  it("RPC context works with ConnectionData", () => {
+    type TestRpcCtx = RpcContext<ConnectionData, any>;
 
-    type TestRpcCtx = RpcMessageContext<any, AppData>;
-
-    // ws.data should be properly typed
-    expectTypeOf<TestRpcCtx>().toHaveProperty("ws");
+    // data property should exist
+    expectTypeOf<TestRpcCtx>().toHaveProperty("data");
+    expectTypeOf<TestRpcCtx>().toHaveProperty("assignData");
   });
 
-  it("Event context preserves custom data type", () => {
-    interface AppData {
-      userId?: string;
-      isAuthenticated: boolean;
-    }
+  it("Event context works with ConnectionData", () => {
+    type TestEventCtx = EventContext<ConnectionData, any>;
 
-    type TestEventCtx = EventMessageContext<any, AppData>;
-
-    // ws.data should be properly typed
-    expectTypeOf<TestEventCtx>().toHaveProperty("ws");
+    // data property should exist
+    expectTypeOf<TestEventCtx>().toHaveProperty("data");
+    expectTypeOf<TestEventCtx>().toHaveProperty("assignData");
   });
 
-  it("Both contexts support assignData", () => {
-    interface MutableData {
-      requestId?: string;
-    }
+  it("Both contexts support assignData for updates", () => {
+    type RpcCtx = RpcContext<ConnectionData, any>;
+    type EventCtx = EventContext<ConnectionData, any>;
 
-    type RpcCtx = RpcMessageContext<any, MutableData>;
-    type EventCtx = EventMessageContext<any, MutableData>;
-
-    // Both should have assignData
+    // Both should have assignData method to update connection data
     expectTypeOf<RpcCtx>().toHaveProperty("assignData");
     expectTypeOf<EventCtx>().toHaveProperty("assignData");
   });
@@ -243,42 +177,28 @@ describe("Custom connection data type preservation", () => {
 // ============================================================================
 
 describe("RPC with complex schema generics", () => {
-  it("should handle discriminated union payloads", () => {
-    interface ComplexRpc {
-      type: "GET_USER";
-      payload: { userId: string };
-      response: {
-        type: "USER_OK";
-        payload: { name: string } | { error: string };
-      };
-    }
+  it("should handle union payloads", () => {
+    type UnionPayload = { userId: string } | { email: string };
+    type TestContext = RpcContext<ConnectionData, UnionPayload>;
 
-    type TestContext = RpcMessageContext<ComplexRpc, WebSocketData>;
-
-    // Should have payload
+    // Payload should exist with union type
     expectTypeOf<TestContext>().toHaveProperty("payload");
+    expectTypeOf<TestContext["payload"]>().toEqualTypeOf<UnionPayload>();
 
-    // Should have reply for RPC
+    // RPC methods should exist
     expectTypeOf<TestContext>().toHaveProperty("reply");
   });
 
   it("should handle nested payloads", () => {
-    interface NestedRpc {
-      type: "COMPLEX";
-      payload: {
-        filter: { name?: string };
-        options: { limit: number };
-      };
-      response: {
-        type: "COMPLEX_OK";
-        payload: { results: { id: string }[] };
-      };
+    interface NestedPayload {
+      filter: { name?: string };
+      options: { limit: number };
     }
 
-    type TestContext = RpcMessageContext<NestedRpc, WebSocketData>;
+    type TestContext = RpcContext<ConnectionData, NestedPayload>;
 
-    // Should have nested payload
-    expectTypeOf<TestContext>().toHaveProperty("payload");
+    // Payload structure should be preserved
+    expectTypeOf<TestContext["payload"]>().toEqualTypeOf<NestedPayload>();
   });
 });
 
@@ -287,25 +207,31 @@ describe("RPC with complex schema generics", () => {
 // ============================================================================
 
 describe("Message metadata type safety", () => {
-  it("RPC context has required meta fields", () => {
-    type RpcCtx = RpcMessageContext<any, WebSocketData>;
+  it("RPC context has required base fields", () => {
+    type RpcCtx = RpcContext<ConnectionData, any>;
 
-    // Should have meta
-    expectTypeOf<RpcCtx>().toHaveProperty("meta");
+    // Should have type field (from message)
+    expectTypeOf<RpcCtx>().toHaveProperty("type");
+    // Should have clientId field
+    expectTypeOf<RpcCtx>().toHaveProperty("clientId");
   });
 
-  it("Event context has required meta fields", () => {
-    type EventCtx = EventMessageContext<any, WebSocketData>;
+  it("Event context has required base fields", () => {
+    type EventCtx = EventContext<ConnectionData, any>;
 
-    // Should have meta
-    expectTypeOf<EventCtx>().toHaveProperty("meta");
+    // Should have type field
+    expectTypeOf<EventCtx>().toHaveProperty("type");
+    // Should have clientId field
+    expectTypeOf<EventCtx>().toHaveProperty("clientId");
   });
 
-  it("RPC context may have optional correlationId", () => {
-    type RpcCtx = RpcMessageContext<any, WebSocketData>;
+  it("Both contexts have extensions map", () => {
+    type RpcCtx = RpcContext<ConnectionData, any>;
+    type EventCtx = EventContext<ConnectionData, any>;
 
-    // correlationId is optional in meta
-    expectTypeOf<RpcCtx>().toHaveProperty("meta");
+    // extensions is available for plugins to store data
+    expectTypeOf<RpcCtx>().toHaveProperty("extensions");
+    expectTypeOf<EventCtx>().toHaveProperty("extensions");
   });
 });
 
@@ -314,30 +240,18 @@ describe("Message metadata type safety", () => {
 // ============================================================================
 
 describe("Feature availability across contexts", () => {
-  it("both contexts support publish", () => {
-    type RpcCtx = RpcMessageContext<any, WebSocketData>;
-    type EventCtx = EventMessageContext<any, WebSocketData>;
+  it("RPC has reply/error/progress methods", () => {
+    type RpcCtx = RpcContext<ConnectionData, any>;
 
-    // Both should have publish
-    expectTypeOf<RpcCtx>().toHaveProperty("publish");
-    expectTypeOf<EventCtx>().toHaveProperty("publish");
-  });
-
-  it("both contexts support error responses", () => {
-    type RpcCtx = RpcMessageContext<any, WebSocketData>;
-    type EventCtx = EventMessageContext<any, WebSocketData>;
-
-    // Both should have error
+    expectTypeOf<RpcCtx>().toHaveProperty("reply");
     expectTypeOf<RpcCtx>().toHaveProperty("error");
-    expectTypeOf<EventCtx>().toHaveProperty("error");
+    expectTypeOf<RpcCtx>().toHaveProperty("progress");
   });
 
-  it("both contexts support timeRemaining", () => {
-    type RpcCtx = RpcMessageContext<any, WebSocketData>;
-    type EventCtx = EventMessageContext<any, WebSocketData>;
+  it("Event has send method", () => {
+    type EventCtx = EventContext<ConnectionData, any>;
 
-    // Both should have timeRemaining
-    expectTypeOf<RpcCtx>().toHaveProperty("timeRemaining");
-    expectTypeOf<EventCtx>().toHaveProperty("timeRemaining");
+    // Event context sends one-way messages
+    expectTypeOf<EventCtx>().toHaveProperty("send");
   });
 });
