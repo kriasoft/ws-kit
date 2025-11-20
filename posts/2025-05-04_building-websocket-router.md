@@ -839,7 +839,7 @@ The library is framework-agnostic — it works standalone, with Hono, Elysia, or
 ```typescript
 // Handle new connections
 router.onOpen((ctx) => {
-  console.log(`New client connected: ${ctx.ws.data.clientId}`);
+  console.log(`New client connected: ${ctx.data.clientId}`);
 
   // Send welcome message
   ctx.send(Welcome, { message: "Welcome to the server!" });
@@ -852,18 +852,18 @@ router.on(JoinRoom, (ctx) => {
 
 // Handle disconnections
 router.onClose((ctx) => {
-  console.log(`Client disconnected: ${ctx.ws.data.clientId}`);
+  console.log(`Client disconnected: ${ctx.data.clientId}`);
   console.log(`Close code: ${ctx.code}`);
   console.log(`Close reason: ${ctx.reason}`);
 
   // Clean up any resources
-  if (ctx.ws.data.roomId) {
-    leaveRoom(ctx.ws.data.roomId, ctx.ws.data.clientId);
+  if (ctx.data.roomId) {
+    leaveRoom(ctx.data.roomId, ctx.data.clientId);
   }
 });
 ```
 
-Each handler has access to the WebSocket connection's metadata through `ctx.ws.data`, allowing you to store and retrieve session information.
+Each handler has access to the WebSocket connection's metadata through `ctx.data`, allowing you to store and retrieve session information.
 
 ## Authentication and Security
 
@@ -884,7 +884,7 @@ const router = createRouter<AppData>();
 
 // Your message handlers
 router.on(SomeMessage, (ctx) => {
-  // ctx.ws.data.userId is available here
+  // ctx.data.userId is available here
 });
 
 // Start server with authentication
@@ -912,7 +912,7 @@ serve(router, {
 });
 ```
 
-By authenticating during the upgrade process, you ensure that only authorized users can establish WebSocket connections. The user data is then available in all your handlers via `ctx.ws.data`.
+By authenticating during the upgrade process, you ensure that only authorized users can establish WebSocket connections. The user data is then available in all your handlers via `ctx.data`.
 
 ## Broadcasting and Room Management
 
@@ -926,7 +926,7 @@ const router = createRouter();
 
 router.on(ChatMessage, (ctx) => {
   const { roomId, message } = ctx.payload;
-  const userId = ctx.ws.data.userId;
+  const userId = ctx.data.userId;
 
   // Broadcast the message to everyone in the room
   ctx.publish(roomId, ChatMessage, {
@@ -939,11 +939,11 @@ router.on(ChatMessage, (ctx) => {
 
 router.on(JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId;
+  const userId = ctx.data.userId;
 
   // Subscribe to the room
   await ctx.topics.subscribe(roomId);
-  ctx.ws.data.roomId = roomId;
+  ctx.data.roomId = roomId;
 
   // Notify others
   ctx.publish(roomId, UserJoined, {
@@ -1289,7 +1289,7 @@ const router = createRouter<schema.Meta>();
 // Handle new connections
 router.onOpen((ctx) => {
   // clientId is automatically assigned by ws-kit framework
-  console.log(`New client connected: ${ctx.ws.data.clientId}`);
+  console.log(`New client connected: ${ctx.data.clientId}`);
 
   // Assign a random guest name until authenticated
   ctx.assignData({
@@ -1315,9 +1315,9 @@ router.on(schema.Authenticate, (ctx) => {
 
   if (user) {
     // Authentication successful
-    ctx.ws.data.isAuthenticated = true;
-    ctx.ws.data.userId = user.id;
-    ctx.ws.data.username = user.username;
+    ctx.data.isAuthenticated = true;
+    ctx.data.userId = user.id;
+    ctx.data.username = user.username;
 
     ctx.send(schema.AuthSuccess, {
       userId: user.id,
@@ -1329,12 +1329,12 @@ router.on(schema.Authenticate, (ctx) => {
     // Create a new user if token doesn't exist
     // In a real app, you'd probably reject invalid tokens
     const newUser = createUser(
-      ctx.ws.data.username || `User-${randomUUID().slice(0, 6)}`,
+      ctx.data.username || `User-${randomUUID().slice(0, 6)}`,
     );
 
-    ctx.ws.data.isAuthenticated = true;
-    ctx.ws.data.userId = newUser.id;
-    ctx.ws.data.username = newUser.username;
+    ctx.data.isAuthenticated = true;
+    ctx.data.userId = newUser.id;
+    ctx.data.username = newUser.username;
 
     ctx.send(schema.AuthSuccess, {
       userId: newUser.id,
@@ -1348,8 +1348,8 @@ router.on(schema.Authenticate, (ctx) => {
 // Handle joining a room
 router.on(schema.JoinRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId;
-  const username = ctx.ws.data.username;
+  const userId = ctx.data.userId;
+  const username = ctx.data.username;
 
   // Check if user is authenticated
   if (!userId || !username) {
@@ -1365,23 +1365,23 @@ router.on(schema.JoinRoom, async (ctx) => {
   }
 
   // If user is already in a room, leave it first
-  if (ctx.ws.data.currentRoomId) {
-    leaveRoom(ctx.ws.data.currentRoomId, userId);
+  if (ctx.data.currentRoomId) {
+    leaveRoom(ctx.data.currentRoomId, userId);
 
     // Let others know user left the previous room
-    ctx.publish(ctx.ws.data.currentRoomId, schema.UserLeft, {
-      roomId: ctx.ws.data.currentRoomId,
+    ctx.publish(ctx.data.currentRoomId, schema.UserLeft, {
+      roomId: ctx.data.currentRoomId,
       userId,
       username,
     });
 
     // Unsubscribe from previous room
-    await ctx.topics.unsubscribe(ctx.ws.data.currentRoomId);
+    await ctx.topics.unsubscribe(ctx.data.currentRoomId);
   }
 
   // Join the new room
   joinRoom(roomId, userId);
-  ctx.ws.data.currentRoomId = roomId;
+  ctx.data.currentRoomId = roomId;
 
   // Subscribe to the room's messages
   await ctx.topics.subscribe(roomId);
@@ -1406,8 +1406,8 @@ router.on(schema.JoinRoom, async (ctx) => {
 // Handle leaving a room
 router.on(schema.LeaveRoom, async (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId;
-  const username = ctx.ws.data.username;
+  const userId = ctx.data.userId;
+  const username = ctx.data.username;
 
   if (!userId || !username) {
     ctx.error("UNAUTHENTICATED", "You must be authenticated to leave a room");
@@ -1415,14 +1415,14 @@ router.on(schema.LeaveRoom, async (ctx) => {
   }
 
   // Check if user is in the room
-  if (ctx.ws.data.currentRoomId !== roomId) {
+  if (ctx.data.currentRoomId !== roomId) {
     ctx.error("INVALID_ARGUMENT", "You are not in this room");
     return;
   }
 
   // Leave the room
   leaveRoom(roomId, userId);
-  ctx.ws.data.currentRoomId = undefined;
+  ctx.data.currentRoomId = undefined;
 
   // Unsubscribe from room
   await ctx.topics.unsubscribe(roomId);
@@ -1440,8 +1440,8 @@ router.on(schema.LeaveRoom, async (ctx) => {
 // Handle sending messages
 router.on(schema.SendMessage, (ctx) => {
   const { roomId, text, attachment } = ctx.payload;
-  const userId = ctx.ws.data.userId;
-  const username = ctx.ws.data.username;
+  const userId = ctx.data.userId;
+  const username = ctx.data.username;
 
   if (!userId || !username) {
     ctx.error("UNAUTHENTICATED", "You must be authenticated to send messages");
@@ -1455,7 +1455,7 @@ router.on(schema.SendMessage, (ctx) => {
   }
 
   // Check if user is in the room they're trying to message
-  if (ctx.ws.data.currentRoomId !== roomId) {
+  if (ctx.data.currentRoomId !== roomId) {
     ctx.error(
       "PERMISSION_DENIED",
       "You must join the room before sending messages",
@@ -1488,10 +1488,10 @@ router.on(schema.SendMessage, (ctx) => {
 // Handle typing indicators
 router.on(schema.TypingStart, (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId;
-  const username = ctx.ws.data.username;
+  const userId = ctx.data.userId;
+  const username = ctx.data.username;
 
-  if (!userId || !username || ctx.ws.data.currentRoomId !== roomId) return;
+  if (!userId || !username || ctx.data.currentRoomId !== roomId) return;
 
   // Broadcast typing indicator to everyone else in the room
   ctx.publish(roomId, schema.UserTyping, {
@@ -1503,12 +1503,12 @@ router.on(schema.TypingStart, (ctx) => {
 
 // Handle connection closure
 router.onClose((ctx) => {
-  const userId = ctx.ws.data.userId;
-  const username = ctx.ws.data.username;
-  const roomId = ctx.ws.data.currentRoomId;
+  const userId = ctx.data.userId;
+  const username = ctx.data.username;
+  const roomId = ctx.data.currentRoomId;
 
   console.log(
-    `Client disconnected: ${userId || ctx.ws.data.clientId}, code: ${ctx.code}`,
+    `Client disconnected: ${userId || ctx.data.clientId}, code: ${ctx.code}`,
   );
 
   // If user was in a room, notify others and clean up
@@ -2310,9 +2310,9 @@ router.onOpen((ctx) => {
   const clientId = randomUUID();
 
   // Set initial connection metadata
-  ctx.ws.data.clientId = clientId;
-  ctx.ws.data.connectedAt = Date.now();
-  ctx.ws.data.lastActivity = Date.now();
+  ctx.data.clientId = clientId;
+  ctx.data.connectedAt = Date.now();
+  ctx.data.lastActivity = Date.now();
 
   // Add to connection pool
   pool.add(clientId, ctx.ws);
@@ -2323,8 +2323,8 @@ router.onOpen((ctx) => {
 // Add activity tracking middleware
 router.use((ctx, next) => {
   // Update last activity timestamp
-  ctx.ws.data.lastActivity = Date.now();
-  pool.updateActivity(ctx.ws.data.clientId);
+  ctx.data.lastActivity = Date.now();
+  pool.updateActivity(ctx.data.clientId);
 
   // Continue processing
   return next();
@@ -2335,8 +2335,8 @@ router.on(schema.Authenticate, (ctx) => {
   // Authentication logic...
 
   // Associate connection with user
-  if (ctx.ws.data.userId) {
-    pool.associateWithUser(ctx.ws.data.clientId, ctx.ws.data.userId);
+  if (ctx.data.userId) {
+    pool.associateWithUser(ctx.data.clientId, ctx.data.userId);
   }
 
   // Continue with normal flow...
@@ -2344,8 +2344,8 @@ router.on(schema.Authenticate, (ctx) => {
 
 // Handle disconnection
 router.onClose((ctx) => {
-  console.log(`Client disconnected: ${ctx.ws.data.clientId}`);
-  pool.remove(ctx.ws.data.clientId);
+  console.log(`Client disconnected: ${ctx.data.clientId}`);
+  pool.remove(ctx.data.clientId);
 });
 
 // Add our chat routes
@@ -2412,7 +2412,7 @@ export function createRateLimiter(options: RateLimitOptions) {
       return;
     }
 
-    const clientId = ctx.ws.data.clientId;
+    const clientId = ctx.data.clientId;
 
     if (!clientId) {
       // Can't rate limit without client ID
@@ -2491,8 +2491,8 @@ router.on(schema.ChatMessage, (ctx) => {
   // Publish to all subscribers in room (with validation)
   ctx.publish(roomId, schema.ChatMessage, {
     roomId,
-    userId: ctx.ws.data.userId,
-    username: ctx.ws.data.username,
+    userId: ctx.data.userId,
+    username: ctx.data.username,
     text,
     timestamp: Date.now(),
   });
@@ -2644,9 +2644,9 @@ const pubsub = new EnhancedPubSub<AppData>();
 // Handle room joining with role-based filters
 router.on(schema.JoinRoom, (ctx) => {
   const { roomId } = ctx.payload;
-  const userId = ctx.ws.data.userId;
-  const username = ctx.ws.data.username;
-  const userRole = ctx.ws.data.userRole || "user";
+  const userId = ctx.data.userId;
+  const username = ctx.data.username;
+  const userRole = ctx.data.userRole || "user";
 
   // Subscribe with filter - only receive messages for your role level and below
   pubsub.subscribe(ctx.ws, roomId, (clientData) => {
@@ -2681,7 +2681,7 @@ router.on(schema.ModAction, (ctx) => {
   const { roomId, action } = ctx.payload;
 
   // Only allow moderators and admins to send mod actions
-  const userRole = ctx.ws.data.userRole;
+  const userRole = ctx.data.userRole;
   if (userRole !== "moderator" && userRole !== "admin") {
     ctx.error(
       "PERMISSION_DENIED",
@@ -2691,18 +2691,18 @@ router.on(schema.ModAction, (ctx) => {
   }
 
   // Set minimum role to receive this message
-  ctx.ws.data.messageMinRole = "moderator";
+  ctx.data.messageMinRole = "moderator";
 
   // Publish to room (only mods/admins will receive it due to filter)
   pubsub.publish(ctx.ws, roomId, schema.ModAction, {
     roomId,
-    userId: ctx.ws.data.userId,
-    username: ctx.ws.data.username,
+    userId: ctx.data.userId,
+    username: ctx.data.username,
     action,
   });
 
   // Reset the message minimum role
-  ctx.ws.data.messageMinRole = "user";
+  ctx.data.messageMinRole = "user";
 });
 
 // Clean up subscriptions when user leaves
@@ -3005,7 +3005,7 @@ export function setupProtocolNegotiation(router) {
     );
 
     // Store enabled features in connection metadata
-    ctx.ws.data.enabledFeatures = enabledFeatures;
+    ctx.data.enabledFeatures = enabledFeatures;
 
     // Determine compression format if requested
     let compressionFormat: string | undefined;
@@ -3022,7 +3022,7 @@ export function setupProtocolNegotiation(router) {
         compressionFormat = "deflate";
       }
 
-      ctx.ws.data.compressionFormat = compressionFormat;
+      ctx.data.compressionFormat = compressionFormat;
     }
 
     // Send server capabilities
@@ -3034,7 +3034,7 @@ export function setupProtocolNegotiation(router) {
     });
 
     console.log(
-      `Negotiated protocol with ${ctx.ws.data.clientId}: ${enabledFeatures.join(", ")}`,
+      `Negotiated protocol with ${ctx.data.clientId}: ${enabledFeatures.join(", ")}`,
     );
   });
 }

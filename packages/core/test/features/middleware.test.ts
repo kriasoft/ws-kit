@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect } from "bun:test";
 import { createRouter, message, z } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 
 describe("Middleware", () => {
   describe("Basic execution", () => {
@@ -281,20 +281,20 @@ describe("Middleware", () => {
   });
 
   describe("Context modification", () => {
-    it("should allow middleware to modify ws.data", async () => {
+    it("should allow middleware to modify ctx.data", async () => {
       const router = createRouter<{ userId?: string }>();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
       });
 
       router.use((ctx, next) => {
-        ctx.ws.data.userId = "user123";
+        ctx.assignData({ userId: "user123" });
         return next();
       });
 
       let handlerUserId: string | undefined;
       router.on(TestMessage, (ctx) => {
-        handlerUserId = ctx.ws.data.userId;
+        handlerUserId = ctx.data.userId;
       });
 
       const wsHandler = router.websocket;
@@ -326,21 +326,21 @@ describe("Middleware", () => {
       });
 
       router.use((ctx, next) => {
-        ctx.ws.data.step1 = true;
+        ctx.assignData({ step1: true });
         return next();
       });
 
       router.use((ctx, next) => {
-        expect(ctx.ws.data.step1).toBe(true);
-        ctx.ws.data.step2 = true;
+        expect(ctx.data.step1).toBe(true);
+        ctx.assignData({ step2: true });
         return next();
       });
 
       let step1: boolean | undefined;
       let step2: boolean | undefined;
       router.on(TestMessage, (ctx) => {
-        step1 = ctx.ws.data.step1;
-        step2 = ctx.ws.data.step2;
+        step1 = ctx.data.step1;
+        step2 = ctx.data.step2;
       });
 
       const wsHandler = router.websocket;

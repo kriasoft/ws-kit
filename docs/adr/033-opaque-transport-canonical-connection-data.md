@@ -1,6 +1,6 @@
 # ADR-033: Opaque Transport + Canonical ConnectionData
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2025-11-15
 **References:** ADR-016 (ConnectionData Naming), ADR-021 (Adapter-First), ADR-031 (Plugin-Adapter Architecture)
 
@@ -262,27 +262,6 @@ The migration is safe because:
 - Core's WeakMap _already_ doesn't sync with `ws.data`
 - Code reading/writing `ctx.data` may already be reading stale or undefined values across platforms
 - Fixing it now makes the error explicit (type error) instead of silent (undefined at runtime)
-
----
-
-## Implementation Status
-
-**Implemented in code:**
-
-- `ServerWebSocket` (public) and `AdapterWebSocket` (internal) interfaces in `platform-adapter.ts`
-- `MinimalContext.ws` typed as `ServerWebSocket` so user code cannot reach `initialData`
-- Router seeding via `AdapterWebSocket.initialData` during `handleOpen()`
-- Test utilities (`TestWebSocket`, `InMemoryPlatformAdapter`, `createTestRouter`, `wrapTestRouter`) implement the adapter contract
-- Bun and Cloudflare adapters cast to `AdapterWebSocket` for `initialData` seeding
-
-**Pending / migration work:**
-
-- Update all docs/examples to use `ctx.data` instead of `ctx.data`
-- Remove legacy `ServerWebSocket<TData>` usage from helpers/tests
-- Document migration notes for plugin authors so lingering patterns are easy to spot
-- Clean up any defensive `as any` assertions introduced before the router boundary hardened
-
----
 
 ## Consequences
 

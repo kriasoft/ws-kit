@@ -257,7 +257,7 @@ describe("Timestamp Usage Patterns", () => {
       const rateLimits = new Map<string, number[]>();
 
       router.on(TestMsg, (ctx) => {
-        const clientId = ctx.ws.data.clientId as string;
+        const clientId = ctx.data.clientId;
         const history = rateLimits.get(clientId) || [];
 
         // ✅ CORRECT: Use server time for rate limiting

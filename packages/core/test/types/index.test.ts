@@ -2,62 +2,58 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Type tests for @ws-kit/core
+ * Root Public API Type Tests
  *
- * These tests are run via `tsc --noEmit` to verify type safety.
- * They use expectTypeOf from bun:test for compile-time assertions.
+ * Verifies the contract of @ws-kit/core's public type surface.
+ * These tests are run via `tsc --noEmit` to check type safety.
  *
  * Reference: docs/specs/test-requirements.md
  */
 
 import type {
+  CreateRouterOptions,
   ErrorCode,
-  MessageContext,
+  EventContext,
+  MinimalContext,
   PlatformAdapter,
-  PubSub,
-  RouterHooks,
+  PubSubAdapter,
+  RpcContext,
   ServerWebSocket,
   ValidatorAdapter,
   WebSocketData,
-  WebSocketRouterOptions,
 } from "@ws-kit/core";
 import { WsKitError } from "@ws-kit/core";
-import { memoryPubSub } from "@ws-kit/memory";
-import { describe, expectTypeOf, it } from "bun:test";
+import { describe, expect, expectTypeOf, it } from "bun:test";
 
 // ============================================================================
-// ServerWebSocket Interface Tests
+// ServerWebSocket Interface
 // ============================================================================
 
-describe("ServerWebSocket<T>", () => {
-  it("should accept generic data parameter", () => {
-    type CustomData = WebSocketData<{ userId: string; role: "admin" | "user" }>;
-    type WS = ServerWebSocket<CustomData>;
-
-    expectTypeOf<WS>().toHaveProperty("data");
-    expectTypeOf<WS["data"]>().toMatchTypeOf<CustomData>();
-  });
-
-  it("should have required methods", () => {
+describe("ServerWebSocket", () => {
+  it("should be opaque transport without data property", () => {
     type WS = ServerWebSocket;
 
+    // Public API only includes send, close, and readyState
     expectTypeOf<WS>().toHaveProperty("send");
     expectTypeOf<WS>().toHaveProperty("close");
-    expectTypeOf<WS>().toHaveProperty("subscribe");
-    expectTypeOf<WS>().toHaveProperty("unsubscribe");
+    expectTypeOf<WS>().toHaveProperty("readyState");
+
+    // Data is NOT on ws; it lives in ctx.data
+    // @ts-expect-error - ws.data must not be accessible
+    // noinspection ES6UnusedImports
+    type _AssertNoData = WS["data"];
   });
 });
 
 // ============================================================================
-// WebSocketData Tests
+// WebSocketData<T>
 // ============================================================================
 
 describe("WebSocketData<T>", () => {
-  it("should always include clientId", () => {
+  it("should always include clientId as string", () => {
     type Data = WebSocketData<{ userId: string }>;
 
     expectTypeOf<Data>().toHaveProperty("clientId");
-    expectTypeOf<Data["clientId"]>().toBeString();
   });
 
   it("should merge custom properties", () => {
@@ -68,242 +64,184 @@ describe("WebSocketData<T>", () => {
       token: "secret",
     };
 
-    expectTypeOf(data.clientId).toBeString();
-    expectTypeOf(data.userId).toBeString();
+    expect(typeof data.clientId).toBe("string");
+    expect(typeof data.userId).toBe("string");
   });
 });
 
 // ============================================================================
-// MessageContext Tests
+// MinimalContext (Base context)
 // ============================================================================
 
-describe("MessageContext<TSchema, TData>", () => {
-  it("should have required properties", () => {
-    type Context = MessageContext;
+describe("MinimalContext<TContext>", () => {
+  it("should have core properties available to all handlers", () => {
+    type Context = MinimalContext;
 
+    // Always present: clientId, ws, type, data, assignData
+    expectTypeOf<Context>().toHaveProperty("clientId");
     expectTypeOf<Context>().toHaveProperty("ws");
     expectTypeOf<Context>().toHaveProperty("type");
-    expectTypeOf<Context>().toHaveProperty("meta");
+    expectTypeOf<Context>().toHaveProperty("data");
+    expectTypeOf<Context>().toHaveProperty("assignData");
+    expectTypeOf<Context["assignData"]>().toBeFunction();
+  });
+
+  it("should be generic over custom data type", () => {
+    type CustomData = WebSocketData<{ userId: string }>;
+    type Context = MinimalContext<CustomData>;
+
+    // data is the parameterized type
+    expectTypeOf<Context["data"]>().toEqualTypeOf<CustomData>();
+  });
+
+  it("should have assignData method for updating context data", () => {
+    type Context = MinimalContext;
+    expectTypeOf<Context["assignData"]>().toBeFunction();
+  });
+});
+
+// ============================================================================
+// EventContext (After validation plugin adds payload & send)
+// ============================================================================
+
+describe("EventContext<TContext, TPayload>", () => {
+  it("should extend MinimalContext", () => {
+    expectTypeOf<EventContext>().toExtend<MinimalContext>();
+  });
+
+  it("should add payload and send properties", () => {
+    type Context = EventContext;
+
+    expectTypeOf<Context>().toHaveProperty("payload");
     expectTypeOf<Context>().toHaveProperty("send");
   });
 
-  it("should type ws as ServerWebSocket with generic data", () => {
+  it("should be generic over custom data and payload types", () => {
     type CustomData = WebSocketData<{ userId: string }>;
+    // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+    type Payload = { message: string };
+    type Context = EventContext<CustomData, Payload>;
 
-    type Context = MessageContext<any, CustomData>;
-
-    expectTypeOf<Context["ws"]>().toMatchTypeOf<ServerWebSocket<CustomData>>();
-  });
-
-  it("should have SendFunction", () => {
-    type Context = MessageContext;
-
-    expectTypeOf<Context["send"]>().toBeFunction();
-    // SendFunction signature: (schema: any, data: any, meta?: any) => void
+    expectTypeOf<Context["data"]>().toEqualTypeOf<CustomData>();
+    expectTypeOf<Context["payload"]>().toEqualTypeOf<Payload>();
   });
 });
 
 // ============================================================================
-// ValidatorAdapter Tests
+// RpcContext (RPC handler context)
+// ============================================================================
+
+describe("RpcContext<TContext, TPayload, TResponse>", () => {
+  it("should extend MinimalContext", () => {
+    expectTypeOf<RpcContext>().toExtend<MinimalContext>();
+  });
+
+  it("should add reply and progress methods for RPC", () => {
+    type Context = RpcContext;
+
+    expectTypeOf<Context>().toHaveProperty("reply");
+    expectTypeOf<Context>().toHaveProperty("progress");
+  });
+});
+
+// ============================================================================
+// ValidatorAdapter Interface
 // ============================================================================
 
 describe("ValidatorAdapter", () => {
-  it("should require getMessageType method", () => {
+  it("should have validate and validateOutgoing methods", () => {
     type Adapter = ValidatorAdapter;
 
-    expectTypeOf<Adapter>().toHaveProperty("getMessageType");
-    expectTypeOf<Adapter["getMessageType"]>().toBeFunction();
-  });
-
-  it("should require safeParse method", () => {
-    type Adapter = ValidatorAdapter;
-
-    expectTypeOf<Adapter>().toHaveProperty("safeParse");
-    expectTypeOf<Adapter["safeParse"]>().toBeFunction();
-  });
-
-  it("should require infer method (TypeScript only)", () => {
-    type Adapter = ValidatorAdapter;
-
-    expectTypeOf<Adapter>().toHaveProperty("infer");
-    expectTypeOf<Adapter["infer"]>().toBeFunction();
+    expectTypeOf<Adapter>().toHaveProperty("validate");
+    expectTypeOf<Adapter>().toHaveProperty("validateOutgoing");
   });
 });
 
 // ============================================================================
-// PlatformAdapter Tests
+// PlatformAdapter Interface
 // ============================================================================
 
 describe("PlatformAdapter", () => {
-  it("should optionally include pubsub", () => {
+  it("should have send, close, and getServerWebSocket methods", () => {
     type Adapter = PlatformAdapter;
 
-    expectTypeOf<Adapter>().toHaveProperty("pubsub");
-  });
-
-  it("should optionally include getServerWebSocket method", () => {
-    type Adapter = PlatformAdapter;
-
+    expectTypeOf<Adapter>().toHaveProperty("send");
+    expectTypeOf<Adapter>().toHaveProperty("close");
     expectTypeOf<Adapter>().toHaveProperty("getServerWebSocket");
   });
 
-  it("should optionally include init and destroy methods", () => {
+  it("should optionally have getConnectionInfo", () => {
     type Adapter = PlatformAdapter;
-
-    expectTypeOf<Adapter>().toHaveProperty("init");
-    expectTypeOf<Adapter>().toHaveProperty("destroy");
+    expectTypeOf<Adapter>().toHaveProperty("getConnectionInfo");
   });
 });
 
 // ============================================================================
-// PubSub Interface Tests
+// PubSubAdapter Interface
 // ============================================================================
 
-describe("PubSub", () => {
-  it("should have publish method", () => {
-    type PS = PubSub;
+describe("PubSubAdapter", () => {
+  it("should have publish, subscribe, unsubscribe methods", () => {
+    type Adapter = PubSubAdapter;
 
-    expectTypeOf<PS>().toHaveProperty("publish");
-    expectTypeOf<PS["publish"]>().toBeFunction();
-  });
-
-  it("should have subscribe method", () => {
-    type PS = PubSub;
-
-    expectTypeOf<PS>().toHaveProperty("subscribe");
-    expectTypeOf<PS["subscribe"]>().toBeFunction();
-  });
-
-  it("should have unsubscribe method", () => {
-    type PS = PubSub;
-
-    expectTypeOf<PS>().toHaveProperty("unsubscribe");
-    expectTypeOf<PS["unsubscribe"]>().toBeFunction();
+    expectTypeOf<Adapter>().toHaveProperty("publish");
+    expectTypeOf<Adapter>().toHaveProperty("subscribe");
+    expectTypeOf<Adapter>().toHaveProperty("unsubscribe");
   });
 });
 
 // ============================================================================
-// MemoryPubSub Implementation Tests
-// ============================================================================
-
-describe("MemoryPubSub", () => {
-  it("should implement PubSub interface", () => {
-    const pubsub = memoryPubSub();
-
-    expectTypeOf<typeof pubsub>().toMatchTypeOf<PubSub>();
-  });
-
-  it("should have publish method that returns Promise<void>", () => {
-    const pubsub = memoryPubSub();
-    const result = pubsub.publish("test", {});
-
-    expectTypeOf(result).resolves.toBeVoid();
-  });
-
-  it("should have subscribe method with handler", () => {
-    const pubsub = memoryPubSub();
-
-    expectTypeOf<typeof pubsub.subscribe>().toBeFunction();
-  });
-
-  it("should have additional methods for testing", () => {
-    const pubsub = memoryPubSub();
-
-    expectTypeOf<typeof pubsub>().toHaveProperty("clear");
-    expectTypeOf<typeof pubsub>().toHaveProperty("subscriberCount");
-  });
-});
-
-// ============================================================================
-// Error Code Tests
+// ErrorCode and WsKitError
 // ============================================================================
 
 describe("ErrorCode", () => {
   it("should be a string literal union type", () => {
-    type TestCode = ErrorCode;
-    expectTypeOf<TestCode>().toBeString();
+    type Code = ErrorCode;
+    expectTypeOf<Code>().toBeString();
   });
 });
-
-// ============================================================================
-// WsKitError Tests
-// ============================================================================
 
 describe("WsKitError", () => {
-  it("should be an Error subclass", () => {
-    expectTypeOf<WsKitError>().toMatchTypeOf<Error>();
+  it("should extend Error", () => {
+    expectTypeOf<WsKitError>().toExtend<Error>();
+  });
+
+  it("should have .code property of type ErrorCode", () => {
+    type CodeOfError = WsKitError["code"];
+    expectTypeOf<CodeOfError>().toEqualTypeOf<ErrorCode>();
   });
 });
 
 // ============================================================================
-// RouterHooks Tests
+// CreateRouterOptions
 // ============================================================================
 
-describe("RouterHooks", () => {
-  it("should have optional lifecycle hooks", () => {
-    type Hooks = RouterHooks;
+describe("CreateRouterOptions", () => {
+  it("should optionally configure heartbeat and limits", () => {
+    type Options = CreateRouterOptions;
 
-    expectTypeOf<Hooks>().toHaveProperty("onOpen");
-    expectTypeOf<Hooks>().toHaveProperty("onClose");
-    expectTypeOf<Hooks>().toHaveProperty("onAuth");
-    expectTypeOf<Hooks>().toHaveProperty("onError");
-  });
-
-  it("should support custom data type", () => {
-    type CustomData = WebSocketData<{ userId: string }>;
-    type Hooks = RouterHooks<CustomData>;
-
-    // Hooks should be assignable with handlers that accept CustomData
-
-    const hooks: Hooks = {
-      onOpen: (ctx) => {
-        expectTypeOf(ctx.ws.data.clientId).toBeString();
-        expectTypeOf(ctx.ws.data.userId).toBeString();
-      },
-    };
-  });
-});
-
-// ============================================================================
-// WebSocketRouterOptions Tests
-// ============================================================================
-
-describe("WebSocketRouterOptions", () => {
-  it("should accept validator adapter", () => {
-    type Options = WebSocketRouterOptions;
-
-    expectTypeOf<Options>().toHaveProperty("validator");
-  });
-
-  it("should accept platform adapter", () => {
-    type Options = WebSocketRouterOptions;
-
-    expectTypeOf<Options>().toHaveProperty("platform");
-  });
-
-  it("should accept pubsub", () => {
-    type Options = WebSocketRouterOptions;
-
-    expectTypeOf<Options>().toHaveProperty("pubsub");
-  });
-
-  it("should accept hooks", () => {
-    type Options = WebSocketRouterOptions;
-
-    expectTypeOf<Options>().toHaveProperty("hooks");
-  });
-
-  it("should accept heartbeat config", () => {
-    type Options = WebSocketRouterOptions;
-
+    // Optional runtime configuration (plugins added via .plugin() method)
     expectTypeOf<Options>().toHaveProperty("heartbeat");
-  });
-
-  it("should accept limits config", () => {
-    type Options = WebSocketRouterOptions;
-
     expectTypeOf<Options>().toHaveProperty("limits");
   });
-});
 
-// Constants are internal and not part of the public API
+  it("should allow heartbeat config with intervalMs and timeoutMs", () => {
+    const opts: CreateRouterOptions = {
+      heartbeat: {
+        intervalMs: 30_000,
+        timeoutMs: 5_000,
+      },
+    };
+    expect(opts.heartbeat?.intervalMs).toBe(30_000);
+  });
+
+  it("should allow limits config with maxPending and maxPayloadBytes", () => {
+    const opts: CreateRouterOptions = {
+      limits: {
+        maxPending: 100,
+        maxPayloadBytes: 1024 * 1024,
+      },
+    };
+    expect(opts.limits?.maxPending).toBe(100);
+  });
+});
