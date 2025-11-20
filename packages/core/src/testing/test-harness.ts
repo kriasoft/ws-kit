@@ -167,6 +167,9 @@ export function wrapTestRouter<
     errors(): readonly unknown[] {
       return capturedErrors;
     },
+    assertErrors(): readonly Error[] {
+      return capturedErrors.filter((err) => err instanceof Error) as Error[];
+    },
     publishes(): readonly PublishRecord[] {
       return capturedPublishes;
     },
@@ -225,12 +228,15 @@ export function wrapTestRouter<
       return conn;
     },
 
+    getConnectionInfo(clientId: string) {
+      const info = adapter.getConnectionInfo(clientId);
+      return {
+        headers: info.headers,
+      };
+    },
+
     capture,
     clock,
-    // Internal: expose adapter for testing auth/headers flows
-    get adapter() {
-      return adapter;
-    },
 
     async tick(ms: number): Promise<void> {
       if (clock instanceof FakeClock) {

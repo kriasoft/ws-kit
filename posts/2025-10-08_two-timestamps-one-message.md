@@ -54,7 +54,7 @@ Watch how a clever attacker can speed-run your spam filter just by lying about t
 ```typescript
 // ❌ VULNERABLE: Rate limiting using client time
 router.on(ChatMessage, (ctx) => {
-  const lastMessageTime = cache.get(ctx.ws.data.userId);
+  const lastMessageTime = cache.get(ctx.data.userId);
   const timeSinceLastMessage = ctx.meta.timestamp - lastMessageTime;
 
   if (timeSinceLastMessage < 1000) {
@@ -193,7 +193,7 @@ Martin Kleppmann summed it up neatly in _Designing Data-Intensive Applications_:
 const rateLimits = new Map<string, number[]>();
 
 router.on(ChatMessage, (ctx) => {
-  const userId = ctx.ws.data.userId;
+  const userId = ctx.data.userId;
   const timestamps = rateLimits.get(userId) || [];
 
   // Filter to last 60 seconds using SERVER time
@@ -223,7 +223,7 @@ router.on(ChatMessage, async (ctx) => {
   await db.messages.insert({
     roomId: ctx.payload.roomId,
     text: ctx.payload.text,
-    userId: ctx.ws.data.userId,
+    userId: ctx.data.userId,
 
     // Server authoritative ordering
     receivedAt: ctx.receivedAt,
@@ -240,7 +240,7 @@ router.on(ChatMessage, async (ctx) => {
 });
 ```
 
-Pair that with storage tuned for temporal queries: index on `(receivedAt DESC, userId)` or `(receivedAt DESC, clientId)` so recent events stream efficiently. UUID v7 connection IDs from `ctx.ws.data.clientId` already encode time bits, and combining them with `receivedAt` keeps hot paths cache-friendly (see `docs/specs/rules.md#performance` for rationale).
+Pair that with storage tuned for temporal queries: index on `(receivedAt DESC, userId)` or `(receivedAt DESC, clientId)` so recent events stream efficiently. UUID v7 connection IDs from `ctx.data.clientId` already encode time bits, and combining them with `receivedAt` keeps hot paths cache-friendly (see `docs/specs/rules.md#performance` for rationale).
 
 ### Latency Metrics (Defensive)
 
@@ -258,7 +258,7 @@ router.on(PingMessage, (ctx) => {
     } else {
       // Log suspicious timestamp for investigation
       console.warn(
-        `Invalid timestamp from ${ctx.ws.data.clientId}: latency=${latency}ms`,
+        `Invalid timestamp from ${ctx.data.clientId}: latency=${latency}ms`,
       );
       metrics.increment("timestamp.invalid_latency");
     }
@@ -290,7 +290,7 @@ router.on(ChatMessage, async (ctx) => {
   const messageId = await db.messages.insert({
     roomId: ctx.payload.roomId,
     text: ctx.payload.text,
-    userId: ctx.ws.data.userId,
+    userId: ctx.data.userId,
     receivedAt: ctx.receivedAt, // Server time for ordering
   });
 
@@ -371,7 +371,7 @@ Network partitions exaggerate this further: after a flaky connection heals you m
 // Deduplicate messages that reappear within 30 seconds of ingress
 const windowStart = ctx.receivedAt - 30_000;
 const duplicate = await db.messages.findFirst({
-  userId: ctx.ws.data.userId,
+  userId: ctx.data.userId,
   checksum: ctx.meta.correlationId,
   receivedAt: { gte: windowStart },
 });
@@ -437,7 +437,7 @@ router.on(ChatMessage, (ctx) => {
 
     if (drift > 300000) {
       // More than 5 minutes stale = possible replay attack
-      console.warn(`Stale message from ${ctx.ws.data.userId}: ${drift}ms old`);
+      console.warn(`Stale message from ${ctx.data.userId}: ${drift}ms old`);
       // You might allow it but flag for monitoring
     }
   }
@@ -522,11 +522,11 @@ router.on(ChatMessage, (ctx) => {
     // Alert on suspicious patterns
     if (drift < -1000) {
       // Client timestamp is in the future
-      console.warn(`Future timestamp from ${ctx.ws.data.userId}: ${drift}ms`);
+      console.warn(`Future timestamp from ${ctx.data.userId}: ${drift}ms`);
       metrics.increment("timestamp.future_dated");
     } else if (drift > 60000) {
       // Message is more than 1 minute old
-      console.warn(`Stale timestamp from ${ctx.ws.data.userId}: ${drift}ms`);
+      console.warn(`Stale timestamp from ${ctx.data.userId}: ${drift}ms`);
       metrics.increment("timestamp.stale");
     }
   }
@@ -654,10 +654,10 @@ auditLog.append({ action: "DELETE", time: ctx.receivedAt });
 
 ```typescript
 // Pitfall: Sortable IDs depend on client honesty
-const id = `${ctx.meta.timestamp}-${ctx.ws.data.userId}`;
+const id = `${ctx.meta.timestamp}-${ctx.data.userId}`;
 
 // Fix: Use server clocks for order, client data for context
-const id = `${ctx.receivedAt}-${ctx.ws.data.userId}`; // or UUID v7 + receivedAt
+const id = `${ctx.receivedAt}-${ctx.data.userId}`; // or UUID v7 + receivedAt
 ```
 
 **Audit your codebase**: Search for `.timestamp` in your WebSocket handlers. If it's used in any conditional logic (`if`, `while`, comparisons), double-check that it shouldn't be `receivedAt` instead. Grep tricks like `rg "meta\\.timestamp" server/handlers` surface subtle trust bugs fast.

@@ -53,9 +53,15 @@ export type { EventHandler, Middleware } from "./core/types";
 // Plugin system
 export type { Plugin } from "./plugin/types";
 
-// Error handling
-export type { ErrorCode, WsKitErrorData } from "./error/codes";
-export { WsKitError } from "./error/error";
+// Error handling (canonical: new unified implementation in ./error.ts)
+export type {
+  ErrorCode,
+  ErrorCodeMetadata,
+  ErrorMessage,
+  ErrorPayload,
+  ExtErrorCode,
+} from "./error";
+export { WsKitError, ERROR_CODE_META, isStandardErrorCode } from "./error";
 
 // Capability contracts (core only; validators add validation, adapters add transport)
 export type {
@@ -78,6 +84,19 @@ export type {
   PublishResult,
 } from "./core/router";
 export { isPublishError } from "./core/types";
+
+// Schema branding/inference (used by validator adapters)
+export type {
+  AnySchema,
+  BrandedSchema,
+  InferMessage,
+  InferMeta,
+  InferPayload,
+  InferResponse,
+  InferType,
+  MessageSchema,
+  RpcSchema,
+} from "./protocol/schema";
 
 // Platform adapter contract
 export type {

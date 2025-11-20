@@ -84,6 +84,10 @@ router.plugin(withZod()).rpc(GetUser, (ctx) => {
 });
 ```
 
+**Runtime gating**: The router provides `rpc()` at runtime, but it throws unless the validation capability is present (`withZod()` or `withValibot()`). Capability markers live on `router.__caps.validation`, never by overwriting core methods.
+
+**Context stashing**: Validator plugins stash schema metadata on `ctx.__wskit` as a non-enumerable field (request/response descriptors) so reply/progress validation can run without leaking internal fields into user code or JSON payloads.
+
 ### Custom Connection Data
 
 Both handlers infer context from custom `ConnectionData`:

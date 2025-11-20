@@ -120,22 +120,29 @@ describe("Valibot router composition with merge", () => {
 
       const router1 = createRouter();
       // Per-route middleware for MESSAGE in router1
-      router1.use(MessageSchema, (ctx, next) => {
-        return next();
-      });
-      router1.on(MessageSchema, (ctx) => {
-        expectTypeOf(ctx.payload.text).toBeString();
-      });
+      router1
+        .route(MessageSchema)
+        .use((ctx, next) => {
+          return next();
+        })
+        .on((ctx) => {
+          expectTypeOf(ctx.payload.text).toBeString();
+        });
 
       const router2 = createRouter();
 
       const mainRouter = createRouter();
       mainRouter.merge(router1).merge(router2);
 
-      // Should still be able to use schema for per-route middleware in main router
-      mainRouter.use(MessageSchema, (ctx, next) => {
-        return next();
-      });
+      // Should still be able to use builder pattern for per-route middleware in main router
+      mainRouter
+        .route(MessageSchema)
+        .use((ctx, next) => {
+          return next();
+        })
+        .on((ctx) => {
+          expectTypeOf(ctx.payload.text).toBeString();
+        });
 
       expectTypeOf(mainRouter).toHaveProperty("use");
     });

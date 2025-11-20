@@ -40,7 +40,7 @@ import {
   withRpc as coreWithRpc,
 } from "@ws-kit/plugins";
 import { getZodPayload, validatePayload } from "./internal.js";
-import type { AnySchema, InferPayload } from "./types.js";
+import type { AnySchema } from "./types.js";
 
 interface WsContext {
   kind?: string; // "event" | "rpc" if set by schema registry
@@ -154,49 +154,18 @@ function resolveOptions(
 }
 
 /**
- * Validation plugin API interface with capability marker.
- * Added to the router when withZod() is applied.
+ * The runtime API surface this plugin adds:
+ * - Capability marker for type narrowing ({ validation: true })
+ * - rpc() for registering RPC handlers (does NOT overwrite router.on)
  *
- * The { validation: true } marker enables Router type narrowing:
- * - Before plugin: Router<TContext, {}> → keyof excludes rpc()
- * - After plugin: Router<TContext, { validation: true }> → keyof includes rpc()
+ * Note: Type-level on()/rpc() overloads are supplied by Router’s ValidationAPI
+ * when the { validation: true } capability is present. We only add the runtime
+ * rpc() implementation; router.on remains untouched to avoid collisions.
  */
-interface WithZodValidationAPI<
-  TContext extends ConnectionData = ConnectionData,
-> {
-  /**
-   * Marker for capability-gating in Router type system.
-   * @internal
-   */
+type WithZodCapability<TContext extends ConnectionData = ConnectionData> = {
   readonly validation: true;
-
-  /**
-   * Register an RPC handler with request-response pattern.
-   * Automatically infers context type from schema without explicit casting.
-   * @param schema RPC message schema with request and response types
-   * @param handler RPC handler function with inferred context type
-   * @example
-   * const GetUser = rpc("GET_USER", { id: z.string() }, "USER", { name: z.string() });
-   * router.rpc(GetUser, (ctx) => {
-   *   // ctx is automatically typed as RpcContext<TContext, { id: string }, { name: string }>
-   *   ctx.reply({ name: "Alice" });
-   * });
-   */
-  rpc<S extends AnySchema>(
-    schema: S & { response?: AnySchema },
-    handler: (
-      ctx: S extends { response: infer R }
-        ? R extends AnySchema
-          ? import("@ws-kit/core").RpcContext<
-              TContext,
-              InferPayload<S>,
-              InferPayload<R>
-            >
-          : never
-        : never,
-    ) => void | Promise<void>,
-  ): any; // Returns Router<TContext, any> (type system enforces via plugin mechanism)
-}
+  readonly __caps: { validation: true };
+};
 
 export function withZod<TContext extends ConnectionData = ConnectionData>(
   options?: WithZodOptions,
@@ -206,7 +175,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
     onValidationError: options?.onValidationError,
   };
 
-  return definePlugin<TContext, WithZodValidationAPI<TContext>>((router) => {
+  return definePlugin<TContext, WithZodCapability<TContext>>((router) => {
     // Step 1: Apply core messaging and RPC plugins first
     // These provide ctx.send(), ctx.reply(), ctx.error(), ctx.progress()
     router.plugin(coreWithMessaging<TContext>());
@@ -277,11 +246,15 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           }
 
           // Stash schema info for later use in reply/progress/send validation
-          enhCtx.__wskit = {
-            kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
-            request: schema,
-            response: schema.response,
-          };
+          Object.defineProperty(enhCtx, "__wskit", {
+            enumerable: false,
+            configurable: true,
+            value: {
+              kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
+              request: schema,
+              response: schema.response,
+            } satisfies WsContext,
+          });
         }
       }
 
@@ -506,29 +479,10 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
       { priority: 100 }, // Higher priority (after core plugins)
     );
 
-    // Type-safe RPC handler method with automatic context type inference
-    const rpcMethod = <S extends AnySchema>(
-      schema: S & { response?: AnySchema },
-      handler: (
-        ctx: S extends { response: infer R }
-          ? R extends AnySchema
-            ? import("@ws-kit/core").RpcContext<
-                TContext,
-                InferPayload<S>,
-                InferPayload<R>
-              >
-            : never
-          : never,
-      ) => void | Promise<void>,
-    ) => {
-      // Use the standard on() method but mark it internally as RPC-capable
-      return router.on(schema as any, handler as any);
-    };
-
-    // Return the plugin API extensions with capability marker
+    // Return the plugin API extensions with capability marker and rpc().
     return {
       validation: true as const,
-      rpc: rpcMethod,
-    };
+      __caps: { validation: true as const },
+    } satisfies WithZodCapability<TContext>;
   });
 }

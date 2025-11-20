@@ -95,7 +95,7 @@ export default {
 ### Middleware
 
 - **ALWAYS** use `router.use(middleware)` for global middleware → docs/specs/router.md#Middleware
-- **ALWAYS** use `router.use(schema, middleware)` for per-route middleware → docs/specs/router.md#Middleware
+- **ALWAYS** use `router.route(schema).use(middleware).on(handler)` for per-route middleware → docs/specs/router.md#Middleware
 - **ALWAYS** call `next()` to continue to next middleware or handler → docs/specs/router.md#Middleware
 - **ALWAYS** skip calling `next()` to prevent handler execution → docs/specs/router.md#Middleware
 - **ALWAYS** register global middleware before per-route middleware → docs/specs/router.md#Middleware

@@ -408,13 +408,18 @@ Per-message authentication checks send `UNAUTHENTICATED` errors and keep the con
 
 ```typescript
 // Default: non-fatal, connection stays open
-router.use(ProtectedMessage, (ctx, next) => {
-  if (!ctx.data?.userId) {
-    ctx.error("UNAUTHENTICATED", "Not authenticated");
-    return; // Connection stays open
-  }
-  return next();
-});
+router
+  .route(ProtectedMessage)
+  .use((ctx, next) => {
+    if (!ctx.data?.userId) {
+      ctx.error("UNAUTHENTICATED", "Not authenticated");
+      return; // Connection stays open
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Handle protected message
+  });
 ```
 
 To enforce strict authentication (close on auth failure), enable the flag during router creation:
@@ -435,17 +440,22 @@ With strict mode enabled, the router will close the connection after sending the
 Most handlers should **not** close connections. The library automatically closes only in specific cases: handshake scope auth failures, and payload limit violations (with `onExceeded: "close"`). Message-scope auth errors are in-band by default and stay open unless you enable the strict config flags. See [Connection Close Policy](#connection-close-policy) for the complete list.
 
 ```typescript
-router.use(SendMessage, (ctx, next) => {
-  if (isRateLimited(ctx.data?.userId)) {
-    // Send error message first
-    ctx.error("RESOURCE_EXHAUSTED", "Too many requests");
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    if (isRateLimited(ctx.data?.userId)) {
+      // Send error message first
+      ctx.error("RESOURCE_EXHAUSTED", "Too many requests");
 
-    // Then close connection if your policy requires it
-    ctx.ws.close(1008, "Rate limit exceeded");
-    return; // Skip handler
-  }
-  return next();
-});
+      // Then close connection if your policy requires it
+      ctx.ws.close(1008, "Rate limit exceeded");
+      return; // Skip handler
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Handle message
+  });
 ```
 
 **When to close explicitly:**

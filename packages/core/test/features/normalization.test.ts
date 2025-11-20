@@ -14,7 +14,7 @@
 import { describe, expect, it } from "bun:test";
 import type { z as zType } from "zod";
 import * as zodModule from "@ws-kit/zod";
-import { normalizeInboundMessage } from "../../src/normalize.js";
+import { normalizeInboundMessage } from "@ws-kit/core";
 
 const { z, message } = zodModule;
 

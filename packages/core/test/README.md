@@ -7,14 +7,13 @@ Quick guide for navigating and extending the core tests. Stick to these location
 
 ## Directory Map
 
-| Path                            | Focus                                           | Add tests when…                                  |
-| ------------------------------- | ----------------------------------------------- | ------------------------------------------------ |
-| `router*.test.ts`               | Router API, lifecycle, limits                   | validating base behavior shared by every app     |
-| `integration/`                  | End-to-end flows with `TestRouter`              | verifying real messaging workflows without mocks |
-| `features/`                     | Plugin, middleware, validation, RPC edge cases  | covering a single capability or regression       |
-| `types/`                        | `tsc`-only inference checks                     | guardrails for type-level contracts              |
-| `testing-harness/`              | Utilities like `TestRouter`, fake clocks        | evolving test infra itself                       |
-| `core/`, `engine/`, `fixtures/` | Low-level internals, legacy suites, shared data | poking routing tables, transports, or fixtures   |
+| Path                 | Focus                                          | Add tests when…                                  |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| `runtime/`           | Core implementation (route table, protocol)    | testing low-level internals, message structure   |
+| `features/`          | Plugin, middleware, validation, RPC, messaging | covering a single capability or regression       |
+| `features/fixtures/` | Shared test data and schemas                   | re-using fixtures across multiple test files     |
+| `types/`             | `tsc`-only inference checks                    | guardrails for type-level contracts              |
+| `testing-harness/`   | Test infrastructure (TestRouter, fake clocks)  | evolving test utilities and harness capabilities |
 
 Name files as `{topic}.test.ts` (kebab-case) and group behavior with `describe()` blocks so search remains reliable.
 
@@ -50,11 +49,14 @@ await tr.close();
 # All core tests
 bun test packages/core/test
 
-# Integration subset
-bun test packages/core/test/integration
+# By category
+bun test packages/core/test/runtime      # Low-level implementation
+bun test packages/core/test/features     # Feature specs
+bun test packages/core/test/types        # Type inference checks
+bun test packages/core/test/testing-harness  # Test infrastructure
 
 # Single file or name pattern
-bun test packages/core/test/integration/basic-usage.test.ts
+bun test packages/core/test/features/basic-usage.test.ts
 bun test packages/core/test --grep "fire-and-forget"
 ```
 

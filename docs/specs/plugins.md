@@ -65,6 +65,13 @@ const router = createRouter()
 - `withPubSub()` depends on `withMessaging()`
 - `withRateLimit()` has no dependencies (can apply anywhere)
 
+### Capability Gating (No Runtime Overwrites)
+
+- Router methods are **never overwritten at runtime**. Core owns `on()` and `rpc()`; plugins add capability markers (`__caps`) to expose gated APIs via conditional types.
+- Validation plugins (withZod/withValibot) set `{ validation: true }` on `__caps`. They do **not** reassign `router.on`/`router.rpc`; type exposure is static through the Router type’s capability check.
+- Core plugins (withMessaging/withRpc) contribute context methods through enhancers and stash data in **non-enumerable** fields (`__wskit`), avoiding public surface pollution.
+- If adding a new plugin API, pick a unique namespace on `ctx.extensions` and add only capability markers on the router. Do not patch existing router methods.
+
 ### Plugin Registration Styles
 
 **Style 1: Validator Plugins (Recommended for Most Apps)**

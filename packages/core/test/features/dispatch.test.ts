@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Dispatch pipeline tests: message routing, middleware chain, error handling.
  *
@@ -11,10 +14,11 @@
  * - Limits enforcement: maxPending
  */
 
+import type { MessageDescriptor } from "@ws-kit/core";
+import { createRouter } from "@ws-kit/core";
+import { test } from "@ws-kit/core/testing";
+import { withMessaging } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
-import type { MessageDescriptor } from "../../src/core/types";
-import { createTestRouter } from "../../src/testing";
 
 describe("dispatch pipeline", () => {
   // Helper to create a simple test schema
@@ -26,49 +30,40 @@ describe("dispatch pipeline", () => {
     it("executes global middleware before per-route middleware", async () => {
       const calls: string[] = [];
 
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
 
       // Global middleware A
-      router.use(async (ctx, next) => {
+      router.use(async (_ctx, next) => {
         calls.push("global-A:before");
         await next();
         calls.push("global-A:after");
       });
 
       // Global middleware B
-      router.use(async (ctx, next) => {
+      router.use(async (_ctx, next) => {
         calls.push("global-B:before");
         await next();
         calls.push("global-B:after");
       });
 
-      // Per-route middleware C
-      router
-        .route(schema("TEST"))
-        .use(async (ctx, next) => {
-          calls.push("route-C:before");
-          await next();
-          calls.push("route-C:after");
-        })
-        .on(async () => {
-          calls.push("handler");
-        });
+      // Handler with schema
+      router.on(schema("TEST"), async () => {
+        calls.push("handler");
+      });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
       const conn = await tr.connect();
       conn.send("TEST");
-      await conn.drain();
+      await tr.flush();
 
-      // Order: global → global → route → handler
+      // Order: global A → global B → handler → (unwinding) B → A
       expect(calls).toEqual([
         "global-A:before",
         "global-B:before",
-        "route-C:before",
         "handler",
-        "route-C:after",
         "global-B:after",
         "global-A:after",
       ]);
@@ -77,7 +72,7 @@ describe("dispatch pipeline", () => {
     });
 
     it("prevents next() from being called multiple times", async () => {
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
       const errors: unknown[] = [];
 
       router.onError((err) => {
@@ -98,14 +93,14 @@ describe("dispatch pipeline", () => {
         // handler
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
 
       const conn = await tr.connect();
       conn.send("TEST");
-      await conn.drain();
+      await tr.flush();
 
       // We should have caught the "next() called multiple times" error
       expect(errors.length).toBeGreaterThan(0);
@@ -125,7 +120,7 @@ describe("dispatch pipeline", () => {
         // dummy handler
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -149,7 +144,7 @@ describe("dispatch pipeline", () => {
         called = true;
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -175,7 +170,7 @@ describe("dispatch pipeline", () => {
         // should never be called
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -203,7 +198,7 @@ describe("dispatch pipeline", () => {
         errors.push(err);
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
@@ -223,7 +218,7 @@ describe("dispatch pipeline", () => {
 
   describe("error handling", () => {
     it("catches handler errors and routes to onError", async () => {
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
       const errors: unknown[] = [];
 
       router.onError((err) => {
@@ -234,14 +229,14 @@ describe("dispatch pipeline", () => {
         throw new Error("Handler error");
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
 
       const conn = await tr.connect();
       conn.send("THROW");
-      await conn.drain();
+      await tr.flush();
 
       const handlerError = errors.find((e) =>
         String(e).includes("Handler error"),
@@ -252,14 +247,14 @@ describe("dispatch pipeline", () => {
     });
 
     it("catches middleware errors and routes to onError", async () => {
-      const router = createRouter();
+      const router = createRouter().plugin(withMessaging());
       const errors: unknown[] = [];
 
       router.onError((err) => {
         errors.push(err);
       });
 
-      router.use(async (ctx, next) => {
+      router.use(async (_ctx, _next) => {
         throw new Error("Middleware error");
       });
 
@@ -267,14 +262,14 @@ describe("dispatch pipeline", () => {
         // won't reach here
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
         onErrorCapture: false,
       });
 
       const conn = await tr.connect();
       conn.send("TEST");
-      await conn.drain();
+      await tr.flush();
 
       const mwError = errors.find((e) =>
         String(e).includes("Middleware error"),
@@ -298,7 +293,7 @@ describe("dispatch pipeline", () => {
         hasSetData = typeof ctx.assignData === "function";
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter({
         create: () => router,
       });
 
@@ -313,7 +308,7 @@ describe("dispatch pipeline", () => {
     });
 
     it("provides assignData function in context", async () => {
-      interface AppData {
+      interface AppData extends Record<string, unknown> {
         userId?: string;
         count?: number;
       }
@@ -328,11 +323,11 @@ describe("dispatch pipeline", () => {
         assignDataWasCalled = true;
       });
 
-      const tr = createTestRouter({
+      const tr = test.createTestRouter<AppData>({
         create: () => router,
       });
 
-      const conn = await tr.connect<AppData>();
+      const conn = await tr.connect();
       conn.send("UPDATE");
       await conn.drain();
 

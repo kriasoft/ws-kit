@@ -1,8 +1,30 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect } from "bun:test";
-import { createRouter, message, z } from "@ws-kit/zod";
+/**
+ * Middleware integration tests: Bun-specific concerns
+ *
+ * Focus: Per-route builder patterns, context mutation, async ordering,
+ * early returns, and Bun adapter integration.
+ *
+ * Canonical dispatch pipeline tests (middleware order, next() guards,
+ * reserved types, heartbeat) are in dispatch.test.ts using the adapter-agnostic
+ * test harness (@ws-kit/core/testing).
+ *
+ * Scenarios:
+ * - Per-route middleware via .route().use().on() builder
+ * - Global vs per-route execution order
+ * - Early return (skip subsequent middleware/handler)
+ * - Async middleware and post-handler phase
+ * - Context mutation (ctx.assignData) propagation
+ * - Router composition (.merge())
+ * - ctx.error() short-circuiting semantics
+ * - Error handler suppression (return false)
+ */
+
+import { createBunHandler } from "@ws-kit/bun";
+import { createRouter, message, z, withZod } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
 
 describe("Middleware", () => {
   describe("Basic execution", () => {
@@ -22,7 +44,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -70,7 +92,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -101,6 +123,7 @@ describe("Middleware", () => {
   describe("Early return", () => {
     it("should skip handler if middleware returns early", async () => {
       const calls: string[] = [];
+      let handlerCalled = false;
       const router = createRouter();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
@@ -108,15 +131,16 @@ describe("Middleware", () => {
 
       router.use((ctx, next) => {
         calls.push("middleware");
-        // Early return - skip handler
-        return;
+        // Early return - skip handler (don't call next())
+        return Promise.resolve();
       });
 
       router.on(TestMessage, (ctx) => {
+        handlerCalled = true;
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -136,10 +160,12 @@ describe("Middleware", () => {
       );
 
       expect(calls).toEqual(["middleware"]);
+      expect(handlerCalled).toBe(false);
     });
 
     it("should skip subsequent middleware and handler if any middleware returns early", async () => {
       const calls: string[] = [];
+      let handlerCalled = false;
       const router = createRouter();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
@@ -152,8 +178,8 @@ describe("Middleware", () => {
 
       router.use((ctx, next) => {
         calls.push("middleware2");
-        // Early return - skip rest
-        return;
+        // Early return - skip rest (don't call next())
+        return Promise.resolve();
       });
 
       router.use((ctx, next) => {
@@ -162,10 +188,11 @@ describe("Middleware", () => {
       });
 
       router.on(TestMessage, (ctx) => {
+        handlerCalled = true;
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -185,6 +212,7 @@ describe("Middleware", () => {
       );
 
       expect(calls).toEqual(["middleware1", "middleware2"]);
+      expect(handlerCalled).toBe(false);
     });
   });
 
@@ -207,7 +235,7 @@ describe("Middleware", () => {
         calls.push("handler");
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -252,7 +280,7 @@ describe("Middleware", () => {
         calls.push("handler_after");
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -281,23 +309,23 @@ describe("Middleware", () => {
   });
 
   describe("Context modification", () => {
-    it("should allow middleware to modify ws.data", async () => {
+    it("should allow middleware to modify ctx.data", async () => {
       const router = createRouter<{ userId?: string }>();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
       });
 
       router.use((ctx, next) => {
-        ctx.ws.data.userId = "user123";
+        ctx.assignData({ userId: "user123" });
         return next();
       });
 
       let handlerUserId: string | undefined;
       router.on(TestMessage, (ctx) => {
-        handlerUserId = ctx.ws.data.userId;
+        handlerUserId = ctx.data.userId;
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -326,24 +354,24 @@ describe("Middleware", () => {
       });
 
       router.use((ctx, next) => {
-        ctx.ws.data.step1 = true;
+        ctx.assignData({ step1: true });
         return next();
       });
 
       router.use((ctx, next) => {
-        expect(ctx.ws.data.step1).toBe(true);
-        ctx.ws.data.step2 = true;
+        expect(ctx.data.step1).toBe(true);
+        ctx.assignData({ step2: true });
         return next();
       });
 
       let step1: boolean | undefined;
       let step2: boolean | undefined;
       router.on(TestMessage, (ctx) => {
-        step1 = ctx.ws.data.step1;
-        step2 = ctx.ws.data.step2;
+        step1 = ctx.data.step1;
+        step2 = ctx.data.step2;
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -367,27 +395,25 @@ describe("Middleware", () => {
     });
   });
 
-  describe("Error handling", () => {
-    it("should catch errors thrown in middleware", async () => {
-      const errors: Error[] = [];
+  describe("Per-route middleware (builder pattern)", () => {
+    it("should execute per-route middleware before handler", async () => {
+      const calls: string[] = [];
       const router = createRouter();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
       });
 
-      router.onError((error) => {
-        errors.push(error);
-      });
+      router
+        .route(TestMessage)
+        .use((ctx, next) => {
+          calls.push("per-route-middleware");
+          return next();
+        })
+        .on((ctx) => {
+          calls.push("handler");
+        });
 
-      router.use(() => {
-        throw new Error("Middleware error");
-      });
-
-      router.on(TestMessage, (ctx) => {
-        // Should not reach here
-      });
-
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -406,12 +432,182 @@ describe("Middleware", () => {
         }),
       );
 
-      expect(errors).toHaveLength(1);
-      expect(errors[0]?.message).toBe("Middleware error");
+      expect(calls).toEqual(["per-route-middleware", "handler"]);
     });
 
-    it("should catch errors thrown in async middleware", async () => {
-      const errors: Error[] = [];
+    it("should execute global before per-route middleware", async () => {
+      const calls: string[] = [];
+      const router = createRouter();
+      const TestMessage = message("TEST", {
+        value: z.string().optional(),
+      });
+
+      router.use((ctx, next) => {
+        calls.push("global");
+        return next();
+      });
+
+      router
+        .route(TestMessage)
+        .use((ctx, next) => {
+          calls.push("per-route");
+          return next();
+        })
+        .on((ctx) => {
+          calls.push("handler");
+        });
+
+      const { websocket: wsHandler } = createBunHandler(router);
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: () => {},
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      expect(calls).toEqual(["global", "per-route", "handler"]);
+    });
+
+    it("should chain multiple per-route middleware", async () => {
+      const calls: string[] = [];
+      const router = createRouter();
+      const TestMessage = message("TEST", {
+        value: z.string().optional(),
+      });
+
+      router
+        .route(TestMessage)
+        .use((ctx, next) => {
+          calls.push("middleware-1");
+          return next();
+        })
+        .use((ctx, next) => {
+          calls.push("middleware-2");
+          return next();
+        })
+        .on((ctx) => {
+          calls.push("handler");
+        });
+
+      const { websocket: wsHandler } = createBunHandler(router);
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: () => {},
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      expect(calls).toEqual(["middleware-1", "middleware-2", "handler"]);
+    });
+
+    it("should skip handler when per-route middleware skips next()", async () => {
+      const calls: string[] = [];
+      let handlerCalled = false;
+      const router = createRouter();
+      const TestMessage = message("TEST", {
+        value: z.string().optional(),
+      });
+
+      router
+        .route(TestMessage)
+        .use(() => {
+          calls.push("per-route");
+          // Skip handler by not calling next()
+          return Promise.resolve();
+        })
+        .on(() => {
+          handlerCalled = true;
+          calls.push("handler");
+        });
+
+      const { websocket: wsHandler } = createBunHandler(router);
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: () => {},
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      expect(calls).toEqual(["per-route"]);
+      expect(handlerCalled).toBe(false);
+    });
+
+    it("should allow per-route middleware to mutate context", async () => {
+      const router = createRouter<{ step?: number }>();
+      const TestMessage = message("TEST", {
+        value: z.string().optional(),
+      });
+      let handlerData: any = null;
+
+      router
+        .route(TestMessage)
+        .use((ctx, next) => {
+          ctx.assignData({ step: 1 });
+          return next();
+        })
+        .on((ctx) => {
+          handlerData = ctx.data;
+        });
+
+      const { websocket: wsHandler } = createBunHandler(router);
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: () => {},
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      expect(handlerData?.step).toBe(1);
+    });
+  });
+
+  describe("Error handling", () => {
+    it("should catch errors thrown after await next() (post-handler phase)", async () => {
+      const errors: unknown[] = [];
       const router = createRouter();
       const TestMessage = message("TEST", {
         value: z.string().optional(),
@@ -421,15 +617,16 @@ describe("Middleware", () => {
         errors.push(error);
       });
 
-      router.use(async () => {
-        throw new Error("Async middleware error");
+      router.use(async (ctx, next) => {
+        await next();
+        throw new Error("Post-handler error");
       });
 
-      router.on(TestMessage, (ctx) => {
-        // Should not reach here
+      router.on(TestMessage, () => {
+        // Handler succeeds
       });
 
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -449,12 +646,59 @@ describe("Middleware", () => {
       );
 
       expect(errors).toHaveLength(1);
-      expect(errors[0]?.message).toBe("Async middleware error");
+      expect((errors[0] as any)?.message).toBe("Post-handler error");
+    });
+
+    it("should short-circuit handler when middleware calls ctx.error()", async () => {
+      const errorsCaught: unknown[] = [];
+      let handlerCalled = false;
+      const router = createRouter();
+      const TestMessage = message("TEST", {
+        value: z.string().optional(),
+      });
+
+      router.onError((error) => {
+        errorsCaught.push(error);
+      });
+
+      router.use((ctx) => {
+        ctx.error("UNAUTHENTICATED", "Missing credentials");
+        return Promise.resolve();
+      });
+
+      router.on(TestMessage, () => {
+        handlerCalled = true;
+      });
+
+      const { websocket: wsHandler } = createBunHandler(router);
+      const mockWs = {
+        data: { clientId: "test-123" },
+        send: () => {},
+        subscribe: () => {},
+        unsubscribe: () => {},
+        close: () => {},
+        readyState: 1,
+      };
+
+      await wsHandler.message(
+        mockWs as any,
+        JSON.stringify({
+          type: "TEST",
+          meta: {},
+          payload: { value: "hello" },
+        }),
+      );
+
+      // ctx.error() schedules async error handling; wait for microtask queue
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(handlerCalled).toBe(false);
+      expect(errorsCaught).toHaveLength(1);
     });
   });
 
   describe("Router composition", () => {
-    it("should merge middleware from composed routers", async () => {
+    it("should execute router1 middleware and merged route handler", async () => {
       const calls: string[] = [];
 
       const router1 = createRouter();
@@ -467,17 +711,20 @@ describe("Middleware", () => {
       const TestMessage = message("TEST", {
         value: z.string().optional(),
       });
-      router2.use((ctx, next) => {
-        calls.push("router2_middleware");
-        return next();
-      });
-      router2.on(TestMessage, (ctx) => {
-        calls.push("handler");
-      });
+      // Per-route middleware on router2 will be preserved when merged
+      router2
+        .route(TestMessage)
+        .use((ctx, next) => {
+          calls.push("router2_per_route_middleware");
+          return next();
+        })
+        .on((ctx) => {
+          calls.push("handler");
+        });
 
       router1.merge(router2);
 
-      const wsHandler = router1._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router1);
       const mockWs = {
         data: { clientId: "test-123" },
         send: () => {},
@@ -496,126 +743,20 @@ describe("Middleware", () => {
         }),
       );
 
-      // Both router1 and router2 middleware should execute, then router2 handler
+      // router1 global middleware + router2 per-route middleware + handler
       expect(calls).toEqual([
         "router1_middleware",
-        "router2_middleware",
+        "router2_per_route_middleware",
         "handler",
       ]);
     });
   });
 
-  describe("Automatic error response on handler exception", () => {
-    it("should auto-send ERROR message when handler throws", async () => {
-      const router = createRouter();
-      const TestMessage = message("TEST", { value: z.string() });
-
-      const sentMessages: string[] = [];
-      router.on(TestMessage, () => {
-        throw new Error("Test error");
-      });
-
-      const wsHandler = router._core.websocket;
-      const mockWs = {
-        data: { clientId: "test-123" },
-        send: (msg: string) => {
-          sentMessages.push(msg);
-        },
-        subscribe: () => {},
-        unsubscribe: () => {},
-        close: () => {},
-        readyState: 1,
-      };
-
-      await wsHandler.message(
-        mockWs as any,
-        JSON.stringify({
-          type: "TEST",
-          meta: {},
-          payload: { value: "hello" },
-        }),
-      );
-
-      // Should have sent an ERROR message
-      expect(sentMessages.length).toBe(1);
-      const errorMsg = JSON.parse(sentMessages[0]!);
-      expect(errorMsg.type).toBe("ERROR");
-      expect(errorMsg.payload.code).toBe("INTERNAL");
-      expect(errorMsg.payload.message).toBe("Internal server error"); // Default sanitized message
-    });
-
-    it("should include actual error message when exposeErrorDetails is true", async () => {
-      const router = createRouter({ exposeErrorDetails: true });
-      const TestMessage = message("TEST", { value: z.string() });
-
-      const sentMessages: string[] = [];
-      router.on(TestMessage, () => {
-        throw new Error("Specific error message");
-      });
-
-      const wsHandler = router._core.websocket;
-      const mockWs = {
-        data: { clientId: "test-123" },
-        send: (msg: string) => {
-          sentMessages.push(msg);
-        },
-        subscribe: () => {},
-        unsubscribe: () => {},
-        close: () => {},
-        readyState: 1,
-      };
-
-      await wsHandler.message(
-        mockWs as any,
-        JSON.stringify({
-          type: "TEST",
-          meta: {},
-          payload: { value: "hello" },
-        }),
-      );
-
-      // Should include the actual error message
-      const errorMsg = JSON.parse(sentMessages[0]!);
-      expect(errorMsg.payload.message).toBe("Specific error message");
-    });
-
-    it("should not auto-send error when autoSendErrorOnThrow is false", async () => {
-      const router = createRouter({ autoSendErrorOnThrow: false });
-      const TestMessage = message("TEST", { value: z.string() });
-
-      const sentMessages: string[] = [];
-      router.on(TestMessage, () => {
-        throw new Error("Test error");
-      });
-
-      const wsHandler = router._core.websocket;
-      const mockWs = {
-        data: { clientId: "test-123" },
-        send: (msg: string) => {
-          sentMessages.push(msg);
-        },
-        subscribe: () => {},
-        unsubscribe: () => {},
-        close: () => {},
-        readyState: 1,
-      };
-
-      await wsHandler.message(
-        mockWs as any,
-        JSON.stringify({
-          type: "TEST",
-          meta: {},
-          payload: { value: "hello" },
-        }),
-      );
-
-      // Should NOT have sent any message (no error handler suppression needed)
-      expect(sentMessages.length).toBe(0);
-    });
-
+  describe("Error handler suppression", () => {
     it("error handler can suppress auto-send by returning false", async () => {
       const errorHandlerCalled = { count: 0 };
-      const router = createRouter();
+      let handlerCalled = false;
+      const router = createRouter().plugin(withZod());
       const TestMessage = message("TEST", { value: z.string() });
 
       router.onError(() => {
@@ -624,11 +765,12 @@ describe("Middleware", () => {
       });
 
       router.on(TestMessage, () => {
+        handlerCalled = true;
         throw new Error("Test error");
       });
 
       const sentMessages: string[] = [];
-      const wsHandler = router._core.websocket;
+      const { websocket: wsHandler } = createBunHandler(router);
       const mockWs = {
         data: { clientId: "test-123" },
         send: (msg: string) => {
@@ -651,7 +793,9 @@ describe("Middleware", () => {
 
       // Error handler was called
       expect(errorHandlerCalled.count).toBe(1);
-      // But no error message was sent
+      // Handler was called before throwing
+      expect(handlerCalled).toBe(true);
+      // With suppression returning false, no error message should be sent
       expect(sentMessages.length).toBe(0);
     });
   });

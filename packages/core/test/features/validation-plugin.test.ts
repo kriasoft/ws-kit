@@ -12,14 +12,20 @@
  * - Validation errors flow to router.onError()
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import type { Router, MessageDescriptor } from "../../src/index";
+import type { MessageDescriptor, Router } from "../../src/index";
 
 describe("Validation Plugin - Capability Gating", () => {
-  it("should not have rpc() method before plugin", () => {
+  it("guards rpc() before validation plugin", () => {
     const router = createRouter();
-    expect("rpc" in router).toBe(false);
+    expect(typeof (router as any).rpc).toBe("function");
+    expect(() =>
+      (router as any).rpc(
+        { type: "X", kind: "rpc", response: { type: "Y", kind: "event" } },
+        () => {},
+      ),
+    ).toThrow(/validation plugin/);
   });
 
   it("should have rpc() method after validation plugin", () => {

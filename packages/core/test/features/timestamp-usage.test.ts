@@ -11,8 +11,8 @@
  * Spec: docs/specs/router.md#server-controlled-fields
  */
 
-import { describe, expect, expectTypeOf, it, mock } from "bun:test";
 import { createRouter, message, z } from "@ws-kit/zod";
+import { describe, expect, expectTypeOf, it, mock } from "bun:test";
 
 // Mock WebSocket
 class MockServerWebSocket {
@@ -46,10 +46,9 @@ describe("Timestamp Usage Patterns", () => {
 
       router.on(TestMsg, handlerMock);
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -73,10 +72,9 @@ describe("Timestamp Usage Patterns", () => {
         capturedReceivedAt = ctx.receivedAt;
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {} }),
       );
@@ -99,21 +97,21 @@ describe("Timestamp Usage Patterns", () => {
         receivedTimes.push(ctx.receivedAt);
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
       // Send multiple messages
       // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {}, payload: { data: "1" } }),
       );
       // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {}, payload: { data: "2" } }),
       );
       // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {}, payload: { data: "3" } }),
       );
@@ -137,13 +135,13 @@ describe("Timestamp Usage Patterns", () => {
         clientTime = ctx.meta.timestamp;
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
       // Client sends message with future timestamp (clock skew)
       const futureTimestamp = Date.now() + 100000; // 100 seconds in future
 
       // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -179,9 +177,9 @@ describe("Timestamp Usage Patterns", () => {
 
       router.on(TestMsg, handlerMock);
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -204,9 +202,9 @@ describe("Timestamp Usage Patterns", () => {
 
       router.on(TestMsg, handlerMock);
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -236,9 +234,9 @@ describe("Timestamp Usage Patterns", () => {
         expect(serverTime).toBeGreaterThan(0);
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "CHAT",
@@ -259,7 +257,7 @@ describe("Timestamp Usage Patterns", () => {
       const rateLimits = new Map<string, number[]>();
 
       router.on(TestMsg, (ctx) => {
-        const clientId = ctx.ws.data.clientId as string;
+        const clientId = ctx.data.clientId;
         const history = rateLimits.get(clientId) || [];
 
         // ✅ CORRECT: Use server time for rate limiting
@@ -271,10 +269,10 @@ describe("Timestamp Usage Patterns", () => {
         rateLimits.set(clientId, history);
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
       // Send messages - now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({ type: "TEST", meta: {} }),
       );
@@ -300,10 +298,10 @@ describe("Timestamp Usage Patterns", () => {
         });
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
       // Client sends events with manipulated timestamps - now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "EVENT",
@@ -313,7 +311,7 @@ describe("Timestamp Usage Patterns", () => {
       );
 
       // Now handleMessage is public
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "EVENT",
@@ -342,9 +340,9 @@ describe("Timestamp Usage Patterns", () => {
         }
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "TEST",
@@ -373,9 +371,9 @@ describe("Timestamp Usage Patterns", () => {
         expect(age).toBeLessThanOrEqual(TTL_MS);
       });
 
-      await router._core.handleOpen(ws as never);
+      await router.websocket.open(ws as never);
 
-      await router._core.handleMessage(
+      await router.websocket.message(
         ws as never,
         JSON.stringify({
           type: "REQUEST",

@@ -10,12 +10,11 @@
  * Spec: docs/specs/router.md#subscriptions--publishing
  */
 
-import { describe, expect, it } from "bun:test";
-import { createRouter, withZod } from "@ws-kit/zod";
-import { z, message } from "@ws-kit/zod";
-import type { ServerWebSocket, WebSocketData } from "../../src/index.js";
-import { withPubSub } from "@ws-kit/pubsub";
 import { memoryPubSub } from "@ws-kit/memory";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createRouter, message, withZod, z } from "@ws-kit/zod";
+import { describe, expect, it } from "bun:test";
+import type { ServerWebSocket, WebSocketData } from "../../src/index.js";
 
 // Mock WebSocket implementation
 class MockWebSocket<TData extends WebSocketData = WebSocketData>

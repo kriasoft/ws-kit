@@ -275,7 +275,7 @@ router.on(ChatSendMessage, (ctx) => {
 
 router.on(PresenceUpdateMessage, (ctx) => {
   ctx.publish("presence", PresenceChangedMessage, {
-    userId: ctx.ws.data?.userId,
+    userId: ctx.data?.userId,
   });
 });
 ```
@@ -302,7 +302,7 @@ const limiter = rateLimit({
     tokensPerSecond: 50,
   }),
   key: (ctx) => {
-    const user = ctx.ws.data?.userId ?? "anon";
+    const user = ctx.data?.userId ?? "anon";
     return `user:${user}`;
   },
   cost: (ctx) => {
@@ -675,7 +675,7 @@ const limiter = rateLimit({
     tokensPerSecond: 20,
   }),
   key: (ctx) => {
-    const user = ctx.ws.data?.userId ?? "anon";
+    const user = ctx.data?.userId ?? "anon";
     return `user:${user}`;
   },
 });
@@ -694,17 +694,17 @@ import { memoryRateLimiter } from "@ws-kit/memory";
 
 const chatLimiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 50, tokensPerSecond: 20 }),
-  key: (ctx) => `user:${ctx.ws.data?.userId ?? "anon"}`,
+  key: (ctx) => `user:${ctx.data?.userId ?? "anon"}`,
 });
 
 const uploadLimiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 5, tokensPerSecond: 1 }),
-  key: (ctx) => `user:${ctx.ws.data?.userId ?? "anon"}`,
+  key: (ctx) => `user:${ctx.data?.userId ?? "anon"}`,
 });
 
 const searchLimiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 2 }),
-  key: (ctx) => `user:${ctx.ws.data?.userId ?? "anon"}`,
+  key: (ctx) => `user:${ctx.data?.userId ?? "anon"}`,
 });
 
 // Register each limiter with its specific message type

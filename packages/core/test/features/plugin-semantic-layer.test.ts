@@ -11,13 +11,13 @@
  * - Semantic layer doesn't affect runtime behavior
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import { definePlugin } from "../../src/plugin/define";
 import type {
   RouterCapabilityAPIs,
   RouterWithCapabilities,
 } from "../../src/plugin/capabilities";
+import { definePlugin } from "../../src/plugin/define";
 
 // ============================================================================
 // Test Setup

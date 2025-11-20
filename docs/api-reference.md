@@ -406,27 +406,32 @@ off<Schema extends MessageSchemaType>(schema: Schema): this;
 
 **Returns:** Router instance for chaining
 
-#### `use(middleware)` and `use(schema, middleware)`
+#### `use(middleware)` — Global Middleware
 
-Register global or per-route middleware.
+Register middleware that runs for all messages.
 
 ```typescript
-// Global middleware
-use(middleware: Middleware<TData>): this;
-
-// Per-route middleware
-use<Schema extends MessageSchemaType>(
-  schema: Schema,
-  middleware: Middleware<TData>
-): this;
+use(middleware: Middleware<TContext>): this;
 ```
 
 **Parameters:**
 
-- `middleware` - Middleware function `(ctx, next) => void | Promise<void>`
-- `schema` - Message schema for per-route middleware
+- `middleware` - Middleware function with signature `(ctx, next) => Promise<void>`
 
 **Returns:** Router instance for chaining
+
+**Context Type:**
+
+Middleware receives `MinimalContext<TContext>`:
+
+```typescript
+type Middleware<TContext extends ConnectionData = ConnectionData> = (
+  ctx: MinimalContext<TContext>,
+  next: () => Promise<void>,
+) => Promise<void>;
+```
+
+Where `MinimalContext<TContext>` includes only connection data (`ctx.data`, `ctx.type`, `ctx.error()`, etc.), not the message payload.
 
 **Examples:**
 
@@ -439,15 +444,44 @@ router.use((ctx, next) => {
   }
   return next();
 });
+```
 
+#### `route(schema)` - Per-Route Middleware Registration
+
+Register per-route middleware using the builder pattern.
+
+```typescript
+route<S extends MessageSchema>(schema: S): RouteBuilder<S, TContext>;
+```
+
+Returns a `RouteBuilder` for fluent registration:
+
+```typescript
+interface RouteBuilder<
+  S extends MessageSchema,
+  TContext extends ConnectionData = ConnectionData,
+> {
+  use(middleware: Middleware<TContext>): this;
+  on(handler: MessageHandler<S, TContext>): this;
+}
+```
+
+**Examples:**
+
+```typescript
 // Per-route rate limiting
-router.use(SendMessage, (ctx, next) => {
-  if (isRateLimited(ctx.data?.userId)) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return;
-  }
-  return next();
-});
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    if (isRateLimited(ctx.data?.userId)) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return;
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Handle message
+  });
 ```
 
 #### `onOpen(handler)`, `onClose(handler)`, `onAuth(handler)`, `onError(handler)`
@@ -1837,18 +1871,23 @@ router.use((ctx, next) => {
   return next();
 });
 
-// ✅ Per-route rate limiting
+// ✅ Per-route rate limiting (builder pattern)
 const rateLimiter = new Map<string, number>();
-router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.data?.userId || "anon";
-  const count = (rateLimiter.get(userId) || 0) + 1;
-  if (count > 10) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return;
-  }
-  rateLimiter.set(userId, count);
-  return next();
-});
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    const userId = ctx.data?.userId || "anon";
+    const count = (rateLimiter.get(userId) || 0) + 1;
+    if (count > 10) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return;
+    }
+    rateLimiter.set(userId, count);
+    return next();
+  })
+  .on((ctx) => {
+    // Handle message
+  });
 ```
 
 ### Broadcasting

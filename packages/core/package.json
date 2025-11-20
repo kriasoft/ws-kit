@@ -35,7 +35,7 @@
   "scripts": {
     "build": "tsc",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun tsc -b tsconfig.json && bun tsc -b tsconfig.test.json"
   },
   "dependencies": {},
   "devDependencies": {

@@ -64,21 +64,6 @@ export interface RpcContext<
   reply(payload: TResponse, opts?: ReplyOptions): void | Promise<void>;
 
   /**
-   * Terminal error response (one-shot, symmetric with reply()).
-   * Sends application-level error to RPC caller.
-   * Only first call to reply() or error() sends; subsequent calls ignored.
-   *
-   * Returns void by default (async enqueue). With {waitFor} option,
-   * returns Promise<void> (always completes, never rejects).
-   */
-  error<T = unknown>(
-    code: string,
-    message: string,
-    details?: T,
-    opts?: ReplyOptions,
-  ): void | Promise<void>;
-
-  /**
    * Non-terminal progress update (streaming).
    * Can call multiple times before reply() or error().
    *

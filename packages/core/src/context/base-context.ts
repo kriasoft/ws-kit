@@ -13,7 +13,10 @@
  * RPC handlers add: reply(payload), progress(payload)
  */
 
+import type { MessageDescriptor } from "../protocol/message-descriptor";
 import type { ServerWebSocket } from "../ws/platform-adapter";
+import type { ExtErrorCode } from "../error";
+import type { ErrorOptions } from "./error-handling";
 
 /**
  * Per-connection data structure.
@@ -91,6 +94,26 @@ export interface MinimalContext<
   assignData(partial: Partial<TContext>): void;
 
   /**
+   * Send an error to the client (available in all contexts).
+   *
+   * For non-RPC handlers: sends an ERROR message (fire-and-forget, can call multiple times).
+   * For RPC handlers: sends RPC_ERROR with correlation and one-shot semantics (symmetric with reply()).
+   *
+   * Fire-and-forget: enqueued asynchronously, returns immediately.
+   *
+   * @param code - Standard or custom error code (inferred for retry semantics if standard)
+   * @param message - Optional human-readable error message
+   * @param details - Optional structured debug information (safe for client transmission)
+   * @param options - Optional retry and cause configuration
+   */
+  error(
+    code: ExtErrorCode,
+    message?: string,
+    details?: Record<string, unknown>,
+    options?: ErrorOptions,
+  ): void;
+
+  /**
    * Plugin extensions registry. Each plugin stores its context enhancements here.
    * Use this to avoid collisions and enable plugin composition.
    *
@@ -142,4 +165,11 @@ export function getContextExtension<T>(
   name: string,
 ): T | undefined {
   return ctx.extensions.get(name) as T | undefined;
+}
+
+export interface EventContext<
+  TContext extends ConnectionData = ConnectionData,
+  TPayload = unknown,
+> extends MinimalContext<TContext> {
+  payload: TPayload;
 }

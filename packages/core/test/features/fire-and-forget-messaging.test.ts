@@ -8,10 +8,10 @@
  * (deterministic, no mocks, no external dependencies).
  */
 
-import { describe, it, expect } from "bun:test";
+import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
 import { test } from "@ws-kit/core/testing";
-import type { MessageDescriptor } from "@ws-kit/core";
+import { describe, expect, it } from "bun:test";
 
 describe("messaging patterns integration", () => {
   describe("fire-and-forget messaging", () => {

@@ -10,9 +10,9 @@
   "include": ["test/**/*.ts", "**/*.test.ts"],
   "references": [
     { "path": "./tsconfig.json" },
-    { "path": "../zod/tsconfig.json" },
+    { "path": "../bun/tsconfig.json" },
     { "path": "../memory/tsconfig.json" },
     { "path": "../pubsub/tsconfig.json" },
-    { "path": "../bun/tsconfig.json" }
+    { "path": "../zod/tsconfig.json" }
   ]
 }

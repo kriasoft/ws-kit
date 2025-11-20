@@ -116,6 +116,7 @@ export function definePlugin<
       process.env?.NODE_ENV !== "production"
     ) {
       for (const key of Object.keys(extensions)) {
+        if (key === "__caps") continue; // internal capability marker
         if (key in router) {
           console.warn(
             `[definePlugin] Plugin overwrites existing router property: "${key}". ` +
