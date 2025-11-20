@@ -187,7 +187,7 @@ For detailed working examples, see **[router.md](./router.md)** and **[getting s
 
 3. **Middleware & validation**
    - Global middleware with `router.use((ctx, next) => ...)`
-   - Per-route middleware with `router.use(schema, middleware)`
+   - Per-route middleware with `router.route(schema).use(middleware).on(handler)` (builder pattern)
    - Validation occurs before handlers run
 
 4. **Broadcasting & pub/sub**

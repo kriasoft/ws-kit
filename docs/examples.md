@@ -300,32 +300,33 @@ router.use((ctx, next) => {
 });
 
 // Per-route middleware: admin-only access
-router.use(AdminAction, (ctx, next) => {
-  if (!ctx.data.roles.includes(Role.ADMIN)) {
-    ctx.error("PERMISSION_DENIED", "Admin access required");
-    return;
-  }
-  return next();
-});
+router
+  .route(AdminAction)
+  .use((ctx, next) => {
+    if (!ctx.data.roles.includes(Role.ADMIN)) {
+      ctx.error("PERMISSION_DENIED", "Admin access required");
+      return;
+    }
+    return next();
+  })
+  .on(async (ctx) => {
+    const { action, targetUserId } = ctx.payload;
+    console.log(`Admin ${ctx.data.userId} executed: ${action}`);
 
-router.on(AdminAction, async (ctx) => {
-  const { action, targetUserId } = ctx.payload;
-  console.log(`Admin ${ctx.data.userId} executed: ${action}`);
-
-  // Handle admin actions
-  switch (action) {
-    case "kick":
-      await router.publish(targetUserId, Kicked, {
-        reason: ctx.payload.reason || "No reason provided",
-      });
-      break;
-    case "mute":
-      await router.publish(targetUserId, Muted, {
-        reason: ctx.payload.reason || "No reason provided",
-      });
-      break;
-  }
-});
+    // Handle admin actions
+    switch (action) {
+      case "kick":
+        await router.publish(targetUserId, Kicked, {
+          reason: ctx.payload.reason || "No reason provided",
+        });
+        break;
+      case "mute":
+        await router.publish(targetUserId, Muted, {
+          reason: ctx.payload.reason || "No reason provided",
+        });
+        break;
+    }
+  });
 
 // Start server with JWT authentication
 serve(router, {
@@ -381,33 +382,34 @@ const rateLimits = new Map<string, number[]>();
 
 const router = createRouter();
 
-router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.clientId;
-  const now = Date.now();
-  const windowStart = now - 60000; // 60 second window
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    const userId = ctx.clientId;
+    const now = Date.now();
+    const windowStart = now - 60000; // 60 second window
 
-  // Get timestamps for this user
-  const timestamps = rateLimits.get(userId) || [];
+    // Get timestamps for this user
+    const timestamps = rateLimits.get(userId) || [];
 
-  // Remove old timestamps
-  const recentTimestamps = timestamps.filter((t) => t > windowStart);
+    // Remove old timestamps
+    const recentTimestamps = timestamps.filter((t) => t > windowStart);
 
-  // Check if limit exceeded
-  if (recentTimestamps.length >= 10) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages. Max 10 per minute.");
-    return;
-  }
+    // Check if limit exceeded
+    if (recentTimestamps.length >= 10) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages. Max 10 per minute.");
+      return;
+    }
 
-  // Record this message
-  recentTimestamps.push(now);
-  rateLimits.set(userId, recentTimestamps);
+    // Record this message
+    recentTimestamps.push(now);
+    rateLimits.set(userId, recentTimestamps);
 
-  return next();
-});
-
-router.on(SendMessage, (ctx) => {
-  console.log(`Message: ${ctx.payload.text}`);
-});
+    return next();
+  })
+  .on((ctx) => {
+    console.log(`Message: ${ctx.payload.text}`);
+  });
 ```
 
 ## Request/Response Pattern (RPC)

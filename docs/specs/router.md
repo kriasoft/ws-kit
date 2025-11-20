@@ -542,20 +542,21 @@ router.use((ctx, next) => {
   return next(); // Continue to handler
 });
 
-// Per-route middleware (runs only for specific message type)
-router.use(SendMessage, (ctx, next) => {
-  // Rate limiting
-  if (isRateLimited(ctx.data?.userId)) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return; // Skip handler
-  }
-  return next();
-});
-
-router.on(SendMessage, (ctx) => {
-  // Handler runs if all middleware calls next()
-  processMessage(ctx.payload);
-});
+// Per-route middleware (runs only for specific message type, using builder pattern)
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    // Rate limiting
+    if (isRateLimited(ctx.data?.userId)) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return; // Skip handler
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Handler runs if all middleware calls next()
+    processMessage(ctx.payload);
+  });
 ```
 
 **Middleware Contract:**
@@ -563,12 +564,15 @@ router.on(SendMessage, (ctx) => {
 Middleware functions have the signature:
 
 ```typescript
-(ctx: Context, next: () => void | Promise<void>) => void | Promise<void>
+(ctx: MinimalContext<TContext>, next: () => Promise<void>) => Promise<void>;
 ```
+
+Where `MinimalContext<TContext>` includes only connection data (not the message payload).
 
 **Execution and Control Flow:**
 
 - **Execution Order**: Global middleware first, then per-route middleware, then handler
+- **Payload-Blind Design**: Middleware sees `MinimalContext<TContext>` (only connection data), not the specific message payload. Handlers get the full typed context via `.on()`
 - **Must Call `next()`**: Middleware must explicitly call `await next()` to continue; omitting it skips the handler
 - **Async/Await Support**: Middleware can be async; use `await next()` to wait for downstream completion
 - **Skip Behavior**: If middleware doesn't call `next()`, the handler is skipped and the chain stops
@@ -634,18 +638,19 @@ router.use((ctx, next) => {
 });
 
 // Per-route middleware: admin-only check for dangerous operations
-router.use(DeleteMessage, (ctx, next) => {
-  if (!ctx.data?.roles?.includes("admin")) {
-    ctx.error("PERMISSION_DENIED", "Admin access required");
-    return;
-  }
-  return next();
-});
-
-router.on(DeleteMessage, (ctx) => {
-  // Only reached if both middleware called next()
-  deleteItem(ctx.payload.id);
-});
+router
+  .route(DeleteMessage)
+  .use((ctx, next) => {
+    if (!ctx.data?.roles?.includes("admin")) {
+      ctx.error("PERMISSION_DENIED", "Admin access required");
+      return;
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Only reached if both middleware called next()
+    deleteItem(ctx.payload.id);
+  });
 ```
 
 ### Connection Lifecycle

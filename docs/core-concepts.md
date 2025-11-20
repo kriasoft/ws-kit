@@ -167,25 +167,26 @@ router.use((ctx, next) => {
   return next(); // Continue to handler
 });
 
-// Per-route middleware: runs only for specific message
-router.use(SendMessage, (ctx, next) => {
-  if (isRateLimited(ctx.data?.userId)) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return;
-  }
-  return next();
-});
-
-router.on(SendMessage, (ctx) => {
-  // Handler runs if all middleware calls next()
-  processMessage(ctx.payload);
-});
+// Per-route middleware: runs only for specific message (builder pattern)
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    if (isRateLimited(ctx.data?.userId)) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return;
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Handler runs if all middleware calls next()
+    processMessage(ctx.payload);
+  });
 ```
 
 **Key features:**
 
 - **Global middleware** — `router.use(middleware)` runs for all messages
-- **Per-route middleware** — `router.use(schema, middleware)` runs only for specific messages
+- **Per-route middleware** — `router.route(schema).use(middleware).on(handler)` runs only for specific messages
 - **Execution order** — Global → per-route → handler
 - **Control flow** — Call `next()` to continue; omit to skip handler
 - **Context mutation** — Middleware can update `ctx.data` via `ctx.assignData()`

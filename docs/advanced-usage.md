@@ -77,34 +77,35 @@ router.use((ctx, next) => {
   return next();
 });
 
-// Per-message middleware: rate limiting
+// Per-route middleware: rate limiting (builder pattern)
 const rateLimiter = new Map<string, number>();
 const RateLimitMessage = message("RATE_LIMIT_MESSAGE", {
   text: z.string(),
 });
 
-router.use(RateLimitMessage, (ctx, next) => {
-  const userId = ctx.data?.userId || "anon";
-  const count = (rateLimiter.get(userId) || 0) + 1;
+router
+  .route(RateLimitMessage)
+  .use((ctx, next) => {
+    const userId = ctx.data?.userId || "anon";
+    const count = (rateLimiter.get(userId) || 0) + 1;
 
-  if (count > 10) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return;
-  }
+    if (count > 10) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return;
+    }
 
-  rateLimiter.set(userId, count);
-  return next();
-});
-
-router.on(RateLimitMessage, (ctx) => {
-  console.log(`Message from ${ctx.data?.userId}: ${ctx.payload.text}`);
-});
+    rateLimiter.set(userId, count);
+    return next();
+  })
+  .on((ctx) => {
+    console.log(`Message from ${ctx.data?.userId}: ${ctx.payload.text}`);
+  });
 ```
 
 **Middleware semantics:**
 
 - `router.use(middleware)` — Global middleware (runs for all messages)
-- `router.use(schema, middleware)` — Per-message middleware (runs only for that message)
+- `router.route(schema).use(middleware).on(handler)` — Per-route middleware (runs only for that message)
 - Middleware can call `ctx.error()` to reject or skip calling `next()` to prevent handler execution
 - Middleware can modify connection data via `ctx.assignData()` for handlers to access
 - Both sync and async middleware supported
@@ -112,7 +113,7 @@ router.on(RateLimitMessage, (ctx) => {
 
 **Important: Context type in middleware**
 
-Middleware receives `MessageContext<any, TData>` (generic payload type), not the specific message schema type. This is because at middleware execution time, we don't yet know which specific handler will run. Use `ctx.type` to discriminate by message type:
+Middleware receives `MinimalContext<TContext>` (connection data only), not the specific message type or payload. This keeps middleware composable and generic. Use `ctx.type` to discriminate by message type if needed:
 
 ```typescript
 router.use((ctx, next) => {

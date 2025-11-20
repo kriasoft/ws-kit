@@ -51,7 +51,7 @@ router.use((ctx, next) => {
 
 ## Per-Route Middleware
 
-Per-route middleware runs only for specific messages. Register it by passing a schema as the first argument:
+Per-route middleware runs only for specific messages. Use the builder pattern to register it:
 
 ```typescript
 import { z, message, createRouter } from "@ws-kit/zod";
@@ -64,29 +64,30 @@ const SendMessage = message("SEND_MESSAGE", { text: z.string() });
 // Rate limiting for SendMessage only
 const rateLimiter = new Map<string, { count: number; resetAt: number }>();
 
-router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.data?.userId || "anon";
-  const now = Date.now();
-  const state = rateLimiter.get(userId);
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    const userId = ctx.data?.userId || "anon";
+    const now = Date.now();
+    const state = rateLimiter.get(userId);
 
-  if (state && state.resetAt > now && state.count >= 10) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return; // Skip handler
-  }
+    if (state && state.resetAt > now && state.count >= 10) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return; // Skip handler
+    }
 
-  if (!state || state.resetAt <= now) {
-    rateLimiter.set(userId, { count: 1, resetAt: now + 60000 });
-  } else {
-    state.count++;
-  }
+    if (!state || state.resetAt <= now) {
+      rateLimiter.set(userId, { count: 1, resetAt: now + 60000 });
+    } else {
+      state.count++;
+    }
 
-  return next();
-});
-
-router.on(SendMessage, (ctx) => {
-  // Rate limiting already checked by middleware
-  console.log(`Message from ${ctx.data?.userId}: ${ctx.payload.text}`);
-});
+    return next();
+  })
+  .on((ctx) => {
+    // Rate limiting already checked by middleware
+    console.log(`Message from ${ctx.data?.userId}: ${ctx.payload.text}`);
+  });
 ```
 
 ## Common Patterns
@@ -111,17 +112,18 @@ router.use((ctx, next) => {
 // Per-route: role-based authorization
 const AdminMessage = message("ADMIN_ACTION", { action: z.string() });
 
-router.use(AdminMessage, (ctx, next) => {
-  if (!ctx.data?.roles?.includes("admin")) {
-    ctx.error("PERMISSION_DENIED", "Admin access required");
-    return;
-  }
-  return next();
-});
-
-router.on(AdminMessage, (ctx) => {
-  console.log(`Admin action: ${ctx.payload.action}`);
-});
+router
+  .route(AdminMessage)
+  .use((ctx, next) => {
+    if (!ctx.data?.roles?.includes("admin")) {
+      ctx.error("PERMISSION_DENIED", "Admin access required");
+      return;
+    }
+    return next();
+  })
+  .on((ctx) => {
+    console.log(`Admin action: ${ctx.payload.action}`);
+  });
 ```
 
 ### Data Enrichment
@@ -150,25 +152,26 @@ router.on(SomeMessage, (ctx) => {
 Validate and transform payload data before the handler sees it:
 
 ```typescript
-router.use(QueryMessage, (ctx, next) => {
-  try {
-    // Parse and validate complex structures
-    ctx.assignData({
-      query: parseSearchQuery(ctx.payload.q),
-    });
-  } catch (err) {
-    ctx.error("INVALID_ARGUMENT", "Invalid query syntax");
-    return;
-  }
-  return next();
-});
-
-router.on(QueryMessage, (ctx) => {
-  // Query is pre-validated
-  const query = (ctx.data as any).query;
-  const results = database.search(query);
-  ctx.send(QueryResultsMessage, { results });
-});
+router
+  .route(QueryMessage)
+  .use((ctx, next) => {
+    try {
+      // Parse and validate complex structures
+      ctx.assignData({
+        query: parseSearchQuery(ctx.payload.q),
+      });
+    } catch (err) {
+      ctx.error("INVALID_ARGUMENT", "Invalid query syntax");
+      return;
+    }
+    return next();
+  })
+  .on((ctx) => {
+    // Query is pre-validated
+    const query = (ctx.data as any).query;
+    const results = database.search(query);
+    ctx.send(QueryResultsMessage, { results });
+  });
 ```
 
 ### Async Operations (Feature Flags, External Checks)
@@ -273,23 +276,31 @@ If middleware throws an unhandled error, the router will:
 When multiple middleware are registered, they execute in the order they were registered:
 
 ```typescript
-router.use("global-1", () => {
+// Global middleware runs first
+router.use((ctx, next) => {
   /* runs first */
+  return next();
 });
-router.use("global-2", () => {
+
+router.use((ctx, next) => {
   /* runs second */
+  return next();
 });
 
-router.use(Message, "route-1", () => {
-  /* runs third */
-});
-router.use(Message, "route-2", () => {
-  /* runs fourth */
-});
-
-router.on(Message, () => {
-  /* runs last */
-});
+// Per-route middleware runs next (in registration order)
+router
+  .route(Message)
+  .use((ctx, next) => {
+    /* runs third */
+    return next();
+  })
+  .use((ctx, next) => {
+    /* runs fourth */
+    return next();
+  })
+  .on((ctx) => {
+    /* runs last (handler) */
+  });
 ```
 
 **Global middleware runs first** (in registration order), then **per-route middleware** (in registration order), then the **handler**.

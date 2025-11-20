@@ -1,6 +1,6 @@
 # ADR-008: Middleware Support (Global and Per-Route)
 
-**Status**: Accepted
+**Status**: Final
 **Date**: 2025-10-29
 **Related**: ADR-005 (builder pattern), ADR-007 (export-with-helpers)
 
@@ -43,7 +43,7 @@ This pattern:
 Introduce middleware similar to Express/Hono:
 
 1. **Global middleware** via `router.use((ctx, next) => { ... })`
-2. **Per-route middleware** via `router.use(schema, (ctx, next) => { ... })`
+2. **Per-route middleware** via `router.route(schema).use((ctx, next) => { ... }).on(handler)` — builder pattern
 3. **Standard `(ctx, next)` signature** — Familiar pattern from Express/Hono
 4. **Synchronous and async support** — Both `sync` and `async` middleware work
 5. **Execution order** — Global middleware first, then per-route, then handler
@@ -51,76 +51,90 @@ Introduce middleware similar to Express/Hono:
 ### Type Signature
 
 ```typescript
-type Middleware<TData> = (
-  ctx: MessageContext<any, TData>,
-  next: () => unknown | Promise<unknown>,
-) => unknown | Promise<unknown>;
+type Middleware<TContext extends ConnectionData = ConnectionData> = (
+  ctx: MinimalContext<TContext>,
+  next: () => Promise<void>,
+) => Promise<void>;
 
-interface Router<TData> {
+interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   /**
    * Register global middleware (runs for all messages).
    * Executed before per-route middleware and handlers.
    */
-  use(middleware: Middleware<TData>): this;
+  use(middleware: Middleware<TContext>): this;
 
   /**
-   * Register per-route middleware (runs only for this message type).
-   * Executed after global middleware, before handler.
+   * Fluent builder to register per-route middleware.
+   * Returns a RouteBuilder for chaining `.use()` calls and `.on(handler)`.
    */
-  use<S extends MessageSchema>(schema: S, middleware: Middleware<TData>): this;
+  route<S extends MessageSchema>(schema: S): RouteBuilder<S, TContext>;
+}
+
+interface RouteBuilder<
+  S extends MessageSchema,
+  TContext extends ConnectionData = ConnectionData,
+> {
+  /**
+   * Register per-route middleware (runs only for this message type).
+   * Can be chained multiple times. Executed after global middleware, before handler.
+   */
+  use(middleware: Middleware<TContext>): this;
+
+  /**
+   * Register handler for this route. Executes after all middleware.
+   */
+  on(
+    handler: (ctx: MessageContext<S, TContext>) => void | Promise<void>,
+  ): RouterCore<TContext>;
 }
 ```
+
+**Key design choice**: Per-route middleware is **payload-blind** — it sees `MinimalContext<TContext>` with only connection data, not the specific message type. This keeps middleware composable and router-generic-only. Handler `.on()` provides the specific schema type for full payload access.
 
 ### Implementation Pattern
 
 ```typescript
-export class WebSocketRouter<TData> {
-  private globalMiddleware: Array<Middleware<TData>> = [];
-  private routeMiddleware: Map<string, Array<Middleware<TData>>> = new Map();
+export class WebSocketRouter<TContext extends ConnectionData = ConnectionData> {
+  private globalMiddleware: Array<Middleware<TContext>> = [];
+  private routes: Map<string, RouteEntry<any, TContext>> = new Map();
 
-  use(middleware: Middleware<TData>): this;
-  use<S extends MessageSchema>(schema: S, middleware: Middleware<TData>): this;
-  use(schemaOrMiddleware: any, middleware?: any): this {
-    if (typeof schemaOrMiddleware === "function") {
-      // Global middleware
-      this.globalMiddleware.push(schemaOrMiddleware);
-    } else {
-      // Per-route middleware
-      const type = schemaOrMiddleware.shape.type.value;
-      if (!this.routeMiddleware.has(type)) {
-        this.routeMiddleware.set(type, []);
-      }
-      this.routeMiddleware.get(type)!.push(middleware);
-    }
+  use(middleware: Middleware<TContext>): this {
+    this.globalMiddleware.push(middleware);
     return this;
   }
 
-  private async executeMiddlewareChain(
-    ctx: MessageContext<any, TData>,
-    middleware: Middleware<TData>[],
-    handler: () => unknown | Promise<unknown>,
-  ): Promise<void> {
-    let index = 0;
-
-    const next = async (): Promise<unknown> => {
-      if (index < middleware.length) {
-        const mw = middleware[index++];
-        return mw(ctx, next);
-      }
-      return handler();
-    };
-
-    await next();
+  route<S extends MessageSchema>(schema: S): RouteBuilder<S, TContext> {
+    return new RouteBuilderImpl(this, schema);
   }
 
-  async handleMessage(ctx: MessageContext<any, TData>): Promise<void> {
-    const routeMiddleware = this.routeMiddleware.get(ctx.type) || [];
-    const allMiddleware = [...this.globalMiddleware, ...routeMiddleware];
+  private async executeMiddlewareChain(
+    ctx: MinimalContext<TContext>,
+    middleware: Middleware<TContext>[],
+    handler: () => Promise<void>,
+  ): Promise<void> {
+    let index = -1;
 
-    const handler = this.messageHandlers.get(ctx.type)?.handler;
-    if (!handler) return; // No handler registered
+    const dispatch = async (i: number): Promise<void> => {
+      if (i <= index) throw new Error("next() called multiple times");
+      index = i;
 
-    await this.executeMiddlewareChain(ctx, allMiddleware, () => handler(ctx));
+      const mw = middleware[i];
+      if (!mw) return handler();
+
+      await mw(ctx, () => dispatch(i + 1));
+    };
+
+    await dispatch(0);
+  }
+
+  async handleMessage(ctx: MessageContext<any, TContext>): Promise<void> {
+    const route = this.routes.get(ctx.type);
+    if (!route) return;
+
+    const allMiddleware = [...this.globalMiddleware, ...route.middlewares];
+    await this.executeMiddlewareChain(ctx, allMiddleware, () =>
+      route.handler(ctx),
+    );
   }
 }
 ```
@@ -175,52 +189,54 @@ router.use((ctx, next) => {
 ```typescript
 const rateLimiter = new Map<string, { count: number; resetAt: number }>();
 
-router.use(SendMessage, (ctx, next) => {
-  const userId = ctx.data?.userId || "anon";
-  const now = Date.now();
-  const state = rateLimiter.get(userId);
+router
+  .route(SendMessage)
+  .use((ctx, next) => {
+    const userId = ctx.data?.userId || "anon";
+    const now = Date.now();
+    const state = rateLimiter.get(userId);
 
-  if (state && state.resetAt > now && state.count >= 10) {
-    ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
-    return; // Skip handler
-  }
+    if (state && state.resetAt > now && state.count >= 10) {
+      ctx.error("RESOURCE_EXHAUSTED", "Too many messages");
+      return; // Skip handler
+    }
 
-  if (!state || state.resetAt <= now) {
-    rateLimiter.set(userId, { count: 1, resetAt: now + 60000 });
-  } else {
-    state.count++;
-  }
+    if (!state || state.resetAt <= now) {
+      rateLimiter.set(userId, { count: 1, resetAt: now + 60000 });
+    } else {
+      state.count++;
+    }
 
-  return next();
-});
-
-router.on(SendMessage, (ctx) => {
-  // Rate limit already checked
-  processMessage(ctx.payload);
-});
+    return next();
+  })
+  .on((ctx) => {
+    // Rate limit already checked
+    processMessage(ctx.payload);
+  });
 ```
 
 ### Per-Route Validation Enrichment
 
 ```typescript
 // Enrich context with validated data before handler
-router.use(QueryMessage, (ctx, next) => {
-  try {
-    ctx.assignData({
-      query: parseQuery(ctx.payload.q),
-    });
-  } catch (err) {
-    ctx.error("INVALID_ARGUMENT", "Invalid query syntax");
-    return; // Skip handler
-  }
-  return next();
-});
-
-router.on(QueryMessage, (ctx) => {
-  const query = (ctx.data as any)?.query; // Pre-validated by middleware
-  const results = database.search(query);
-  ctx.send(QueryResultsMessage, { results });
-});
+router
+  .route(QueryMessage)
+  .use((ctx, next) => {
+    try {
+      ctx.assignData({
+        query: parseQuery(ctx.payload.q),
+      });
+    } catch (err) {
+      ctx.error("INVALID_ARGUMENT", "Invalid query syntax");
+      return; // Skip handler
+    }
+    return next();
+  })
+  .on((ctx) => {
+    const query = (ctx.data as any)?.query; // Pre-validated by middleware
+    const results = database.search(query);
+    ctx.send(QueryResultsMessage, { results });
+  });
 ```
 
 ### Async Middleware (External Service Calls)
@@ -291,16 +307,18 @@ router.use(async (ctx, next) => {
 
 ### Context Visibility
 
-Middleware sees generic `MessageContext<any, TData>`:
+Middleware is **payload-blind** — it sees `MinimalContext<TContext>` with only connection data:
 
 ```typescript
-type Middleware<TData> = (
-  ctx: MessageContext<any, TData>, // Generic message type
-  next: () => unknown | Promise<unknown>,
-) => unknown | Promise<unknown>;
+type Middleware<TContext extends ConnectionData = ConnectionData> = (
+  ctx: MinimalContext<TContext>, // Only connection data (TContext), not message payload
+  next: () => Promise<void>,
+) => Promise<void>;
 ```
 
-**Why generic?** At middleware execution time, we don't know the specific handler's schema type. Per-route middleware gets `next()` routed to the specific handler, but the context type itself remains generic. Handlers get the specific type via their `on()` registration.
+**Why payload-blind?** Middleware operates at the router level, above any specific message type. Per-route middleware doesn't need the specific message schema — it works with generic connection data (e.g., userId, roles). Payload access happens only in handlers via `.on()`, which provides the full `MessageContext<S, TContext>` with typed payload.
+
+This design keeps middleware reusable and router-generic-only, avoiding tight coupling between middleware and message schemas.
 
 ### Modifying Context
 
@@ -365,6 +383,45 @@ If middleware throws an unhandled error:
 - Handler is NOT executed
 - Connection stays open (error sent via `ctx.error()` if available)
 
+## API Shape: Builder vs Overload
+
+### The Decision: Builder Pattern
+
+Per-route middleware uses the **builder pattern**: `router.route(schema).use(mw).on(handler)`
+
+This was chosen over adding a `router.use(schema, mw)` overload.
+
+### Why Builder Pattern?
+
+1. **Single registration path** — All per-route middleware flows through one entry point (the builder), making code easier to trace and maintain
+2. **Minimal API surface** — No overload ambiguity (is this global or per-route middleware?)
+3. **Fluent, composable** — Chain multiple `.use()` calls before `.on()` with clean syntax
+4. **Aligns with router structure** — Mirrors how handlers are registered: `router.route(schema).on(handler)`
+5. **Forces explicit ordering** — Builder makes it clear what's global vs per-route
+
+### Why Not Overload?
+
+Adding `router.use(schema, mw)` overload would:
+
+- Create ambiguity: `use(param1, param2)` — is this global with mw param, or per-route?
+- Bloat the surface: developers must remember both `use(mw)` and `use(schema, mw)`
+- Make per-route middleware look like global (different semantics, same call site)
+- Reintroduce overload complexity that builder pattern explicitly avoids
+
+### Trade-off: DX
+
+Builder pattern is slightly more verbose than Express/Hono style:
+
+```typescript
+// Express/Hono style (hypothetical)
+router.use(SendMessage, (ctx, next) => { ... });
+
+// WS-Kit builder style (actual)
+router.route(SendMessage).use((ctx, next) => { ... }).on(handler);
+```
+
+**Why acceptable**: The builder pattern is still concise, instantly clear on intent, and aligns with the broader API philosophy (route composition > function overloading). Examples show it's readable and natural once familiar.
+
 ## Consequences
 
 ### Benefits
@@ -382,7 +439,7 @@ If middleware throws an unhandled error:
 ⚠️ **Execution overhead** — Each middleware adds a function call (negligible)
 ⚠️ **Cognitive complexity** — Requires understanding middleware execution order
 ⚠️ **Error handling** — Unhandled errors in middleware should be caught and logged
-⚠️ **Type visibility** — Per-route middleware sees `MessageContext<any>`, not specific schema type
+⚠️ **Payload-blind middleware** — Middleware doesn't see the specific message type/payload (intentional design; see "API Shape" section)
 
 ## Alternatives Considered
 

@@ -224,10 +224,17 @@ describe("@ws-kit/valibot - Type Tests", () => {
         return next();
       });
 
-      router.use(TestMessage, (ctx, next) => {
-        expectTypeOf(ctx.payload).toEqualTypeOf<{ data: string }>();
-        return next();
-      });
+      router
+        .route(TestMessage)
+        .use((ctx, next) => {
+          // Middleware sees MinimalContext (connection data only, no payload)
+          expectTypeOf(ctx.data).toBeDefined();
+          return next();
+        })
+        .on((ctx) => {
+          // Handler sees full context with typed payload
+          expectTypeOf(ctx.payload).toEqualTypeOf<{ data: string }>();
+        });
     });
   });
 
