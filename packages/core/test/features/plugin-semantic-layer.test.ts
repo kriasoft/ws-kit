@@ -77,7 +77,7 @@ describe("Semantic Capability Layer", () => {
     });
 
     it("should work with custom context", () => {
-      interface MyContext {
+      interface MyContext extends Record<string, unknown> {
         userId?: string;
       }
 

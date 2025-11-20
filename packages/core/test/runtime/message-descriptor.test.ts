@@ -82,7 +82,6 @@ describe("assertMessageDescriptor", () => {
     const valid: MessageDescriptor = {
       type: "TEST",
       kind: "event",
-      version: undefined,
     };
     expect(() => assertMessageDescriptor(valid)).not.toThrow();
   });
@@ -111,7 +110,6 @@ describe("assertMessageDescriptor", () => {
     const valid: MessageDescriptor = {
       type: "TEST",
       kind: "event",
-      __runtime: undefined,
     };
     expect(() => assertMessageDescriptor(valid)).not.toThrow();
   });

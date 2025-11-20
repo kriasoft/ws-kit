@@ -182,7 +182,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
       });
 
       // Directly publish on router
-      const result = await (tr as any).publish("announcements", ChatMessage, {
+      const result = await tr.publish("announcements", ChatMessage, {
         text: "direct publish",
       });
       expect(result.ok).toBe(true);

@@ -7,7 +7,9 @@
 
 import type { ConnectionData } from "../context/base-context";
 import type { RouterCore } from "../core/router";
+import type { PublishOptions, PublishResult } from "../core/types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
+import type { AnySchema, InferPayload } from "../protocol/schema";
 import type { Clock } from "./fake-clock";
 
 /**
@@ -148,6 +150,23 @@ export interface TestCapture<TContext extends ConnectionData = ConnectionData> {
  */
 export interface TestRouter<TContext extends ConnectionData = ConnectionData>
   extends RouterCore<TContext> {
+  /**
+   * Typed shortcut for router.publish() when pub/sub plugin is installed.
+   */
+  publish<S extends AnySchema>(
+    topic: string,
+    schema: S,
+    payload: InferPayload<S>,
+    options?: PublishOptions,
+  ): Promise<PublishResult>;
+
+  publish(
+    topic: string,
+    schema: MessageDescriptor,
+    payload: unknown,
+    options?: PublishOptions,
+  ): Promise<PublishResult>;
+
   /**
    * Establish a connection and wait for all `onConnect` hooks to settle.
    * Always await this method before sending messages.

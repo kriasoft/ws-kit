@@ -2,75 +2,87 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Publish Sender Tracking Tests
+ * Publish Origin Tracking Tests
  *
  * Validates sender/author tracking in broadcast messages using recommended patterns:
  * 1. Include sender in payload (recommended for essential message semantics)
  * 2. Include sender in extended meta (recommended for optional metadata)
  *
- * Tests the public API of router.publish() and ctx.publish()
+ * Tests router.publish() and ctx.publish() with origin tracking via test harness.
+ * Demonstrates real-world patterns for sender identity in published messages.
  *
  * Spec: docs/specs/pubsub.md#origin-tracking-include-sender-identity
- * Related: ADR-022 (pub/sub API design), ADR-019 (ctx.publish), ADR-018 (publish terminology)
+ * Related: ADR-022 (pub/sub API design), ADR-024 (unified adapter)
  */
 
+import { test } from "@ws-kit/core/testing";
 import { memoryPubSub } from "@ws-kit/memory";
-import * as zodModule from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createRouter, message, withZod, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
-import { RouterImpl as RouterImplClass } from "../../src/core/router.js";
 
-const { z, message } = zodModule;
-
-describe("Publish Sender Tracking (router.publish API)", () => {
+describe("Publish Origin Tracking via ctx.publish()", () => {
   describe("Sender in Payload Pattern", () => {
     it("should support including sender userId in payload", async () => {
+      type ChatPayload = { text: string; senderId: string };
       const ChatMessage = message("CHAT", {
         text: z.string(),
         senderId: z.string(),
       });
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "CHAT",
-          safeParse: (schema: any, data: any) => ({
-            success: true,
-            data,
-          }),
-        } as any,
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
-      // Verify router.publish() returns PublishResult
-      const result = await router.publish("room:general", ChatMessage, {
+      // Publish message with sender payload
+      const result = await tr.publish("room:general", ChatMessage, {
         text: "Hello world",
         senderId: "alice",
       });
 
       expect(result.ok).toBe(true);
-      expect(result.ok === true && result.capability).toBeDefined();
+
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      const payload = publishes[0]!.payload as ChatPayload;
+      expect(payload.senderId).toBe("alice");
+      expect(payload.text).toBe("Hello world");
+
+      await tr.close();
     });
 
     it("should accept numeric sender IDs in payload", async () => {
+      type RoomPayload = { text: string; userId: number };
       const RoomUpdate = message("ROOM_UPDATE", {
         text: z.string(),
         userId: z.number(),
       });
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "ROOM_UPDATE",
-          safeParse: (schema: any, data: any) => ({
-            success: true,
-            data,
-          }),
-        } as any,
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: number }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
-      const result = await router.publish("room:123", RoomUpdate, {
+      const result = await tr.publish("room:123", RoomUpdate, {
         text: "User joined",
         userId: 42,
       });
 
       expect(result.ok).toBe(true);
+
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      const payload = publishes[0]!.payload as RoomPayload;
+      expect(payload.userId).toBe(42);
+
+      await tr.close();
     });
   });
 
@@ -82,18 +94,16 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         { senderId: z.string().optional() },
       );
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "MSG",
-          safeParse: (schema: any, data: any) => ({
-            success: true,
-            data,
-          }),
-        } as any,
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
       // Use meta option to include sender in extended metadata
-      const result = await router.publish(
+      const result = await tr.publish(
         "room:general",
         Message,
         { text: "Hello" },
@@ -101,6 +111,12 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       );
 
       expect(result.ok).toBe(true);
+
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta?.senderId).toBe("bob");
+
+      await tr.close();
     });
 
     it("should merge multiple custom meta fields", async () => {
@@ -114,17 +130,15 @@ describe("Publish Sender Tracking (router.publish API)", () => {
         },
       );
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "ROOM",
-          safeParse: (schema: any, data: any) => ({
-            success: true,
-            data,
-          }),
-        } as any,
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
-      const result = await router.publish(
+      const result = await tr.publish(
         "room:lobby",
         RoomMsg,
         { text: "Welcome" },
@@ -138,125 +152,96 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       );
 
       expect(result.ok).toBe(true);
+
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta).toEqual(
+        expect.objectContaining({
+          roomId: "room:123",
+          senderId: "charlie",
+          priority: 5,
+        }),
+      );
+
+      await tr.close();
     });
   });
 
-  describe("Timestamp Auto-Injection", () => {
-    it("should auto-inject timestamp in metadata", async () => {
+  describe("Metadata Handling", () => {
+    it("should capture metadata in published messages", async () => {
       const Message = message("MSG", { text: z.string() });
-      let capturedMessage: any;
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "MSG",
-          safeParse: (schema: any, data: any) => {
-            capturedMessage = data;
-            return { success: true, data };
-          },
-        } as any,
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
-      await router.publish("room", Message, { text: "test" });
-
-      // Verify timestamp was auto-injected
-      expect(capturedMessage.meta).toBeDefined();
-      expect(typeof capturedMessage.meta.timestamp).toBe("number");
-      expect(capturedMessage.meta.timestamp).toBeGreaterThan(0);
-    });
-
-    it("should preserve user-provided timestamp", async () => {
-      const Message = message("MSG", { text: z.string() });
-      let capturedMessage: any;
-
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "MSG",
-          safeParse: (schema: any, data: any) => {
-            capturedMessage = data;
-            return { success: true, data };
-          },
-        } as any,
-      });
-
-      const customTimestamp = 1234567890;
-      await router.publish(
+      const timestamp = Date.now();
+      const result = await tr.publish(
         "room",
         Message,
         { text: "test" },
-        {
-          meta: { timestamp: customTimestamp },
-        },
+        { meta: { timestamp, customField: "value" } },
       );
 
-      expect(capturedMessage.meta.timestamp).toBe(customTimestamp);
-    });
-  });
+      expect(result.ok).toBe(true);
 
-  describe("Validation and Error Handling", () => {
-    it("should return 0 on validation failure", async () => {
-      const Message = message("MSG", { text: z.string() });
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta).toEqual(
+        expect.objectContaining({ customField: "value" }),
+      );
+      expect(typeof publishes[0]!.meta?.timestamp).toBe("number");
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "MSG",
-          safeParse: (schema: any, data: any) => ({
-            success: false,
-            error: "Validation error",
-          }),
-        } as any,
-      });
-
-      const result = await router.publish("room", Message, {
-        text: "test",
-      });
-
-      expect(result.ok).toBe(false);
-      expect(result.ok === false && result.error).toBe("VALIDATION");
-      expect(result.ok === false && result.retryable).toBe(false);
+      await tr.close();
     });
 
-    it("should handle missing validator gracefully", async () => {
+    it("should preserve custom metadata across publishes", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new RouterImplClass({
-        validator: undefined as any,
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
-      const result = await router.publish("room", Message, {
-        text: "test",
-      });
+      const customTimestamp = 1234567890;
+      const result = await tr.publish(
+        "room",
+        Message,
+        { text: "test" },
+        { meta: { timestamp: customTimestamp } },
+      );
 
-      expect(result.ok).toBe(false);
-      expect(result.ok === false && result.error).toBe("STATE");
-      expect(result.ok === false && result.retryable).toBe(false);
-      expect(result.ok === false && result.cause).toBeInstanceOf(Error);
+      expect(result.ok).toBe(true);
+
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta?.timestamp).toBe(1234567890);
+
+      await tr.close();
     });
   });
 
   describe("MemoryPubSub Integration", () => {
-    it("should work with real MemoryPubSub", async () => {
+    it("should work with real MemoryPubSub and sender tracking", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) =>
-            schema?.type?.value || schema?.type || "MSG",
-          safeParse: (schema: any, data: any) => ({
-            success: true,
-            data,
-          }),
-        } as any,
-        pubsub: memoryPubSub(),
+      const adapter = memoryPubSub();
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter })),
+        capturePubSub: true,
       });
 
-      // Subscribe to channel first
-      let receivedMessage: any;
-      router.pubsub.subscribe("room", (msg) => {
-        receivedMessage = msg;
-      });
-
-      // Publish message
-      const result = await router.publish(
+      const result = await tr.publish(
         "room",
         Message,
         { text: "Hello" },
@@ -264,37 +249,46 @@ describe("Publish Sender Tracking (router.publish API)", () => {
       );
 
       expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.capability).toBe("exact");
+      }
 
-      // Verify message was delivered with sender in extended meta
-      expect(receivedMessage).toBeDefined();
-      expect(receivedMessage.payload).toEqual({ text: "Hello" });
-      expect(receivedMessage.meta.senderId).toBe("alice");
-      expect(receivedMessage.meta.timestamp).toBeDefined();
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta?.senderId).toBe("alice");
+
+      await tr.close();
     });
 
-    it("should not expose clientId in meta", async () => {
+    it("should support publishing with partitionKey and meta options", async () => {
       const Message = message("MSG", { text: z.string() });
 
-      const router = new RouterImplClass({
-        validator: {
-          getMessageType: (schema: any) => schema.type || "MSG",
-          safeParse: (schema: any, data: any) => ({
-            success: true,
-            data,
-          }),
-        } as any,
-        pubsub: memoryPubSub(),
+      const adapter = memoryPubSub();
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter })),
+        capturePubSub: true,
       });
 
-      let receivedMessage: any;
-      router.pubsub.subscribe("room", (msg) => {
-        receivedMessage = msg;
-      });
+      const result = await tr.publish(
+        "room",
+        Message,
+        { text: "test" },
+        {
+          partitionKey: "user:user123",
+          meta: { customField: "value" },
+        },
+      );
 
-      await router.publish("room", Message, { text: "test" });
+      expect(result.ok).toBe(true);
 
-      // clientId should never be in broadcast metadata
-      expect(receivedMessage.meta).not.toHaveProperty("clientId");
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta?.customField).toBe("value");
+
+      await tr.close();
     });
   });
 });

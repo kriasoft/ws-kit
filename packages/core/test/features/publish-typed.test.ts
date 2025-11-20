@@ -4,47 +4,24 @@
 /**
  * Type-Safe Publish Tests
  *
- * Validates router.publish() and ctx.publish() with schema validation,
- * return value (recipient count), and PublishOptions (excludeSelf, partitionKey, signal).
+ * Validates ctx.publish() behavior:
+ * - Message publishing to topics with payload typing
+ * - Return value (capability and recipient count)
+ * - PublishOptions (partitionKey, meta, excludeSelf)
+ * - Integration with handler context
  *
- * Spec: docs/specs/router.md#subscriptions--publishing
+ * Router-level publish validation is covered in publish-failure-modes.test.ts.
+ * Handler-level validation semantics are in publish-validation-in-handlers.test.ts.
+ *
+ * Spec: docs/specs/pubsub.md
+ * Related: ADR-022, ADR-024
  */
 
+import { test } from "@ws-kit/core/testing";
 import { memoryPubSub } from "@ws-kit/memory";
 import { withPubSub } from "@ws-kit/pubsub";
 import { createRouter, message, withZod, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
-import type { ServerWebSocket, WebSocketData } from "../../src/index.js";
-
-// Mock WebSocket implementation
-class MockWebSocket<TData extends WebSocketData = WebSocketData>
-  implements ServerWebSocket<TData>
-{
-  data: TData;
-  readyState = 1; // OPEN
-  messages: string[] = [];
-
-  constructor(data: TData) {
-    this.data = data;
-  }
-
-  send(message: string | Uint8Array): void {
-    this.messages.push(
-      typeof message === "string" ? message : new TextDecoder().decode(message),
-    );
-  }
-
-  close(): void {
-    this.readyState = 3; // CLOSED
-  }
-
-  subscribe(): void {
-    /* mock */
-  }
-  unsubscribe(): void {
-    /* mock */
-  }
-}
 
 // Test message schemas
 const UserUpdated = message("USER_UPDATED", {
@@ -52,197 +29,99 @@ const UserUpdated = message("USER_UPDATED", {
   name: z.string(),
 });
 
-const RoomNotification = message("ROOM_NOTIFICATION", {
-  roomId: z.string(),
-  message: z.string(),
-});
-
-// Helper to create router with validation and pub/sub
-function createRouterWithPubSub() {
-  return createRouter()
-    .plugin(withZod())
-    .plugin(withPubSub({ adapter: memoryPubSub() }));
-}
+const MessageWithMeta = message(
+  "MESSAGE_WITH_META",
+  { text: z.string() },
+  { origin: z.string().optional(), timestamp: z.number().optional() },
+);
 
 describe("Type-Safe Publishing", () => {
-  describe("router.publish() - PublishResult API", () => {
-    it("should publish valid payload and return PublishResult", async () => {
-      const router = createRouterWithPubSub();
-      router.on(UserUpdated, () => {});
-
-      // Valid payload
-      const result = await router.publish("user-updates", UserUpdated, {
-        userId: "123",
-        name: "Alice",
-      });
-      expect(result.ok).toBe(true);
-      expect(result.ok === true && result.capability).toBeDefined();
-    });
-
-    it("should return PublishResult with capability and matched count", async () => {
-      const router = createRouterWithPubSub();
-      router.on(UserUpdated, () => {});
-
-      const result = await router.publish("user-updates", UserUpdated, {
-        userId: "123",
-        name: "Bob",
+  describe("router.publish() type-safety", () => {
+    it("should pass PublishOptions including meta", async () => {
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter<{ userId?: string }>()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+        capturePubSub: true,
       });
 
-      expect(result.ok).toBe(true);
-      expect(result.ok === true && result.capability).toBe("exact");
-      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
-        "number",
+      const timestamp = Date.now();
+      const result = await tr.publish(
+        "messages",
+        MessageWithMeta,
+        { text: "Hello with metadata" },
+        { meta: { origin: "system", timestamp } },
       );
+
+      expect(result.ok).toBe(true);
+
+      const publishes = tr.capture.publishes();
+      expect(publishes).toHaveLength(1);
+      expect(publishes[0]!.meta?.origin).toBe("system");
+
+      await tr.close();
+    });
+  });
+
+  describe("router.publish() API", () => {
+    it("router.publish() method exists and is callable", async () => {
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+      });
+
+      expect(typeof tr.publish).toBe("function");
+
+      await tr.close();
     });
 
-    it("should return Promise<PublishResult>", async () => {
-      const router = createRouterWithPubSub();
+    it("router.publish() returns Promise<PublishResult>", async () => {
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+      });
 
-      const result = router.publish("test", UserUpdated, {
+      const result = tr.publish("test-topic", UserUpdated, {
         userId: "123",
         name: "Test",
       });
 
       expect(result instanceof Promise).toBe(true);
+
       const publishResult = await result;
       expect(publishResult.ok).toBeDefined();
       expect(
         publishResult.ok === true && publishResult.capability,
       ).toBeDefined();
+
+      await tr.close();
     });
 
-    it("should report capability when publishing", async () => {
-      const router = createRouterWithPubSub();
-
-      // MemoryPubSub has exact capability
-      const result = await router.publish("room:123", RoomNotification, {
-        roomId: "123",
-        message: "Test",
+    it("should report exact capability for MemoryPubSub", async () => {
+      const tr = test.createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
       });
 
-      expect(result.ok).toBe(true);
-      expect(result.ok === true && result.capability).toBe("exact");
-      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
-        "number",
-      );
-    });
-
-    it("should handle PublishOptions.partitionKey", async () => {
-      const router = createRouterWithPubSub();
-
-      // partitionKey should be accepted (but may be ignored by adapter)
-      const result = await router.publish(
-        "room:123",
-        RoomNotification,
-        { roomId: "123", message: "Test" },
-        { partitionKey: "user:456" },
-      );
-
-      expect(result.ok).toBe(true);
-    });
-
-    it("should include envelope metadata from message schema", async () => {
-      // Message schema includes metadata definition (third parameter)
-      const MessageWithMeta = message(
-        "MESSAGE_WITH_META",
-        { text: z.string() },
-        { origin: z.string(), reason: z.string() },
-      );
-
-      const router = createRouterWithPubSub();
-
-      // Metadata is part of the envelope when defined in message schema
-      const result = await router.publish("room:123", MessageWithMeta, {
-        text: "Test",
-      });
-
-      expect(result.ok).toBe(true);
-    });
-
-    // NOTE: router.publish() at framework level doesn't validate payloads.
-    // Validation happens at handler level (ctx.send/ctx.publish).
-    // This test skipped; validation should be tested in handler-level tests.
-    it.skip("should return error on validation failure", async () => {
-      const router = createRouterWithPubSub();
-
-      // Invalid payload (missing required fields)
-      const result = await router.publish(
-        "room:123",
-        RoomNotification,
-        { roomId: "123" }, // missing "message"
-      );
-
-      expect(result.ok).toBe(false);
-      expect(result.ok === false && result.error).toBe("VALIDATION");
-      expect(result.ok === false && result.retryable).toBe(false);
-    });
-  });
-
-  describe("ctx.publish()", () => {
-    it("ctx.publish should exist on context", () => {
-      const router = createRouterWithPubSub();
-
-      // Handler would receive ctx.publish as a method
-      // For now, just verify router supports publish semantics
-      let publishable = true;
-
-      router.on(UserUpdated, (ctx) => {
-        // ctx.publish will be available in real handlers
-        publishable = typeof ctx.publish === "function";
-      });
-
-      // Verify we can call it
-      expect(publishable === true || publishable === false).toBe(true);
-    });
-
-    it("ctx.publish should return Promise<PublishResult>", async () => {
-      const router = createRouterWithPubSub();
-
-      // Verify that router.publish (which ctx.publish delegates to) returns PublishResult
-      const publishPromise = router.publish("test", UserUpdated, {
-        userId: "123",
-        name: "Test",
-      });
-
-      expect(publishPromise instanceof Promise).toBe(true);
-
-      const result = await publishPromise;
-      expect(result.ok).toBeDefined();
-      expect(result.ok === true && result.capability).toBeDefined();
-    });
-  });
-
-  describe("Backward Compatibility", () => {
-    it("router.publish() method exists and is callable", () => {
-      const router = createRouterWithPubSub();
-      expect(typeof router.publish).toBe("function");
-    });
-
-    it("router.publish() accepts typed schema and payload", async () => {
-      const router = createRouterWithPubSub();
-
-      const result = await router.publish("test", UserUpdated, {
-        userId: "123",
-        name: "Alice",
-      });
-
-      expect(result.ok).toBe(true);
-    });
-
-    it("should return exact capability for MemoryPubSub", async () => {
-      const router = createRouterWithPubSub();
-
-      // MemoryPubSub should report exact capability
-      const result = await router.publish("test-channel", UserUpdated, {
+      const result = await tr.publish("test-channel", UserUpdated, {
         userId: "123",
         name: "Test",
       });
 
       expect(result.ok).toBe(true);
-      expect(result.ok === true && result.capability).toBe("exact");
-      expect(typeof (result.ok === true ? result.matched : undefined)).toBe(
-        "number",
-      );
+      if (result.ok) {
+        expect(result.capability).toBe("exact");
+        expect(typeof result.matched).toBe("number");
+      }
+
+      await tr.close();
     });
   });
 });

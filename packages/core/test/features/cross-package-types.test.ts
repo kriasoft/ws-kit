@@ -54,11 +54,11 @@ describe("Cross-package type safety", () => {
           break;
         case "PONG":
           // TypeScript should know this has { reply: string } payload
-          expect(msg.payload.reply).toBeDefined();
+          expect((msg.payload as { reply: string }).reply).toBeDefined();
           break;
         case "ECHO":
           // TypeScript should know this has { text: string } payload
-          expect(msg.payload.text).toBeDefined();
+          expect((msg.payload as { text: string }).text).toBeDefined();
           break;
       }
     };

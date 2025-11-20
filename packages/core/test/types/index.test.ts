@@ -66,6 +66,7 @@ describe("WebSocketData<T>", () => {
 
     expect(typeof data.clientId).toBe("string");
     expect(typeof data.userId).toBe("string");
+    expect(typeof data.token).toBe("string");
   });
 });
 
@@ -118,8 +119,9 @@ describe("EventContext<TContext, TPayload>", () => {
 
   it("should be generic over custom data and payload types", () => {
     type CustomData = WebSocketData<{ userId: string }>;
-    // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-    type Payload = { message: string };
+    interface Payload {
+      message: string;
+    }
     type Context = EventContext<CustomData, Payload>;
 
     expectTypeOf<Context["data"]>().toEqualTypeOf<CustomData>();
@@ -207,7 +209,7 @@ describe("WsKitError", () => {
   });
 
   it("should have .code property of type ErrorCode", () => {
-    type CodeOfError = WsKitError["code"];
+    type CodeOfError = WsKitError<ErrorCode>["code"];
     expectTypeOf<CodeOfError>().toEqualTypeOf<ErrorCode>();
   });
 });

@@ -25,6 +25,7 @@ import type {
   ReplyOptions as CoreReplyOptions,
   MessageDescriptor,
   MinimalContext,
+  PublishOptions as CorePublishOptions,
   SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
@@ -71,6 +72,12 @@ type EnhancedContext = MinimalContext<any> & {
   ) => void | Promise<void>;
   progress?: (payload: any, opts?: any) => void | Promise<void>;
   getData?: (key: string) => unknown;
+  publish?: (
+    topic: string,
+    schema: AnySchema | MessageDescriptor,
+    payload: unknown,
+    opts?: CorePublishOptions,
+  ) => Promise<any>;
 };
 
 export interface WithValibotOptions {
@@ -400,6 +407,7 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
         // Get the messaging extension from core plugin
         const messagingExt = ctx.extensions.get("messaging") as any;
         const rpcExt = ctx.extensions.get("rpc") as any;
+        const pubsubExt = ctx.extensions.get("pubsub") as any;
 
         if (messagingExt?.send) {
           // Wrap send() with outbound validation
@@ -468,6 +476,23 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
               }
             }
             return coreProgress(payload, opts);
+          };
+        }
+
+        const corePublish = pubsubExt?.publish ?? (enhCtx as any).publish;
+        if (corePublish) {
+          // Wrap publish() with outbound validation
+          (enhCtx as any).publish = async (
+            topic: string,
+            schema: AnySchema | MessageDescriptor,
+            payload: any,
+            opts?: CorePublishOptions,
+          ): Promise<any> => {
+            const validatedPayload = await validateOutgoingPayload(
+              schema,
+              payload,
+            );
+            return corePublish(topic, schema, validatedPayload, opts);
           };
         }
       },

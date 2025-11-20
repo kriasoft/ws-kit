@@ -34,7 +34,6 @@ describe("Router Observer API", () => {
     });
 
     it("should capture errors via onError", async () => {
-      const errors: any[] = [];
       const tr = test.createTestRouter({
         create: () => createRouter(),
       });
@@ -79,8 +78,8 @@ describe("Router Observer API", () => {
 
       // Should have captured open and close events
       expect(events.length).toBeGreaterThanOrEqual(2);
-      expect(events[0].event).toBe("open");
-      expect(events[1].event).toBe("close");
+      expect(events[0]!.event).toBe("open");
+      expect(events[1]!.event).toBe("close");
 
       off();
     });
