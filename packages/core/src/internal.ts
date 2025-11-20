@@ -63,6 +63,41 @@ export type ContextEnhancer<TContext extends ConnectionData = ConnectionData> =
   (ctx: MinimalContext<TContext>) => void | Promise<void>;
 
 /**
+ * Internal state stored on `ctx.__wskit`.
+ *
+ * This is the contract between Core and Plugins:
+ * - Core error handling reads/writes `rpc.replied` for one-shot semantics
+ * - RPC plugin reads/writes `rpc.replied` and `rpc.correlationId`
+ * - Plugins may add other fields under different keys
+ *
+ * @internal
+ */
+export interface WsKitInternalState {
+  /**
+   * RPC-specific state (set by RPC plugin when handling RPC messages).
+   */
+  rpc?: {
+    /**
+     * Flag indicating a terminal response has been sent (via reply/progress/error).
+     * Shared by all three methods to ensure one-shot semantics.
+     */
+    replied: boolean;
+
+    /**
+     * Request correlation ID (for matching responses to requests).
+     * Set from inbound message meta.correlationId if present.
+     */
+    correlationId?: string | undefined;
+  };
+
+  /**
+   * Function that returns current message metadata to be included in outbound messages.
+   * Called by send/reply/error methods to preserve server-side meta fields.
+   */
+  meta?: () => Record<string, unknown>;
+}
+
+/**
  * Stable, typed plugin API contract.
  *
  * This interface defines what plugins can safely depend on.

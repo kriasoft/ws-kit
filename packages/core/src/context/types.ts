@@ -12,5 +12,6 @@ export type {
   WebSocketData,
 } from "./base-context";
 export type { EventContext, SendOptions } from "./event-context";
+export type { ErrorOptions } from "./error-handling";
 export type { PubSubContext } from "./pubsub-context";
 export type { ProgressOptions, ReplyOptions, RpcContext } from "./rpc-context";

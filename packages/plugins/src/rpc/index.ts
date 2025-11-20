@@ -4,32 +4,35 @@
 /**
  * withRpc() plugin: adds request-response (RPC) messaging with streaming support.
  *
- * Once plugged, handlers gain:
+ * Once plugged, RPC handlers gain:
  * - ctx.reply(payload, opts?) - Terminal response (one-shot)
- * - ctx.error(code, message, details?, opts?) - Terminal error response (one-shot)
  * - ctx.progress(update, opts?) - Non-terminal streaming update
+ *
+ * Note: ctx.error() is provided by core and available in all handler types (event, RPC, middleware).
  *
  * This plugin is validator-agnostic: validation (if needed) is handled by validator
  * plugins like withZod() or withValibot(). This plugin just handles RPC message
  * envelope construction, one-shot guard enforcement, and throttling.
  *
  * Key semantics:
- * - reply() and error() are "one-shot": subsequent calls are idempotent no-ops
+ * - reply() is "one-shot": subsequent calls are idempotent no-ops
  * - progress() can be called multiple times before terminal (reply/error)
  * - Throttling supported via {throttleMs} on progress()
  * - Auto-correlation via preserving correlationId from inbound meta
  *
  * Message envelopes:
  * - Terminal: { type: (response type), meta: {...}, payload: {...} }
- * - Error: { type: "$ws:rpc-error", meta: {...}, payload: {code, message, details?} }
  * - Progress: { type: "$ws:rpc-progress", meta: {...}, payload: {...} }
+ * - Error: { type: "RPC_ERROR", meta: {...}, payload: {code, message, details?} } (via core ctx.error)
  *
  * See ADR-030 for design rationale and ADR-031 for plugin-adapter architecture.
+ * See ADR-036 for unified error handling in core.
  */
 
 import type { ConnectionData, MinimalContext } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
+import type { WsKitInternalState } from "@ws-kit/core/internal";
 import type { ProgressOptions, ReplyOptions } from "./types";
 
 /**
@@ -39,7 +42,7 @@ import type { ProgressOptions, ReplyOptions } from "./types";
 interface EnhancedContext extends MinimalContext<any> {
   payload?: unknown;
   meta?: Record<string, unknown>;
-  __wskit?: {
+  __wskit?: WsKitInternalState & {
     kind?: string; // "event" | "rpc"
     request?: any; // root request schema
     response?: any; // root response schema
@@ -65,8 +68,9 @@ interface WithRpcAPI<TContext extends ConnectionData = ConnectionData> {
  *
  * Adds context methods (RPC handlers only):
  * - ctx.reply(payload, opts?) - Terminal response (one-shot)
- * - ctx.error(code, message, details?, opts?) - Terminal error (one-shot)
  * - ctx.progress(update, opts?) - Non-terminal streaming update
+ *
+ * Note: ctx.error() is provided by core and available in all handler types.
  *
  * Terminal responses enforce one-shot semantics via a "replied" flag:
  * - First call to reply() or error() marks RPC complete and sends response
@@ -102,6 +106,7 @@ interface WithRpcAPI<TContext extends ConnectionData = ConnectionData> {
  * router.rpc(GetUserMsg, (ctx) => {
  *   const user = db.get(ctx.payload.id);
  *   if (!user) {
+ *     // ctx.error() is provided by core, not by withRpc
  *     return ctx.error("NOT_FOUND", "User not found");
  *   }
  *   ctx.reply({ id: user.id, name: user.name });
@@ -137,9 +142,6 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
       (ctx: MinimalContext<any>) => {
         const enhCtx = ctx as EnhancedContext;
 
-        // Track reply idempotency: one-shot guard for terminal responses
-        let replied = false;
-
         // Track throttle state for progress updates
         let lastProgressTime = 0;
 
@@ -151,10 +153,28 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           const wskit = enhCtx.__wskit;
           if (!wskit?.response) {
             throw new Error(
-              "ctx.reply(), ctx.error(), and ctx.progress() are only available in RPC handlers",
+              "ctx.reply() and ctx.progress() are only available in RPC handlers (ctx.error() is available in all handlers)",
             );
           }
           return wskit;
+        }
+
+        /**
+         * Initialize RPC state for this handler.
+         * Sets up the replied flag and correlation ID for use by core error method.
+         */
+        function initializeRpcState() {
+          if (!enhCtx.__wskit) {
+            enhCtx.__wskit = {} as WsKitInternalState;
+          }
+          if (!enhCtx.__wskit.rpc) {
+            const correlationId = enhCtx.meta?.correlationId;
+            enhCtx.__wskit.rpc = {
+              replied: false,
+              correlationId:
+                typeof correlationId === "string" ? correlationId : undefined,
+            };
+          }
         }
 
         /**
@@ -165,6 +185,16 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           return {
             correlationId: context.meta?.correlationId,
           };
+        }
+
+        /**
+         * Store the baseMeta function on __wskit for use by core error method.
+         */
+        function attachBaseMeta() {
+          if (!enhCtx.__wskit) {
+            enhCtx.__wskit = {} as WsKitInternalState;
+          }
+          enhCtx.__wskit.meta = () => baseMeta(enhCtx);
         }
 
         /**
@@ -238,10 +268,17 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
         }
 
         /**
+         * Initialize RPC state and setup methods
+         */
+        initializeRpcState();
+        attachBaseMeta();
+
+        /**
          * reply(payload, opts?) - Terminal RPC response (one-shot).
          *
          * Marks the RPC as complete and sends response payload to client.
-         * Subsequent calls are idempotent (no-ops, optional dev-mode log).
+         * Shares one-shot guard with ctx.error(): once either is called, the other is a no-op.
+         * Subsequent reply/error calls are idempotent (no-ops).
          *
          * Returns void by default (async enqueue).
          * With {waitFor} option, returns Promise<void>.
@@ -253,7 +290,7 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           guardRpc();
 
           // One-shot guard: return immediately if already replied
-          if (replied) {
+          if (enhCtx.__wskit!.rpc!.replied) {
             if (opts?.waitFor) {
               return Promise.resolve();
             }
@@ -266,7 +303,7 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           }
 
           // Mark as replied (idempotent guard)
-          replied = true;
+          enhCtx.__wskit!.rpc!.replied = true;
 
           // If no waitFor, return void (fire-and-forget)
           if (!opts?.waitFor) {
@@ -316,99 +353,6 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
                 responseMessage.type,
                 responseMessage.payload,
                 responseMessage.meta,
-              );
-
-              // Stub for buffer tracking: resolve immediately
-              // TODO: Implement actual buffer drain/ack tracking
-              resolve();
-            });
-          });
-        };
-
-        /**
-         * error(code, message, details?, opts?) - Terminal error response (one-shot).
-         *
-         * Sends application-level error to RPC caller.
-         * Symmetric with reply(): first call to either reply() or error() marks RPC complete.
-         * Subsequent calls are idempotent no-ops (logged in dev mode).
-         *
-         * Error message envelope: { type: "$ws:rpc-error", meta, payload: {code, message, details?} }
-         *
-         * Returns void by default (async enqueue).
-         * With {waitFor} option, returns Promise<void>.
-         */
-        const error = (
-          code: string,
-          message: string,
-          details?: any,
-          opts?: ReplyOptions,
-        ): void | Promise<void> => {
-          guardRpc();
-
-          // Check if signal is already aborted
-          if (opts?.signal?.aborted) {
-            return opts?.waitFor ? Promise.resolve() : undefined;
-          }
-
-          // One-shot guard: return immediately if already replied
-          if (replied) {
-            if (opts?.waitFor) {
-              return Promise.resolve();
-            }
-            return undefined;
-          }
-
-          // Mark as replied (idempotent guard, applies to both reply and error)
-          replied = true;
-
-          // If no waitFor, return void (fire-and-forget)
-          if (!opts?.waitFor) {
-            setImmediate(() => {
-              // Construct error response message
-              const errorMessage = {
-                type: "$ws:rpc-error",
-                meta: {
-                  ...baseMeta(enhCtx),
-                  ...sanitizeMeta(opts?.meta),
-                },
-                payload: {
-                  code,
-                  message,
-                  ...(details !== undefined ? { details } : {}),
-                },
-              };
-
-              sendMessage(
-                errorMessage.type,
-                errorMessage.payload,
-                errorMessage.meta,
-              );
-            });
-
-            return undefined;
-          }
-
-          // With waitFor, return promise
-          return new Promise<void>((resolve) => {
-            setImmediate(() => {
-              // Construct error response message
-              const errorMessage = {
-                type: "$ws:rpc-error",
-                meta: {
-                  ...baseMeta(enhCtx),
-                  ...sanitizeMeta(opts?.meta),
-                },
-                payload: {
-                  code,
-                  message,
-                  ...(details !== undefined ? { details } : {}),
-                },
-              };
-
-              sendMessage(
-                errorMessage.type,
-                errorMessage.payload,
-                errorMessage.meta,
               );
 
               // Stub for buffer tracking: resolve immediately
@@ -423,6 +367,7 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
          *
          * Sends progress update without terminating the RPC.
          * Can be called multiple times before reply() or error().
+         * Calls after a terminal response (reply/error) are idempotent no-ops.
          * Supports throttling via {throttleMs}.
          *
          * Progress message envelope: { type: "$ws:rpc-progress", meta, payload: {...} }
@@ -435,6 +380,14 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           opts?: ProgressOptions,
         ): void | Promise<void> => {
           guardRpc();
+
+          // Cannot send progress after a terminal response (reply or error)
+          if (enhCtx.__wskit!.rpc!.replied) {
+            if (opts?.waitFor) {
+              return Promise.resolve();
+            }
+            return undefined;
+          }
 
           // Check if signal is already aborted
           if (opts?.signal?.aborted) {
@@ -497,12 +450,11 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
         };
 
         // Store extension in context extensions map
-        const rpcExt = { reply, error, progress };
+        const rpcExt = { reply, progress };
         ctx.extensions.set("rpc", rpcExt);
 
         // Also expose directly on context for backwards compatibility
         (enhCtx as any).reply = reply;
-        (enhCtx as any).error = error;
         (enhCtx as any).progress = progress;
       },
       { priority: 0 },

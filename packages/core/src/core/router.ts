@@ -20,6 +20,7 @@
 import type { ConnectionData, MinimalContext } from "../context/base-context";
 import type { EventContext } from "../context/event-context";
 import type { RpcContext } from "../context/rpc-context";
+import { createCoreErrorEnhancer } from "../context/error-handling";
 import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
@@ -393,6 +394,12 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
     // Attach to symbol for internal access escape hatch
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any)[ROUTER_IMPL] = this;
+    // Register core error enhancer with very high priority (runs first) to ensure
+    // ctx.error is always available before other plugins add their enhancements.
+    // Pass lifecycle manager so all errors flow through observability hooks.
+    this.addContextEnhancer(createCoreErrorEnhancer(this.lifecycle), {
+      priority: -1000,
+    });
   }
 
   /**
@@ -743,19 +750,20 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
     receivedAt?: number;
   }): Promise<MinimalContext<TContext>> {
     const data = this.getOrInitData(params.ws);
-    const ctx: MinimalContext<TContext> & {
-      payload?: unknown;
-      meta?: Record<string, unknown>;
-      receivedAt?: number;
-    } = {
+    // Build context incrementally; error method will be added by core error enhancer
+    const ctx = {
       clientId: params.clientId,
       ws: params.ws,
       type: params.type,
       data,
-      extensions: new Map(),
+      extensions: new Map<string, unknown>(),
       assignData: (partial: Partial<TContext>) => {
         Object.assign(data, partial);
       },
+      payload: undefined as unknown,
+      meta: {} as Record<string, unknown>,
+      receivedAt: undefined as number | undefined,
+      error: undefined as any, // Placeholder; will be set by core error enhancer
     };
 
     if ("payload" in params) {
@@ -794,7 +802,8 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
       }
     }
 
-    return ctx;
+    // After enhancers run, ctx is guaranteed to have error method (from core error enhancer)
+    return ctx as MinimalContext<TContext>;
   }
 
   /**
