@@ -182,7 +182,7 @@ export function createErrorMethod<TContext extends ConnectionData>(
             ctx.ws.send(
               JSON.stringify({
                 type: envelope.type,
-                meta,
+                meta: meta,
                 payload: { code: err.code, message: err.message || "Error" },
               }),
             );
