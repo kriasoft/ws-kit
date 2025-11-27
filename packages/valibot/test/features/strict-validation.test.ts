@@ -29,9 +29,9 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.issues?.some((i) => i.type === "strict_object")).toBe(
-          true,
-        );
+        expect(
+          result.issues?.some((i: any) => i.type === "strict_object"),
+        ).toBe(true);
       }
     });
 
@@ -46,9 +46,9 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.issues?.some((i) => i.type === "strict_object")).toBe(
-          true,
-        );
+        expect(
+          result.issues?.some((i: any) => i.type === "strict_object"),
+        ).toBe(true);
       }
     });
   });
@@ -68,9 +68,9 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.issues?.some((i) => i.type === "strict_object")).toBe(
-          true,
-        );
+        expect(
+          result.issues?.some((i: any) => i.type === "strict_object"),
+        ).toBe(true);
       }
     });
 
@@ -113,9 +113,9 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.issues?.some((i) => i.type === "strict_object")).toBe(
-          true,
-        );
+        expect(
+          result.issues?.some((i: any) => i.type === "strict_object"),
+        ).toBe(true);
       }
     });
 
@@ -195,9 +195,9 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.issues?.some((i) => i.type === "strict_object")).toBe(
-          true,
-        );
+        expect(
+          result.issues?.some((i: any) => i.type === "strict_object"),
+        ).toBe(true);
       }
     });
 

@@ -148,8 +148,9 @@ export interface TestCapture<TContext extends ConnectionData = ConnectionData> {
  * connection management, and capture helpers. The actual router instance
  * may have additional APIs (validation, pubsub) from plugins.
  */
-export interface TestRouter<TContext extends ConnectionData = ConnectionData>
-  extends RouterCore<TContext> {
+export interface TestRouter<
+  TContext extends ConnectionData = ConnectionData,
+> extends RouterCore<TContext> {
   /**
    * Typed shortcut for router.publish() when pub/sub plugin is installed.
    */

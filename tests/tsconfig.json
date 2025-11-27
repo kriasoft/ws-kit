@@ -1,0 +1,30 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Project References
+    "composite": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+
+    // Paths
+    "rootDir": ".",
+    "outDir": "dist",
+
+    // Emit
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../packages/bun/tsconfig.json" },
+    { "path": "../packages/client/tsconfig.json" },
+    { "path": "../packages/cloudflare/tsconfig.json" },
+    { "path": "../packages/core/tsconfig.json" },
+    { "path": "../packages/memory/tsconfig.json" },
+    { "path": "../packages/middleware/tsconfig.json" },
+    { "path": "../packages/plugins/tsconfig.json" },
+    { "path": "../packages/pubsub/tsconfig.json" },
+    { "path": "../packages/rate-limit/tsconfig.json" },
+    { "path": "../packages/redis/tsconfig.json" },
+    { "path": "../packages/valibot/tsconfig.json" },
+    { "path": "../packages/zod/tsconfig.json" }
+  ]
+}

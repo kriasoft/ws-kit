@@ -1,0 +1,19 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./examples/tsconfig.json" },
+    { "path": "./packages/bun/tsconfig.check.json" },
+    { "path": "./packages/client/tsconfig.check.json" },
+    { "path": "./packages/cloudflare/tsconfig.check.json" },
+    { "path": "./packages/core/tsconfig.check.json" },
+    { "path": "./packages/memory/tsconfig.check.json" },
+    { "path": "./packages/middleware/tsconfig.check.json" },
+    { "path": "./packages/plugins/tsconfig.check.json" },
+    { "path": "./packages/pubsub/tsconfig.check.json" },
+    { "path": "./packages/rate-limit/tsconfig.check.json" },
+    { "path": "./packages/redis/tsconfig.check.json" },
+    { "path": "./packages/valibot/tsconfig.check.json" },
+    { "path": "./packages/zod/tsconfig.check.json" },
+    { "path": "./tests/tsconfig.json" }
+  ]
+}

@@ -31,27 +31,27 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
-      "default": "./dist/src/index.js"
+      "default": "./dist/index.js"
     }
   },
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
   "peerDependencies": {
     "@ws-kit/core": "workspace:^",
     "@ws-kit/rate-limit": "workspace:^",
-    "redis": ">=5.0.0"
+    "redis": ">=5.10.0"
   },
   "dependencies": {
     "@ws-kit/pubsub": "workspace:^"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.2",
-    "redis": "^5.9.0"
+    "@types/bun": "^1.3.3",
+    "redis": "^5.10.0"
   },
   "engines": {
     "node": ">=22"

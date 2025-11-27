@@ -54,7 +54,7 @@ router.on(GetUser, (ctx) => {
 | RPC standard    | gRPC, Twirp, REST all use "response"        |
 | Intent signal   | Presence of `response` marks message as RPC |
 | Handler clarity | Pairs naturally with `ctx.reply()`          |
-| Bidirectional   | `payload` (request) ↔ `response` (result)  |
+| Bidirectional   | `payload` (request) ↔ `response` (result)   |
 
 **Rejected alternatives**: `result` (ambiguous with progress), `reply` (awkward in schema), `terminal` (non-standard), `output` (functional term), `success` (doesn't cover errors)
 

@@ -5,7 +5,7 @@
  * Core reads only these fields; never introspects validator ASTs.
  *
  * Discriminators:
- * - kind: "event" | "rpc" → router.on() vs router.rpc()
+ * - kind: "event" | "rpc" → router.on() vs router.rpc() (stored in DESCRIPTOR symbol)
  * - response: MessageDescriptor → only for RPC; validated at registration
  * - type: literal string → handler lookup key
  * - version (optional): rolling upgrades
@@ -14,11 +14,17 @@
  * Invariants enforced at RouteTable.register():
  * - RPC must have a response descriptor
  * - Event must not have a response descriptor
+ *
+ * Note: `kind` is read via getKind() from DESCRIPTOR symbol to avoid
+ * polluting the schema object namespace and conflicts with validator internals.
  */
+
+import { getKind } from "../schema/metadata.js";
 
 export interface MessageDescriptor {
   readonly type: string;
-  readonly kind: "event" | "rpc";
+  /** @deprecated Use getKind() to read from DESCRIPTOR symbol */
+  readonly kind?: "event" | "rpc";
   readonly version?: number;
   readonly __runtime?: string;
   readonly response?: MessageDescriptor;
@@ -26,8 +32,10 @@ export interface MessageDescriptor {
 
 /**
  * Type guards + assertions (re-exported in guards.ts).
+ *
+ * Uses getKind() to read kind from DESCRIPTOR symbol.
+ * No fallback to obj.kind - strictly reads from DESCRIPTOR.
  */
-
 export function assertMessageDescriptor(
   obj: unknown,
 ): asserts obj is MessageDescriptor {
@@ -37,17 +45,19 @@ export function assertMessageDescriptor(
 
   const desc = obj as Record<string, unknown>;
 
-  if (
-    typeof desc.type !== "string" ||
-    typeof desc.kind !== "string" ||
-    !["event", "rpc"].includes(desc.kind)
-  ) {
-    throw new TypeError("Invalid MessageDescriptor");
+  // Validate type is non-empty string
+  if (typeof desc.type !== "string" || desc.type.length === 0) {
+    throw new TypeError(
+      "Invalid MessageDescriptor.type: must be non-empty string",
+    );
   }
 
-  // Validate type is non-empty string
-  if ((desc.type as string).length === 0) {
-    throw new TypeError("Invalid MessageDescriptor.type: must not be empty");
+  // Read kind from DESCRIPTOR symbol (no fallback to obj.kind)
+  const kind = getKind(obj);
+  if (kind !== "event" && kind !== "rpc") {
+    throw new TypeError(
+      `Invalid MessageDescriptor.kind: expected "event" | "rpc", got ${kind === undefined ? "undefined" : `"${kind}"`}`,
+    );
   }
 
   // Validate optional fields if present. Event/RPC invariant is enforced

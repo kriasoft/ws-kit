@@ -341,8 +341,10 @@ interface EventMessageContext<TPayload, TData = unknown> {
 }
 
 // RPC message context (request-response with guaranteed correlation)
-interface RpcMessageContext<TPayload, TData = unknown>
-  extends Omit<EventMessageContext<TPayload, TData>, "isRpc"> {
+interface RpcMessageContext<TPayload, TData = unknown> extends Omit<
+  EventMessageContext<TPayload, TData>,
+  "isRpc"
+> {
   isRpc: true; // Discriminant: true for RPC messages
 
   // RPC-specific methods

@@ -51,9 +51,9 @@ export const ROUTER_IMPL = Symbol("@ws-kit/router-impl");
 **2. Attach symbol in constructor** (`packages/core/src/core/router.ts`):
 
 ```typescript
-export class RouterImpl<TContext extends ConnectionData = ConnectionData>
-  implements RouterCore<TContext>
-{
+export class RouterImpl<
+  TContext extends ConnectionData = ConnectionData,
+> implements RouterCore<TContext> {
   constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
     this.limitsManager = new LimitsManager(limitsConfig);
     this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);

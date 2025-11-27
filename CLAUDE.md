@@ -13,6 +13,9 @@ WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare.
 - `docs/specs/schema.md` — Message structure, type definitions, canonical imports
 - `docs/specs/router.md` — Server router API, handlers, lifecycle hooks
 - `docs/specs/validation.md` — Validation flow, normalization, error handling
+- `docs/specs/context-methods.md` — Handler context methods: send, reply, progress, publish
+- `docs/specs/plugins.md` — Plugin system: core plugins, adapters, custom plugins
+- `docs/specs/canonical-imports.md` — Quick reference for canonical import sources
 - `docs/specs/pubsub.md` — Pub/Sub API, topic subscriptions, publishing, patterns
 - `docs/specs/client.md` — Client SDK API, connection states, queueing
 - `docs/specs/adapters.md` — Platform adapter responsibilities, limits, pub/sub guarantees
@@ -182,9 +185,10 @@ The validation plugin now enforces outbound checks for `ctx.publish()` (send/rep
 
 ```bash
 # Validation
-bun run lint        # ESLint with unused directive check
-bun tsc --noEmit    # Type checking
-bun run format      # Prettier formatting
+bun lint        # ESLint with unused directive check
+bun typecheck   # Type checking (tsc --build tsconfig.check.json)
+bun tsc --build packages/*/tsconfig.check.json  # Per-package type check
+bun format      # Prettier formatting
 
 # Testing
 bun test            # Run all tests
@@ -193,30 +197,33 @@ bun test --watch    # Watch mode
 
 ## Test Structure
 
-Tests are organized by package. Each package owns its test directory:
+Hybrid structure: unit tests co-located in `src/`, feature tests in `test/`, cross-package in `tests/`.
 
 ```text
-packages/
-├── core/test/              # Core router tests + features/
-├── zod/test/               # Zod validator tests + features/
-├── valibot/test/           # Valibot validator tests + features/
-├── bun/test/               # Bun adapter tests
-├── client/test/            # Client tests (runtime/ + types/)
-└── cloudflare/test/        # Cloudflare DO adapter tests
+packages/<name>/
+├── src/*.test.ts          # Unit tests next to implementation
+└── test/features/         # Feature/integration tests (optional)
+
+tests/
+├── integration/           # Cross-package integration
+├── e2e/                   # Full client-server scenarios
+├── benchmarks/            # Performance benchmarks
+└── helpers/               # Shared utilities
 ```
 
 **When adding tests:**
 
-- **Core features**: `packages/core/test/features/`
-- **Validator features**: Mirror Zod tests in Valibot with same structure
-- **Type inference tests**: Use `packages/*/test/types/`
-- **Adapters**: Add to respective `packages/*/test/`
+- **Unit tests**: `packages/*/src/*.test.ts` (next to the file being tested)
+- **Feature tests**: `packages/*/test/features/` (integration scenarios)
+- **Validator features**: Mirror Zod tests in Valibot
+- **Cross-package**: `tests/integration/` or `tests/e2e/`
 
 **Run tests:**
 
 ```bash
 bun test                           # All tests
-bun test packages/zod/test         # Specific package
+bun test packages/core/src         # Package unit tests
+bun test packages/zod/test         # Package feature tests
 bun test --grep "pattern"          # By pattern
 bun test --watch                   # Watch mode
 ```

@@ -140,5 +140,7 @@ export interface DurableObjectStub {
  * Used to access bindings like DO namespaces and other resources.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface DurableObjectEnv
-  extends Record<string, DurableObjectNamespace | unknown> {}
+export interface DurableObjectEnv extends Record<
+  string,
+  DurableObjectNamespace | unknown
+> {}

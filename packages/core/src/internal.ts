@@ -36,9 +36,10 @@ export {
   getSchemaOpts,
   cloneWithOpts,
   getDescriptor,
+  getKind,
   typeOf,
 } from "./schema/metadata.js";
-export type { SchemaOpts } from "./schema/metadata.js";
+export type { SchemaOpts, DescriptorValue } from "./schema/metadata.js";
 
 /**
  * Function signature for context enhancers.

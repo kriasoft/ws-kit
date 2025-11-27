@@ -263,9 +263,9 @@ export interface PublicPluginHost {
  * Internal plugin host (not exposed publicly).
  * Manages plugin application and capability tracking.
  */
-export class RouterPluginHost<TContext extends ConnectionData = ConnectionData>
-  implements PublicPluginHost
-{
+export class RouterPluginHost<
+  TContext extends ConnectionData = ConnectionData,
+> implements PublicPluginHost {
   private readonly applied = new WeakSet<Function>();
   private readonly capabilities = new Set<string>();
 

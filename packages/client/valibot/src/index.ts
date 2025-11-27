@@ -49,8 +49,9 @@ interface SendOptions<S extends any = ValibotMessageSchema> {
  * Options for request() method with typed meta field inference.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-interface RequestOptions<S extends any = ValibotMessageSchema>
-  extends SendOptions<S> {
+interface RequestOptions<
+  S extends any = ValibotMessageSchema,
+> extends SendOptions<S> {
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -63,8 +64,10 @@ interface RequestOptions<S extends any = ValibotMessageSchema>
  * - send(): Payload conditional typing via overloads
  * - request(): Returns Promise<InferMessage<R>>
  */
-export interface ValibotWebSocketClient
-  extends Omit<WebSocketClient, "on" | "send" | "request"> {
+export interface ValibotWebSocketClient extends Omit<
+  WebSocketClient,
+  "on" | "send" | "request"
+> {
   readonly state: ClientState;
   readonly isConnected: boolean;
   readonly protocol: string;

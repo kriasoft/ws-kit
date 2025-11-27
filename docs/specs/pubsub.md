@@ -28,7 +28,7 @@ For full analysis and design rationale, see [ADR-022 Context](../adr/022-namespa
 This spec defines a **minimal, portable, and hard-to-misuse topic-based pub/sub system** for WS-Kit.
 
 - Subscriptions are **per-connection** via `ctx.topics` and **process-wide** via `router.publish()`.
-- On Bun (v1.3.2+), subscriptions leverage native WebSocket pub/sub (`ws.subscribe`, `server.publish`).
+- On Bun (v1.3.3+), subscriptions leverage native WebSocket pub/sub (`ws.subscribe`, `server.publish`).
 - On other adapters, behavior is **emulated** with identical semantics unless explicitly stated.
 
 ### Design Philosophy
@@ -2114,7 +2114,7 @@ Per §6.1, all operations (single and batch) follow: normalize → **await in-fl
 
 ## 12. Adapter Compliance
 
-### Bun (≥1.3.2)
+### Bun (≥1.3.3)
 
 | Capability              | Implementation                                                  | Notes                                        |
 | ----------------------- | --------------------------------------------------------------- | -------------------------------------------- |

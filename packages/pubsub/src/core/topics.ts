@@ -232,8 +232,7 @@ export function createTopics<
  */
 export class OptimisticTopics<
   TContext extends { clientId: string } = { clientId: string },
-> implements Topics
-{
+> implements Topics {
   private readonly subscriptions = new Set<string>();
   private readonly ws: ServerWebSocket & Record<string, unknown>;
   private readonly maxTopicsPerConnection: number;

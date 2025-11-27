@@ -92,11 +92,35 @@ export function cloneWithOpts<T extends any>(from: any, to: T): T {
 }
 
 /**
+ * Descriptor shape stored under DESCRIPTOR symbol.
+ * Contains type and kind for routing decisions.
+ */
+export interface DescriptorValue {
+  readonly type: string;
+  readonly kind?: "event" | "rpc";
+}
+
+/**
  * Get message type descriptor from a schema.
  * @internal
  */
-export function getDescriptor(schema: any): { type: string } | undefined {
+export function getDescriptor(schema: any): DescriptorValue | undefined {
   return schema?.[DESCRIPTOR];
+}
+
+/**
+ * Get schema kind from descriptor.
+ * Prefers DESCRIPTOR symbol, falls back to schema.kind for compatibility.
+ * Returns undefined if neither is present.
+ * @internal
+ */
+export function getKind(schema: any): "event" | "rpc" | undefined {
+  const desc = getDescriptor(schema);
+  if (desc?.kind) return desc.kind;
+  // Fallback for plain objects and backwards compatibility
+  const kind = schema?.kind;
+  if (kind === "event" || kind === "rpc") return kind;
+  return undefined;
 }
 
 /**

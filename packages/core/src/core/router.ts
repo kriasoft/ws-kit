@@ -25,12 +25,14 @@ import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
 import type { ContextEnhancer } from "../internal";
+import { getKind } from "../schema/metadata";
 import { PluginHost } from "../plugin/manager";
 import type { Plugin } from "../plugin/types";
 import type {
   AnySchema,
   InferPayload,
   InferResponse,
+  InferType,
   MessageDescriptor,
 } from "../protocol/schema";
 import type { AdapterWebSocket, ServerWebSocket } from "../ws/platform-adapter";
@@ -60,7 +62,7 @@ export type {
 export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   use(mw: Middleware<TContext>): this;
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
-  route(schema: MessageDescriptor): RouteBuilder<TContext>;
+  route<S extends MessageDescriptor>(schema: S): RouteBuilder<TContext, S>;
   merge(
     other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
@@ -163,12 +165,16 @@ export interface ValidationAPI<
 > {
   on<S extends AnySchema>(
     schema: S,
-    handler: (ctx: EventContext<TContext, InferPayload<S>>) => void,
+    handler: (
+      ctx: EventContext<TContext, InferPayload<S>> & { type: InferType<S> },
+    ) => void,
   ): this;
   rpc<S extends AnySchema>(
     schema: S,
     handler: (
-      ctx: RpcContext<TContext, InferPayload<S>, InferResponse<S>>,
+      ctx: RpcContext<TContext, InferPayload<S>, InferResponse<S>> & {
+        type: InferType<S>;
+      },
     ) => void,
   ): this;
 }
@@ -266,9 +272,16 @@ export interface PubSubAPI<TContext extends ConnectionData = ConnectionData> {
  */
 export interface RouteBuilder<
   TContext extends ConnectionData = ConnectionData,
+  S extends MessageDescriptor = MessageDescriptor,
 > {
   use(mw: Middleware<TContext>): this;
-  on(handler: EventHandler<TContext>): void;
+  on(
+    handler: S extends AnySchema
+      ? (
+          ctx: EventContext<TContext, InferPayload<S>> & { type: InferType<S> },
+        ) => void
+      : EventHandler<TContext>,
+  ): void;
 }
 
 /**
@@ -316,14 +329,15 @@ export function getRouteIndex(router: Router<any>): ReadonlyRouteIndex {
  * Accumulates middleware for a single message type, then registers with router.
  * @internal
  */
-class RouteBuilderImpl<TContext extends ConnectionData = ConnectionData>
-  implements RouteBuilder<TContext>
-{
+class RouteBuilderImpl<
+  TContext extends ConnectionData = ConnectionData,
+  S extends MessageDescriptor = MessageDescriptor,
+> implements RouteBuilder<TContext, S> {
   private middlewares: Middleware<TContext>[] = [];
 
   constructor(
     private router: RouterImpl<TContext>,
-    private schema: MessageDescriptor,
+    private schema: S,
   ) {}
 
   use(mw: Middleware<TContext>): this {
@@ -331,11 +345,18 @@ class RouteBuilderImpl<TContext extends ConnectionData = ConnectionData>
     return this;
   }
 
-  on(handler: EventHandler<TContext>): void {
+  on(
+    handler: S extends AnySchema
+      ? (
+          ctx: EventContext<TContext, InferPayload<S>> & { type: InferType<S> },
+        ) => void
+      : EventHandler<TContext>,
+  ): void {
     const entry: RouteEntry<TContext> = {
-      schema: this.schema,
+      schema: this.schema as unknown as MessageDescriptor,
       middlewares: this.middlewares,
-      handler,
+      // handler type is runtime-compatible (middleware chain handles context)
+      handler: handler as EventHandler<TContext>,
     };
     this.router.registerRoute(entry);
   }
@@ -346,9 +367,9 @@ class RouteBuilderImpl<TContext extends ConnectionData = ConnectionData>
  * Stores global middleware, per-route handlers (via registry), and error hooks.
  * @internal
  */
-export class RouterImpl<TContext extends ConnectionData = ConnectionData>
-  implements RouterCore<TContext>
-{
+export class RouterImpl<
+  TContext extends ConnectionData = ConnectionData,
+> implements RouterCore<TContext> {
   private globalMiddlewares: Middleware<TContext>[] = [];
   private routes = new RouteTable<TContext>();
   private lifecycle = new LifecycleManager<TContext>();
@@ -438,7 +459,14 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
   > {
     const result = new Map<string, { schema?: unknown; kind?: string }>();
     for (const [type, entry] of this.routes.list()) {
-      result.set(type, { schema: entry.schema, kind: (entry as any).kind });
+      // Read kind from DESCRIPTOR symbol via getKind()
+      const kind = getKind(entry.schema);
+      result.set(
+        type,
+        kind !== undefined
+          ? { schema: entry.schema, kind }
+          : { schema: entry.schema },
+      );
     }
     return result;
   }
@@ -502,9 +530,11 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
       );
     }
 
-    if (schema.kind !== "rpc") {
+    // Read kind from DESCRIPTOR symbol (no fallback to schema.kind)
+    const kind = getKind(schema);
+    if (kind !== "rpc") {
       throw new Error(
-        `Schema kind mismatch for "${schema.type}": expected kind="rpc"`,
+        `Schema kind mismatch for "${schema.type}": expected kind="rpc", got "${kind}"`,
       );
     }
 
@@ -523,7 +553,7 @@ export class RouterImpl<TContext extends ConnectionData = ConnectionData>
     return this;
   }
 
-  route(schema: MessageDescriptor): RouteBuilder<TContext> {
+  route<S extends MessageDescriptor>(schema: S): RouteBuilder<TContext, S> {
     return new RouteBuilderImpl(this, schema);
   }
 

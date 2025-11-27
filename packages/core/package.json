@@ -3,49 +3,49 @@
   "version": "0.0.1",
   "type": "module",
   "description": "Tiny, type-safe WebSocket router",
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
-      "import": "./dist/src/index.js"
+      "import": "./dist/index.js"
     },
     "./plugin": {
-      "types": "./dist/src/plugin/index.d.ts",
+      "types": "./dist/plugin/index.d.ts",
       "bun": "./src/plugin/index.ts",
-      "import": "./dist/src/plugin/index.js"
+      "import": "./dist/plugin/index.js"
     },
     "./pubsub": {
-      "types": "./dist/src/capabilities/pubsub/index.d.ts",
+      "types": "./dist/capabilities/pubsub/index.d.ts",
       "bun": "./src/capabilities/pubsub/index.ts",
-      "import": "./dist/src/capabilities/pubsub/index.js"
+      "import": "./dist/capabilities/pubsub/index.js"
     },
     "./testing": {
-      "types": "./dist/src/testing/index.d.ts",
+      "types": "./dist/testing/index.d.ts",
       "bun": "./src/testing/index.ts",
-      "import": "./dist/src/testing/index.js"
+      "import": "./dist/testing/index.js"
     },
     "./internal": {
-      "types": "./dist/src/internal.d.ts",
+      "types": "./dist/internal.d.ts",
       "bun": "./src/internal.ts",
-      "import": "./dist/src/internal.js"
+      "import": "./dist/internal.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "test": "bun test",
-    "typecheck": "bun tsc -b tsconfig.json && bun tsc -b tsconfig.test.json"
+    "typecheck": "tsc --build tsconfig.check.json"
   },
   "dependencies": {},
   "devDependencies": {
-    "@types/bun": "^1.3.2",
+    "@types/bun": "^1.3.3",
     "@ws-kit/bun": "workspace:^",
     "@ws-kit/memory": "workspace:^",
     "@ws-kit/pubsub": "workspace:^",
     "@ws-kit/zod": "workspace:^",
     "typescript": "^5.0.0",
-    "zod": "^4.1.12"
+    "zod": "^4.1.13"
   },
   "keywords": [
     "websocket",
