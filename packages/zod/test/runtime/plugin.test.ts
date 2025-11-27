@@ -14,6 +14,7 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createRouter, message, rpc, withZod } from "../../src/index";
+import { getKind } from "@ws-kit/core/internal";
 
 describe("withZod() Plugin", () => {
   it("should add rpc method after plugin", () => {
@@ -70,27 +71,34 @@ describe("withZod() Plugin", () => {
     expect(router).toBeDefined();
   });
 
-  it("should create schema with kind='event'", () => {
+  it("should create schema with kind='event' in DESCRIPTOR", () => {
     const Join = message("JOIN", { roomId: z.string() });
-    expect((Join as any).kind).toBe("event");
+    // kind is stored in DESCRIPTOR symbol, not on the schema object
+    expect(getKind(Join)).toBe("event");
     expect((Join as any).type).toBe("JOIN");
+    // Zod schemas don't have a native 'kind' property
+    expect("kind" in Join).toBe(false);
   });
 
-  it("should create schema with kind='rpc' and response", () => {
+  it("should create schema with kind='rpc' in DESCRIPTOR and response", () => {
     const GetUser = rpc("GET_USER", { id: z.string() }, "USER", {
       id: z.string(),
       name: z.string(),
     });
 
-    expect((GetUser as any).kind).toBe("rpc");
+    // kind is stored in DESCRIPTOR symbol, not on the schema object
+    expect(getKind(GetUser)).toBe("rpc");
     expect((GetUser as any).type).toBe("GET_USER");
     expect((GetUser as any).response?.type).toBe("USER");
+    // Response should have kind="event" in DESCRIPTOR
+    expect(getKind((GetUser as any).response)).toBe("event");
   });
 
   it("should allow message schema without payload", () => {
     const Ping = message("PING");
     expect((Ping as any).type).toBe("PING");
-    expect((Ping as any).kind).toBe("event");
+    // kind is stored in DESCRIPTOR symbol
+    expect(getKind(Ping)).toBe("event");
   });
 
   it("should capture error hook", () => {

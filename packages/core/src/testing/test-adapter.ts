@@ -25,8 +25,7 @@ import type { OutgoingFrame } from "./types";
  */
 export class InMemoryPlatformAdapter<
   TContext extends ConnectionData = ConnectionData,
-> implements PlatformAdapter
-{
+> implements PlatformAdapter {
   private connections = new Map<string, ConnectionState<TContext>>();
   private nextClientId = 0;
   private globalMessages: OutgoingFrame[] = [];

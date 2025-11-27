@@ -12,6 +12,6 @@
     "@ws-kit/zod": "workspace:*"
   },
   "devDependencies": {
-    "@types/bun": "1.3.2"
+    "@types/bun": "1.3.3"
   }
 }

@@ -31,6 +31,7 @@ import type {
 import { getRouteIndex } from "@ws-kit/core";
 import {
   getRouterPluginAPI,
+  getKind,
   getSchemaOpts,
   typeOf,
   type SchemaOpts,
@@ -252,7 +253,7 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
             enumerable: false,
             configurable: true,
             value: {
-              kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
+              kind: getKind(schemaInfo.schema), // read from DESCRIPTOR symbol
               request: schema,
               response: schema.response,
             },

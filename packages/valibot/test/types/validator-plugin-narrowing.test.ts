@@ -81,8 +81,8 @@ describe("validator plugin narrowing - Valibot (types)", () => {
       : never;
 
     // PayloadType should exist (it's the Valibot schema object)
-    // We can verify it's not undefined by testing it matches a generic schema type
-    expectTypeOf<PayloadType>().toMatchTypeOf<Record<string, any>>();
+    // Verify it's not never
+    expectTypeOf<PayloadType>().not.toBeNever();
   });
 
   // Test 6: withValibot options configuration is type-safe

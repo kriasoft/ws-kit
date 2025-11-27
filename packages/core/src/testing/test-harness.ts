@@ -308,9 +308,9 @@ export function wrapTestRouter<
 /**
  * Implementation of TestConnection.
  */
-class TestConnectionImpl<TContext extends ConnectionData = ConnectionData>
-  implements TestConnection<TContext>
-{
+class TestConnectionImpl<
+  TContext extends ConnectionData = ConnectionData,
+> implements TestConnection<TContext> {
   private outgoingFrames: OutgoingFrame[] = [];
   private pendingMessages: Promise<void>[] = [];
 

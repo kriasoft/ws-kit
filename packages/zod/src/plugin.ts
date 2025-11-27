@@ -31,6 +31,7 @@ import type {
 import { getRouteIndex } from "@ws-kit/core";
 import {
   getRouterPluginAPI,
+  getKind,
   getSchemaOpts,
   typeOf,
   type SchemaOpts,
@@ -253,11 +254,12 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           }
 
           // Stash schema info for later use in reply/progress/send validation
+          const kind = getKind(schemaInfo.schema); // read from DESCRIPTOR symbol
           Object.defineProperty(enhCtx, "__wskit", {
             enumerable: false,
             configurable: true,
             value: {
-              kind: (schemaInfo.schema as any).kind, // may be undefined; that's ok
+              ...(kind !== undefined && { kind }),
               request: schema,
               response: schema.response,
             } satisfies WsContext,

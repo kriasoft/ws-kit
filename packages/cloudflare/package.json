@@ -52,10 +52,10 @@
     "uuid": "^13.0.0"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": ">4.20251115.0"
+    "@cloudflare/workers-types": ">4.20251127.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.2"
+    "@types/bun": "^1.3.3"
   },
   "engines": {
     "node": ">=22"

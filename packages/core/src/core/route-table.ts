@@ -9,6 +9,7 @@
 import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { assertMessageDescriptor } from "../protocol/message-descriptor";
+import { getKind } from "../schema/metadata";
 import type { RouteEntry } from "./types";
 
 export interface RouteTableOptions {
@@ -47,7 +48,9 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
     // Enforce event/RPC invariant at registration time (fail-fast).
     // RPC descriptors must have a response; events must not.
     // Catches schema misconfiguration before system boots.
-    if (schema.kind === "rpc") {
+    // Read kind from DESCRIPTOR symbol (no fallback to schema.kind)
+    const kind = getKind(schema);
+    if (kind === "rpc") {
       if (!schema.response) {
         throw new Error(
           `RPC schema for type "${type}" must have a response descriptor.`,
@@ -64,7 +67,7 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
       }
     }
 
-    if (schema.kind === "event" && schema.response !== undefined) {
+    if (kind === "event" && schema.response !== undefined) {
       throw new Error(
         `Event schema for type "${type}" must not have a response descriptor.`,
       );

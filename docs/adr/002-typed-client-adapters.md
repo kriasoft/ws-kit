@@ -41,8 +41,10 @@ client.on(HelloOk, (msg) => {
 import { createClient as createGenericClient } from "@ws-kit/client";
 import type { WebSocketClient } from "@ws-kit/client";
 
-export interface ZodWebSocketClient
-  extends Omit<WebSocketClient, "on" | "send" | "request"> {
+export interface ZodWebSocketClient extends Omit<
+  WebSocketClient,
+  "on" | "send" | "request"
+> {
   // Type-safe overrides with Zod inference
   on<S extends ZodMessageSchema>(
     schema: S,

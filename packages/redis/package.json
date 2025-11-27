@@ -44,14 +44,14 @@
   "peerDependencies": {
     "@ws-kit/core": "workspace:^",
     "@ws-kit/rate-limit": "workspace:^",
-    "redis": ">=5.0.0"
+    "redis": ">=5.10.0"
   },
   "dependencies": {
     "@ws-kit/pubsub": "workspace:^"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.2",
-    "redis": "^5.9.0"
+    "@types/bun": "^1.3.3",
+    "redis": "^5.10.0"
   },
   "engines": {
     "node": ">=22"

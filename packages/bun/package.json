@@ -53,10 +53,10 @@
     "@ws-kit/core": "workspace:^"
   },
   "peerDependencies": {
-    "@types/bun": ">=1.3.2"
+    "@types/bun": ">=1.3.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.2",
+    "@types/bun": "^1.3.3",
     "@ws-kit/memory": "workspace:^",
     "@ws-kit/pubsub": "workspace:^",
     "@ws-kit/zod": "workspace:^"

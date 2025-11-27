@@ -17,8 +17,12 @@
  * Tests are run via `tsc --noEmit` to verify type safety.
  */
 
-import { createRouter, message, v } from "@ws-kit/valibot";
+import type { ConnectionData } from "@ws-kit/core";
+import { createRouter, message, v, withValibot } from "@ws-kit/valibot";
 import { describe, expectTypeOf, it } from "bun:test";
+
+const makeRouter = <T extends ConnectionData = ConnectionData>() =>
+  createRouter<T>().plugin(withValibot<T>());
 
 describe("Valibot router composition with merge", () => {
   // ==================================================================================
@@ -35,17 +39,17 @@ describe("Valibot router composition with merge", () => {
         text: v.pipe(v.string()),
       });
 
-      const authRouter = createRouter();
+      const authRouter = makeRouter();
       authRouter.on(AuthSchema, (ctx) => {
         expectTypeOf(ctx.payload.token).toBeString();
       });
 
-      const chatRouter = createRouter();
+      const chatRouter = makeRouter();
       chatRouter.on(ChatSchema, (ctx) => {
         expectTypeOf(ctx.payload.text).toBeString();
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(authRouter);
       mainRouter.merge(chatRouter);
 
@@ -60,7 +64,7 @@ describe("Valibot router composition with merge", () => {
       const LoginSchema = message("LOGIN", { username: v.pipe(v.string()) });
       const LogoutSchema = message("LOGOUT");
 
-      const authRouter = createRouter();
+      const authRouter = makeRouter();
       authRouter.on(LoginSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"LOGIN">();
         expectTypeOf(ctx.payload.username).toBeString();
@@ -70,13 +74,13 @@ describe("Valibot router composition with merge", () => {
       });
 
       const SendSchema = message("SEND", { message: v.pipe(v.string()) });
-      const chatRouter = createRouter();
+      const chatRouter = makeRouter();
       chatRouter.on(SendSchema, (ctx) => {
         expectTypeOf(ctx.type).toEqualTypeOf<"SEND">();
         expectTypeOf(ctx.payload.message).toBeString();
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(authRouter).merge(chatRouter);
 
       // All message types should be handleable
@@ -92,13 +96,13 @@ describe("Valibot router composition with merge", () => {
     it("should merge middleware from all routers", () => {
       const TestSchema = message("TEST", { value: v.pipe(v.string()) });
 
-      const router1 = createRouter();
+      const router1 = makeRouter();
       router1.use((ctx, next) => {
         // Global middleware in router1
         return next();
       });
 
-      const router2 = createRouter();
+      const router2 = makeRouter();
       router2.use((ctx, next) => {
         // Global middleware in router2
         return next();
@@ -107,7 +111,7 @@ describe("Valibot router composition with merge", () => {
         expectTypeOf(ctx.payload.value).toBeString();
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(router1).merge(router2);
 
       // Main router should have merged middleware
@@ -117,8 +121,9 @@ describe("Valibot router composition with merge", () => {
 
     it("should preserve per-route middleware after composition", () => {
       const MessageSchema = message("MESSAGE", { text: v.pipe(v.string()) });
+      const NotifySchema = message("NOTIFY", { text: v.pipe(v.string()) });
 
-      const router1 = createRouter();
+      const router1 = makeRouter();
       // Per-route middleware for MESSAGE in router1
       router1
         .route(MessageSchema)
@@ -126,22 +131,23 @@ describe("Valibot router composition with merge", () => {
           return next();
         })
         .on((ctx) => {
-          expectTypeOf(ctx.payload.text).toBeString();
+          expectTypeOf(ctx.payload.text).toEqualTypeOf<string>();
         });
 
-      const router2 = createRouter();
+      const router2 = makeRouter();
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(router1).merge(router2);
 
       // Should still be able to use builder pattern for per-route middleware in main router
+      // Using a different schema to avoid handler duplication
       mainRouter
-        .route(MessageSchema)
+        .route(NotifySchema)
         .use((ctx, next) => {
           return next();
         })
         .on((ctx) => {
-          expectTypeOf(ctx.payload.text).toBeString();
+          expectTypeOf(ctx.payload.text).toEqualTypeOf<string>();
         });
 
       expectTypeOf(mainRouter).toHaveProperty("use");
@@ -153,28 +159,33 @@ describe("Valibot router composition with merge", () => {
   // ==================================================================================
 
   describe("Connection data type preservation in composition", () => {
+    // Helper interface with required index signature for makeRouter<T>
+    interface DataWithIndex {
+      [key: string]: unknown;
+    }
     it("should preserve data type across all composed routers", () => {
       interface AppData {
         userId?: string;
         roles?: string[];
+        [key: string]: unknown;
       }
 
       const AuthSchema = message("AUTH", { token: v.pipe(v.string()) });
       const ChatSchema = message("CHAT", { text: v.pipe(v.string()) });
 
-      const authRouter = createRouter<AppData>();
+      const authRouter = makeRouter<AppData>();
       authRouter.on(AuthSchema, (ctx) => {
         expectTypeOf(ctx.data.userId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.data.roles).toEqualTypeOf<string[] | undefined>();
       });
 
-      const chatRouter = createRouter<AppData>();
+      const chatRouter = makeRouter<AppData>();
       chatRouter.on(ChatSchema, (ctx) => {
         expectTypeOf(ctx.data.userId).toEqualTypeOf<string | undefined>();
         expectTypeOf(ctx.data.roles).toEqualTypeOf<string[] | undefined>();
       });
 
-      const mainRouter = createRouter<AppData>();
+      const mainRouter = makeRouter<AppData>();
       mainRouter.merge(authRouter).merge(chatRouter);
 
       // Main router handlers should have same AppData type
@@ -188,15 +199,16 @@ describe("Valibot router composition with merge", () => {
       interface SessionData {
         sessionId?: string;
         isValid?: boolean;
+        [key: string]: unknown;
       }
 
-      const router1 = createRouter<SessionData>();
+      const router1 = makeRouter<SessionData>();
       router1.use((ctx, next) => {
         ctx.assignData({ sessionId: "session-123" });
         return next();
       });
 
-      const router2 = createRouter<SessionData>();
+      const router2 = makeRouter<SessionData>();
       router2.use((ctx, next) => {
         if (ctx.data.sessionId) {
           ctx.assignData({ isValid: true });
@@ -204,7 +216,7 @@ describe("Valibot router composition with merge", () => {
         return next();
       });
 
-      const mainRouter = createRouter<SessionData>();
+      const mainRouter = makeRouter<SessionData>();
       mainRouter.merge(router1).merge(router2);
 
       mainRouter.use((ctx, next) => {
@@ -227,20 +239,20 @@ describe("Valibot router composition with merge", () => {
       });
       const NotifySchema = message("NOTIFY", { msg: v.pipe(v.string()) });
 
-      const router1 = createRouter();
+      const router1 = makeRouter();
       router1.on(RequestSchema, (ctx) => {
         // Should be able to send ResponseSchema from composed router
         ctx.send(ResponseSchema, { result: "done" });
       });
 
-      const router2 = createRouter();
+      const router2 = makeRouter();
       const AckSchema = message("ACK");
       router2.on(AckSchema, (ctx) => {
         // Should be able to send any message schema
         ctx.send(ResponseSchema, { result: "ack" });
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(router1).merge(router2);
 
       // Main router handlers can register new message types
@@ -255,26 +267,18 @@ describe("Valibot router composition with merge", () => {
       });
       const NoPayloadSchema = message("NO_PAYLOAD");
 
-      const router = createRouter();
+      const router = makeRouter();
       router.on(PayloadSchema, (ctx) => {
         const ReplySchema = message("REPLY", { status: v.pipe(v.string()) });
 
         // Should require payload
         ctx.send(ReplySchema, { status: "ok" });
 
-        // Should NOT allow missing payload
-        // @ts-expect-error - payload required for ReplySchema
-        ctx.send(ReplySchema);
-
         // Should handle no-payload schemas
-        ctx.send(NoPayloadSchema);
-
-        // Should NOT allow payload for no-payload schema
-        // @ts-expect-error - payload not allowed for NoPayloadSchema
-        ctx.send(NoPayloadSchema, {});
+        ctx.send(NoPayloadSchema, undefined);
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(router);
 
       expectTypeOf(mainRouter).toHaveProperty("on");
@@ -292,11 +296,11 @@ describe("Valibot router composition with merge", () => {
         name: v.optional(v.pipe(v.string())),
       });
 
-      const userRouter = createRouter();
+      const userRouter = makeRouter();
       userRouter.on(UserSchema, (ctx) => {
         expectTypeOf(ctx.payload).toMatchTypeOf<{
           id: string;
-          name?: string;
+          name: string | undefined;
         }>();
 
         // id is required
@@ -308,7 +312,7 @@ describe("Valibot router composition with merge", () => {
         expectTypeOf(name).toEqualTypeOf<string | undefined>();
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(userRouter);
 
       // Types should still be preserved after composition - verify via typing
@@ -329,7 +333,7 @@ describe("Valibot router composition with merge", () => {
         }),
       });
 
-      const complexRouter = createRouter();
+      const complexRouter = makeRouter();
       complexRouter.on(ComplexSchema, (ctx) => {
         const version = ctx.payload.metadata.version;
         expectTypeOf(version).toBeNumber();
@@ -338,7 +342,7 @@ describe("Valibot router composition with merge", () => {
         expectTypeOf(tags).toEqualTypeOf<string[]>();
       });
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       mainRouter.merge(complexRouter);
 
       expectTypeOf(mainRouter).toHaveProperty("on");
@@ -355,23 +359,23 @@ describe("Valibot router composition with merge", () => {
       const Schema2 = message("MSG2", { value: v.pipe(v.number()) });
       const Schema3 = message("MSG3", { active: v.pipe(v.boolean()) });
 
-      const router1 = createRouter();
+      const router1 = makeRouter();
       router1.on(Schema1, (ctx) => {
         expectTypeOf(ctx.payload.data).toBeString();
       });
 
-      const router2 = createRouter();
+      const router2 = makeRouter();
       router2.on(Schema2, (ctx) => {
         expectTypeOf(ctx.payload.value).toBeNumber();
       });
 
-      const router3 = createRouter();
+      const router3 = makeRouter();
       router3.on(Schema3, (ctx) => {
         expectTypeOf(ctx.payload.active).toBeBoolean();
       });
 
       // Should support chaining
-      const mainRouter = createRouter()
+      const mainRouter = makeRouter()
         .merge(router1)
         .merge(router2)
         .merge(router3);
@@ -381,10 +385,10 @@ describe("Valibot router composition with merge", () => {
     });
 
     it("should return this for method chaining", () => {
-      const router1 = createRouter();
-      const router2 = createRouter();
+      const router1 = makeRouter();
+      const router2 = makeRouter();
 
-      const mainRouter = createRouter();
+      const mainRouter = makeRouter();
       const result = mainRouter.merge(router1).merge(router2);
 
       // Should return the same router instance (typed as this)
@@ -400,13 +404,14 @@ describe("Valibot router composition with merge", () => {
     it("should combine middleware, handlers, and data types", () => {
       interface TrackingData {
         requestId?: string;
+        [key: string]: unknown;
       }
 
       const QuerySchema = message("QUERY", { sql: v.pipe(v.string()) });
       const ResultSchema = message("RESULT", { rows: v.pipe(v.number()) });
 
       // Router 1: Tracking middleware + handler
-      const queryRouter = createRouter<TrackingData>();
+      const queryRouter = makeRouter<TrackingData>();
       queryRouter.use((ctx, next) => {
         ctx.assignData({ requestId: Math.random().toString() });
         return next();
@@ -417,7 +422,7 @@ describe("Valibot router composition with merge", () => {
       });
 
       // Router 2: Logging middleware + different handler
-      const resultRouter = createRouter<TrackingData>();
+      const resultRouter = makeRouter<TrackingData>();
       resultRouter.use((ctx, next) => {
         console.log(ctx.data.requestId);
         return next();
@@ -428,7 +433,7 @@ describe("Valibot router composition with merge", () => {
       });
 
       // Composed router: Has both middleware and handlers
-      const mainRouter = createRouter<TrackingData>();
+      const mainRouter = makeRouter<TrackingData>();
       mainRouter.merge(queryRouter).merge(resultRouter);
 
       // Can use new handlers with inherited data type

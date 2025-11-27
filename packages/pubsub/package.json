@@ -48,7 +48,7 @@
     "@ws-kit/core": "workspace:^"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.2",
+    "@types/bun": "^1.3.3",
     "@ws-kit/core": "workspace:^"
   },
   "engines": {

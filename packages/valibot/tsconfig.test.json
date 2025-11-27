@@ -8,5 +8,8 @@
     "tsBuildInfoFile": "dist/test.tsbuildinfo"
   },
   "include": ["test", "**/*.test.ts"],
-  "references": [{ "path": "./tsconfig.json" }]
+  "references": [
+    { "path": "./tsconfig.json" },
+    { "path": "../core/tsconfig.json" }
+  ]
 }

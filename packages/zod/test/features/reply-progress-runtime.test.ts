@@ -11,6 +11,7 @@
  */
 
 import { createRouter } from "@ws-kit/core";
+import { getKind } from "@ws-kit/core/internal";
 import { message, rpc, withZod, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
@@ -138,7 +139,8 @@ describe("reply() and progress() runtime", () => {
 
       expect((GetUser as any).type).toBe("GET_USER");
       expect((GetUser as any).response?.type).toBe("USER");
-      expect((GetUser as any).kind).toBe("rpc");
+      // kind is stored in DESCRIPTOR symbol, not on the schema object
+      expect(getKind(GetUser)).toBe("rpc");
     });
   });
 

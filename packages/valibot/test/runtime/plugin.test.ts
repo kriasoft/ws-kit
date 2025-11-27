@@ -15,6 +15,7 @@ import { describe, it, expect } from "bun:test";
 import * as v from "valibot";
 import { createRouter, message, rpc, withValibot } from "../../src/index";
 import type { MessageDescriptor } from "@ws-kit/core";
+import { getDescriptor, getKind } from "@ws-kit/core/internal";
 
 describe("withValibot() Plugin", () => {
   it("should add rpc method after plugin", () => {
@@ -71,27 +72,34 @@ describe("withValibot() Plugin", () => {
     expect(router).toBeDefined();
   });
 
-  it("should create schema with kind='event'", () => {
+  it("should create schema with kind='event' in DESCRIPTOR", () => {
     const Join = message("JOIN", { roomId: v.string() });
-    expect((Join as any).kind).toBe("event");
+    // kind is stored in DESCRIPTOR symbol, not on the schema object
+    expect(getKind(Join)).toBe("event");
     expect(Join.type).toBe("JOIN");
+    // Valibot's native kind should be preserved
+    expect(Join.kind).toBe("schema");
   });
 
-  it("should create schema with kind='rpc' and response", () => {
+  it("should create schema with kind='rpc' in DESCRIPTOR and response", () => {
     const GetUser = rpc("GET_USER", { id: v.string() }, "USER", {
       id: v.string(),
       name: v.string(),
     });
 
-    expect((GetUser as any).kind).toBe("rpc");
+    // kind is stored in DESCRIPTOR symbol, not on the schema object
+    expect(getKind(GetUser)).toBe("rpc");
     expect(GetUser.type).toBe("GET_USER");
     expect((GetUser as any).response?.type).toBe("USER");
+    // Response should have kind="event" in DESCRIPTOR
+    expect(getKind((GetUser as any).response)).toBe("event");
   });
 
   it("should allow message schema without payload", () => {
     const Ping = message("PING");
     expect(Ping.type).toBe("PING");
-    expect((Ping as any).kind).toBe("event");
+    // kind is stored in DESCRIPTOR symbol
+    expect(getKind(Ping)).toBe("event");
   });
 
   it("should capture error hook", () => {
