@@ -1,13 +1,23 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // Project References
     "composite": true,
-    "rootDir": ".",
-    "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo",
+
+    // Paths
+    "rootDir": "src",
+    "outDir": "dist",
+
+    // Emit
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // Environment
     "types": ["bun"]
   },
   "include": ["src"],
-  "exclude": ["**/*.test.ts"],
+  "exclude": ["src/**/*.test.ts"],
   "references": [{ "path": "../core" }]
 }

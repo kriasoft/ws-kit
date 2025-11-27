@@ -25,6 +25,8 @@
   // Auto-update import paths on file move/rename
   "javascript.updateImportsOnFileMove.enabled": "always",
   "typescript.updateImportsOnFileMove.enabled": "always",
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
 
   // Bun
   "bun.test.filePattern": "test/*.test.ts",

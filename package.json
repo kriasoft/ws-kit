@@ -5,7 +5,7 @@
   "type": "module",
   "description": "WS-Kit — Type-Safe WebSocket router for Bun and Cloudflare",
   "license": "MIT",
-  "packageManager": "bun@1.3.2",
+  "packageManager": "bun@1.3.3",
   "author": "Kriasoft <hello@kriasoft.com>",
   "contributors": [
     {
@@ -53,8 +53,11 @@
     "rebuild": "bun tsc -b --clean && bun tsc -b",
     "clean": "bun tsc -b --clean",
     "test": "bun test",
+    "test:unit": "bun test packages/",
+    "test:e2e": "bun test tests/integration tests/e2e",
+    "test:bench": "bun test tests/benchmarks",
     "test:patterns": "bash ./scripts/validate-patterns.sh && bun test examples/**/conformance.test.ts",
-    "typecheck": "bun tsc -b tsconfig.json && bun tsc -b tsconfig.tests.json",
+    "typecheck": "tsc --build tsconfig.check.json",
     "lint": "eslint --report-unused-disable-directives .",
     "lint:fix": "eslint --report-unused-disable-directives --fix .",
     "format": "prettier --write .",
@@ -63,11 +66,6 @@
     "docs:dev": "vitepress dev",
     "docs:preview": "vitepress preview",
     "docs:deploy": "gh-pages -d .vitepress/dist"
-  },
-  "lint-staged": {
-    "*.{ts,js,json,md}": [
-      "bun prettier --write"
-    ]
   },
   "prettier": {
     "singleQuote": false,

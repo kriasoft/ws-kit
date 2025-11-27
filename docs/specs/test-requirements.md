@@ -2,27 +2,43 @@
 
 ## Test Organization
 
-Every package owns its tests under `packages/<name>/test`. Use sub-folders consistently:
+Hybrid structure: unit tests in `src/` (co-located), feature tests in `test/`, cross-package in `tests/`.
 
-- `runtime/` (behavioral tests, normalization, queue)
-- `types/` (expectTypeOf suites)
-- `features/` (integration-style specs per feature area)
-- Adapter-specific folders (`bun/`, `cloudflare/`, etc.) follow the same pattern
+### Package Tests
+
+```text
+packages/<name>/
+├── src/*.test.ts          # Unit tests next to implementation
+└── test/features/         # Feature/integration tests (optional)
+```
+
+- **Unit tests** (`src/`): Test individual modules directly (e.g., `plugin.test.ts`, `types.test.ts`)
+- **Feature tests** (`test/features/`): Integration-style specs, validator scenarios
+
+### Cross-Package Tests (`tests/`)
+
+```text
+tests/
+├── integration/           # Cross-package integration
+├── e2e/                   # Full client-server scenarios
+├── benchmarks/            # Performance benchmarks
+└── helpers/               # Shared utilities
+```
 
 ### When Adding Tests
 
-- **Core features**: `packages/core/test/features/`
-- **Validator features**: Mirror Zod tests in Valibot with same structure
-- **Type inference tests**: Use `packages/*/test/types/`
-- **Adapters**: Add to respective `packages/*/test/`
+- **Unit tests**: `packages/*/src/*.test.ts` (next to the file being tested)
+- **Feature tests**: `packages/*/test/features/` (integration scenarios)
+- **Validator features**: Mirror Zod tests in Valibot
+- **Cross-package**: `tests/integration/` or `tests/e2e/`
 
 ### Running Tests
 
 ```bash
 bun test                           # All tests
-bun test packages/zod/test         # Specific package
+bun test packages/core/src         # Package unit tests
+bun test packages/zod/test         # Package feature tests
 bun test --grep "pattern"          # By pattern
-bun test --watch                   # Watch mode
 ```
 
 ## Test Harness Basics
@@ -86,7 +102,7 @@ describe("Client runtime example", () => {
 
 ### Mock WebSocket Helpers
 
-- Use `createMockWebSocket()` from `packages/client/test/runtime/helpers.ts` to deterministically simulate lifecycle events.
+- Use `createMockWebSocket()` from `tests/helpers/client.ts` to deterministically simulate lifecycle events.
 - Define helpers once per suite and reuse them in tests:
 
 ```typescript
@@ -349,7 +365,7 @@ expectTypeOf(union).toMatchTypeOf<z.ZodDiscriminatedUnion<"type", any>>();
 
 ## RPC Context Inference Type Tests
 
-**Location**: `packages/core/test/types/rpc-context-inference.test.ts`
+**Location**: `packages/core/src/context/rpc-context-inference.test.ts`
 
 **Purpose**: Verify RPC context (via `router.rpc()`) and event context (via `router.on()`) have properly discriminated types with correct inference for RPC-specific methods: `reply()`, `progress()`, `onCancel()`, `deadline`.
 
@@ -421,7 +437,7 @@ The test file verifies:
 
 ## RPC Incomplete Handler Detection Tests
 
-**Location**: `packages/core/test/features/rpc-incomplete-warning.test.ts`
+**Location**: `packages/core/src/context/rpc-incomplete-warning.test.ts`
 
 **Purpose**: Verify that the router warns developers when RPC handlers complete without sending a terminal response (reply or error). This helps catch common bugs where `ctx.reply()` or `ctx.error()` is forgotten, causing client timeouts.
 
@@ -702,7 +718,7 @@ test("custom metadata merges with auto-injected fields", async () => {
 
 - Multiple handlers fire strictly in registration order, handler errors never short-circuit later handlers, and `unsubscribe()` removes only the targeted callback.
 - Reserved meta keys (`clientId`, `receivedAt`) are rejected at schema creation time, even when mixed with otherwise valid custom meta fields.
-- **Reference**: `packages/client/test/runtime/handlers.test.ts`, `packages/core/test/features/normalization.test.ts`.
+- **Reference**: `packages/client/src/handlers.test.ts`, `packages/core/src/internal/normalization.test.ts`.
 
 > **Standard Fixture Reminder**: Unless explicitly redefined, the runtime tests below reuse the shared `beforeEach` setup described in [Mock WebSocket Helpers](#mock-websocket-helpers) (`client`, `mockWs`, `simulateReceive`, `simulateRaw`). Recreate that scaffold when copying an individual test into a new suite.
 
@@ -922,7 +938,7 @@ test("request() ignores duplicate replies with same correlationId", async () => 
 - Connected clients return `true` from `send()`; disconnected clients rely on queue mode (`drop-newest`, `drop-oldest`, `off`) to decide whether to buffer, drop newest, or reject immediately.
 - Queue overflow honors the configured strategy: `drop-newest` rejects the incoming message, `drop-oldest` evicts the oldest buffered entry before accepting the new payload.
 - Invalid payloads always return `false` synchronously (schema validation happens before enqueue).
-- **Reference**: `packages/client/test/runtime/queue.test.ts`.
+- **Reference**: `packages/client/src/queue.test.ts`.
 
 ```typescript
 test("request() rejects with ValidationError on invalid payload", async () => {
@@ -1014,27 +1030,27 @@ test("pending request limit enforced before timeout check", async () => {
 
 - Fires only for structurally valid messages with no registered schema; invalid JSON and validation failures are dropped before reaching the hook.
 - Schema handlers always execute before `onUnhandled()`, and the hook must treat the message as readonly.
-- **Reference**: `packages/client/test/runtime/handlers.test.ts`.
+- **Reference**: `packages/client/src/handlers.test.ts`.
 
 ### Auto-connect behavior
 
 - First `send()` or `request()` triggers connection when `autoConnect: true`; merely registering handlers does not.
 - Connection failures surface through the initiating API: `send()` returns `false`, while `request()` rejects with the original error. When `queue: "off"`, subsequent calls reject with `StateError` until the caller reconnects manually.
 - Auto-connect does not restart automatically after an explicit `close()`.
-- **Reference**: `packages/client/test/runtime/auto-connect.test.ts`.
+- **Reference**: `tests/integration/client/auto-connect.test.ts`.
 
 ### Extended meta & outbound normalization
 
 - Required meta fields must be supplied when calling `send()`/`request()`; optional meta can be omitted. Type errors enforce this at compile time.
 - Outbound normalization preserves user-provided timestamps, auto-injects them when missing, strips reserved keys (`clientId`, `receivedAt`, `correlationId`) from `opts.meta`, and only trusts `opts.correlationId`.
 - Extended metadata travels with requests so replies can be scoped (e.g., `roomId`).
-- **Reference**: `packages/client/test/runtime/normalization.test.ts`, `packages/client/test/runtime/request-response.test.ts`.
+- **Reference**: `packages/client/src/normalize.test.ts`, `packages/client/src/requests.test.ts`.
 
 ### `onError` hook expectations
 
 - Fires for parse failures, validation failures, and queue overflow events with structured context.
 - Does **not** fire for caller-managed rejections (e.g., `request()` throwing `StateError`).
-- **Reference**: `packages/client/test/runtime/error-hook.test.ts`.
+- **Reference**: `tests/integration/client/error-hook.test.ts`.
 
 ## Client Type Inference Tests {#client-type-inference}
 
@@ -1042,7 +1058,7 @@ test("pending request limit enforced before timeout check", async () => {
 - Schemas without payload must produce compile-time errors when accessing `ctx.payload`; overloads enforce supplying payloads only when schemas require them.
 - Extended meta requirements/optionals are enforced by the type system.
 - The generic `@ws-kit/client` export intentionally returns `unknown` message payloads, forcing consumers to narrow manually.
-- **Reference**: `packages/client/test/types/client.test.ts`, ADR-002.
+- **Reference**: `packages/client/src/types.test.ts`, ADR-002.
 
 ## Key Constraints
 

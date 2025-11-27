@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Project References
+    "composite": true,
+    "tsBuildInfoFile": "dist/check.tsbuildinfo",
+
+    // Paths
+    "rootDir": ".",
+    "outDir": "dist",
+
+    // Emit
+    "noEmit": true,
+
+    // Type Checking
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    // Environment
+    "typeRoots": ["./src", "../../node_modules/@types"]
+  },
+  "include": ["src/**/*.test.ts", "test/**/*.ts"],
+  "references": [{ "path": "." }, { "path": "../valibot" }]
+}

@@ -1,9 +1,13 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
+    // Project References
+    "composite": true,
+    "tsBuildInfoFile": "../dist/valibot/.tsbuildinfo",
+
+    // Paths
     "rootDir": "src",
-    "outDir": "../dist/valibot",
-    "tsBuildInfoFile": "../dist/valibot/.tsbuildinfo"
+    "outDir": "../dist/valibot"
   },
   "include": ["src"],
   "references": [{ "path": "../" }, { "path": "../../valibot" }]

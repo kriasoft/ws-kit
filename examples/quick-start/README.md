@@ -13,7 +13,7 @@ A minimal chat room example demonstrating WS-Kit's core features: type-safe mess
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) 1.3.2 or later
+- [Bun](https://bun.sh) 1.3.3 or later
 
 ### Install Dependencies
 

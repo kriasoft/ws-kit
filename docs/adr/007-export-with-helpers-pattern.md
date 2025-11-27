@@ -212,8 +212,8 @@ Update `packages/zod/package.json` and `packages/valibot/package.json`:
 {
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     }
   }
 }

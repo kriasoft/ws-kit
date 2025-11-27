@@ -89,16 +89,14 @@ packages/
 ├── zod/             # Zod validator adapter
 ├── valibot/         # Valibot validator adapter
 ├── bun/             # Bun platform adapter
-├── cloudflare-do/   # Cloudflare DO platform adapter
-├── redis-pubsub/    # Redis pub/sub adapter
+├── cloudflare/      # Cloudflare DO platform adapter
+├── redis/           # Redis pub/sub adapter
 └── client/          # WebSocket client library
 docs/
 ├── specs/           # Technical specifications
-├── adr/             # Architectural Decision Records
-├── blog/            # Blog posts
-└── client-api.md    # Client API documentation
-examples/           # Usage examples
-test/               # Shared test utilities
+└── adr/             # Architectural Decision Records
+tests/               # Cross-package integration & e2e tests
+examples/            # Usage examples
 ```
 
 ## Types of Contributions

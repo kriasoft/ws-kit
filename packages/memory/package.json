@@ -30,13 +30,13 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
-      "default": "./dist/src/index.js"
+      "default": "./dist/index.js"
     }
   },
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],

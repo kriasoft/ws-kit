@@ -1,9 +1,13 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
+    // Project References
+    "composite": true,
+    "tsBuildInfoFile": "../dist/zod/.tsbuildinfo",
+
+    // Paths
     "rootDir": "src",
-    "outDir": "../dist/zod",
-    "tsBuildInfoFile": "../dist/zod/.tsbuildinfo"
+    "outDir": "../dist/zod"
   },
   "include": ["src"],
   "references": [{ "path": "../" }, { "path": "../../zod" }]

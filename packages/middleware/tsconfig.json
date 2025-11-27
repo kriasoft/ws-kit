@@ -1,12 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // Project References
     "composite": true,
-    "rootDir": ".",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+
+    // Paths
+    "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+
+    // Emit
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   },
   "include": ["src"],
-  "exclude": ["**/*.test.ts"],
+  "exclude": ["src/**/*.test.ts"],
   "references": [{ "path": "../core" }, { "path": "../rate-limit" }]
 }

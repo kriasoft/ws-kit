@@ -1,4 +1,4 @@
-# Bun v1.3.2 Features Relevant to WS-Kit
+# Bun v1.3.3 Features Relevant to WS-Kit
 
 ## WebSocket: `ServerWebSocket.subscriptions` Getter
 
@@ -8,7 +8,7 @@ Access deduplicated list of topics a connection is subscribed to:
 
 ```typescript
 router.on(someMessage, (ctx) => {
-  const topics = ctx.ws.subscriptions; // New getter in v1.3.2
+  const topics = ctx.ws.subscriptions; // New getter in v1.3.3
   console.log(`Client subscribed to: ${topics.join(", ")}`);
 });
 ```
@@ -18,6 +18,26 @@ Use cases:
 - Debug topic subscriptions per connection
 - Validate subscription state
 - Cleanup and resource tracking
+
+---
+
+## Testing: Flake Control with `retry`/`repeats`
+
+**Relevance**: Stabilize timing-sensitive e2e/integration suites
+
+Use Bun's built-in flake controls instead of ad-hoc loops:
+
+```typescript
+import { test } from "bun:test";
+
+test("debounced broadcast", runScenario, { retry: 2 }); // pass on first success
+test("idempotent reconnect", runScenario, { repeats: 10 }); // fail on first miss
+```
+
+Use cases:
+
+- Cushion rare timing flakes (network, Worker startup) without hiding real failures
+- Prove determinism of reconnection/subscription flows by running them multiple times
 
 ---
 
@@ -56,6 +76,21 @@ Use cases:
 
 ---
 
+## Environment: Disable Implicit `.env` Loading
+
+**Relevance**: Deterministic CI runs and reproducible examples
+
+Avoid leaking local `.env` into tests or example servers:
+
+```bash
+bun test --no-env-file
+bun run --no-env-file examples/bun/server.ts
+```
+
+Set `env = false` in `bunfig.toml` if you want this as the default.
+
+---
+
 ## Performance: CPU Profiling with `--cpu-prof`
 
 **Relevance**: Performance bottleneck analysis
@@ -89,4 +124,4 @@ Use in CI: Lock Bun version + regenerate lockfile when upgrading.
 
 ## References
 
-- [Bun v1.3.2 Release Notes](https://bun.com/blog/release-notes/bun-v1.3.2)
+- [Bun v1.3.3 Release Notes](https://bun.com/blog/release-notes/bun-v1.3.3)
