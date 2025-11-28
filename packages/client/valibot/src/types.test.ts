@@ -37,13 +37,14 @@ test("Valibot client: Type inference for message schemas", () => {
   expectTypeOf<InferMessage<typeof HelloMessage>>().toMatchTypeOf<{
     type: "HELLO";
     payload: { text: string };
-    meta?: Record<string, unknown>;
+    meta: { timestamp?: number; correlationId?: string };
   }>();
 
-  // ✅ Assert InferMeta extracts meta field correctly
-  expectTypeOf<InferMeta<typeof HelloMessage>>().toEqualTypeOf<
-    Record<string, unknown> | undefined
-  >();
+  // ✅ Assert InferMeta extracts meta field correctly (standard meta fields)
+  expectTypeOf<InferMeta<typeof HelloMessage>>().toEqualTypeOf<{
+    timestamp?: number;
+    correlationId?: string;
+  }>();
 });
 
 test("Valibot client: ValibotWebSocketClient type shape", () => {
@@ -62,14 +63,17 @@ test("Valibot client: ValibotWebSocketClient type shape", () => {
   expectTypeOf(client.on).toBeFunction();
   const unsubscribe = client.on(HelloMessage, (msg) => {
     // ✅ msg should have full type from schema
-    expectTypeOf(msg.type).toEqualTypeOf<"HELLO">();
-    expectTypeOf(msg.payload).toEqualTypeOf<{ text: string }>();
+    expectTypeOf(msg).toMatchTypeOf<{
+      type: "HELLO";
+      payload: { text: string };
+      meta: { timestamp?: number; correlationId?: string };
+    }>();
   });
   expectTypeOf(unsubscribe).toBeFunction();
 
   // ✅ Assert send() with payload
   const sendResult = client.send(HelloMessage, { text: "hello" });
-  expectTypeOf(sendResult).toEqualTypeOf<boolean | never>();
+  expectTypeOf(sendResult).toEqualTypeOf<boolean>();
 
   // ✅ Assert send() without payload (for PONG, even though it has payload)
   // For messages with payload, send requires the payload parameter
@@ -89,14 +93,13 @@ test("Valibot client: Discriminated union narrowing", () => {
     if (msg.type === "PING") {
       expectTypeOf(msg).toMatchTypeOf<{
         type: "PING";
-        payload?: never;
-        meta?: Record<string, unknown>;
+        meta: { timestamp?: number; correlationId?: string };
       }>();
     } else if (msg.type === "PONG") {
       expectTypeOf(msg).toMatchTypeOf<{
         type: "PONG";
         payload: { latency: number };
-        meta?: Record<string, unknown>;
+        meta: { timestamp?: number; correlationId?: string };
       }>();
     }
   };
@@ -108,17 +111,18 @@ test("Valibot client: Complex schema types", () => {
   const UserMessage = message("USER", {
     id: v.number(),
     name: v.string(),
-    email: v.string([v.email()]),
+    email: v.pipe(v.string(), v.email()),
     age: v.optional(v.number()),
     tags: v.array(v.string()),
   });
 
   // ✅ Assert complex payload types are preserved
+  // Note: Valibot infers optional() as `T | undefined`, not `T?`
   expectTypeOf<InferPayload<typeof UserMessage>>().toEqualTypeOf<{
     id: number;
     name: string;
     email: string;
-    age?: number;
+    age: number | undefined;
     tags: string[];
   }>();
 });

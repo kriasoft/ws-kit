@@ -19,6 +19,8 @@
   "include": ["src/**/*.test.ts", "test/**/*.ts"],
   "references": [
     { "path": "." },
+    { "path": "./zod" },
+    { "path": "./valibot" },
     { "path": "../zod" },
     { "path": "../valibot" }
   ]
