@@ -4,16 +4,12 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
 import { createTopics } from "../../src/core/topics.js";
+import { createMockWs } from "../helpers.js";
 
 describe("OptimisticTopics - set()", () => {
   describe("basic replace semantics", () => {
     it("should replace topics: add and remove in one operation", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Initially subscribe to room:1 and room:2
@@ -33,12 +29,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should handle empty replacement (unsubscribe all)", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe to some topics
@@ -55,12 +46,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should handle subscripting to all new topics", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Start empty
@@ -79,16 +65,14 @@ describe("OptimisticTopics - set()", () => {
   describe("idempotency", () => {
     it("should be idempotent (no-op when desired set equals current set)", async () => {
       const adapterCalls = { subscribe: 0, unsubscribe: 0 };
-      const mockWs = {
-        data: { clientId: "test-123" },
+      const mockWs = createMockWs("test-123", {
         subscribe: mock(() => {
           adapterCalls.subscribe++;
         }),
         unsubscribe: mock(() => {
           adapterCalls.unsubscribe++;
         }),
-      };
-
+      });
       const topics = createTopics(mockWs);
 
       // Subscribe to some topics
@@ -128,7 +112,7 @@ describe("OptimisticTopics - set()", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to topics first (setup phase)
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -154,7 +138,7 @@ describe("OptimisticTopics - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Replace with duplicates
       adapterCalls.length = 0;
@@ -181,7 +165,7 @@ describe("OptimisticTopics - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Try to replace with an invalid topic in the middle
       try {
@@ -198,12 +182,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should throw on invalid topic format", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       try {
@@ -232,7 +211,7 @@ describe("OptimisticTopics - set()", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1"]);
@@ -268,7 +247,7 @@ describe("OptimisticTopics - set()", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -291,12 +270,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should apply all changes atomically on success", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe to initial topics
@@ -358,7 +332,7 @@ describe("OptimisticTopics - set()", () => {
         }),
       };
 
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
+      const topics = createTopics(mockWs as any, { maxTopicsPerConnection: 3 });
 
       // Initial state: subscribed to room:1, room:2, room:3 (at capacity)
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -404,12 +378,7 @@ describe("OptimisticTopics - set()", () => {
 
   describe("edge cases", () => {
     it("should handle large topic sets", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Create a large initial set
@@ -433,12 +402,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should handle partial overlap correctly", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe to rooms 1-5
@@ -473,12 +437,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should handle iterator input (not just arrays)", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Start with some topics
@@ -494,12 +453,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should handle topics at the boundary of length limits", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Maximum length topic (128 chars)
@@ -514,12 +468,7 @@ describe("OptimisticTopics - set()", () => {
 
   describe("return values", () => {
     it("should return correct counts for mixed add/remove operations", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Start with some topics
@@ -540,12 +489,7 @@ describe("OptimisticTopics - set()", () => {
     });
 
     it("should return correct total even on no-op", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Start with 5 topics
@@ -574,12 +518,7 @@ describe("OptimisticTopics - set()", () => {
 
   describe("ReadonlySet interface", () => {
     it("should maintain ReadonlySet compatibility after replace", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Replace with some topics
@@ -611,7 +550,7 @@ describe("forEach security", () => {
       unsubscribe: () => {},
     };
 
-    const topics = createTopics(mockWs);
+    const topics = createTopics(mockWs as any);
 
     // Subscribe to some topics
     await topics.subscribeMany(["room:1", "room:2"]);

@@ -7,7 +7,7 @@ import { createTopics } from "../../src/core/topics.js";
 
 describe("OptimisticTopics - Confirmation Semantics", () => {
   describe("subscribe() with confirm option", () => {
-    it("should subscribe with confirm='settled' and wait for settlement", async () => {
+    it("should subscribe with waitFor='settled' and wait for settlement", async () => {
       let adapterCalled = false;
       const mockWs = {
         data: { clientId: "test-123" },
@@ -17,33 +17,33 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe with confirmation
-      await topics.subscribe("room:1", { confirm: "settled" });
+      await topics.subscribe("room:1", { waitFor: "settled" });
 
       // Adapter should have been called before returning
       expect(adapterCalled).toBe(true);
       expect(topics.has("room:1")).toBe(true);
     });
 
-    it("should return quickly when subscribing to already-settled topic with confirm='settled'", async () => {
+    it("should return quickly when subscribing to already-settled topic with waitFor='settled'", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First subscription
       await topics.subscribe("room:1");
       expect(mockWs.subscribe.mock.calls.length).toBe(1);
 
-      // Second subscription with confirm='settled' on already-settled topic
+      // Second subscription with waitFor='settled' on already-settled topic
       // should be fast (no wait needed)
       const startTime = Date.now();
-      await topics.subscribe("room:1", { confirm: "settled" });
+      await topics.subscribe("room:1", { waitFor: "settled" });
       const elapsed = Date.now() - startTime;
 
       // Should be very quick (settled idempotency)
@@ -52,7 +52,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
       expect(mockWs.subscribe.mock.calls.length).toBe(1);
     });
 
-    it("should complete successfully with confirm='settled' and normal adapter", async () => {
+    it("should complete successfully with waitFor='settled' and normal adapter", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {
@@ -61,11 +61,11 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe with confirmation
       const result = await topics.subscribe("room:1", {
-        confirm: "settled",
+        waitFor: "settled",
         timeoutMs: 5000,
       });
 
@@ -75,14 +75,14 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
       expect(mockWs.subscribe).toHaveBeenCalledWith("room:1");
     });
 
-    it("should respect pre-aborted signal with confirm='settled'", async () => {
+    it("should respect pre-aborted signal with waitFor='settled'", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
       const ac = new AbortController();
 
       // Pre-abort the signal
@@ -90,7 +90,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
 
       try {
         await topics.subscribe("room:1", {
-          confirm: "settled",
+          waitFor: "settled",
           signal: ac.signal,
         });
         expect.unreachable("Should have thrown AbortError");
@@ -106,7 +106,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
       expect(topics.has("room:1")).toBe(false);
     });
 
-    it("should throw adapter error when adapter fails with confirm='settled'", async () => {
+    it("should throw adapter error when adapter fails with waitFor='settled'", async () => {
       const adapterError = new Error("Adapter failed");
       const mockWs = {
         data: { clientId: "test-123" },
@@ -116,10 +116,10 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
-        await topics.subscribe("room:1", { confirm: "settled" });
+        await topics.subscribe("room:1", { waitFor: "settled" });
         expect.unreachable("Should have thrown PubSubError");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -129,7 +129,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
   });
 
   describe("unsubscribe() with confirm option", () => {
-    it("should unsubscribe with confirm='settled' and wait for settlement", async () => {
+    it("should unsubscribe with waitFor='settled' and wait for settlement", async () => {
       let adapterCalled = false;
       const mockWs = {
         data: { clientId: "test-123" },
@@ -139,7 +139,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -147,7 +147,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
 
       // Unsubscribe with confirmation
       adapterCalled = false;
-      await topics.unsubscribe("room:1", { confirm: "settled" });
+      await topics.unsubscribe("room:1", { waitFor: "settled" });
 
       expect(adapterCalled).toBe(true);
       expect(topics.has("room:1")).toBe(false);
@@ -160,14 +160,14 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
       expect(topics.has("room:1")).toBe(true);
 
       // Unsubscribe with confirm
-      await topics.unsubscribe("room:1", { confirm: "settled" });
+      await topics.unsubscribe("room:1", { waitFor: "settled" });
 
       expect(topics.has("room:1")).toBe(false);
       expect(mockWs.unsubscribe).toHaveBeenCalledWith("room:1");
@@ -182,11 +182,11 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe many with confirmation
       const result = await topics.subscribeMany(["room:1", "room:2"], {
-        confirm: "settled",
+        waitFor: "settled",
       });
 
       expect(result.added).toBe(2);
@@ -195,17 +195,17 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
       expect(topics.has("room:2")).toBe(true);
     });
 
-    it("should throw validation error with confirm='settled'", async () => {
+    it("should throw validation error with waitFor='settled'", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
-        await topics.subscribeMany(["room:1", ""], { confirm: "settled" });
+        await topics.subscribeMany(["room:1", ""], { waitFor: "settled" });
         expect.unreachable("Should have thrown PubSubError");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -222,14 +222,14 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribeMany(["room:1", "room:2"]);
 
       // Unsubscribe many with confirmation
       const result = await topics.unsubscribeMany(["room:1", "room:2"], {
-        confirm: "settled",
+        waitFor: "settled",
       });
 
       expect(result.removed).toBe(2);
@@ -245,11 +245,11 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Set with confirmation
       const result = await topics.set(["room:1", "room:2"], {
-        confirm: "settled",
+        waitFor: "settled",
       });
 
       expect(result.added).toBe(2);
@@ -268,7 +268,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Initial set
       await topics.set(["room:1", "room:2"]);
@@ -276,7 +276,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
 
       // Replace with confirmation
       const result = await topics.set(["room:1", "room:3"], {
-        confirm: "settled",
+        waitFor: "settled",
       });
 
       expect(result.added).toBe(1);
@@ -295,14 +295,14 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to some topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
       expect(topics.size).toBe(3);
 
       // Clear with confirmation
-      const result = await topics.clear({ confirm: "settled" });
+      const result = await topics.clear({ waitFor: "settled" });
 
       expect(result.removed).toBe(3);
       expect(topics.size).toBe(0);
@@ -317,7 +317,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -328,7 +328,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
           draft.add("room:3");
           draft.delete("room:1");
         },
-        { confirm: "settled" },
+        { waitFor: "settled" },
       );
 
       expect(result.added).toBe(1);
@@ -349,7 +349,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe (will be in-flight)
       const promise = topics.subscribe("room:1");
@@ -369,7 +369,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe
       await topics.subscribe("room:1");
@@ -387,7 +387,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       const ac = new AbortController();
       ac.abort(); // Pre-abort
@@ -415,7 +415,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start multiple in-flight operations
       const sub1 = topics.subscribe("room:1");
@@ -438,7 +438,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe without confirm option (default behavior)
       await topics.subscribe("room:1");
@@ -454,7 +454,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // All these should work as before
       await topics.subscribe("room:1");
@@ -468,18 +468,18 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
   });
 
   describe("Error handling with confirm option", () => {
-    it("should propagate validation errors with confirm='settled'", async () => {
+    it("should propagate validation errors with waitFor='settled'", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {}),
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         // Invalid topic name
-        await topics.subscribe("", { confirm: "settled" });
+        await topics.subscribe("", { waitFor: "settled" });
         expect.unreachable("Should have thrown PubSubError");
       } catch (err) {
         expect(err).toBeInstanceOf(PubSubError);
@@ -487,7 +487,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
       }
     });
 
-    it("should not mutate state on adapter error with confirm='settled'", async () => {
+    it("should not mutate state on adapter error with waitFor='settled'", async () => {
       const mockWs = {
         data: { clientId: "test-123" },
         subscribe: mock(() => {
@@ -496,10 +496,10 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
-        await topics.subscribe("room:1", { confirm: "settled" });
+        await topics.subscribe("room:1", { waitFor: "settled" });
         expect.unreachable("Should have thrown");
       } catch {
         // Expected
@@ -520,13 +520,13 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to multiple topics concurrently with confirmation
       await Promise.all([
-        topics.subscribe("room:1", { confirm: "settled" }),
-        topics.subscribe("room:2", { confirm: "settled" }),
-        topics.subscribe("room:3", { confirm: "settled" }),
+        topics.subscribe("room:1", { waitFor: "settled" }),
+        topics.subscribe("room:2", { waitFor: "settled" }),
+        topics.subscribe("room:3", { waitFor: "settled" }),
       ]);
 
       expect(topics.size).toBe(3);
@@ -547,14 +547,14 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe (will be in-flight)
-      const sub = topics.subscribe("room:1", { confirm: "settled" });
+      const sub = topics.subscribe("room:1", { waitFor: "settled" });
 
       // Try to unsubscribe while subscribe is in-flight
       // This should wait for subscribe to complete first
-      const unsub = topics.unsubscribe("room:1", { confirm: "settled" });
+      const unsub = topics.unsubscribe("room:1", { waitFor: "settled" });
 
       await Promise.all([sub, unsub]);
 

@@ -37,13 +37,11 @@ test("Zod client: Type inference for message schemas", () => {
   expectTypeOf<InferMessage<typeof HelloMessage>>().toMatchTypeOf<{
     type: "HELLO";
     payload: { text: string };
-    meta?: Record<string, unknown>;
+    meta: {};
   }>();
 
-  // ✅ Assert InferMeta extracts meta field correctly
-  expectTypeOf<InferMeta<typeof HelloMessage>>().toEqualTypeOf<
-    Record<string, unknown> | undefined
-  >();
+  // ✅ Assert InferMeta extracts meta field correctly (empty object for default meta)
+  expectTypeOf<InferMeta<typeof HelloMessage>>().toEqualTypeOf<{}>();
 });
 
 test("Zod client: ZodWebSocketClient type shape", () => {
@@ -62,14 +60,17 @@ test("Zod client: ZodWebSocketClient type shape", () => {
   expectTypeOf(client.on).toBeFunction();
   const unsubscribe = client.on(HelloMessage, (msg) => {
     // ✅ msg should have full type from schema
-    expectTypeOf(msg.type).toEqualTypeOf<"HELLO">();
-    expectTypeOf(msg.payload).toEqualTypeOf<{ text: string }>();
+    expectTypeOf(msg).toMatchTypeOf<{
+      type: "HELLO";
+      payload: { text: string };
+      meta: {};
+    }>();
   });
   expectTypeOf(unsubscribe).toBeFunction();
 
   // ✅ Assert send() with payload
   const sendResult = client.send(HelloMessage, { text: "hello" });
-  expectTypeOf(sendResult).toEqualTypeOf<boolean | never>();
+  expectTypeOf(sendResult).toEqualTypeOf<boolean>();
 
   // ✅ Assert send() without payload (for PONG, even though it has payload)
   // For messages with payload, send requires the payload parameter
@@ -89,14 +90,13 @@ test("Zod client: Discriminated union narrowing", () => {
     if (msg.type === "PING") {
       expectTypeOf(msg).toMatchTypeOf<{
         type: "PING";
-        payload?: never;
-        meta?: Record<string, unknown>;
+        meta: {};
       }>();
     } else if (msg.type === "PONG") {
       expectTypeOf(msg).toMatchTypeOf<{
         type: "PONG";
         payload: { latency: number };
-        meta?: Record<string, unknown>;
+        meta: {};
       }>();
     }
   };
@@ -114,11 +114,12 @@ test("Zod client: Complex schema types", () => {
   });
 
   // ✅ Assert complex payload types are preserved
+  // Note: Zod infers optional() as `T | undefined`, not `T?`
   expectTypeOf<InferPayload<typeof UserMessage>>().toEqualTypeOf<{
     id: number;
     name: string;
     email: string;
-    age?: number;
+    age: number | undefined;
     tags: string[];
   }>();
 });

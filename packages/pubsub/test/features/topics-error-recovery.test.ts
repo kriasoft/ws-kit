@@ -16,7 +16,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe fails with adapter error
       try {
@@ -49,7 +49,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First subscribe fails
       try {
@@ -77,7 +77,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Fire subscribe and unsubscribe concurrently
       // subscribe fails, unsubscribe returns void (soft no-op because not subscribed)
@@ -88,8 +88,8 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
       const results = await Promise.allSettled(promises);
 
       // subscribe rejects, unsubscribe succeeds (soft no-op - not subscribed)
-      expect(results[0].status).toBe("rejected");
-      expect(results[1].status).toBe("fulfilled");
+      expect(results[0]!.status).toBe("rejected");
+      expect(results[1]!.status).toBe("fulfilled");
 
       // unsubscribe should NOT be called (soft no-op for non-subscribed topic)
       expect(mockWs.unsubscribe.mock.calls.length).toBe(0);
@@ -110,7 +110,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Try to subscribe to 3 topics, second fails
       let errorThrown = false;
@@ -153,7 +153,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Try to subscribe to multiple topics
       let errorThrown = false;
@@ -178,7 +178,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
@@ -207,7 +207,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -247,7 +247,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -288,7 +288,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start with 3 topics (calls 1, 2, 3)
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -327,7 +327,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start with 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -357,7 +357,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start with 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -396,7 +396,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribeMany(["room:1", "room:2"]);
@@ -435,7 +435,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First subscribe to topics (subscribeCount: 2)
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -471,7 +471,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribeMany(["room:1", "room:2"]);
@@ -494,7 +494,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 }); // Limit is 3
+      const topics = createTopics(mockWs as any, { maxTopicsPerConnection: 3 }); // Limit is 3
 
       // Subscribe to 3 topics (at limit)
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -526,7 +526,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -553,7 +553,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start with 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -587,7 +587,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start with 2 topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -619,11 +619,11 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: 5 }); // limit to 5 topics
+      const topics = createTopics(mockWs as any, { maxTopicsPerConnection: 5 }); // limit to 5 topics
       const validator = () => {
         throw new PubSubError("INVALID_TOPIC", "Invalid");
       };
-      const topicsWithValidator = createTopics(mockWs, {
+      const topicsWithValidator = createTopics(mockWs as any, {
         maxTopicsPerConnection: 5,
         validator: validator,
       });
@@ -646,7 +646,7 @@ describe("OptimisticTopics - Error Recovery & Rollback", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 }); // limit to 2 topics
+      const topics = createTopics(mockWs as any, { maxTopicsPerConnection: 2 }); // limit to 2 topics
 
       // Subscribe to 2 topics (should succeed)
       await topics.subscribeMany(["room:1", "room:2"]);

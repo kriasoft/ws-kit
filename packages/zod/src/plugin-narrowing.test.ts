@@ -16,7 +16,7 @@
  * Run with: `bun tsc --noEmit` or `bun test`
  */
 
-import type { MessageDescriptor, Router } from "@ws-kit/core";
+import type { MessageDescriptor, Plugin, Router } from "@ws-kit/core";
 import { describe, expectTypeOf, it } from "bun:test";
 import { createRouter, message, withZod, z } from "./index.js";
 
@@ -119,38 +119,43 @@ describe("validator plugin narrowing - Zod (types)", () => {
   // Test 8: Multiple plugins merge capabilities
   it("multiple plugins merge capabilities correctly", () => {
     // Mock pubsub plugin for testing capability merging
-    const withMockPubSub: (r: Router<any>) => Router<any, { pubsub: true }> = (
-      r: Router<any>,
-    ) => {
-      const enhanced = Object.assign(r, {
+    // Uses __caps for runtime capability tracking (matches production plugins)
+    interface MockPubSubAPI {
+      __caps: { pubsub: true };
+      publish(
+        topic: string,
+        schema: MessageDescriptor,
+        payload: unknown,
+      ): Promise<{ ok: true; matched: number; capability: "exact" }>;
+      topics: {
+        list(): readonly string[];
+        has(t: string): boolean;
+      };
+    }
+
+    const withMockPubSub: Plugin<any, MockPubSubAPI> = ((r: Router<any>) => {
+      return Object.assign(r, {
+        __caps: { pubsub: true as const },
         publish: async (
-          topic: string,
-          schema: MessageDescriptor,
-          payload: unknown,
+          _topic: string,
+          _schema: MessageDescriptor,
+          _payload: unknown,
         ) => ({ ok: true as const, matched: 0, capability: "exact" as const }),
         topics: {
           list: () => [] as readonly string[],
-          has: (t: string) => false,
+          has: (_t: string) => false,
         },
-      }) as unknown as Router<any, { pubsub: true }>;
-      (enhanced as any).__caps = { pubsub: true };
-      return enhanced;
-    };
+      });
+    }) as Plugin<any, MockPubSubAPI>;
 
     const router = createRouter<{ userId?: string }>()
       .plugin(withZod())
-      .plugin(withMockPubSub as any);
+      .plugin(withMockPubSub);
 
     // Both validation and pubsub methods should be available
-    expectTypeOf<
-      "rpc" extends keyof typeof router ? true : false
-    >().toEqualTypeOf<true>();
-    expectTypeOf<
-      "publish" extends keyof typeof router ? true : false
-    >().toEqualTypeOf<true>();
-    expectTypeOf<
-      "on" extends keyof typeof router ? true : false
-    >().toEqualTypeOf<true>();
+    expectTypeOf(router).toHaveProperty("rpc");
+    expectTypeOf(router).toHaveProperty("publish");
+    expectTypeOf(router).toHaveProperty("on");
   });
 
   // Test 9: withZod() is idempotent

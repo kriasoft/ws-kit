@@ -18,7 +18,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -51,7 +51,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -83,7 +83,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -114,7 +114,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -141,7 +141,7 @@ describe("Plugin Delivery Orchestration", () => {
     it("should handle init failure gracefully", async () => {
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -168,7 +168,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const retryAdapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -189,7 +189,7 @@ describe("Plugin Delivery Orchestration", () => {
     it("should handle adapter without start() method", async () => {
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -214,7 +214,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -262,7 +262,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -289,7 +289,7 @@ describe("Plugin Delivery Orchestration", () => {
     it("should handle stop function returning undefined", async () => {
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},
@@ -317,7 +317,7 @@ describe("Plugin Delivery Orchestration", () => {
 
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe(clientId: string, topic: string) {
           if (!subscriptions.has(topic)) {
@@ -351,7 +351,7 @@ describe("Plugin Delivery Orchestration", () => {
     it("should tolerate send errors and continue loop", async () => {
       const adapter: PubSubAdapter = {
         async publish() {
-          return { ok: true };
+          return { ok: true, capability: "unknown" as const };
         },
         async subscribe() {},
         async unsubscribe() {},

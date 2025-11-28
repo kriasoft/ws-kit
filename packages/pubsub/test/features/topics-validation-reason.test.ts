@@ -14,7 +14,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribe("");
@@ -35,7 +35,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       const longTopic = "a".repeat(129);
 
@@ -61,7 +61,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribe("room@invalid!topic");
@@ -84,7 +84,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Topic that is both too long AND has invalid characters
       const badTopic = "!".repeat(200);
@@ -111,10 +111,10 @@ describe("OptimisticTopics - Validation Reason Field", () => {
       };
 
       const customPattern = /^[A-Z0-9]+$/; // Only uppercase and digits
-      const validator = createTopicValidator(customPattern, 128);
-      const topics = createTopics(mockWs, {
+      const validator = createTopicValidator(customPattern, 128)!;
+      const topics = createTopics(mockWs as any, {
         maxTopicsPerConnection: Infinity,
-        validator: validator,
+        validator,
       });
 
       // Valid according to custom pattern
@@ -143,10 +143,10 @@ describe("OptimisticTopics - Validation Reason Field", () => {
       const validator = createTopicValidator(
         /^[a-z0-9:_./-]{1,128}$/i,
         customMaxLength,
-      );
-      const topics = createTopics(mockWs, {
+      )!;
+      const topics = createTopics(mockWs as any, {
         maxTopicsPerConnection: Infinity,
-        validator: validator,
+        validator,
       });
 
       // Valid: within custom limit
@@ -181,7 +181,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Try to subscribe to multiple topics, with one invalid due to length
       const longTopic = "a".repeat(129);
@@ -207,7 +207,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribeMany(["room:1", "bad@topic!", "room:2"]);
@@ -230,7 +230,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       const longTopic = "a".repeat(129);
 
@@ -267,7 +267,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         }
       };
 
-      const topics = createTopics(mockWs, {
+      const topics = createTopics(mockWs as any, {
         maxTopicsPerConnection: Infinity,
         validator: customValidator,
       });
@@ -306,7 +306,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         }
       };
 
-      const topics = createTopics(mockWs, {
+      const topics = createTopics(mockWs as any, {
         maxTopicsPerConnection: Infinity,
         validator: customValidator,
       });
@@ -334,7 +334,7 @@ describe("OptimisticTopics - Validation Reason Field", () => {
         }
       };
 
-      const topics = createTopics(mockWs, {
+      const topics = createTopics(mockWs as any, {
         maxTopicsPerConnection: Infinity,
         validator: customValidator,
       });
