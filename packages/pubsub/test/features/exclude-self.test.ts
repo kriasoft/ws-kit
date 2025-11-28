@@ -12,10 +12,9 @@
  * Related: ADR-022 (pub/sub API design), ADR-019 (publish API convenience)
  */
 
-import { createRouter } from "@ws-kit/core";
-import { rpc, withZod, z } from "@ws-kit/zod";
-import { withPubSub } from "@ws-kit/pubsub";
 import { memoryPubSub } from "@ws-kit/memory";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createRouter, rpc, withZod, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
 describe("ctx.publish() - excludeSelf support", () => {
