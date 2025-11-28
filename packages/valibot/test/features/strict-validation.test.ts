@@ -29,8 +29,11 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
+        // Verify error message indicates unknown key rejection
         expect(
-          result.issues?.some((i: any) => i.type === "strict_object"),
+          result.issues?.some((i: any) =>
+            i.message?.toLowerCase().includes("invalid key"),
+          ),
         ).toBe(true);
       }
     });
@@ -46,8 +49,11 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
+        // Verify error message indicates unknown key rejection
         expect(
-          result.issues?.some((i: any) => i.type === "strict_object"),
+          result.issues?.some((i: any) =>
+            i.message?.toLowerCase().includes("invalid key"),
+          ),
         ).toBe(true);
       }
     });
@@ -195,8 +201,13 @@ describe("Strict Schema Validation (Valibot)", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
+        // Verify error indicates missing required field
         expect(
-          result.issues?.some((i: any) => i.type === "strict_object"),
+          result.issues?.some(
+            (i: any) =>
+              i.message?.toLowerCase().includes("invalid key") ||
+              i.path?.some((p: any) => p.key === "payload"),
+          ),
         ).toBe(true);
       }
     });

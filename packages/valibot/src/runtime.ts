@@ -16,7 +16,6 @@
  */
 
 import {
-  fallback,
   literal,
   number,
   optional,
@@ -203,9 +202,11 @@ export function message<
     : undefined;
 
   // Build root schema: { type, meta, payload? }
+  // Use optional(schema, default) instead of fallback to preserve validation errors
+  // (fallback swallows ALL errors, optional with default only handles missing)
   const rootShape: Record<string, GenericSchema> = {
     type: literal(type),
-    meta: fallback(metaObj, {}) as GenericSchema,
+    meta: optional(metaObj, {}) as GenericSchema,
     ...(payloadObj ? { payload: payloadObj } : {}),
   };
 

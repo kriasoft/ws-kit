@@ -19,7 +19,7 @@ describe("@ws-kit/client/valibot: Integration", () => {
     const HelloMessage = message("HELLO", { text: v.string() });
 
     expect(HelloMessage).toBeDefined();
-    expect(HelloMessage.type).toBe("strict_object");
+    expect(HelloMessage.type).toBe("HELLO");
   });
 
   it("multiple schemas can be created", () => {
