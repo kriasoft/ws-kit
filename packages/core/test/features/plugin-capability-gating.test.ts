@@ -46,26 +46,27 @@ const mockPubSubPlugin: Plugin<any, { pubsub: true }> = <
 
 // ============================================================================
 // Negative Gating: Base router lacks capability methods
+// These are compile-time only checks - never executed at runtime
 // ============================================================================
 
 /**
  * Test 1A: Base router should NOT have rpc() method
- */
-const baseRouter = createRouter();
-// @ts-expect-error — rpc() should not exist without validation plugin
-baseRouter.rpc({} as any, () => {});
-
-/**
  * Test 1B: Base router should NOT have publish() method
- */
-// @ts-expect-error — publish() should not exist without pubsub plugin
-baseRouter.publish("topic", {} as any, {});
-
-/**
  * Test 1C: Base router should NOT have topics
+ *
+ * Note: Wrapped in function to prevent runtime execution while still
+ * allowing TypeScript to check the types.
  */
-// @ts-expect-error — topics should not exist without pubsub plugin
-baseRouter.topics;
+function typeChecksOnly() {
+  const baseRouter = createRouter();
+  // @ts-expect-error — rpc() should not exist without validation plugin
+  baseRouter.rpc({} as any, () => {});
+  // @ts-expect-error — publish() should not exist without pubsub plugin
+  baseRouter.publish("topic", {} as any, {});
+  // @ts-expect-error — topics should not exist without pubsub plugin
+  void baseRouter.topics;
+}
+void typeChecksOnly; // Reference to avoid unused warning
 
 // ============================================================================
 // Positive Gating: Single plugins enable capabilities

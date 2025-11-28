@@ -242,7 +242,7 @@ describe("Handler-Level Validation in Publishing", () => {
       expect(result.ok).toBe(true);
 
       const publishes = tr.capture.publishes();
-      expect(publishes[0]!.schema?.type).toBe("TYPED");
+      expect(publishes[0]!.type).toBe("TYPED");
       expect((publishes[0]!.payload as any).count).toBe(42);
 
       await tr.close();
@@ -290,7 +290,7 @@ describe("Handler-Level Validation in Publishing", () => {
       });
 
       const publishes = tr.capture.publishes();
-      expect(publishes[0]!.schema?.type).toBe("TEST");
+      expect(publishes[0]!.type).toBe("TEST");
 
       await tr.close();
     });

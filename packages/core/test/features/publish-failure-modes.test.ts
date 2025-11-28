@@ -208,9 +208,11 @@ describe("publish() failure modes", () => {
         { excludeSelf: true },
       );
 
-      // Adapters like memoryPubSub silently ignore excludeSelf
-      // (no sender context available at router level)
-      expect(result.ok).toBe(true);
+      // Memory adapter rejects excludeSelf (no sender context available)
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe("UNSUPPORTED");
+      }
     });
   });
 
