@@ -22,16 +22,16 @@
 import type {
   ConnectionData,
   ProgressOptions as CoreProgressOptions,
+  PublishOptions as CorePublishOptions,
   ReplyOptions as CoreReplyOptions,
   MessageDescriptor,
   MinimalContext,
-  PublishOptions as CorePublishOptions,
   SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
 import {
-  getRouterPluginAPI,
   getKind,
+  getRouterPluginAPI,
   getSchemaOpts,
   typeOf,
   type SchemaOpts,
@@ -170,10 +170,10 @@ function resolveOptions(
  * when the { validation: true } capability is present. We only add the runtime
  * rpc() implementation; router.on remains untouched to avoid collisions.
  */
-type WithZodCapability<TContext extends ConnectionData = ConnectionData> = {
+interface WithZodCapability<TContext extends ConnectionData = ConnectionData> {
   readonly validation: true;
   readonly __caps: { validation: true };
-};
+}
 
 export function withZod<TContext extends ConnectionData = ConnectionData>(
   options?: WithZodOptions,
@@ -255,10 +255,12 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
 
           // Stash schema info for later use in reply/progress/send validation
           const kind = getKind(schemaInfo.schema); // read from DESCRIPTOR symbol
+          const existingWskit = enhCtx.__wskit || {};
           Object.defineProperty(enhCtx, "__wskit", {
             enumerable: false,
             configurable: true,
             value: {
+              ...existingWskit,
               ...(kind !== undefined && { kind }),
               request: schema,
               response: schema.response,

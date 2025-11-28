@@ -272,7 +272,7 @@ describe("RPC Incomplete Handler Warning", () => {
 
   describe("Configuration: warnIncompleteRpc flag", () => {
     // TODO: Enable this test once warnIncompleteRpc option is implemented in withZod()
-    it.skip("should not warn when warnIncompleteRpc is disabled", async () => {
+    it("should not warn when warnIncompleteRpc is disabled", async () => {
       const TestRpc = rpc(
         "NO_WARN_DISABLED",
         { id: z.string() },
@@ -282,9 +282,9 @@ describe("RPC Incomplete Handler Warning", () => {
 
       const tr = test.createTestRouter({
         create: () => {
-          // TODO: Once warnIncompleteRpc is implemented in withZod(), change to:
-          // const router = createRouter().plugin(withZod({ warnIncompleteRpc: false }));
-          const router = createRouter().plugin(withZod());
+          const router = createRouter({ warnIncompleteRpc: false }).plugin(
+            withZod(),
+          );
           router.rpc(TestRpc, () => {
             // Handler doesn't reply - no warning should occur since flag is disabled
           });
