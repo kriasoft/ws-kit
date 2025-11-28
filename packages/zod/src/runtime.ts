@@ -18,7 +18,15 @@ import {
   setSchemaOpts,
   type SchemaOpts,
 } from "@ws-kit/core/internal";
-import { z, type ZodObject, type ZodRawShape, type ZodType } from "zod";
+import {
+  z,
+  type ZodDefault,
+  type ZodLiteral,
+  type ZodObject,
+  type ZodOptional,
+  type ZodRawShape,
+  type ZodType,
+} from "zod";
 import type { BrandedSchema } from "./types.js";
 
 /**
@@ -60,6 +68,35 @@ type InferPayloadShape<P extends ZodRawShape | ZodObject<any> | undefined> =
         : never;
 
 /**
+ * Helper to construct the Zod shape for the message root object.
+ * This ensures z.infer<typeof Message> returns the correct structure.
+ */
+type MessageZodShape<
+  T extends string,
+  P extends ZodRawShape | ZodObject<any> | undefined,
+  M extends ZodRawShape | undefined,
+> = {
+  type: ZodLiteral<T>;
+  meta: ZodDefault<
+    ZodOptional<
+      ZodObject<
+        M extends ZodRawShape
+          ? Omit<typeof STANDARD_META_FIELDS, keyof M> & M
+          : typeof STANDARD_META_FIELDS
+      >
+    >
+  >;
+} & (P extends undefined
+  ? {}
+  : {
+      payload: P extends ZodObject<any>
+        ? P
+        : P extends ZodRawShape
+          ? ZodObject<P>
+          : never;
+    });
+
+/**
  * Creates a strict Zod root message schema.
  * Supports two forms: object-oriented (primary) and positional (compact).
  *
@@ -89,7 +126,7 @@ export function message<
   payload?: P;
   meta?: M;
   options?: SchemaOpts;
-}): ZodObject<any> &
+}): ZodObject<MessageZodShape<T, P, M>> &
   BrandedSchema<
     T,
     P extends undefined ? never : InferPayloadShape<P>,
@@ -113,7 +150,7 @@ export function message<
   type: T,
   payload?: P,
   metaShape?: M,
-): ZodObject<any> &
+): ZodObject<MessageZodShape<T, P, M>> &
   BrandedSchema<
     T,
     P extends undefined ? never : InferPayloadShape<P>,
@@ -137,7 +174,7 @@ export function message<
   specOrType: { type: T; payload?: P; meta?: M; options?: SchemaOpts } | T,
   payload?: P,
   metaShape?: M,
-): ZodObject<any> &
+): ZodObject<MessageZodShape<T, P, M>> &
   BrandedSchema<
     T,
     P extends undefined ? never : InferPayloadShape<P>,
@@ -236,7 +273,7 @@ export function message<
     setSchemaOpts(root, options);
   }
 
-  return root as unknown as ZodObject<any> &
+  return root as unknown as ZodObject<MessageZodShape<T, P, M>> &
     BrandedSchema<
       T,
       P extends undefined ? never : InferPayloadShape<P>,
@@ -304,7 +341,7 @@ export function rpc<
     meta?: ResM;
     options?: SchemaOpts;
   };
-}): ZodObject<any> &
+}): ZodObject<MessageZodShape<ReqT, ReqP, ReqM>> &
   BrandedSchema<
     ReqT,
     ReqP extends undefined ? never : InferPayloadShape<ReqP>,
@@ -313,7 +350,7 @@ export function rpc<
       ? { [K in keyof ReqM]: ReqM[K] extends ZodType<infer U> ? U : never }
       : {}
   > & {
-    readonly response: ZodObject<any> &
+    readonly response: ZodObject<MessageZodShape<ResT, ResP, ResM>> &
       BrandedSchema<
         ResT,
         ResP extends undefined ? never : InferPayloadShape<ResP>,
@@ -347,14 +384,14 @@ export function rpc<
   requestPayload: ReqP,
   responseType: ResT,
   responsePayload: ResP,
-): ZodObject<any> &
+): ZodObject<MessageZodShape<ReqT, ReqP, undefined>> &
   BrandedSchema<
     ReqT,
     ReqP extends undefined ? never : InferPayloadShape<ReqP>,
     ResP extends undefined ? never : InferPayloadShape<ResP>,
     {}
   > & {
-    readonly response: ZodObject<any> &
+    readonly response: ZodObject<MessageZodShape<ResT, ResP, undefined>> &
       BrandedSchema<
         ResT,
         ResP extends undefined ? never : InferPayloadShape<ResP>,
@@ -401,14 +438,14 @@ export function rpc<
   requestPayload?: ReqP,
   responseType?: ResT,
   responsePayload?: ResP,
-): ZodObject<any> &
+): ZodObject<MessageZodShape<ReqT, ReqP, any>> &
   BrandedSchema<
     ReqT,
     ReqP extends undefined ? never : InferPayloadShape<ReqP>,
     ResP extends undefined ? never : InferPayloadShape<ResP>,
     {}
   > & {
-    readonly response: ZodObject<any> &
+    readonly response: ZodObject<MessageZodShape<ResT, ResP, any>> &
       BrandedSchema<
         ResT,
         ResP extends undefined ? never : InferPayloadShape<ResP>,
@@ -477,5 +514,33 @@ export function rpc<
     },
   });
 
-  return requestRoot as any;
+  return requestRoot as unknown as ZodObject<MessageZodShape<ReqT, ReqP, any>> &
+    BrandedSchema<
+      ReqT,
+      ReqP extends undefined ? never : InferPayloadShape<ReqP>,
+      ResP extends undefined ? never : InferPayloadShape<ResP>,
+      {}
+    > & {
+      readonly response: ZodObject<MessageZodShape<ResT, ResP, any>> &
+        BrandedSchema<
+          ResT,
+          ResP extends undefined ? never : InferPayloadShape<ResP>,
+          never,
+          {}
+        > & {
+          readonly messageType: ResT;
+          readonly __zod_payload: ResP;
+          readonly __descriptor: {
+            readonly messageType: ResT;
+            readonly kind: "event";
+          };
+          readonly __runtime: "ws-kit-schema";
+        };
+      readonly __zod_payload: ReqP;
+      readonly __descriptor: {
+        readonly messageType: ReqT;
+        readonly kind: "rpc";
+      };
+      readonly __runtime: "ws-kit-schema";
+    };
 }
