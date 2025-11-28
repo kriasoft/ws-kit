@@ -20,6 +20,7 @@
 import type { ConnectionData, MinimalContext } from "../context/base-context";
 import { createCoreErrorEnhancer } from "../context/error-handling";
 import type { EventContext } from "../context/event-context";
+import type { PubSubContext } from "../context/pubsub-context";
 import type { RpcContext } from "../context/rpc-context";
 import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
@@ -255,7 +256,7 @@ export type RouterWithExtensions<
 > = Router<TContext, TExtensions> &
   Omit<TExtensions, "__caps" | "validation"> &
   (HasCapability<TExtensions, "validation"> extends true
-    ? ValidationAPI<TContext>
+    ? ValidationAPI<TContext, TExtensions>
     : {}) &
   (HasCapability<TExtensions, "pubsub"> extends true
     ? PubSubAPI<TContext>
@@ -264,23 +265,33 @@ export type RouterWithExtensions<
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
  * It overloads `on()` and `rpc()` with type-safe handlers.
- * TContext is kept for type alignment with other API interfaces.
+ *
+ * TContext is the per-connection data type.
+ * TExtensions captures installed plugin capabilities - when pubsub is present,
+ * handlers receive PubSubContext methods (ctx.publish, ctx.topics).
  */
 export interface ValidationAPI<
   TContext extends ConnectionData = ConnectionData,
+  TExtensions extends object = {},
 > {
   on<S extends AnySchema>(
     schema: S,
     handler: (
-      ctx: EventContext<TContext, InferPayload<S>> & { type: InferType<S> },
+      ctx: EventContext<TContext, InferPayload<S>> &
+        (HasCapability<TExtensions, "pubsub"> extends true
+          ? PubSubContext
+          : {}) & { type: InferType<S> },
     ) => void,
   ): this;
   rpc<S extends AnySchema>(
     schema: S,
     handler: (
-      ctx: RpcContext<TContext, InferPayload<S>, InferResponse<S>> & {
-        type: InferType<S>;
-      },
+      ctx: RpcContext<TContext, InferPayload<S>, InferResponse<S>> &
+        (HasCapability<TExtensions, "pubsub"> extends true
+          ? PubSubContext
+          : {}) & {
+          type: InferType<S>;
+        },
     ) => void,
   ): this;
 }
@@ -1056,16 +1067,16 @@ export class RouterImpl<
     // Capture clientId before cleaning up
     const clientId = this.getClientId(ws);
 
-    // Explicitly clean up per-connection data and client ID.
-    // While WeakMap entries auto-clean when ws is GC'd, explicit deletion ensures
-    // timely resource release and allows plugins to react via lifecycle hooks.
+    // Notify lifecycle handlers FIRST (plugins, heartbeat monitor, etc.)
+    // so they can access clientId via getClientId(ws) for cleanup tasks
+    // (pub/sub subscriptions, timers, etc.)
+    await this.lifecycle.handleClose(ws, code, reason);
+
+    // Clean up per-connection data and client ID AFTER lifecycle handlers.
+    // While WeakMap entries auto-clean when ws is GC'd, explicit deletion
+    // ensures timely resource release.
     this.connData.delete(ws);
     this.wsToClientId.delete(ws);
-
-    // Notify lifecycle handlers (plugins, heartbeat monitor, etc.)
-    // for per-connection cleanup. This allows plugins to perform cleanup
-    // (pub/sub subscriptions, timers, etc.) on connection departure.
-    await this.lifecycle.handleClose(ws, code, reason);
 
     // Notify observers
     if (clientId) {

@@ -3,84 +3,37 @@
 
 /**
  * Runtime tests for capability gating.
- * Verify that ctx.publish() and ctx.topics exist only when withPubSub() is plugged.
- *
- * Tests subscribe/unsubscribe lifecycle and verify that clientId is passed to adapter.
+ * Verify that ctx.publish() and ctx.topics exist when withPubSub() is plugged,
+ * and that clientId is correctly propagated to the adapter.
  */
 
-import { createRouter, getRouteIndex } from "@ws-kit/core";
+import { createRouter, type ServerWebSocket } from "@ws-kit/core";
 import { withPubSub } from "@ws-kit/pubsub";
 import { message, withZod } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 
+/**
+ * Create a mock WebSocket for testing message dispatch.
+ */
+function createMockWebSocket(clientId = "test-client-123"): ServerWebSocket {
+  return {
+    send: () => {},
+    close: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+    data: { clientId },
+    readyState: 1,
+  } as unknown as ServerWebSocket;
+}
+
 describe("Capability Gating (Runtime)", () => {
-  it("should allow pubsub methods when withPubSub is installed", async () => {
+  it("should provide ctx.publish and ctx.topics when withPubSub is installed", async () => {
     const adapter = {
       async publish() {
-        return { ok: true };
+        return { ok: true as const, capability: "exact" as const };
       },
-      async subscribe(clientId: string, topic: string) {
-        // Track the call for verification
-        adapter.subscribedClients ??= [];
-        adapter.subscribedClients.push({ clientId, topic });
-      },
-      async unsubscribe() {},
-      async *getSubscribers() {},
-      subscribedClients: [] as { clientId: string; topic: string }[],
-    };
-
-    const router = createRouter()
-      .plugin(withZod())
-      .plugin(withPubSub({ adapter }));
-
-    const Message = message("MSG", { text: z.string() });
-
-    let contextReceived: any = null;
-
-    router.on(Message, async (ctx) => {
-      contextReceived = ctx;
-      // These should exist:
-      expect(typeof ctx.publish).toBe("function");
-      expect(typeof ctx.topics).toBe("object");
-      expect(typeof ctx.topics.subscribe).toBe("function");
-      expect(typeof ctx.topics.unsubscribe).toBe("function");
-      expect(typeof ctx.topics.has).toBe("function");
-
-      // clientId should be a string
-      expect(typeof ctx.clientId).toBe("string");
-      expect(ctx.clientId.length).toBeGreaterThan(0);
-
-      // Test subscribe call
-      await ctx.topics.subscribe("test-topic");
-    });
-
-    // Simulate a message
-    const testRouter = createRouter()
-      .plugin(withZod())
-      .plugin(withPubSub({ adapter }));
-
-    const routeIndex = getRouteIndex(router);
-    const msgRoute = routeIndex.get("MSG");
-    if (msgRoute?.handler) {
-      testRouter.on(Message, msgRoute.handler);
-    }
-
-    // Since we can't directly test the router without platform adapter setup,
-    // we verify that the adapter is properly wired via the plugin structure
-    expect(true).toBe(true);
-  });
-
-  it("should use clientId when calling adapter.subscribe", async () => {
-    const subscribeCalls: [string, string][] = [];
-
-    const adapter = {
-      async publish() {
-        return { ok: true };
-      },
-      async subscribe(clientId: string, topic: string) {
-        subscribeCalls.push([clientId, topic]);
-      },
+      async subscribe() {},
       async unsubscribe() {},
       async *getSubscribers() {},
     };
@@ -91,28 +44,88 @@ describe("Capability Gating (Runtime)", () => {
 
     const Message = message("MSG", { text: z.string() });
 
-    router.on(Message, async (ctx) => {
-      // When ctx.topics.subscribe is called, it should pass ctx.clientId to adapter
-      await ctx.topics.subscribe("room:123");
+    let contextChecks = {
+      hasPublish: false,
+      hasTopics: false,
+      hasClientId: false,
+      clientIdValue: "",
+    };
+
+    router.on(Message, (ctx) => {
+      contextChecks = {
+        hasPublish: typeof ctx.publish === "function",
+        hasTopics:
+          typeof ctx.topics === "object" &&
+          typeof ctx.topics.subscribe === "function",
+        hasClientId: typeof ctx.clientId === "string",
+        clientIdValue: ctx.clientId,
+      };
     });
 
-    // The plugin structure is set up correctly
-    // Actual message routing requires platform adapter setup
-    expect(getRouteIndex(router).get("MSG")).toBeDefined();
+    const ws = createMockWebSocket("client-abc");
+    await router.websocket.open(ws);
+    await router.websocket.message(
+      ws,
+      JSON.stringify({ type: "MSG", payload: { text: "hello" } }),
+    );
+
+    expect(contextChecks.hasPublish).toBe(true);
+    expect(contextChecks.hasTopics).toBe(true);
+    expect(contextChecks.hasClientId).toBe(true);
+    expect(contextChecks.clientIdValue.length).toBeGreaterThan(0);
   });
 
-  it("should clean up subscriptions on connection close", async () => {
-    const replaceCalls: [string, string[]][] = [];
+  it("should pass clientId to adapter.subscribe", async () => {
+    const subscribeCalls: { clientId: string; topic: string }[] = [];
 
     const adapter = {
       async publish() {
-        return { ok: true };
+        return { ok: true as const, capability: "exact" as const };
+      },
+      async subscribe(clientId: string, topic: string) {
+        subscribeCalls.push({ clientId, topic });
+      },
+      async unsubscribe() {},
+      async *getSubscribers() {},
+    };
+
+    const router = createRouter()
+      .plugin(withZod())
+      .plugin(withPubSub({ adapter }));
+
+    const Message = message("SUB_MSG", { topic: z.string() });
+
+    router.on(Message, async (ctx) => {
+      await ctx.topics.subscribe(ctx.payload.topic);
+    });
+
+    const ws = createMockWebSocket("user-456");
+    await router.websocket.open(ws);
+    await router.websocket.message(
+      ws,
+      JSON.stringify({ type: "SUB_MSG", payload: { topic: "room:123" } }),
+    );
+
+    expect(subscribeCalls).toHaveLength(1);
+    const call = subscribeCalls[0]!;
+    expect(call.topic).toBe("room:123");
+    // clientId should be a non-empty string (exact value depends on router internals)
+    expect(call.clientId.length).toBeGreaterThan(0);
+  });
+
+  it("should call adapter.replace with empty array on connection close", async () => {
+    const replaceCalls: { clientId: string; topics: string[] }[] = [];
+
+    const adapter = {
+      async publish() {
+        return { ok: true as const, capability: "exact" as const };
       },
       async subscribe() {},
       async unsubscribe() {},
       async *getSubscribers() {},
       async replace(clientId: string, topics: string[]) {
-        replaceCalls.push([clientId, topics]);
+        replaceCalls.push({ clientId, topics });
+        return { added: 0, removed: 0, total: 0 };
       },
     };
 
@@ -120,81 +133,56 @@ describe("Capability Gating (Runtime)", () => {
       .plugin(withZod())
       .plugin(withPubSub({ adapter }));
 
-    expect(getRouteIndex(router)).toBeDefined();
+    const ws = createMockWebSocket("cleanup-test");
+    await router.websocket.open(ws);
+    await router.websocket.close(ws);
+
+    expect(replaceCalls).toHaveLength(1);
+    expect(replaceCalls[0]!.topics).toEqual([]);
+    expect(replaceCalls[0]!.clientId.length).toBeGreaterThan(0);
   });
 
-  it("should expose PubSubContext type on handler context", async () => {
+  it("should provide consistent clientId across multiple messages", async () => {
+    const adapter = {
+      async publish() {
+        return { ok: true as const, capability: "exact" as const };
+      },
+      async subscribe() {},
+      async unsubscribe() {},
+      async *getSubscribers() {},
+    };
+
     const router = createRouter()
       .plugin(withZod())
-      .plugin(
-        withPubSub({
-          async publish() {
-            return { ok: true };
-          },
-          async subscribe() {},
-          async unsubscribe() {},
-          async *getSubscribers() {},
-        }),
-      );
+      .plugin(withPubSub({ adapter }));
 
-    const Message = message("TEST", { data: z.string() });
-
-    let contextTypes: {
-      hasPublish: boolean;
-      hasTopics: boolean;
-      hasClientId: boolean;
-    } | null = null;
+    const Message = message("TRACK", { seq: z.number() });
+    const clientIds: string[] = [];
 
     router.on(Message, (ctx) => {
-      contextTypes = {
-        hasPublish: typeof ctx.publish === "function",
-        hasTopics: typeof ctx.topics === "object" && ctx.topics !== null,
-        hasClientId: typeof ctx.clientId === "string",
-      };
+      clientIds.push(ctx.clientId);
     });
 
-    expect(contextTypes).toBe(null); // Not called yet without platform
+    const ws = createMockWebSocket("stable-client");
+    await router.websocket.open(ws);
 
-    // Verify route is registered
-    expect(getRouteIndex(router).get("TEST")).toBeDefined();
-  });
+    // Send multiple messages on same connection
+    await router.websocket.message(
+      ws,
+      JSON.stringify({ type: "TRACK", payload: { seq: 1 } }),
+    );
+    await router.websocket.message(
+      ws,
+      JSON.stringify({ type: "TRACK", payload: { seq: 2 } }),
+    );
+    await router.websocket.message(
+      ws,
+      JSON.stringify({ type: "TRACK", payload: { seq: 3 } }),
+    );
 
-  describe("clientId stability", () => {
-    it("should assign stable clientId at connection accept time", async () => {
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(
-          withPubSub({
-            async publish() {
-              return { ok: true };
-            },
-            async subscribe() {},
-            async unsubscribe() {},
-            async *getSubscribers() {},
-          }),
-        );
-
-      // clientId assignment happens in handleOpen/handleMessage
-      // Verify the router has the internal methods to manage it
-      expect((router as any).getClientId).toBeDefined();
-    });
-
-    it("should track clientId ↔ ws mapping internally", async () => {
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(
-          withPubSub({
-            async publish() {
-              return { ok: true };
-            },
-            async subscribe() {},
-            async unsubscribe() {},
-            async *getSubscribers() {},
-          }),
-        );
-
-      // Internal wsToClientId WeakMap exists
-      expect(true).toBe(true);
-    });
+    expect(clientIds).toHaveLength(3);
+    // All messages should have the same clientId
+    expect(clientIds[0]).toBe(clientIds[1]);
+    expect(clientIds[1]).toBe(clientIds[2]);
   });
 });

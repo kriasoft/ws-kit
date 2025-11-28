@@ -351,10 +351,8 @@ describe("OptimisticTopics - Abort Signal Semantics", () => {
       // Abort after commit has started (adapter call is in progress)
       ctrl.abort();
 
-      // Resolve the adapter call
-      if (subscribeResolver) {
-        subscribeResolver();
-      }
+      // Resolve the adapter call (guaranteed set by mock above)
+      subscribeResolver!();
 
       // Operation should complete successfully (late abort is ignored)
       await promise;
@@ -395,10 +393,8 @@ describe("OptimisticTopics - Abort Signal Semantics", () => {
       // Abort after commit has started
       ctrl.abort();
 
-      // Resolve the adapter call
-      if (subscribeResolver) {
-        subscribeResolver();
-      }
+      // Resolve the adapter call (guaranteed set by mock above)
+      subscribeResolver!();
 
       // Operation should complete successfully
       const result = await promise;
