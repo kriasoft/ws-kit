@@ -1,18 +1,14 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { createTopics } from "../../src/core/topics.js";
+import { createMockWs } from "../helpers.js";
 
 describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
   describe("Iteration happy path", () => {
     it("should support for..of iteration in subscription order", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe in specific order
@@ -31,12 +27,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should support spread operator", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:a");
@@ -50,12 +41,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should support Array.from()", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:x");
@@ -67,12 +53,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should support new Set() constructor", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:a");
@@ -89,12 +70,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("Method parity", () => {
     it("should have values() equal to [...topics]", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
@@ -108,12 +84,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should have keys() equal to values()", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("x");
@@ -127,12 +98,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should have entries() yield [value, value] pairs", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
@@ -149,12 +115,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("No live leakage (snapshot semantics)", () => {
     it("should not include topics added during iteration", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
@@ -182,12 +143,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should still yield topics removed after iteration starts", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
@@ -220,12 +176,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("forEach should iterate over snapshot, ignoring mid-loop mutations", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
@@ -252,12 +203,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should not leak live Set reference", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
@@ -277,12 +223,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("forEach spec compliance", () => {
     it("should pass (value, value, set) to callback", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
@@ -305,12 +246,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should respect thisArg in forEach", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
       await topics.subscribe("x");
 
@@ -324,12 +260,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should preserve insertion order in forEach", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe in specific order
@@ -348,12 +279,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("Order guarantee (insertion order)", () => {
     it("should preserve insertion order across multiple subscriptions", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       const topics_to_add = ["room:lobby", "room:chat", "room:notifications"];
@@ -367,12 +293,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should reflect re-add position when unsubscribe and resubscribe", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe: a, b, c
@@ -394,12 +315,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should maintain order with keys() and entries()", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("1st");
@@ -416,12 +332,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("Empty set edge cases", () => {
     it("should handle iteration on empty topics", () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       const arr = [...topics];
@@ -435,12 +346,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should handle values(), keys(), entries() on empty topics", () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       expect([...topics.values()]).toEqual([]);
@@ -451,12 +357,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("Snapshot independence", () => {
     it("should allow independent iteration of multiple snapshots", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("a");
@@ -480,12 +381,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
     });
 
     it("should support concurrent iteration patterns", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("room:1");
@@ -509,12 +405,7 @@ describe("OptimisticTopics - ReadonlySet Iterators (Snapshot-Based)", () => {
 
   describe("Symbol.iterator compliance", () => {
     it("should be iterable via Symbol.iterator", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       await topics.subscribe("a");

@@ -4,16 +4,12 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
 import { createTopics } from "../../src/core/topics.js";
+import { createMockWs } from "../helpers.js";
 
 describe("OptimisticTopics - localStatus() Method", () => {
   describe("Four-State Semantics", () => {
     it("should return 'absent' for unsubscribed topics", () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       expect(topics.localStatus("room:1")).toBe("absent");
@@ -21,12 +17,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("should return 'settled' after successful subscribe", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe
@@ -50,7 +41,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe (will be pending)
       const subPromise = topics.subscribe("room:1");
@@ -81,7 +72,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -118,7 +109,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe (pending)
       const subPromise = topics.subscribe("room:1");
@@ -150,7 +141,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -187,7 +178,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Initial: absent
       expect(topics.localStatus("room:1")).toBe("absent");
@@ -220,7 +211,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -256,7 +247,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start first subscribe
       const sub1 = topics.subscribe("room:1");
@@ -300,7 +291,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe
       const subPromise = topics.subscribe("room:1");
@@ -355,7 +346,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribes to different topics (parallel, no serialization between topics)
       const sub1 = topics.subscribe("room:1");
@@ -397,7 +388,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribe("room:1");
@@ -414,12 +405,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
 
   describe("Batch Operations", () => {
     it("should show settled for all topics in subscribeMany after completion", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // subscribeMany completes (batch operation)
@@ -434,12 +420,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("should show absent for all topics in unsubscribeMany after completion", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe first
@@ -461,12 +442,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("should show final state after set() operation", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Initial subscription
@@ -484,12 +460,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("should handle update() and show final status", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Initial subscriptions
@@ -526,7 +497,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe
       const subPromise = topics.subscribe("room:1");
@@ -548,12 +519,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("should skip settle if already settled", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe (synchronous adapter)
@@ -573,12 +539,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
 
   describe("Edge Cases", () => {
     it("should handle status() on already-cleared topics", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe, then clear
@@ -590,12 +551,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("should handle localStatus() on non-existent topics", () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Multiple calls should always return absent
@@ -605,12 +561,7 @@ describe("OptimisticTopics - localStatus() Method", () => {
     });
 
     it("localStatus() should be consistent with iteration", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs);
 
       // Subscribe to multiple topics

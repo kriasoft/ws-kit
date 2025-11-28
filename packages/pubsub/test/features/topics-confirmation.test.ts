@@ -17,7 +17,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe with confirmation
       await topics.subscribe("room:1", { confirm: "settled" });
@@ -34,7 +34,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First subscription
       await topics.subscribe("room:1");
@@ -61,7 +61,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe with confirmation
       const result = await topics.subscribe("room:1", {
@@ -82,7 +82,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
       const ac = new AbortController();
 
       // Pre-abort the signal
@@ -116,7 +116,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribe("room:1", { confirm: "settled" });
@@ -139,7 +139,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -160,7 +160,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribe("room:1");
@@ -182,7 +182,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe many with confirmation
       const result = await topics.subscribeMany(["room:1", "room:2"], {
@@ -202,7 +202,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribeMany(["room:1", ""], { confirm: "settled" });
@@ -222,7 +222,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -245,7 +245,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Set with confirmation
       const result = await topics.set(["room:1", "room:2"], {
@@ -268,7 +268,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Initial set
       await topics.set(["room:1", "room:2"]);
@@ -295,7 +295,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to some topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -317,7 +317,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to initial topics
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -349,7 +349,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe (will be in-flight)
       const promise = topics.subscribe("room:1");
@@ -369,7 +369,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe
       await topics.subscribe("room:1");
@@ -387,7 +387,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       const ac = new AbortController();
       ac.abort(); // Pre-abort
@@ -415,7 +415,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start multiple in-flight operations
       const sub1 = topics.subscribe("room:1");
@@ -438,7 +438,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe without confirm option (default behavior)
       await topics.subscribe("room:1");
@@ -454,7 +454,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // All these should work as before
       await topics.subscribe("room:1");
@@ -475,7 +475,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         // Invalid topic name
@@ -496,7 +496,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       try {
         await topics.subscribe("room:1", { confirm: "settled" });
@@ -520,7 +520,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to multiple topics concurrently with confirmation
       await Promise.all([
@@ -547,7 +547,7 @@ describe("OptimisticTopics - Confirmation Semantics", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Start subscribe (will be in-flight)
       const sub = topics.subscribe("room:1", { confirm: "settled" });

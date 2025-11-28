@@ -4,16 +4,12 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PubSubError } from "../../src/core/error.js";
 import { createTopics } from "../../src/core/topics.js";
+import { createMockWs } from "../helpers.js";
 
 describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
   describe("subscribe() with limit enforcement", () => {
     it("should allow subscriptions up to the limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Should succeed for topics within limit
@@ -28,12 +24,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should throw TOPIC_LIMIT_EXCEEDED when limit is reached", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 });
 
       // Subscribe to 2 topics (at limit)
@@ -60,12 +51,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should allow resubscribe to existing topic even at limit (idempotent)", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 });
 
       await topics.subscribe("topic:1");
@@ -78,12 +64,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should work with limit = 1", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 1 });
 
       await topics.subscribe("topic:1");
@@ -100,12 +81,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
 
   describe("subscribeMany() with limit enforcement", () => {
     it("should allow batch subscriptions up to the limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 5 });
 
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -116,12 +92,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should throw TOPIC_LIMIT_EXCEEDED in batch when limit exceeded", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // First batch: subscribe to 2 topics
@@ -150,12 +121,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should succeed when batch fits remaining space", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 5 });
 
       // First batch: subscribe to 2 topics
@@ -171,12 +137,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should deduplicate input before checking limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe with duplicates in the input
@@ -195,12 +156,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should account for already-subscribed topics when calculating new count", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe to 2 topics first
@@ -219,12 +175,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
 
   describe("set() with limit enforcement", () => {
     it("should allow replace when resulting size within limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 4 });
 
       // Subscribe to 3 topics
@@ -239,12 +190,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should throw TOPIC_LIMIT_EXCEEDED when replace would exceed limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe to 2 topics
@@ -280,22 +226,21 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should succeed when replace removes excess to stay within limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Subscribe to 5 topics (pretend limit was higher initially)
       // Start with a fresh instance with higher limit, then reduce
-      const topicsLarge = createTopics(mockWs, { maxTopicsPerConnection: 10 });
+      const topicsLarge = createTopics(mockWs, {
+        maxTopicsPerConnection: 10,
+      });
       await topicsLarge.subscribeMany(["a", "b", "c", "d", "e"]);
       expect(topicsLarge.size).toBe(5);
 
       // Now create new instance with limit 3
-      const topicsLimited = createTopics(mockWs, { maxTopicsPerConnection: 3 });
+      const topicsLimited = createTopics(mockWs, {
+        maxTopicsPerConnection: 3,
+      });
       // Manually set up state for testing (simulating old subscriptions)
       // Instead, let's test a valid scenario:
 
@@ -311,12 +256,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should handle replace with exact limit boundary", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Start with 2 topics
@@ -331,12 +271,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should fail when replace would put us 1 over limit", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 3 });
 
       // Start with 2 topics
@@ -357,12 +292,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
 
   describe("limit = Infinity (disabled mode)", () => {
     it("should allow unlimited subscriptions when limit is Infinity", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       // Default: Infinity (no limit)
       const topics = createTopics(mockWs);
 
@@ -375,13 +305,10 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should allow unlimited subscribeMany when limit is Infinity", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: Infinity });
+      const mockWs = createMockWs();
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+      });
 
       const topicArray = Array.from({ length: 500 }, (_, i) => `topic:${i}`);
       const result = await topics.subscribeMany(topicArray);
@@ -391,13 +318,10 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should allow unlimited replace when limit is Infinity", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: Infinity });
+      const mockWs = createMockWs();
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: Infinity,
+      });
 
       const topicArray = Array.from({ length: 1000 }, (_, i) => `topic:${i}`);
       const result = await topics.set(topicArray);
@@ -410,14 +334,11 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
   describe("error conditions and edge cases", () => {
     it("should throw TOPIC_LIMIT_EXCEEDED before calling adapter", async () => {
       const adapterCalls: string[] = [];
-      const mockWs = {
-        data: { clientId: "test-123" },
+      const mockWs = createMockWs("test-123", {
         subscribe: mock((topic: string) => {
           adapterCalls.push(topic);
         }),
-        unsubscribe: mock(() => {}),
-      };
-
+      });
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 2 });
 
       adapterCalls.length = 0;
@@ -443,12 +364,7 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should enforce limit across subscribe() and subscribeMany() calls", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
+      const mockWs = createMockWs();
       const topics = createTopics(mockWs, { maxTopicsPerConnection: 4 });
 
       // Use subscribe() to add 2 topics
@@ -477,13 +393,10 @@ describe("OptimisticTopics - maxTopicsPerConnection limit", () => {
     });
 
     it("should include helpful debug info in error data", async () => {
-      const mockWs = {
-        data: { clientId: "test-123" },
-        subscribe: mock(() => {}),
-        unsubscribe: mock(() => {}),
-      };
-
-      const topics = createTopics(mockWs, { maxTopicsPerConnection: 10 });
+      const mockWs = createMockWs();
+      const topics = createTopics(mockWs, {
+        maxTopicsPerConnection: 10,
+      });
 
       // Subscribe to 7 topics
       await topics.subscribeMany(Array.from({ length: 7 }, (_, i) => `t:${i}`));

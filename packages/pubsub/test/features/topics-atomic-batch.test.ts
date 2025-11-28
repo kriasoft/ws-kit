@@ -21,7 +21,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Try to subscribe to 3 topics; adapter will fail on the 3rd
       try {
@@ -48,7 +48,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       const result = await topics.subscribeMany(["room:1", "room:2", "room:3"]);
 
@@ -68,7 +68,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First batch
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -103,7 +103,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // First, subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -133,7 +133,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock((topic: string) => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe first
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -162,7 +162,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock((topic: string) => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to room:1 and room:2 only
       await topics.subscribeMany(["room:1", "room:2"]);
@@ -194,7 +194,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         }),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -223,7 +223,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock((topic: string) => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Subscribe to 3 topics
       await topics.subscribeMany(["room:1", "room:2", "room:3"]);
@@ -249,7 +249,7 @@ describe("OptimisticTopics - Atomic Batch Operations", () => {
         unsubscribe: mock(() => {}),
       };
 
-      const topics = createTopics(mockWs);
+      const topics = createTopics(mockWs as any);
 
       // Try to subscribe with invalid topic in the middle
       try {
