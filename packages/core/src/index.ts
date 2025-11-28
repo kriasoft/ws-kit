@@ -25,6 +25,7 @@ export type {
   RouteBuilder,
   Router,
   RouterCore,
+  RouterWithExtensions,
 } from "./core/router";
 export type { CreateRouterOptions } from "./core/types";
 
@@ -54,6 +55,7 @@ export type { EventHandler, Middleware } from "./core/types";
 export type { Plugin } from "./plugin/types";
 
 // Error handling (canonical: new unified implementation in ./error.ts)
+export { ERROR_CODE_META, isStandardErrorCode, WsKitError } from "./error";
 export type {
   ErrorCode,
   ErrorCodeMetadata,
@@ -61,7 +63,6 @@ export type {
   ErrorPayload,
   ExtErrorCode,
 } from "./error";
-export { WsKitError, ERROR_CODE_META, isStandardErrorCode } from "./error";
 
 // Capability contracts (core only; validators add validation, adapters add transport)
 export type {

@@ -17,7 +17,7 @@
  */
 
 import { createRouter } from "../../src/core/createRouter";
-import type { Router } from "../../src/core/router";
+import type { Router, RouterWithExtensions } from "../../src/core/router";
 import type { Plugin } from "../../src/plugin/types";
 
 // Mock plugins for type testing
@@ -29,7 +29,7 @@ const mockValidationPlugin: Plugin<any, { validation: true }> = <
   return Object.assign(router, {
     validation: true as const,
     rpc: (() => {}) as any,
-  }) as any as Router<any, TCurrentExt & { validation: true }>;
+  }) as any as RouterWithExtensions<any, TCurrentExt & { validation: true }>;
 };
 
 const mockPubSubPlugin: Plugin<any, { pubsub: true }> = <
@@ -41,7 +41,7 @@ const mockPubSubPlugin: Plugin<any, { pubsub: true }> = <
     pubsub: true as const,
     publish: (() => {}) as any,
     topics: { list: () => [], has: () => false } as any,
-  }) as any as Router<any, TCurrentExt & { pubsub: true }>;
+  }) as any as RouterWithExtensions<any, TCurrentExt & { pubsub: true }>;
 };
 
 // ============================================================================

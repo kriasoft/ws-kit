@@ -93,7 +93,9 @@ describe("withPubSub() Plugin API", () => {
         withPubSub({
           adapter: memoryPubSub(),
           observer: {
-            onPublish: (rec) => observed.push(rec),
+            onPublish: (rec) => {
+              observed.push(rec);
+            },
           },
         }),
       );

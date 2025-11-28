@@ -16,6 +16,8 @@
 
 import type { Router } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
+import { memoryPubSub } from "@ws-kit/memory";
+import { withZod } from "@ws-kit/zod";
 import { describe, expectTypeOf, it } from "bun:test";
 import { withPubSub } from "./plugin.js";
 
@@ -48,7 +50,7 @@ describe("pubsub plugin narrowing - types", () => {
   // Test 4: Router.plugin(withPubSub()) returns publisher router
   it("router.plugin(withPubSub()) provides publish and topics methods", () => {
     const publisher = createRouter<{ userId?: string }>().plugin(
-      withPubSub({}),
+      withPubSub({ adapter: memoryPubSub() }),
     );
 
     // Should have pubsub methods
@@ -64,7 +66,7 @@ describe("pubsub plugin narrowing - types", () => {
   // Test 5: Fluent chaining preserves pubsub capability
   it("fluent chaining preserves pubsub capability", () => {
     const publisher = createRouter<{ userId?: string }>()
-      .plugin(withPubSub({}))
+      .plugin(withPubSub({ adapter: memoryPubSub() }))
       .use(async (ctx, next) => {
         await next();
       });
@@ -78,7 +80,7 @@ describe("pubsub plugin narrowing - types", () => {
   // Test 6: withPubSub() is idempotent
   it("withPubSub() plugin is idempotent", () => {
     const router = createRouter<{ userId?: string }>();
-    const withPubSubPlugin = withPubSub({});
+    const withPubSubPlugin = withPubSub({ adapter: memoryPubSub() });
 
     const publisher1 = router.plugin(withPubSubPlugin);
     const publisher2 = publisher1.plugin(withPubSubPlugin);
@@ -86,5 +88,15 @@ describe("pubsub plugin narrowing - types", () => {
     // Type should be same after both applications
     expectTypeOf(publisher1).toHaveProperty("publish");
     expectTypeOf(publisher2).toHaveProperty("publish");
+  });
+
+  // Test 7: withZod + withPubSub preserves validation capability
+  it("keeps rpc() available after chaining withPubSub()", () => {
+    const router = createRouter()
+      .plugin(withZod())
+      .plugin(withPubSub({ adapter: memoryPubSub() }));
+
+    expectTypeOf(router).toHaveProperty("publish");
+    expectTypeOf(router).toHaveProperty("rpc");
   });
 });
