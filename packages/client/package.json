@@ -43,12 +43,12 @@
     },
     "./zod": {
       "types": "./dist/zod/index.d.ts",
-      "bun": "./src/zod/index.ts",
+      "bun": "./zod/src/index.ts",
       "default": "./dist/zod/index.js"
     },
     "./valibot": {
       "types": "./dist/valibot/index.d.ts",
-      "bun": "./src/valibot/index.ts",
+      "bun": "./valibot/src/index.ts",
       "default": "./dist/valibot/index.js"
     }
   },

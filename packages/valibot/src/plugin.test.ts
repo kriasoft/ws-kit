@@ -75,7 +75,7 @@ describe("withValibot() Plugin", () => {
     const Join = message("JOIN", { roomId: v.string() });
     // kind is stored in DESCRIPTOR symbol, not on the schema object
     expect(getKind(Join)).toBe("event");
-    expect(Join.type).toBe("JOIN");
+    expect(Join.messageType).toBe("JOIN");
     // Valibot's native kind should be preserved
     expect(Join.kind).toBe("schema");
   });
@@ -88,15 +88,15 @@ describe("withValibot() Plugin", () => {
 
     // kind is stored in DESCRIPTOR symbol, not on the schema object
     expect(getKind(GetUser)).toBe("rpc");
-    expect(GetUser.type).toBe("GET_USER");
-    expect((GetUser as any).response?.type).toBe("USER");
+    expect(GetUser.messageType).toBe("GET_USER");
+    expect((GetUser as any).response?.messageType).toBe("USER");
     // Response should have kind="event" in DESCRIPTOR
     expect(getKind((GetUser as any).response)).toBe("event");
   });
 
   it("should allow message schema without payload", () => {
     const Ping = message("PING");
-    expect(Ping.type).toBe("PING");
+    expect(Ping.messageType).toBe("PING");
     // kind is stored in DESCRIPTOR symbol
     expect(getKind(Ping)).toBe("event");
   });

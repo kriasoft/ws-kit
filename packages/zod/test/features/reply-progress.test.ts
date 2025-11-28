@@ -137,8 +137,8 @@ describe("reply() and progress() runtime", () => {
         name: z.string(),
       });
 
-      expect((GetUser as any).type).toBe("GET_USER");
-      expect((GetUser as any).response?.type).toBe("USER");
+      expect((GetUser as any).messageType).toBe("GET_USER");
+      expect((GetUser as any).response?.messageType).toBe("USER");
       // kind is stored in DESCRIPTOR symbol, not on the schema object
       expect(getKind(GetUser)).toBe("rpc");
     });

@@ -303,7 +303,6 @@ export interface ReadonlyRouteIndex {
  */
 export function getRouteIndex(router: Router<any>): ReadonlyRouteIndex {
   // Extract RouteTable via symbol (works across bundle boundaries)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractor = (router as any)[ROUTE_TABLE];
   if (typeof extractor !== "function") {
     throw new Error(
@@ -417,10 +416,8 @@ export class RouterImpl<
       options.warnIncompleteRpc ?? process.env.NODE_ENV !== "production";
 
     // Initialize plugin host with self reference (cast to bypass recursive type)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);
     // Attach to symbol for internal access escape hatch
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any)[ROUTER_IMPL] = this;
     // Register core error enhancer with very high priority (runs first) to ensure
     // ctx.error is always available before other plugins add their enhancements.
@@ -549,13 +546,13 @@ export class RouterImpl<
     const kind = getKind(schema);
     if (kind !== "rpc") {
       throw new Error(
-        `Schema kind mismatch for "${schema.type}": expected kind="rpc", got "${kind}"`,
+        `Schema kind mismatch for "${schema.messageType}": expected kind="rpc", got "${kind}"`,
       );
     }
 
     if (!schema.response) {
       throw new Error(
-        `RPC schema for type "${schema.type}" must include a response descriptor`,
+        `RPC schema for type "${schema.messageType}" must include a response descriptor`,
       );
     }
 
@@ -635,7 +632,6 @@ export class RouterImpl<
       try {
         const callback = observer[event];
         if (callback) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (callback as any)(...args);
         }
       } catch (err) {
@@ -663,7 +659,6 @@ export class RouterImpl<
    * @internal
    */
   private extractRouteTable(other: Router<any>): RouteTable<TContext> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extractor = (other as any)[ROUTE_TABLE];
     if (typeof extractor === "function") {
       return extractor.call(other);

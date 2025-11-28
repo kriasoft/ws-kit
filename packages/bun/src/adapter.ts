@@ -25,9 +25,6 @@ import { BunPubSub } from "./pubsub.js";
  * @param server - Bun Server instance for pub/sub
  * @returns A PubSubAdapter that broadcasts to this Bun instance only
  */
-export function bunPubSub(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  server: Server<any>,
-) {
+export function bunPubSub(server: Server<any>) {
   return new BunPubSub(server);
 }

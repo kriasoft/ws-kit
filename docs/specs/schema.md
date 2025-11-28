@@ -457,12 +457,12 @@ Progress updates are sent as internal control messages (reserved type `$ws:rpc-p
 
 When you register a schema with `router.on()` or `router.rpc()`, the router validates that your descriptor conforms to a strict contract:
 
-| You Call                      | Descriptor Must Be                                                        | If Violated                                                   |
-| ----------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `router.on(schema, handler)`  | Event: `kind: "event"` with no `response`                                 | Throws: "Event schema... must not have a response descriptor" |
-| `router.rpc(schema, handler)` | RPC: `kind: "rpc"` with valid `response` descriptor                       | Throws: "RPC schema... must have a response descriptor"       |
-| Any registration              | `type` non-empty string, `kind` literal `"event"\|"rpc"` (case-sensitive) | Throws: "Invalid schema for type..."                          |
-| RPC with response             | Response is itself a valid `MessageDescriptor`                            | Throws: "...has invalid response descriptor"                  |
+| You Call                      | Descriptor Must Be                                                               | If Violated                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `router.on(schema, handler)`  | Event: `kind: "event"` with no `response`                                        | Throws: "Event schema... must not have a response descriptor" |
+| `router.rpc(schema, handler)` | RPC: `kind: "rpc"` with valid `response` descriptor                              | Throws: "RPC schema... must have a response descriptor"       |
+| Any registration              | `messageType` non-empty string, `kind` literal `"event"\|"rpc"` (case-sensitive) | Throws: "Invalid schema for type..."                          |
+| RPC with response             | Response is itself a valid `MessageDescriptor`                                   | Throws: "...has invalid response descriptor"                  |
 
 The `message()` helper generates descriptors for you automatically based on whether you provide a `response` field. Typically you won't think about `kind` — you just use the right API (`.on()` for events, `.rpc()` for RPCs):
 
@@ -498,12 +498,12 @@ router.rpc(BadRpc, handler);
 // Error: RPC schema for type "REQUEST" must have a response descriptor.
 
 // ❌ Empty type (even descriptors built by hand)
-const Empty = { type: "", kind: "event" } as any;
+const Empty = { messageType: "", kind: "event" } as any;
 router.on(Empty, handler);
-// Error: Invalid schema for type "": type must not be empty
+// Error: Invalid schema for type "": messageType must not be empty
 
 // ❌ Case-sensitive kind check
-const CaseIssue = { type: "MSG", kind: "Rpc" } as any; // Must be lowercase
+const CaseIssue = { messageType: "MSG", kind: "Rpc" } as any; // Must be lowercase
 router.rpc(CaseIssue, handler);
 // Error: Invalid schema for type "MSG": ...
 ```

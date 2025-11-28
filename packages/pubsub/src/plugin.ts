@@ -259,9 +259,9 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
     ): Promise<PublishResult> => {
       // Construct envelope: the message itself
       const envelope: PublishEnvelope = {
-        topic,
+        topic: topic,
         payload,
-        type: schema.type, // Schema type for observability
+        type: schema.messageType, // Schema type for observability
         ...(opts?.meta && { meta: opts.meta }), // Pass through optional metadata
       };
 

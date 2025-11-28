@@ -75,7 +75,7 @@ describe("withZod() Plugin", () => {
     const Join = message("JOIN", { roomId: z.string() });
     // kind is stored in DESCRIPTOR symbol, not on the schema object
     expect(getKind(Join)).toBe("event");
-    expect((Join as any).type).toBe("JOIN");
+    expect((Join as any).messageType).toBe("JOIN");
     // Zod schemas don't have a native 'kind' property
     expect("kind" in Join).toBe(false);
   });
@@ -88,15 +88,15 @@ describe("withZod() Plugin", () => {
 
     // kind is stored in DESCRIPTOR symbol, not on the schema object
     expect(getKind(GetUser)).toBe("rpc");
-    expect((GetUser as any).type).toBe("GET_USER");
-    expect((GetUser as any).response?.type).toBe("USER");
+    expect((GetUser as any).messageType).toBe("GET_USER");
+    expect((GetUser as any).response?.messageType).toBe("USER");
     // Response should have kind="event" in DESCRIPTOR
     expect(getKind((GetUser as any).response)).toBe("event");
   });
 
   it("should allow message schema without payload", () => {
     const Ping = message("PING");
-    expect((Ping as any).type).toBe("PING");
+    expect((Ping as any).messageType).toBe("PING");
     // kind is stored in DESCRIPTOR symbol
     expect(getKind(Ping)).toBe("event");
   });

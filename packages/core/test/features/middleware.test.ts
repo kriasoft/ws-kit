@@ -23,7 +23,7 @@
  */
 
 import { createBunHandler } from "@ws-kit/bun";
-import { createRouter, message, z, withZod } from "@ws-kit/zod";
+import { createRouter, message, withZod, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
 describe("Middleware", () => {
@@ -566,7 +566,10 @@ describe("Middleware", () => {
     });
 
     it("should allow per-route middleware to mutate context", async () => {
-      type RouterCtx = { step?: number };
+      interface RouterCtx {
+        step?: number;
+        [key: string]: unknown;
+      }
       const router = createRouter<RouterCtx>();
       const TestMessage = message("TEST", {
         value: z.string().optional(),

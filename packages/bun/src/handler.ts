@@ -23,7 +23,7 @@ import type {
  */
 function upgradeConnection<TContext extends ConnectionData = ConnectionData>(
   req: Request,
-  server: Server<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+  server: Server<any>,
   clientId: string,
   initialData: TContext | undefined,
   clientIdHeader: string,
@@ -38,7 +38,7 @@ function upgradeConnection<TContext extends ConnectionData = ConnectionData>(
   } as unknown as BunConnectionData<TContext>;
 
   return server.upgrade(req, {
-    data: data as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    data: data as any,
     headers: { [clientIdHeader]: clientId },
   });
 }
@@ -83,7 +83,6 @@ export function createBunHandler<
   // Per ADR-035: Unwrap typed routers (e.g., from @ws-kit/zod) to access core.
   // Rationale: Ensures low-level API behaves identically to high-level serve().
   // Mirrors serve.ts logic for consistency. Fallback for direct core routers.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
 
   return {
@@ -129,9 +128,7 @@ export function createBunHandler<
      */
     fetch: async (
       req: Request,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       server: Server<any>,
-      // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
     ): Promise<Response | void> => {
       try {
         const clientIdHeader = options?.clientIdHeader ?? "x-client-id";

@@ -13,7 +13,7 @@ export function isMessageDescriptor(obj: unknown): obj is MessageDescriptor {
   return (
     typeof obj === "object" &&
     obj !== null &&
-    typeof (obj as any).type === "string" &&
+    typeof (obj as any).messageType === "string" &&
     (kind === "event" || kind === "rpc")
   );
 }

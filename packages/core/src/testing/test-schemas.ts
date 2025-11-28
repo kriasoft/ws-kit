@@ -17,9 +17,9 @@ export function createDescriptor(
   type: string,
   kind: "event" | "rpc",
 ): MessageDescriptor {
-  const obj: MessageDescriptor = { type };
+  const obj: MessageDescriptor = { messageType: type };
   Object.defineProperty(obj, DESCRIPTOR, {
-    value: { type, kind },
+    value: { messageType: type, kind },
     enumerable: false,
   });
   return obj;
@@ -34,11 +34,11 @@ export function createRpcDescriptor(
 ): MessageDescriptor & { response: MessageDescriptor } {
   const response = createDescriptor(resType, "event");
   const obj: MessageDescriptor & { response: MessageDescriptor } = {
-    type: reqType,
+    messageType: reqType,
     response,
   };
   Object.defineProperty(obj, DESCRIPTOR, {
-    value: { type: reqType, kind: "rpc" },
+    value: { messageType: reqType, kind: "rpc" },
     enumerable: false,
   });
   return obj;

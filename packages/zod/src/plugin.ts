@@ -211,7 +211,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         if (typeof schema?.safeParse === "function") {
           // Get per-schema options and resolve effective options
           const schemaOpts = getSchemaOpts(schema);
-          const eff = resolveOptions(schemaOpts, pluginOpts);
+          resolveOptions(schemaOpts, pluginOpts);
 
           // Construct normalized inbound message
           const inboundMessage = {
@@ -309,14 +309,14 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
             const result = schemaObj.safeParse(outboundMessage);
             if (!result.success) {
               const validationError = new Error(
-                `Outbound validation failed for ${schema.type}: ${formatValidationError(result.error)}`,
+                `Outbound validation failed for ${typeOf(schemaObj, schema) || "unknown"}: ${formatValidationError(result.error)}`,
               ) as unknown as Error & { code: string; details: any };
               validationError.code = "OUTBOUND_VALIDATION_ERROR";
               validationError.details = result.error;
 
               if (pluginOpts.onValidationError) {
                 await pluginOpts.onValidationError(validationError, {
-                  type: schema.type,
+                  type: typeOf(schemaObj, schema) || "unknown",
                   direction: "outbound",
                   payload,
                 });
@@ -341,14 +341,14 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           const result = validatePayload(payload, payloadSchema);
           if (!result.success) {
             const validationError = new Error(
-              `Outbound validation failed for ${schema.type}: ${formatValidationError(result.error)}`,
+              `Outbound validation failed for ${typeOf(schemaObj, schema) || "unknown"}: ${formatValidationError(result.error)}`,
             ) as unknown as Error & { code: string; details: any };
             validationError.code = "OUTBOUND_VALIDATION_ERROR";
             validationError.details = result.error;
 
             if (pluginOpts.onValidationError) {
               await pluginOpts.onValidationError(validationError, {
-                type: schema.type,
+                type: typeOf(schemaObj, schema) || "unknown",
                 direction: "outbound",
                 payload,
               });

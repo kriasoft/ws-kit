@@ -16,7 +16,11 @@
  */
 
 import {
-  fallback,
+  DESCRIPTOR,
+  setSchemaOpts,
+  type SchemaOpts,
+} from "@ws-kit/core/internal";
+import {
   literal,
   number,
   optional,
@@ -26,15 +30,10 @@ import {
   safeParse as valibot_safeParse,
   type GenericSchema,
 } from "valibot";
-import {
-  DESCRIPTOR,
-  setSchemaOpts,
-  type SchemaOpts,
-} from "@ws-kit/core/internal";
 import type {
   BrandedSchema,
-  InferPayloadShape,
   InferMetaShape,
+  InferPayloadShape,
   SafeParseResult,
 } from "./types.js";
 
@@ -101,7 +100,7 @@ export function message<
   > & {
     readonly _types?: unknown;
     readonly __valibot_payload: P;
-    readonly __descriptor: { readonly type: T; readonly kind: "event" };
+    readonly __descriptor: { readonly messageType: T; readonly kind: "event" };
     readonly __runtime: "ws-kit-schema";
     readonly safeParse: (data: unknown) => SafeParseResult;
     readonly parse: (data: unknown) => Promise<any>;
@@ -124,9 +123,10 @@ export function message<
     never,
     InferMetaShape<M>
   > & {
+    readonly messageType: T;
     readonly _types?: unknown;
     readonly __valibot_payload: P;
-    readonly __descriptor: { readonly type: T; readonly kind: "event" };
+    readonly __descriptor: { readonly messageType: T; readonly kind: "event" };
     readonly __runtime: "ws-kit-schema";
     readonly safeParse: (data: unknown) => SafeParseResult;
     readonly parse: (data: unknown) => Promise<any>;
@@ -150,7 +150,7 @@ export function message<
     InferMetaShape<M>
   > & {
     readonly __valibot_payload: P;
-    readonly __descriptor: { readonly type: T; readonly kind: "event" };
+    readonly __descriptor: { readonly messageType: T; readonly kind: "event" };
     readonly __runtime: "ws-kit-schema";
     readonly safeParse: (data: unknown) => SafeParseResult;
     readonly parse: (data: unknown) => Promise<any>;
@@ -205,20 +205,20 @@ export function message<
   // Build root schema: { type, meta, payload? }
   const rootShape: Record<string, GenericSchema> = {
     type: literal(type),
-    meta: fallback(metaObj, {}) as GenericSchema,
+    meta: optional(metaObj, {}) as GenericSchema,
     ...(payloadObj ? { payload: payloadObj } : {}),
   };
 
   const root = strictObject(rootShape);
 
-  // Attach non-enumerable runtime hints for router/plugin
-  // Note: kind is stored in DESCRIPTOR symbol to avoid polluting Valibot's own kind property
-  // DESCRIPTOR is configurable so rpc() can override kind from "event" to "rpc"
+  // Attach non-enumerable runtime hints for router/plugin.
+  // Uses `messageType` (not `type`) because Valibot schemas have their own `type`
+  // property indicating schema kind (e.g., "strict_object"). See Zod runtime for parity.
   Object.defineProperties(root, {
-    type: { value: type, enumerable: false }, // Convenience property for quick access
+    messageType: { value: type, enumerable: false },
     __runtime: { value: "ws-kit-schema" as const, enumerable: false },
     [DESCRIPTOR]: {
-      value: { type, kind: "event" as const },
+      value: { messageType: type, kind: "event" as const },
       enumerable: false,
       configurable: true,
     },
@@ -313,16 +313,21 @@ export function rpc<
         never,
         InferMetaShape<ResM>
       > & {
+        readonly messageType: ResT;
         readonly _types?: unknown;
         readonly __valibot_payload: ResP;
-        readonly __descriptor: { readonly type: ResT; readonly kind: "event" };
+        readonly __descriptor: {
+          readonly messageType: ResT;
+          readonly kind: "event";
+        };
         readonly __runtime: "ws-kit-schema";
         readonly safeParse: (data: unknown) => SafeParseResult;
         readonly parse: (data: unknown) => Promise<any>;
       };
+    readonly messageType: ReqT;
     readonly _types?: unknown;
     readonly __valibot_payload: ReqP;
-    readonly __descriptor: { readonly type: ReqT; readonly kind: "rpc" };
+    readonly __descriptor: { readonly messageType: ReqT; readonly kind: "rpc" };
     readonly __runtime: "ws-kit-schema";
     readonly safeParse: (data: unknown) => SafeParseResult;
     readonly parse: (data: unknown) => Promise<any>;
@@ -353,16 +358,21 @@ export function rpc<
         never,
         { timestamp?: number; correlationId?: string }
       > & {
+        readonly messageType: ResT;
         readonly _types?: unknown;
         readonly __valibot_payload: ResP;
-        readonly __descriptor: { readonly type: ResT; readonly kind: "event" };
+        readonly __descriptor: {
+          readonly messageType: ResT;
+          readonly kind: "event";
+        };
         readonly __runtime: "ws-kit-schema";
         readonly safeParse: (data: unknown) => SafeParseResult;
         readonly parse: (data: unknown) => Promise<any>;
       };
+    readonly messageType: ReqT;
     readonly _types?: unknown;
     readonly __valibot_payload: ReqP;
-    readonly __descriptor: { readonly type: ReqT; readonly kind: "rpc" };
+    readonly __descriptor: { readonly messageType: ReqT; readonly kind: "rpc" };
     readonly __runtime: "ws-kit-schema";
     readonly safeParse: (data: unknown) => SafeParseResult;
     readonly parse: (data: unknown) => Promise<any>;
@@ -442,7 +452,7 @@ export function rpc<
     response: { value: responseRoot, enumerable: false, configurable: true },
     responseType: { value: resType, enumerable: false },
     [DESCRIPTOR]: {
-      value: { type: reqType, kind: "rpc" as const },
+      value: { messageType: reqType, kind: "rpc" as const },
       enumerable: false,
     },
   });

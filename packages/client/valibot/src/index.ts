@@ -38,9 +38,7 @@ export { message, rpc, v } from "@ws-kit/valibot";
 /**
  * Options for send() method with typed meta field inference.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface SendOptions<S extends any = ValibotMessageSchema> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   meta?: InferMeta<any>;
   correlationId?: string;
 }
@@ -48,7 +46,6 @@ interface SendOptions<S extends any = ValibotMessageSchema> {
 /**
  * Options for request() method with typed meta field inference.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface RequestOptions<
   S extends any = ValibotMessageSchema,
 > extends SendOptions<S> {
@@ -82,7 +79,6 @@ export interface ValibotWebSocketClient extends Omit<
    * Register typed message handler.
    * Handler receives fully typed message inferred from schema.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on<S extends any>(
     schema: S,
     handler: (msg: InferMessage<any>) => void,
@@ -92,7 +88,6 @@ export interface ValibotWebSocketClient extends Omit<
    * Send message with payload (schema defines payload field).
    * Payload type inferred from schema, required at compile time.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   send<S extends any>(
     schema: S,
     payload: InferPayload<any>,
@@ -103,7 +98,6 @@ export interface ValibotWebSocketClient extends Omit<
    * Send message without payload (schema has no payload field).
    * Payload parameter omitted at compile time.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   send<S extends any>(
     schema: S,
     opts?: SendOptions<S>,
@@ -113,7 +107,6 @@ export interface ValibotWebSocketClient extends Omit<
    * Request/response with typed reply (with payload).
    * Payload type inferred from schema, required at compile time.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request<S extends any, R extends any>(
     schema: S,
     payload: InferPayload<any>,
@@ -125,7 +118,6 @@ export interface ValibotWebSocketClient extends Omit<
    * Request/response with typed reply (no payload).
    * Payload parameter omitted at compile time.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request<S extends any, R extends any>(
     schema: S,
     reply: R,

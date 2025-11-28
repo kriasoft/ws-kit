@@ -21,8 +21,13 @@
  */
 
 import { createRouter } from "@ws-kit/core";
+import { createDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { withMessaging } from "../index.js";
+
+// Test descriptors with proper DESCRIPTOR symbol
+const TEST = createDescriptor("TEST", "event");
+const RESPONSE = createDescriptor("RESPONSE", "event");
 
 describe("withMessaging() plugin - ctx.send()", () => {
   describe("method signature", () => {
@@ -30,7 +35,7 @@ describe("withMessaging() plugin - ctx.send()", () => {
       const router = createRouter().plugin(withMessaging());
 
       let sendMethod: any;
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         sendMethod = ctx.send;
       });
 
@@ -42,9 +47,9 @@ describe("withMessaging() plugin - ctx.send()", () => {
       const router = createRouter().plugin(withMessaging());
 
       let sendCalled = false;
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         // Should not throw
-        ctx.send({ type: "RESPONSE" }, { data: "test" });
+        ctx.send(RESPONSE, { data: "test" });
         sendCalled = true;
       });
 
@@ -54,8 +59,8 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("send() returns void by default (fire-and-forget)", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
-        const result = ctx.send({ type: "RESPONSE" }, { data: "test" });
+      router.on(TEST, (ctx: any) => {
+        const result = ctx.send(RESPONSE, { data: "test" });
         // Should return undefined (void)
         expect(result).toBeUndefined();
       });
@@ -66,9 +71,9 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("send() with {waitFor} returns Promise<boolean>", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         const result = ctx.send(
-          { type: "RESPONSE" },
+          RESPONSE,
           { data: "test" },
           { waitFor: "drain" },
         );
@@ -84,13 +89,13 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("gracefully skips send if signal is aborted before enqueue", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         const controller = new AbortController();
         controller.abort();
 
         // Should return immediately without error
         const result = ctx.send(
-          { type: "RESPONSE" },
+          RESPONSE,
           { data: "test" },
           { signal: controller.signal },
         );
@@ -103,13 +108,13 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("gracefully skips send with {waitFor} if signal is aborted", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         const controller = new AbortController();
         controller.abort();
 
         // Should return resolved Promise without error
         const result = ctx.send(
-          { type: "RESPONSE" },
+          RESPONSE,
           { data: "test" },
           { waitFor: "drain", signal: controller.signal },
         );
@@ -130,12 +135,8 @@ describe("withMessaging() plugin - ctx.send()", () => {
       const router = createRouter().plugin(withMessaging());
 
       let sentMessage: any;
-      router.on({ type: "TEST" }, (ctx: any) => {
-        ctx.send(
-          { type: "RESPONSE" },
-          { data: "test" },
-          { meta: { traceId: "abc123" } },
-        );
+      router.on(TEST, (ctx: any) => {
+        ctx.send(RESPONSE, { data: "test" }, { meta: { traceId: "abc123" } });
       });
 
       expect(router.on).toBeDefined();
@@ -144,10 +145,10 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("sanitizes metadata to prevent reserved key override", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         // Should not throw; reserved keys are stripped
         ctx.send(
-          { type: "RESPONSE" },
+          RESPONSE,
           { data: "test" },
           {
             meta: {
@@ -167,16 +168,12 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("copies correlationId from inbound meta if present", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         // Simulate inbound message with correlationId
         ctx.meta = { correlationId: "req-123" };
 
         // Should preserve it automatically
-        ctx.send(
-          { type: "RESPONSE" },
-          { data: "test" },
-          { preserveCorrelation: true },
-        );
+        ctx.send(RESPONSE, { data: "test" }, { preserveCorrelation: true });
       });
 
       expect(router.on).toBeDefined();
@@ -185,16 +182,12 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("gracefully skips correlation if not present in inbound meta", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         // No correlationId in inbound meta
         ctx.meta = {};
 
         // Should not throw, just skip
-        ctx.send(
-          { type: "RESPONSE" },
-          { data: "test" },
-          { preserveCorrelation: true },
-        );
+        ctx.send(RESPONSE, { data: "test" }, { preserveCorrelation: true });
       });
 
       expect(router.on).toBeDefined();
@@ -203,12 +196,12 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("works together with custom {meta}", async () => {
       const router = createRouter().plugin(withMessaging());
 
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         ctx.meta = { correlationId: "req-123" };
 
         // Should preserve correlation AND merge custom meta
         ctx.send(
-          { type: "RESPONSE" },
+          RESPONSE,
           { data: "test" },
           {
             preserveCorrelation: true,
@@ -225,7 +218,7 @@ describe("withMessaging() plugin - ctx.send()", () => {
     it("works when applied before other plugins", () => {
       const router = createRouter()
         .plugin(withMessaging())
-        .on({ type: "TEST" }, (ctx: any) => {
+        .on(TEST, (ctx: any) => {
           expect(typeof ctx.send).toBe("function");
         });
 
@@ -237,7 +230,7 @@ describe("withMessaging() plugin - ctx.send()", () => {
       const router = createRouter().plugin(withMessaging());
 
       let originalSend: any;
-      router.on({ type: "TEST" }, (ctx: any) => {
+      router.on(TEST, (ctx: any) => {
         originalSend = ctx.send;
         expect(typeof ctx.send).toBe("function");
       });

@@ -33,7 +33,7 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
    * Throws if type already registered (use merge() for conflict handling).
    */
   register(schema: MessageDescriptor, entry: RouteEntry<TContext>): this {
-    const type = schema?.type;
+    const type = schema?.messageType;
 
     // Validate schema structure: checks type (non-empty), kind ("event"|"rpc"), and optional fields.
     // Rejects unknown kind values (e.g., "Rpc", "rPc") before invariant checks.
@@ -43,6 +43,11 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
       throw new Error(
         `Invalid schema for type "${type}": ${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+
+    // Ensure type is defined (validated by assertMessageDescriptor)
+    if (!type) {
+      throw new Error("Invalid schema: missing type");
     }
 
     // Enforce event/RPC invariant at registration time (fail-fast).
@@ -169,11 +174,11 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
       const originalDesc = getDescriptor(entry.schema);
       const newSchema: MessageDescriptor = {
         ...entry.schema,
-        type: prefixedType,
+        messageType: prefixedType,
       };
       if (originalDesc) {
         Object.defineProperty(newSchema, DESCRIPTOR, {
-          value: { ...originalDesc, type: prefixedType },
+          value: { ...originalDesc, messageType: prefixedType },
           enumerable: false,
         });
       }

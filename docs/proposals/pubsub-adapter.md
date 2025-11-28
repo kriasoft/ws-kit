@@ -319,7 +319,11 @@ async function publish(
   payload: any,
   opts?: { excludeSelf?: boolean },
 ) {
-  const envelope: PublishEnvelope = { topic, payload, type: schema.type };
+  const envelope: PublishEnvelope = {
+    topic,
+    payload,
+    type: schema.messageType,
+  };
   const res = await adapter.publish(envelope);
 
   // serialize once and deliver to local matches
