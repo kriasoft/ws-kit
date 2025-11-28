@@ -102,18 +102,13 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
   // Helper to extract message type from schema
   function extractType(schema: AnyMessageSchema): string {
-    // 1. Prefer the standardized hidden property added by runtime wrappers
+    // 1. Prefer the standardized property from message() wrapper
     if (typeof schema.messageType === "string") return schema.messageType;
 
-    // 2. Check type property (Zod only, as Valibot uses it for schema type)
-    if (typeof schema.type === "string" && schema.type !== "strict_object") {
-      return schema.type;
-    }
-
-    // 3. Fallback to Zod internal structure
+    // 2. Fallback to Zod internal structure (shape.type is ZodLiteral)
     if (schema.shape?.type?.value) return schema.shape.type.value;
 
-    // 4. Fallback to Valibot internal structure
+    // 3. Fallback to Valibot internal structure (entries.type has .literal)
     if (schema.entries?.type?.literal) return schema.entries.type.literal;
 
     throw new Error("Unable to extract message type from schema");
