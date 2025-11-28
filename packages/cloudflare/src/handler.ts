@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { Router, ServerWebSocket, ConnectionData } from "@ws-kit/core";
+import type { ConnectionData, Router, ServerWebSocket } from "@ws-kit/core";
 import { type AdapterWebSocket } from "@ws-kit/core";
 import * as uuid from "uuid";
 import type {
@@ -108,7 +108,6 @@ export function createDurableObjectHandler<
       try {
         // Create a WebSocketPair (available in Cloudflare Workers)
         // @ts-expect-error - WebSocketPair is a Cloudflare Workers API
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const WebSocketPairClass = globalThis.WebSocketPair as any;
         if (!WebSocketPairClass) {
           return new Response("WebSocket not supported", { status: 400 });
@@ -119,11 +118,9 @@ export function createDurableObjectHandler<
         const server = pair[0];
 
         // Accept the WebSocket on server side
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (server as any).accept?.();
 
         // Wrap server WebSocket to conform to core interface
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const serverWs = server as any as ServerWebSocket;
 
         connectionCount++;
@@ -133,7 +130,6 @@ export function createDurableObjectHandler<
           // Validate clientId was set
           if (!wsData?.clientId) {
             console.error("[ws] WebSocket missing clientId in data, closing");
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (server as any).close(1008, "Missing client ID");
             return new Response("Missing client ID", { status: 400 });
           }
@@ -148,23 +144,19 @@ export function createDurableObjectHandler<
           await router.websocket.open(serverWs);
         } catch (error) {
           console.error(`[ws] Error in open handler:`, error);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (server as any).close(1011, "Internal server error");
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (server as any).addEventListener("message", async (event: any) => {
           try {
             // Call router's message handler via the object to preserve 'this' binding.
             // This ensures routers with ordinary methods (not arrow functions) work correctly.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await router.websocket.message(serverWs, (event as any).data);
           } catch (error) {
             console.error(`[ws] Error in message handler:`, error);
           }
         });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (server as any).addEventListener("close", async () => {
           connectionCount--;
           try {
@@ -180,7 +172,6 @@ export function createDurableObjectHandler<
         return new Response(null, {
           status: 101,
           webSocket: client,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
       } catch (error) {
         console.error("[ws] Error during WebSocket upgrade:", error);

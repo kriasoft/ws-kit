@@ -217,9 +217,9 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
         // Extract response type from schema
         function getResponseType(schema: any): string {
           return (
-            schema.__descriptor?.type ||
+            schema.__descriptor?.messageType ||
             schema.responseType ||
-            schema.type ||
+            schema.messageType ||
             "RESPONSE"
           );
         }

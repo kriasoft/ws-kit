@@ -12,7 +12,7 @@ describe("Object-form API", () => {
       payload: z.object({ roomId: z.string() }),
     });
 
-    expect((Join as any).type).toBe("USER_JOIN");
+    expect((Join as any).messageType).toBe("USER_JOIN");
     expect(typeof Join.safeParse).toBe("function");
 
     const result = Join.safeParse({
@@ -26,7 +26,7 @@ describe("Object-form API", () => {
   it("message() positional form still works", () => {
     const Join = message("USER_JOIN", { roomId: z.string() });
 
-    expect((Join as any).type).toBe("USER_JOIN");
+    expect((Join as any).messageType).toBe("USER_JOIN");
 
     const result = Join.safeParse({
       type: "USER_JOIN",
@@ -48,8 +48,8 @@ describe("Object-form API", () => {
       },
     });
 
-    expect((GetUser as any).type).toBe("GET_USER");
-    expect((GetUser.response as any).type).toBe("USER");
+    expect((GetUser as any).messageType).toBe("GET_USER");
+    expect((GetUser.response as any).messageType).toBe("USER");
 
     const reqResult = GetUser.safeParse({
       type: "GET_USER",
@@ -72,8 +72,8 @@ describe("Object-form API", () => {
       name: z.string(),
     });
 
-    expect((GetUser as any).type).toBe("GET_USER");
-    expect((GetUser.response as any).type).toBe("USER");
+    expect((GetUser as any).messageType).toBe("GET_USER");
+    expect((GetUser.response as any).messageType).toBe("USER");
   });
 
   it("message() with options attaches metadata", () => {

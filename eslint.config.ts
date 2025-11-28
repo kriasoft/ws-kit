@@ -10,12 +10,14 @@ export default defineConfig([
   {
     name: "global-ignores",
     ignores: [
-      "node_modules",
       ".bun/",
-      ".vitepress/dist",
       ".vitepress/cache",
+      ".vitepress/dist",
       "docs/",
+      "examples/*/dist/",
+      "node_modules",
       "packages/*/dist/",
+      "tests/*/dist/",
     ],
   },
   {
@@ -30,13 +32,26 @@ export default defineConfig([
       ...tslint.configs.strict,
       ...tslint.configs.stylistic,
     ],
+    rules: {
+      "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-unnecessary-type-constraint": "off",
+    },
+  },
+  {
+    name: "source-files-relaxed",
+    files: ["packages/*/src/**/*.ts", "packages/client/*/src/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-invalid-void-type": "off",
+    },
   },
   {
     name: "test-files-relaxed",
-    files: ["**/*.test.ts"],
+    files: ["**/*.test.ts", "**/test/helpers.ts", "**/test/helpers/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-expressions": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-empty-function": "off",
     },

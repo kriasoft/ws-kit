@@ -98,8 +98,9 @@ export function message<
       ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
       : {}
   > & {
+    readonly messageType: T;
     readonly __zod_payload: P;
-    readonly __descriptor: { readonly type: T; readonly kind: "event" };
+    readonly __descriptor: { readonly messageType: T; readonly kind: "event" };
     readonly __runtime: "ws-kit-schema";
   };
 
@@ -121,8 +122,9 @@ export function message<
       ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
       : {}
   > & {
+    readonly messageType: T;
     readonly __zod_payload: P;
-    readonly __descriptor: { readonly type: T; readonly kind: "event" };
+    readonly __descriptor: { readonly messageType: T; readonly kind: "event" };
     readonly __runtime: "ws-kit-schema";
   };
 
@@ -144,8 +146,9 @@ export function message<
       ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
       : {}
   > & {
+    readonly messageType: T;
     readonly __zod_payload: P;
-    readonly __descriptor: { readonly type: T; readonly kind: "event" };
+    readonly __descriptor: { readonly messageType: T; readonly kind: "event" };
     readonly __runtime: "ws-kit-schema";
   } {
   // Normalize inputs: support both object and positional forms
@@ -214,14 +217,14 @@ export function message<
 
   const root = z.object(rootShape).strict();
 
-  // Attach non-enumerable runtime hints for router/plugin
-  // Note: kind is stored in DESCRIPTOR symbol to avoid polluting the schema object namespace
-  // DESCRIPTOR is configurable so rpc() can override kind from "event" to "rpc"
+  // Attach non-enumerable runtime hints for router/plugin.
+  // `messageType` is canonical; `type` is a convenience alias (Zod doesn't conflict).
+  // Valibot only has `messageType` since its schemas use `type` for schema kind.
   Object.defineProperties(root, {
-    type: { value: type, enumerable: false }, // Convenience property for quick access
+    messageType: { value: type, enumerable: false },
     __runtime: { value: "ws-kit-schema" as const, enumerable: false },
     [DESCRIPTOR]: {
-      value: { type, kind: "event" as const },
+      value: { messageType: type, kind: "event" as const },
       enumerable: false,
       configurable: true,
     },
@@ -233,7 +236,7 @@ export function message<
     setSchemaOpts(root, options);
   }
 
-  return root as ZodObject<any> &
+  return root as unknown as ZodObject<any> &
     BrandedSchema<
       T,
       P extends undefined ? never : InferPayloadShape<P>,
@@ -242,8 +245,12 @@ export function message<
         ? { [K in keyof M]: M[K] extends ZodType<infer U> ? U : never }
         : {}
     > & {
+      readonly messageType: T;
       readonly __zod_payload: P;
-      readonly __descriptor: { readonly type: T; readonly kind: "event" };
+      readonly __descriptor: {
+        readonly messageType: T;
+        readonly kind: "event";
+      };
       readonly __runtime: "ws-kit-schema";
     };
 }
@@ -315,12 +322,17 @@ export function rpc<
           ? { [K in keyof ResM]: ResM[K] extends ZodType<infer U> ? U : never }
           : {}
       > & {
+        readonly messageType: ResT;
         readonly __zod_payload: ResP;
-        readonly __descriptor: { readonly type: ResT; readonly kind: "event" };
+        readonly __descriptor: {
+          readonly messageType: ResT;
+          readonly kind: "event";
+        };
         readonly __runtime: "ws-kit-schema";
       };
+    readonly messageType: ReqT;
     readonly __zod_payload: ReqP;
-    readonly __descriptor: { readonly type: ReqT; readonly kind: "rpc" };
+    readonly __descriptor: { readonly messageType: ReqT; readonly kind: "rpc" };
     readonly __runtime: "ws-kit-schema";
   };
 
@@ -349,12 +361,17 @@ export function rpc<
         never,
         {}
       > & {
+        readonly messageType: ResT;
         readonly __zod_payload: ResP;
-        readonly __descriptor: { readonly type: ResT; readonly kind: "event" };
+        readonly __descriptor: {
+          readonly messageType: ResT;
+          readonly kind: "event";
+        };
         readonly __runtime: "ws-kit-schema";
       };
+    readonly messageType: ReqT;
     readonly __zod_payload: ReqP;
-    readonly __descriptor: { readonly type: ReqT; readonly kind: "rpc" };
+    readonly __descriptor: { readonly messageType: ReqT; readonly kind: "rpc" };
     readonly __runtime: "ws-kit-schema";
   };
 
@@ -398,12 +415,16 @@ export function rpc<
         never,
         {}
       > & {
+        readonly messageType: ResT;
         readonly __zod_payload: ResP;
-        readonly __descriptor: { readonly type: ResT; readonly kind: "event" };
+        readonly __descriptor: {
+          readonly messageType: ResT;
+          readonly kind: "event";
+        };
         readonly __runtime: "ws-kit-schema";
       };
     readonly __zod_payload: ReqP;
-    readonly __descriptor: { readonly type: ReqT; readonly kind: "rpc" };
+    readonly __descriptor: { readonly messageType: ReqT; readonly kind: "rpc" };
     readonly __runtime: "ws-kit-schema";
   } {
   // Normalize inputs: support both object and positional forms
@@ -451,7 +472,7 @@ export function rpc<
     response: { value: responseRoot, enumerable: false, configurable: true },
     responseType: { value: resType, enumerable: false },
     [DESCRIPTOR]: {
-      value: { type: reqType, kind: "rpc" as const },
+      value: { messageType: reqType, kind: "rpc" as const },
       enumerable: false,
     },
   });

@@ -46,7 +46,10 @@ export interface BrandedSchema<
  * Event message schema: a Zod object with message type hint.
  */
 export type MessageSchema = ZodObject<any> & {
-  readonly __descriptor: { readonly type: string };
+  readonly __descriptor: {
+    readonly messageType: string;
+    readonly kind: "event" | "rpc";
+  };
 };
 
 /**

@@ -18,7 +18,7 @@ function createTestDescriptor(
     response?: { type: string; kind: "event" | "rpc" };
   },
 ): any {
-  const obj: any = { type };
+  const obj: any = { messageType: type };
   if (opts?.version !== undefined) obj.version = opts.version;
   if (opts?.__runtime !== undefined) obj.__runtime = opts.__runtime;
   if (opts?.response) {
@@ -26,7 +26,7 @@ function createTestDescriptor(
   }
   // Set kind in DESCRIPTOR symbol (the new standard)
   Object.defineProperty(obj, DESCRIPTOR, {
-    value: { type, kind },
+    value: { messageType: type, kind },
     enumerable: false,
   });
   return obj;
@@ -61,16 +61,16 @@ describe("assertMessageDescriptor", () => {
 
   it("should reject missing DESCRIPTOR symbol", () => {
     // Plain object without DESCRIPTOR symbol - should be rejected
-    const invalid: any = { type: "TEST" };
+    const invalid: any = { messageType: "TEST" };
     expect(() => assertMessageDescriptor(invalid)).toThrow(
       'Invalid MessageDescriptor.kind: expected "event" | "rpc", got undefined',
     );
   });
 
   it("should reject invalid kind value in DESCRIPTOR", () => {
-    const invalid: any = { type: "TEST" };
+    const invalid: any = { messageType: "TEST" };
     Object.defineProperty(invalid, DESCRIPTOR, {
-      value: { type: "TEST", kind: "unknown" },
+      value: { messageType: "TEST", kind: "unknown" },
       enumerable: false,
     });
     expect(() => assertMessageDescriptor(invalid)).toThrow(
@@ -172,15 +172,24 @@ describe("assertMessageDescriptor", () => {
     expect(() => assertMessageDescriptor(eventWithResponse)).not.toThrow();
   });
 
-  it("should reject empty type string", () => {
-    const invalid: any = { type: "" };
+  it("should reject empty messageType string", () => {
+    const invalid: any = { messageType: "" };
     Object.defineProperty(invalid, DESCRIPTOR, {
-      value: { type: "", kind: "event" },
+      value: { messageType: "", kind: "event" },
       enumerable: false,
     });
     expect(() => assertMessageDescriptor(invalid)).toThrow(
-      "Invalid MessageDescriptor.type: must be non-empty string",
+      "Invalid MessageDescriptor.messageType: must be non-empty string",
     );
+  });
+
+  it("should accept valid descriptor with messageType instead of type", () => {
+    const valid: any = { messageType: "TEST" };
+    Object.defineProperty(valid, DESCRIPTOR, {
+      value: { type: "TEST", kind: "event" },
+      enumerable: false,
+    });
+    expect(() => assertMessageDescriptor(valid)).not.toThrow();
   });
 
   it("should reject response with invalid nested descriptor", () => {

@@ -21,7 +21,7 @@
 import { getKind } from "../schema/metadata.js";
 
 export interface MessageDescriptor {
-  readonly type: string;
+  readonly messageType: string;
   readonly version?: number;
   readonly __runtime?: string;
   readonly response?: MessageDescriptor;
@@ -42,10 +42,10 @@ export function assertMessageDescriptor(
 
   const desc = obj as Record<string, unknown>;
 
-  // Validate type is non-empty string
-  if (typeof desc.type !== "string" || desc.type.length === 0) {
+  // Validate messageType is non-empty string
+  if (typeof desc.messageType !== "string" || desc.messageType.length === 0) {
     throw new TypeError(
-      "Invalid MessageDescriptor.type: must be non-empty string",
+      "Invalid MessageDescriptor.messageType: must be non-empty string",
     );
   }
 

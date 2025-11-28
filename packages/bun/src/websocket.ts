@@ -24,7 +24,6 @@ export function adaptBunWebSocket<TData = unknown>(
 ): ServerWebSocket {
   // Verify the interface at compile time
   // At runtime, this is a no-op—we just return the WebSocket as-is
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const socket: ServerWebSocket = ws as any;
   return socket;
 }

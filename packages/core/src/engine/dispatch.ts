@@ -136,7 +136,6 @@ export async function dispatchMessage<TContext extends ConnectionData>(
   }
 
   // 4) Lookup handler by message type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractRoutes = (impl as any)[ROUTE_TABLE];
   if (typeof extractRoutes !== "function") {
     const err = new Error(
@@ -184,7 +183,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
     } = {
       clientId,
       ws,
-      type: schema.type,
+      type: schema.messageType,
       receivedAt: now,
     };
     if (envelope.payload !== undefined) {
@@ -213,7 +212,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
       await lifecycle.handleError(err, ctx);
       impl.notifyError(err, {
         clientId,
-        type: schema.type,
+        type: schema.messageType,
       });
       return;
     }
@@ -244,7 +243,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
       // Note: ctx.error() sets replied=true, so we only check replied flag.
       if (wskit?.rpc && !wskit.rpc.replied) {
         console.warn(
-          `[ws] RPC handler for "${schema.type}" completed without calling ctx.reply() or ctx.error(). ` +
+          `[ws] RPC handler for "${schema.messageType}" completed without calling ctx.reply() or ctx.error(). ` +
             `If this is intentional (async response), set { warnIncompleteRpc: false } in createRouter().`,
         );
       }
@@ -255,7 +254,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
     await lifecycle.handleError(err, ctx);
     impl.notifyError(err, {
       clientId,
-      type: schema.type,
+      type: schema.messageType,
     });
   } finally {
     // 10) Release limits tracking

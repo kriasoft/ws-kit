@@ -5,286 +5,253 @@
  * Integration tests for withMessaging() + withRpc() plugins
  *
  * Validates that core plugins compose cleanly without validator involvement.
- * Shows the plugin-agnostic nature of core messaging and RPC functionality.
- *
- * Validator tests verify that Zod/Valibot plugins wrap these correctly.
+ * Tests only fire-and-forget messaging patterns here; RPC functionality
+ * (reply/progress) requires validator plugins and is tested there.
  *
  * Spec: ADR-031#plugin-adapter-architecture
  *       docs/specs/plugins.md
  */
 
 import { createRouter } from "@ws-kit/core";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { withMessaging, withRpc } from "../src/index.js";
 
+// Test descriptors (proper MessageDescriptor with DESCRIPTOR symbol)
+const MESSAGE = createDescriptor("MESSAGE", "event");
+const PING = createDescriptor("PING", "event");
+const PONG = createDescriptor("PONG", "event");
+const TEST = createDescriptor("TEST", "event");
+const RESPONSE = createDescriptor("RESPONSE", "event");
+
 describe("Plugin composition - withMessaging + withRpc", () => {
   describe("both plugins applied to same router", () => {
-    it("both send() and reply() available after composition", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
+    it("send() available in event handlers", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
+      });
 
       let sendAvailable = false;
-      let replyAvailable = false;
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
+      tr.on(MESSAGE, (ctx: any) => {
         sendAvailable = typeof ctx.send === "function";
       });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          replyAvailable = typeof ctx.reply === "function";
-        },
-      );
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
 
-      expect(router.on).toBeDefined();
+      expect(sendAvailable).toBe(true);
+      await tr.close();
     });
 
-    it("send() available in all handlers", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
-        expect(typeof ctx.send).toBe("function");
+    it("reply() and progress() methods exist on context", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.send).toBe("function");
-        },
-      );
+      let replyAvailable = false;
+      let progressAvailable = false;
+      tr.on(MESSAGE, (ctx: any) => {
+        replyAvailable = typeof ctx.reply === "function";
+        progressAvailable = typeof ctx.progress === "function";
+      });
 
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      expect(replyAvailable).toBe(true);
+      expect(progressAvailable).toBe(true);
+      await tr.close();
     });
 
-    it("reply() only available in RPC handlers", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
-        // reply() should not be available in event handlers
-        // (enforced at type level in practice)
-        expect(typeof ctx.reply).toBe("function");
+    it("reply() throws in non-RPC handlers (guards work)", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.reply).toBe("function");
-        },
-      );
+      tr.on(MESSAGE, (ctx: any) => {
+        ctx.reply({ result: "bad" });
+      });
 
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      const errors = tr.capture.errors();
+      expect(errors.length).toBeGreaterThan(0);
+      expect(String(errors[0])).toContain("only in RPC handlers");
+      await tr.close();
     });
 
-    it("extensions available for wrapping by other plugins", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
-        // Plugins store enhancements in ctx.extensions
-        const messagingExt = ctx.extensions.get("messaging");
-        const rpcExt = ctx.extensions.get("rpc");
-
-        expect(messagingExt).toBeDefined();
-        expect(typeof messagingExt.send).toBe("function");
-
-        // RPC extension available too (from context enhancer)
-        expect(rpcExt || typeof ctx.reply).toBeTruthy();
+    it("progress() throws in non-RPC handlers (guards work)", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
 
-      expect(router.on).toBeDefined();
+      tr.on(MESSAGE, (ctx: any) => {
+        ctx.progress({ status: "in progress" });
+      });
+
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      const errors = tr.capture.errors();
+      expect(errors.length).toBeGreaterThan(0);
+      expect(String(errors[0])).toContain("only in RPC handlers");
+      await tr.close();
+    });
+
+    it("extensions available for wrapping by other plugins", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
+      });
+
+      let messagingExtDefined = false;
+      let sendIsFn = false;
+      tr.on(MESSAGE, (ctx: any) => {
+        const messagingExt = ctx.extensions?.get?.("messaging");
+        messagingExtDefined = messagingExt !== undefined;
+        sendIsFn = typeof messagingExt?.send === "function";
+      });
+
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      expect(messagingExtDefined).toBe(true);
+      expect(sendIsFn).toBe(true);
+      await tr.close();
     });
   });
 
   describe("plugin order independence", () => {
-    it("works with withRpc before withMessaging", () => {
-      const router = createRouter().plugin(withRpc()).plugin(withMessaging());
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
-        expect(typeof ctx.send).toBe("function");
+    it("works with withRpc before withMessaging", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withRpc()).plugin(withMessaging()),
       });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.reply).toBe("function");
-        },
-      );
+      let sendAvailable = false;
+      let replyAvailable = false;
 
-      expect(router.on).toBeDefined();
+      tr.on(MESSAGE, (ctx: any) => {
+        sendAvailable = typeof ctx.send === "function";
+        replyAvailable = typeof ctx.reply === "function";
+      });
+
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      expect(sendAvailable).toBe(true);
+      expect(replyAvailable).toBe(true);
+      await tr.close();
     });
 
-    it("works with withMessaging before withRpc", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
-        expect(typeof ctx.send).toBe("function");
+    it("works with withMessaging before withRpc", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.reply).toBe("function");
-        },
-      );
+      let sendAvailable = false;
+      let replyAvailable = false;
 
-      expect(router.on).toBeDefined();
+      tr.on(MESSAGE, (ctx: any) => {
+        sendAvailable = typeof ctx.send === "function";
+        replyAvailable = typeof ctx.reply === "function";
+      });
+
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      expect(sendAvailable).toBe(true);
+      expect(replyAvailable).toBe(true);
+      await tr.close();
     });
   });
 
-  describe("validator plugins can wrap core plugins", () => {
-    it("validator plugin can inject validation between core plugins", () => {
-      // This simulates how @ws-kit/zod and @ws-kit/valibot wrap core plugins
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      // A validator plugin would:
-      // 1. Use getRouterPluginAPI to get enhancer registration
-      // 2. Add validation middleware
-      // 3. Wrap ctx.send/reply/progress with validation
-
-      router.on({ type: "MESSAGE" }, (ctx: any) => {
-        // After validator plugin applied, ctx.send would be wrapped
-        // but the interface remains the same
-        expect(typeof ctx.send).toBe("function");
+  describe("fire-and-forget messaging", () => {
+    it("handlers can send() multiple messages", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.reply).toBe("function");
-        },
-      );
-
-      expect(router.on).toBeDefined();
-    });
-  });
-
-  describe("fire-and-forget and RPC patterns together", () => {
-    it("handlers can send() unicast while handling RPC", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // Send notification to client
-          ctx.send({ type: "PROCESSING" }, { status: "started" });
-
-          // Do some work
-          ctx.send({ type: "PROCESSING" }, { status: "50%" });
-
-          // Send terminal response
-          ctx.reply({ result: "done" });
-
-          // Further sends would be silently queued (not terminal)
-          ctx.send({ type: "COMPLETED" }, { final: true });
-        },
-      );
-
-      expect(router.on).toBeDefined();
-    });
-
-    it("handlers can use progress() for streaming within RPC", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // Stream progress updates
-          for (let i = 1; i <= 10; i++) {
-            ctx.progress({ percent: i * 10 });
-          }
-
-          // Terminal response
-          ctx.reply({ result: "done" });
-        },
-      );
-
-      expect(router.on).toBeDefined();
-    });
-  });
-
-  describe("backwards compatibility with existing patterns", () => {
-    it("simple event pattern still works", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on({ type: "PING" }, (ctx: any) => {
-        ctx.send({ type: "PONG" }, { text: "pong" });
+      let sendCount = 0;
+      tr.on(MESSAGE, (ctx: any) => {
+        ctx.send(RESPONSE, { status: "first" });
+        sendCount++;
+        ctx.send(RESPONSE, { status: "second" });
+        sendCount++;
+        ctx.send(RESPONSE, { status: "third" });
+        sendCount++;
       });
 
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
+
+      expect(sendCount).toBe(3);
+      await tr.close();
     });
 
-    it("simple RPC pattern still works", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
+    it("simple ping-pong pattern works", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
+      });
 
-      router.on(
-        { type: "GET_USER", response: { type: "USER" } },
-        (ctx: any) => {
-          if (!ctx.payload) {
-            ctx.error("INVALID", "Missing payload");
-          } else {
-            ctx.reply({ id: "123", name: "Alice" });
-          }
-        },
-      );
+      let handlerCalled = false;
+      let sendCalled = false;
+      tr.on(PING, (ctx: any) => {
+        handlerCalled = true;
+        ctx.send(PONG, { text: "pong" });
+        sendCalled = true;
+      });
 
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+
+      expect(handlerCalled).toBe(true);
+      expect(sendCalled).toBe(true);
+      await tr.close();
     });
-  });
 
-  describe("behavioral tests - send() and reply() behavior", () => {
-    it("send() returns void (fire-and-forget)", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
+    it("send() returns void (fire-and-forget)", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
+      });
+
       let sendResult: unknown = "not called";
-
-      router.on({ type: "TEST" }, (ctx: any) => {
-        sendResult = ctx.send({ type: "RESPONSE" }, { data: "test" });
+      tr.on(TEST, (ctx: any) => {
+        sendResult = ctx.send(RESPONSE, { data: "test" });
       });
 
-      // The handler isn't called during registration, so we expect "not called"
-      // but the method exists and would return void when called
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("TEST");
+      await tr.flush();
+
+      expect(sendResult).toBeUndefined();
+      await tr.close();
     });
 
-    it("reply() is called and should work in RPC handler", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-      let replyCalled = false;
+    it("error() is available and callable in handlers", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
+      });
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          replyCalled = true;
-          ctx.reply({ result: "success" });
-        },
-      );
+      let errorAvailable = false;
+      tr.on(MESSAGE, (ctx: any) => {
+        errorAvailable = typeof ctx.error === "function";
+      });
 
-      expect(router.on).toBeDefined();
-    });
+      const conn = await tr.connect();
+      conn.send("MESSAGE");
+      await tr.flush();
 
-    it("error() is available in RPC handler", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.error).toBe("function");
-          ctx.error("TEST_ERROR", "Test error message");
-        },
-      );
-
-      expect(router.on).toBeDefined();
-    });
-
-    it("progress() is available in RPC handler", () => {
-      const router = createRouter().plugin(withMessaging()).plugin(withRpc());
-
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.progress).toBe("function");
-          ctx.progress({ status: "in progress" });
-        },
-      );
-
-      expect(router.on).toBeDefined();
+      expect(errorAvailable).toBe(true);
+      await tr.close();
     });
   });
 });

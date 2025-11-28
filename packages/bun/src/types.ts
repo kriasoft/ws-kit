@@ -188,9 +188,7 @@ export interface BunServerHandlers<
    */
   fetch: (
     req: Request,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     server: import("bun").Server<any>,
-    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
   ) => Response | void | Promise<Response | void>;
 
   /** WebSocket handler for Bun.serve */

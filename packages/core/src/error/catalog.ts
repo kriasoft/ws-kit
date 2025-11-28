@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Error catalog: documented error codes and scenarios across all packages.
  *
@@ -124,18 +127,18 @@ export const ERROR_CATALOG = {
  * Get all error codes for documentation generation.
  * Useful for generating error reference docs.
  */
-export function getAllErrorCodes(): Array<{
+export function getAllErrorCodes(): {
   code: string;
   area: string;
   number: string;
   message: string;
-}> {
-  const codes: Array<{
+}[] {
+  const codes: {
     code: string;
     area: string;
     number: string;
     message: string;
-  }> = [];
+  }[] = [];
 
   for (const [area, errors] of Object.entries(ERROR_CATALOG)) {
     // Extract error names and format as codes

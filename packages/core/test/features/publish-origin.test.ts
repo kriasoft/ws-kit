@@ -24,7 +24,10 @@ import { describe, expect, it } from "bun:test";
 describe("Publish Origin Tracking via ctx.publish()", () => {
   describe("Sender in Payload Pattern", () => {
     it("should support including sender userId in payload", async () => {
-      type ChatPayload = { text: string; senderId: string };
+      interface ChatPayload {
+        text: string;
+        senderId: string;
+      }
       const ChatMessage = message("CHAT", {
         text: z.string(),
         senderId: z.string(),
@@ -56,7 +59,10 @@ describe("Publish Origin Tracking via ctx.publish()", () => {
     });
 
     it("should accept numeric sender IDs in payload", async () => {
-      type RoomPayload = { text: string; userId: number };
+      interface RoomPayload {
+        text: string;
+        userId: number;
+      }
       const RoomUpdate = message("ROOM_UPDATE", {
         text: z.string(),
         userId: z.number(),

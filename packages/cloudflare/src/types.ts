@@ -48,7 +48,6 @@ export interface DurableObjectHandler {
   fetch(req: Request): Response | Promise<Response>;
 
   /** WebSocket handler compatible with DO's WebSocket API */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   websocket?: any;
 }
 
@@ -139,7 +138,6 @@ export interface DurableObjectStub {
  *
  * Used to access bindings like DO namespaces and other resources.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DurableObjectEnv extends Record<
   string,
   DurableObjectNamespace | unknown

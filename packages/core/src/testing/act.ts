@@ -39,7 +39,7 @@ export const act = {
     if (kind && kind !== "event") {
       throw new Error(`Expected event schema, got kind: ${kind}`);
     }
-    conn.send(schema.type, payload, meta);
+    conn.send(schema.messageType, payload, meta);
   },
 
   /**
@@ -77,19 +77,21 @@ export const act = {
     }
 
     if (!schema.response) {
-      throw new Error(`Expected RPC schema with response, got: ${schema.type}`);
+      throw new Error(
+        `RPC schema "${schema.messageType}" must have a response descriptor`,
+      );
     }
 
     // Generate a correlation ID for this RPC call
     const rpcId = `rpc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     // Send the request
-    const requestMeta = { ...meta, _rpcId: rpcId };
-    conn.send(schema.type, payload, requestMeta);
+    const requestMeta = { ...meta, correlationId: rpcId };
+    conn.send(schema.messageType, payload, requestMeta);
 
     // Create result/progress iterables
     let resultPromiseResolve: (value: TResponse) => void;
-    let resultPromiseReject: (reason?: unknown) => void;
+    let resultPromiseReject: (reason: any) => void;
     const resultPromise = new Promise<TResponse>((resolve, reject) => {
       resultPromiseResolve = resolve;
       resultPromiseReject = reject;
@@ -99,7 +101,7 @@ export const act = {
     let progressResolved = false;
 
     // Poll for responses (schema.response is guaranteed to exist from checks above)
-    const responseType = (schema.response as MessageDescriptor).type;
+    const responseType = (schema.response as MessageDescriptor).messageType;
 
     const checkForResponses = async (): Promise<void> => {
       const outgoing = conn.outgoing();

@@ -31,7 +31,6 @@ import type { Server } from "bun";
  * @internal Use `bunPubSub(server)` factory for creating instances.
  */
 export class BunPubSub implements PubSubAdapter {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(private server: Server<any>) {}
 
   /**

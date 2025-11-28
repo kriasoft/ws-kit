@@ -40,7 +40,6 @@ export function validateMetaSchema(meta?: Record<string, unknown>): void {
  */
 export function normalizeInboundMessage(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return raw as any; // Will fail validation
   }
 

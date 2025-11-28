@@ -149,13 +149,13 @@ export function withMessaging<
         /**
          * Extract message type from schema.
          *
-         * For MessageDescriptor: use __descriptor.type or .type field.
-         * For plain objects: use .type field.
+         * For MessageDescriptor: use __descriptor.messageType or .messageType field.
+         * For plain objects: use .messageType field.
          */
         function getMessageType(schema: any): string {
           return (
-            schema.__descriptor?.type ||
-            schema.type ||
+            schema.__descriptor?.messageType ||
+            schema.messageType ||
             schema.responseType ||
             "UNKNOWN"
           );

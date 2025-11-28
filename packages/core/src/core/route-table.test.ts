@@ -12,9 +12,9 @@ type TestContext = Record<string, unknown>;
 
 // Helper to create test message descriptors with DESCRIPTOR symbol
 function createMessageDescriptor(type: string): MessageDescriptor {
-  const obj: MessageDescriptor = { type };
+  const obj: MessageDescriptor = { messageType: type };
   Object.defineProperty(obj, DESCRIPTOR, {
-    value: { type, kind: "event" },
+    value: { messageType: type, kind: "event" },
     enumerable: false,
   });
   return obj;
@@ -26,10 +26,10 @@ function createDescWithKind(
   kind: "event" | "rpc",
   response?: MessageDescriptor,
 ): MessageDescriptor {
-  const obj: MessageDescriptor = { type };
+  const obj: MessageDescriptor = { messageType: type };
   if (response) (obj as any).response = response;
   Object.defineProperty(obj, DESCRIPTOR, {
-    value: { type, kind },
+    value: { messageType: type, kind },
     enumerable: false,
   });
   return obj;
@@ -92,9 +92,9 @@ describe("RouteTable", () => {
       const entry = createRouteEntry();
 
       // Case-sensitive kind check - invalid kind in DESCRIPTOR
-      const invalidKind: any = { type: "REQUEST" };
+      const invalidKind: any = { messageType: "REQUEST" };
       Object.defineProperty(invalidKind, DESCRIPTOR, {
-        value: { type: "REQUEST", kind: "Rpc" }, // Wrong case
+        value: { messageType: "REQUEST", kind: "Rpc" }, // Wrong case
         enumerable: false,
       });
       expect(() => table.register(invalidKind, entry)).toThrow(
@@ -131,7 +131,7 @@ describe("RouteTable", () => {
 
       // Response missing DESCRIPTOR symbol
       const rpcSchema = createDescWithKind("REQUEST", "rpc");
-      (rpcSchema as any).response = { type: "RESPONSE" }; // No DESCRIPTOR
+      (rpcSchema as any).response = { messageType: "RESPONSE" }; // No DESCRIPTOR
       expect(() => table.register(rpcSchema, entry)).toThrow(
         /RPC schema for type "REQUEST" has invalid response descriptor/,
       );
@@ -155,9 +155,9 @@ describe("RouteTable", () => {
       const entry = createRouteEntry();
 
       // Response with empty type string - create manually
-      const responseSchema: any = { type: "" };
+      const responseSchema: any = { messageType: "" };
       Object.defineProperty(responseSchema, DESCRIPTOR, {
-        value: { type: "", kind: "event" },
+        value: { messageType: "", kind: "event" },
         enumerable: false,
       });
       const rpcSchema = createDescWithKind("REQUEST", "rpc", responseSchema);
@@ -357,7 +357,7 @@ describe("RouteTable", () => {
       expect(target.has("auth.LOGOUT")).toBe(true);
     });
 
-    it("should update schema.type in mounted entries", () => {
+    it("should update schema.messageType in mounted entries", () => {
       const source = new RouteTable<TestContext>();
       const target = new RouteTable<TestContext>();
 
@@ -372,7 +372,7 @@ describe("RouteTable", () => {
 
       const mounted = target.get("auth.LOGIN");
       expect(mounted).toBeDefined();
-      expect(mounted!.schema.type).toBe("auth.LOGIN");
+      expect(mounted!.schema.messageType).toBe("auth.LOGIN");
     });
 
     it("should preserve other schema fields when mounting", () => {
@@ -380,12 +380,12 @@ describe("RouteTable", () => {
       const target = new RouteTable<TestContext>();
 
       const sourceSchema: MessageDescriptor & Record<string, unknown> = {
-        type: "LOGIN",
+        messageType: "LOGIN",
         version: 1,
         custom: "value",
       };
       Object.defineProperty(sourceSchema, DESCRIPTOR, {
-        value: { type: "LOGIN", kind: "event" },
+        value: { messageType: "LOGIN", kind: "event" },
         enumerable: false,
       });
 
@@ -453,7 +453,7 @@ describe("RouteTable", () => {
 
       const mounted = target.get("auth.LOGIN");
       expect(mounted).toBeDefined();
-      expect(mounted!.schema.type).toBe("auth.LOGIN");
+      expect(mounted!.schema.messageType).toBe("auth.LOGIN");
     });
 
     it("should support method chaining", () => {

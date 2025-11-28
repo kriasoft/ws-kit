@@ -24,20 +24,21 @@
  */
 
 import { createRouter } from "@ws-kit/core";
+import { createRpcDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { withRpc } from "../index.js";
+
+// RPC schema with proper DESCRIPTOR symbol
+const REQUEST = createRpcDescriptor("REQUEST", "RESPONSE");
 
 describe("withRpc() plugin - ctx.reply()", () => {
   describe("method signature", () => {
     it("reply() is available in RPC handlers", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.reply).toBe("function");
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        expect(typeof ctx.reply).toBe("function");
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -45,13 +46,10 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("reply() returns void by default (fire-and-forget)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.reply({ result: "ok" });
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.reply({ result: "ok" });
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -59,13 +57,10 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("reply() with {waitFor} returns Promise<void>", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.reply({ result: "ok" }, { waitFor: "drain" });
-          expect(result).toBeInstanceOf(Promise);
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.reply({ result: "ok" }, { waitFor: "drain" });
+        expect(result).toBeInstanceOf(Promise);
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -76,14 +71,11 @@ describe("withRpc() plugin - ctx.reply()", () => {
       const router = createRouter().plugin(withRpc());
 
       const sendCount = 0;
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.reply({ result: "first" });
-          ctx.reply({ result: "second" }); // Should be ignored
-          ctx.reply({ result: "third" }); // Should be ignored
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.reply({ result: "first" });
+        ctx.reply({ result: "second" }); // Should be ignored
+        ctx.reply({ result: "third" }); // Should be ignored
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -91,14 +83,11 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("returns void for idempotent calls (no waitFor)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.reply({ result: "first" });
-          const result = ctx.reply({ result: "second" }); // Idempotent
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.reply({ result: "first" });
+        const result = ctx.reply({ result: "second" }); // Idempotent
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -106,19 +95,16 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("returns resolved Promise for idempotent calls (with waitFor)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.reply({ result: "first" }, { waitFor: "drain" });
-          const result = ctx.reply({ result: "second" }, { waitFor: "drain" }); // Idempotent
-          if (result instanceof Promise) {
-            result.then(() => {
-              // Should resolve normally
-              expect(true).toBe(true);
-            });
-          }
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.reply({ result: "first" }, { waitFor: "drain" });
+        const result = ctx.reply({ result: "second" }, { waitFor: "drain" }); // Idempotent
+        if (result instanceof Promise) {
+          result.then(() => {
+            // Should resolve normally
+            expect(true).toBe(true);
+          });
+        }
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -128,19 +114,16 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("gracefully skips reply if signal is aborted before enqueue", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const controller = new AbortController();
-          controller.abort();
+      router.on(REQUEST, (ctx: any) => {
+        const controller = new AbortController();
+        controller.abort();
 
-          const result = ctx.reply(
-            { result: "ok" },
-            { signal: controller.signal },
-          );
-          expect(result).toBeUndefined();
-        },
-      );
+        const result = ctx.reply(
+          { result: "ok" },
+          { signal: controller.signal },
+        );
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -148,24 +131,21 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("gracefully skips reply with {waitFor} if signal is aborted", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const controller = new AbortController();
-          controller.abort();
+      router.on(REQUEST, (ctx: any) => {
+        const controller = new AbortController();
+        controller.abort();
 
-          const result = ctx.reply(
-            { result: "ok" },
-            { waitFor: "drain", signal: controller.signal },
-          );
+        const result = ctx.reply(
+          { result: "ok" },
+          { waitFor: "drain", signal: controller.signal },
+        );
 
-          if (result instanceof Promise) {
-            result.then(() => {
-              expect(true).toBe(true);
-            });
-          }
-        },
-      );
+        if (result instanceof Promise) {
+          result.then(() => {
+            expect(true).toBe(true);
+          });
+        }
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -175,13 +155,10 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("merges custom metadata into response", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // Should not throw; metadata accepted
-          ctx.reply({ result: "ok" }, { meta: { traceId: "abc123" } });
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        // Should not throw; metadata accepted
+        ctx.reply({ result: "ok" }, { meta: { traceId: "abc123" } });
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -189,21 +166,18 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("sanitizes metadata to prevent reserved key override", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // Should not throw; reserved keys are stripped
-          ctx.reply(
-            { result: "ok" },
-            {
-              meta: {
-                correlationId: "fake", // Reserved: should be stripped
-                customField: "ok", // Non-reserved: should be preserved
-              },
+      router.on(REQUEST, (ctx: any) => {
+        // Should not throw; reserved keys are stripped
+        ctx.reply(
+          { result: "ok" },
+          {
+            meta: {
+              correlationId: "fake", // Reserved: should be stripped
+              customField: "ok", // Non-reserved: should be preserved
             },
-          );
-        },
-      );
+          },
+        );
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -213,16 +187,13 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("preserves correlationId from inbound request to response", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // Simulate inbound request with correlationId
-          ctx.meta = { correlationId: "req-123" };
+      router.on(REQUEST, (ctx: any) => {
+        // Simulate inbound request with correlationId
+        ctx.meta = { correlationId: "req-123" };
 
-          // Should automatically preserve in response
-          ctx.reply({ result: "ok" });
-        },
-      );
+        // Should automatically preserve in response
+        ctx.reply({ result: "ok" });
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -230,15 +201,12 @@ describe("withRpc() plugin - ctx.reply()", () => {
     it("correlationId preserved even with custom {meta}", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.meta = { correlationId: "req-123" };
+      router.on(REQUEST, (ctx: any) => {
+        ctx.meta = { correlationId: "req-123" };
 
-          // Custom meta merged but correlation preserved
-          ctx.reply({ result: "ok" }, { meta: { customField: "value" } });
-        },
-      );
+        // Custom meta merged but correlation preserved
+        ctx.reply({ result: "ok" }, { meta: { customField: "value" } });
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -250,12 +218,9 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("error() is available in RPC handlers", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.error).toBe("function");
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        expect(typeof ctx.error).toBe("function");
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -263,15 +228,12 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("error() requires code and message parameters", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // Should accept code, message, optional details, optional options
-          ctx.error("NOT_FOUND", "Item not found");
-          ctx.error("NOT_FOUND", "Item not found", { id: "123" });
-          ctx.error("NOT_FOUND", "Item not found", { id: "123" }, {});
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        // Should accept code, message, optional details, optional options
+        ctx.error("NOT_FOUND", "Item not found");
+        ctx.error("NOT_FOUND", "Item not found", { id: "123" });
+        ctx.error("NOT_FOUND", "Item not found", { id: "123" }, {});
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -279,13 +241,10 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("error() returns void by default", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.error("NOT_FOUND", "Not found");
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.error("NOT_FOUND", "Not found");
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -293,18 +252,15 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("error() with {waitFor} returns Promise<void>", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.error(
-            "NOT_FOUND",
-            "Not found",
-            {},
-            { waitFor: "drain" },
-          );
-          expect(result).toBeInstanceOf(Promise);
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.error(
+          "NOT_FOUND",
+          "Not found",
+          {},
+          { waitFor: "drain" },
+        );
+        expect(result).toBeInstanceOf(Promise);
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -314,13 +270,10 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("first error() sends, subsequent calls are idempotent no-ops", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.error("FIRST", "First error");
-          ctx.error("SECOND", "Second error"); // Should be ignored
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.error("FIRST", "First error");
+        ctx.error("SECOND", "Second error"); // Should be ignored
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -328,14 +281,11 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("reply() after error() is ignored (mixed terminals)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.error("FAILED", "Something failed");
-          const result = ctx.reply({ result: "ok" }); // Should be ignored
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.error("FAILED", "Something failed");
+        const result = ctx.reply({ result: "ok" }); // Should be ignored
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -343,14 +293,11 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("error() after reply() is ignored (mixed terminals)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.reply({ result: "ok" });
-          const result = ctx.error("FAILED", "Something failed"); // Should be ignored
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.reply({ result: "ok" });
+        const result = ctx.error("FAILED", "Something failed"); // Should be ignored
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -360,13 +307,10 @@ describe("withRpc() plugin - ctx.error()", () => {
     it("preserves correlationId from inbound request to error response", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.meta = { correlationId: "req-123" };
-          ctx.error("NOT_FOUND", "Not found");
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.meta = { correlationId: "req-123" };
+        ctx.error("NOT_FOUND", "Not found");
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -378,12 +322,9 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("progress() is available in RPC handlers", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          expect(typeof ctx.progress).toBe("function");
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        expect(typeof ctx.progress).toBe("function");
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -391,13 +332,10 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("progress() returns void by default", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.progress({ percent: 50 });
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.progress({ percent: 50 });
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -405,13 +343,10 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("progress() with {waitFor} returns Promise<void>", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.progress({ percent: 50 }, { waitFor: "drain" });
-          expect(result).toBeInstanceOf(Promise);
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.progress({ percent: 50 }, { waitFor: "drain" });
+        expect(result).toBeInstanceOf(Promise);
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -421,16 +356,13 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("can be called multiple times (non-terminal)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.progress({ percent: 25 });
-          ctx.progress({ percent: 50 });
-          ctx.progress({ percent: 75 });
-          // All should succeed
-          expect(true).toBe(true);
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.progress({ percent: 25 });
+        ctx.progress({ percent: 50 });
+        ctx.progress({ percent: 75 });
+        // All should succeed
+        expect(true).toBe(true);
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -438,14 +370,11 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("can be called before reply() (streaming pattern)", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.progress({ percent: 50 });
-          ctx.progress({ percent: 100 });
-          ctx.reply({ result: "done" }); // Terminal marker
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.progress({ percent: 50 });
+        ctx.progress({ percent: 100 });
+        ctx.reply({ result: "done" }); // Terminal marker
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -453,14 +382,11 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("progress() after reply() is idempotent no-op", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.reply({ result: "done" });
-          const result = ctx.progress({ percent: 100 }); // Should be ignored
-          expect(result).toBeUndefined();
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.reply({ result: "done" });
+        const result = ctx.progress({ percent: 100 }); // Should be ignored
+        expect(result).toBeUndefined();
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -470,18 +396,15 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("skips send if within throttle window", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          // First progress sends immediately
-          const result1 = ctx.progress({ percent: 25 }, { throttleMs: 100 });
-          expect(result1).toBeUndefined();
+      router.on(REQUEST, (ctx: any) => {
+        // First progress sends immediately
+        const result1 = ctx.progress({ percent: 25 }, { throttleMs: 100 });
+        expect(result1).toBeUndefined();
 
-          // Second progress within 100ms should be throttled
-          const result2 = ctx.progress({ percent: 50 }, { throttleMs: 100 });
-          expect(result2).toBeUndefined(); // Throttled, returns void
-        },
-      );
+        // Second progress within 100ms should be throttled
+        const result2 = ctx.progress({ percent: 50 }, { throttleMs: 100 });
+        expect(result2).toBeUndefined(); // Throttled, returns void
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -489,17 +412,14 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("works with {waitFor} and throttling", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          const result = ctx.progress(
-            { percent: 25 },
-            { throttleMs: 100, waitFor: "drain" },
-          );
-          // Should return Promise
-          expect(result).toBeInstanceOf(Promise);
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        const result = ctx.progress(
+          { percent: 25 },
+          { throttleMs: 100, waitFor: "drain" },
+        );
+        // Should return Promise
+        expect(result).toBeInstanceOf(Promise);
+      });
 
       expect(router.on).toBeDefined();
     });
@@ -509,15 +429,12 @@ describe("withRpc() plugin - ctx.progress()", () => {
     it("preserves correlationId in progress updates", () => {
       const router = createRouter().plugin(withRpc());
 
-      router.on(
-        { type: "REQUEST", response: { type: "RESPONSE" } },
-        (ctx: any) => {
-          ctx.meta = { correlationId: "req-123" };
-          ctx.progress({ percent: 50 });
-          ctx.progress({ percent: 100 });
-          ctx.reply({ result: "done" });
-        },
-      );
+      router.on(REQUEST, (ctx: any) => {
+        ctx.meta = { correlationId: "req-123" };
+        ctx.progress({ percent: 50 });
+        ctx.progress({ percent: 100 });
+        ctx.reply({ result: "done" });
+      });
 
       expect(router.on).toBeDefined();
     });

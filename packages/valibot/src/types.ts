@@ -59,7 +59,7 @@ export type InferMetaShape<
  * a real Valibot schema with .safeParse() method and __descriptor metadata.
  */
 export type MessageSchema = GenericSchema & {
-  readonly __descriptor: { readonly type: string };
+  readonly __descriptor: { readonly messageType: string };
 };
 
 /**
@@ -88,7 +88,7 @@ export type AnySchema =
  * ```
  */
 export type InferType<S> = S extends {
-  readonly __descriptor: { readonly type: infer T };
+  readonly __descriptor: { readonly messageType: infer T };
 }
   ? T
   : S extends BrandedSchema<infer T, any, any, any>
@@ -117,7 +117,7 @@ export type InferType<S> = S extends {
  * ```
  */
 export type InferMessage<S> = S extends {
-  readonly __descriptor: { readonly type: infer T };
+  readonly __descriptor: { readonly messageType: infer T };
 }
   ? S extends {
       readonly __valibot_payload: infer PayloadDef extends
@@ -178,7 +178,7 @@ export type InferPayload<S> = S extends {
  * ```
  */
 export type InferMeta<S> = S extends {
-  readonly __descriptor: { readonly type: infer T extends string };
+  readonly __descriptor: { readonly messageType: infer T extends string };
 }
   ? S extends BrandedSchema<T, any, any, infer M>
     ? M

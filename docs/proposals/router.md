@@ -410,7 +410,7 @@ const user = await call.result(); // inferred User
 # 6. Middleware semantics (clear and minimal)
 
 - **Global**: `router.use(fn)` → executes for **all** messages in registration order.
-- **Per-route**: `router.route(schema).use(fn)` → runs **only** for messages of `schema.type`; chainable with `.on(handler)`.
+- **Per-route**: `router.route(schema).use(fn)` → runs **only** for messages of `schema.messageType`; chainable with `.on(handler)`.
 - Order is deterministic: _global (in reg order) → per-route (in reg order) → handler_.
 - `route()` returns a builder; multiple `.use()` calls chain in order before `.on()` registers the handler.
 - `next()` returns a promise; exceptions bubble to `onError`.
@@ -497,7 +497,7 @@ Features:
 # 10. Tiny but important guardrails
 
 - **No hidden PubSub:** if you didn't `.plugin(withPubSub(...))`, there is no `publish()`, `subscribe()`, or `subscriptions`.
-- **Stable `schema.type`:** core never inspects validator-specific ASTs.
+- **Stable `schema.messageType`:** core never inspects validator-specific ASTs.
 - **No `.build()` required:** the router is usable right away; plugins are pure and idempotent.
 - **Deterministic `merge()`:** conflict policy is explicit and tested.
 

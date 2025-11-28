@@ -48,7 +48,6 @@ export interface ClientOptions {
 }
 
 // Type helpers for schema-based operations
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyMessageSchema = any; // Must use any to support both Zod and Valibot schemas
 
 export interface AnyInboundMessage {

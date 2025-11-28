@@ -55,16 +55,14 @@ export async function serve<TContext extends ConnectionData = ConnectionData>(
 
   // Extract the core router if it's wrapped
   // (in case someone passes a typed wrapper)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const coreRouter = (router as any)[Symbol.for("ws-kit.core")] ?? router;
 
   // Per ADR-035: Pass only mechanical options (auth, lifecycle hooks) to createBunHandler.
   // Rationale: Adapter should not have behavioral concerns (context, observability).
   // Those belong in plugins on top of the router, not in the adapter itself.
   // This keeps the adapter lean and consistent with ADR-031 (plugin-adapter architecture).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlerOptions: any = {
-    authenticate: options.authenticate as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    authenticate: options.authenticate as any,
     onError: options.onError,
     onUpgrade: options.onUpgrade,
     onOpen: options.onOpen,
@@ -90,7 +88,6 @@ export async function serve<TContext extends ConnectionData = ConnectionData>(
     // Initialize BunPubSub for this server instance if not already configured
     // This enables router.publish() to broadcast to WebSocket connections
     // Respects any custom pub/sub backend already configured by the user
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!(coreRouter as any).pubsubInstance) {
       // We set the private pubsubInstance field directly since the property is readonly
       Object.defineProperty(coreRouter, "pubsubInstance", {

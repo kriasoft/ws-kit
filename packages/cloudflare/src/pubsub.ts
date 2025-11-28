@@ -35,12 +35,10 @@ export class DurablePubSub {
     string,
     Set<(message: unknown) => void | Promise<void>>
   >();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private broadcastChannel: any;
 
   constructor() {
     // BroadcastChannel is available in Cloudflare Workers
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const BC = globalThis.BroadcastChannel as any;
     if (!BC) {
       console.warn(
@@ -52,9 +50,7 @@ export class DurablePubSub {
     this.broadcastChannel = new BC("ws-kit:pubsub");
 
     // Listen for messages from other open handlers in this DO
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.broadcastChannel.onmessage = (event: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { channel, message } = (event as any).data;
       const handlers = this.subscriptions.get(channel);
       if (handlers) {

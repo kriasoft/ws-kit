@@ -96,7 +96,7 @@ export function cloneWithOpts<T extends any>(from: any, to: T): T {
  * Contains type and kind for routing decisions.
  */
 export interface DescriptorValue {
-  readonly type: string;
+  readonly messageType: string;
   readonly kind?: "event" | "rpc";
 }
 
@@ -127,5 +127,9 @@ export function typeOf(
   schemaObj: unknown,
   schema?: unknown,
 ): string | undefined {
-  return (schemaObj as any)?.[DESCRIPTOR]?.type ?? (schema as any)?.type;
+  return (
+    (schemaObj as any)?.[DESCRIPTOR]?.messageType ??
+    (schema as any)?.messageType ??
+    (schema as any)?.type
+  );
 }

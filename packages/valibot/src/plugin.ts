@@ -22,16 +22,16 @@
 import type {
   ConnectionData,
   ProgressOptions as CoreProgressOptions,
+  PublishOptions as CorePublishOptions,
   ReplyOptions as CoreReplyOptions,
   MessageDescriptor,
   MinimalContext,
-  PublishOptions as CorePublishOptions,
   SendOptions,
 } from "@ws-kit/core";
 import { getRouteIndex } from "@ws-kit/core";
 import {
-  getRouterPluginAPI,
   getKind,
+  getRouterPluginAPI,
   getSchemaOpts,
   typeOf,
   type SchemaOpts,
@@ -166,10 +166,12 @@ function resolveOptions(
  * - Before plugin: Router<TContext, {}> → keyof excludes rpc()
  * - After plugin: Router<TContext, { validation: true }> → keyof includes rpc()
  */
-type WithValibotCapability<TContext extends ConnectionData = ConnectionData> = {
+interface WithValibotCapability<
+  TContext extends ConnectionData = ConnectionData,
+> {
   readonly validation: true;
   readonly __caps: { validation: true };
-};
+}
 
 export function withValibot<TContext extends ConnectionData = ConnectionData>(
   options?: WithValibotOptions,
@@ -207,7 +209,7 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
         if (typeof schema?.safeParse === "function") {
           // Get per-schema options and resolve effective options
           const schemaOpts = getSchemaOpts(schema);
-          const eff = resolveOptions(schemaOpts, pluginOpts);
+          resolveOptions(schemaOpts, pluginOpts);
 
           // Construct normalized inbound message
           const inboundMessage = {
@@ -301,14 +303,14 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
             const result = schemaObj.safeParse(outboundMessage);
             if (!result.success) {
               const validationError = new Error(
-                `Outbound validation failed for ${schema.type}: ${formatValidationError(result.error)}`,
+                `Outbound validation failed for ${typeOf(schemaObj, schema) || "unknown"}: ${formatValidationError(result.error)}`,
               ) as unknown as Error & { code: string; details: any };
               validationError.code = "OUTBOUND_VALIDATION_ERROR";
               validationError.details = result.error;
 
               if (pluginOpts.onValidationError) {
                 await pluginOpts.onValidationError(validationError, {
-                  type: schema.type,
+                  type: typeOf(schemaObj, schema) || "unknown",
                   direction: "outbound",
                   payload,
                 });
@@ -333,14 +335,14 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
           const result = validatePayload(payload, payloadSchema);
           if (!result.success) {
             const validationError = new Error(
-              `Outbound validation failed for ${schema.type}: ${formatValidationError(result.error)}`,
+              `Outbound validation failed for ${typeOf(schemaObj, schema) || "unknown"}: ${formatValidationError(result.error)}`,
             ) as unknown as Error & { code: string; details: any };
             validationError.code = "OUTBOUND_VALIDATION_ERROR";
             validationError.details = result.error;
 
             if (pluginOpts.onValidationError) {
               await pluginOpts.onValidationError(validationError, {
-                type: schema.type,
+                type: typeOf(schemaObj, schema) || "unknown",
                 direction: "outbound",
                 payload,
               });

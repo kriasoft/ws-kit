@@ -102,9 +102,20 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
   // Helper to extract message type from schema
   function extractType(schema: AnyMessageSchema): string {
-    // Support both Zod and Valibot schemas
-    if (schema.shape?.type?.value) return schema.shape.type.value; // Zod
-    if (schema.entries?.type?.literal) return schema.entries.type.literal; // Valibot
+    // 1. Prefer the standardized hidden property added by runtime wrappers
+    if (typeof schema.messageType === "string") return schema.messageType;
+
+    // 2. Check type property (Zod only, as Valibot uses it for schema type)
+    if (typeof schema.type === "string" && schema.type !== "strict_object") {
+      return schema.type;
+    }
+
+    // 3. Fallback to Zod internal structure
+    if (schema.shape?.type?.value) return schema.shape.type.value;
+
+    // 4. Fallback to Valibot internal structure
+    if (schema.entries?.type?.literal) return schema.entries.type.literal;
+
     throw new Error("Unable to extract message type from schema");
   }
 
@@ -557,7 +568,6 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
     if (replyOrOpts === undefined) {
       // No third arg: try to get response from RPC schema
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       reply = (schema as any).response;
       opts = undefined;
     } else if (optsArg !== undefined) {
@@ -578,7 +588,6 @@ export function createClient(opts: ClientOptions): WebSocketClient {
 
       if (isOptionsObject) {
         // Third arg is options, use RPC response schema
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         reply = (schema as any).response;
         opts = replyOrOpts;
       } else {
@@ -646,7 +655,6 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     // Validate outbound message
     const result = safeParse(schema, message);
     if (!result.success) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const error: any = result.error;
       const issues = Array.isArray(error?.issues)
         ? (
