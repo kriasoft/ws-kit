@@ -64,7 +64,11 @@ export type {
  * Extracts the API type a plugin contributes.
  * @internal
  */
-type InferPluginAPI<P> = P extends Plugin<any, infer Api> ? Api : never;
+type InferPluginAPI<P> = 0 extends 1 & P
+  ? any
+  : P extends Plugin<any, infer Api>
+    ? Api
+    : never;
 
 export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   use(mw: Middleware<TContext>): this;

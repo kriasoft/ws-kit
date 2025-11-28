@@ -122,9 +122,9 @@ describe("validator plugin narrowing - Valibot (types)", () => {
   // Test 8: Multiple plugins merge capabilities
   it("multiple plugins merge capabilities correctly", () => {
     // Mock pubsub plugin for testing capability merging
-    // Define API type with pubsub marker and methods
+    // Uses __caps for runtime capability tracking (matches production plugins)
     interface MockPubSubAPI {
-      pubsub: true;
+      __caps: { pubsub: true };
       publish(
         topic: string,
         schema: MessageDescriptor,
@@ -138,7 +138,7 @@ describe("validator plugin narrowing - Valibot (types)", () => {
 
     const withMockPubSub: Plugin<any, MockPubSubAPI> = ((r: Router<any>) => {
       return Object.assign(r, {
-        pubsub: true as const,
+        __caps: { pubsub: true as const },
         publish: async (
           _topic: string,
           _schema: MessageDescriptor,
