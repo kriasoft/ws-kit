@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Act helpers: convenient wrappers for common test patterns.
  * Optional utilities to reduce test boilerplate.
@@ -7,8 +10,9 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
-import type { TestConnection } from "./types";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
+import { getKind } from "../schema/metadata";
+import type { TestConnection } from "./types";
 
 /**
  * Act helpers for cleaner test code.
@@ -27,12 +31,13 @@ export const act = {
    */
   emit<TContext extends ConnectionData = ConnectionData>(
     conn: TestConnection<TContext>,
-    schema: MessageDescriptor & { kind?: "event" },
+    schema: MessageDescriptor,
     payload?: unknown,
     meta?: Record<string, unknown>,
   ): void {
-    if (schema.kind && schema.kind !== "event") {
-      throw new Error(`Expected event schema, got kind: ${schema.kind}`);
+    const kind = getKind(schema);
+    if (kind && kind !== "event") {
+      throw new Error(`Expected event schema, got kind: ${kind}`);
     }
     conn.send(schema.type, payload, meta);
   },
@@ -59,15 +64,16 @@ export const act = {
    */
   call<TContext extends ConnectionData = ConnectionData, TResponse = unknown>(
     conn: TestConnection<TContext>,
-    schema: MessageDescriptor & { kind?: "rpc"; response?: MessageDescriptor },
+    schema: MessageDescriptor & { response?: MessageDescriptor },
     payload?: unknown,
     meta?: Record<string, unknown>,
   ): {
     progress: AsyncIterable<TResponse>;
     result: Promise<TResponse>;
   } {
-    if (schema.kind && schema.kind !== "rpc") {
-      throw new Error(`Expected RPC schema, got kind: ${schema.kind}`);
+    const kind = getKind(schema);
+    if (kind && kind !== "rpc") {
+      throw new Error(`Expected RPC schema, got kind: ${kind}`);
     }
 
     if (!schema.response) {

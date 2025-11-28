@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import { createDescriptor } from "@ws-kit/core/testing";
 import { beforeEach, describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
 import type { MessageDescriptor } from "../../src/protocol/message-descriptor";
@@ -27,10 +28,7 @@ describe("handleMessage - Message Dispatch", () => {
   });
 
   it("should handle valid JSON message", async () => {
-    const schema: MessageDescriptor = {
-      type: "PING",
-      kind: "event",
-    };
+    const schema: MessageDescriptor = createDescriptor("PING", "event");
 
     let handled = false;
     router.on(schema, (ctx) => {
@@ -120,10 +118,7 @@ describe("handleMessage - Message Dispatch", () => {
   });
 
   it("should pass payload to handler", async () => {
-    const schema: MessageDescriptor = {
-      type: "ECHO",
-      kind: "event",
-    };
+    const schema: MessageDescriptor = createDescriptor("ECHO", "event");
 
     let receivedPayload: unknown;
 

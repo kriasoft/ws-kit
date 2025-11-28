@@ -12,17 +12,16 @@
  * - Error handling
  */
 
-import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
-import { test } from "@ws-kit/core/testing";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { memoryPubSub } from "@ws-kit/memory";
 import { withPubSub } from "@ws-kit/pubsub";
 import { withZod } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
-const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
-const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
-const BasicMessage: MessageDescriptor = { type: "MSG", kind: "event" };
+const Message1 = createDescriptor("MSG1", "event");
+const Message2 = createDescriptor("MSG2", "event");
+const BasicMessage = createDescriptor("MSG", "event");
 
 describe("smoke test - quick-start example with plugins", () => {
   it("should create and configure router with Zod and PubSub plugins", () => {

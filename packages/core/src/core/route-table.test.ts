@@ -3,18 +3,36 @@
 
 import { describe, expect, it } from "bun:test";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
+import { DESCRIPTOR } from "../schema/metadata";
 import { RouteTable } from "./route-table";
 import type { RouteEntry } from "./types";
 
 // Test connection data type
 type TestContext = Record<string, unknown>;
 
-// Helper to create test message descriptors
+// Helper to create test message descriptors with DESCRIPTOR symbol
 function createMessageDescriptor(type: string): MessageDescriptor {
-  return {
-    type,
-    kind: "event",
-  };
+  const obj: MessageDescriptor = { type };
+  Object.defineProperty(obj, DESCRIPTOR, {
+    value: { type, kind: "event" },
+    enumerable: false,
+  });
+  return obj;
+}
+
+// Helper to create descriptors with DESCRIPTOR symbol for RPC/event tests
+function createDescWithKind(
+  type: string,
+  kind: "event" | "rpc",
+  response?: MessageDescriptor,
+): MessageDescriptor {
+  const obj: MessageDescriptor = { type };
+  if (response) (obj as any).response = response;
+  Object.defineProperty(obj, DESCRIPTOR, {
+    value: { type, kind },
+    enumerable: false,
+  });
+  return obj;
 }
 
 // Helper to create test route entries
@@ -60,12 +78,12 @@ describe("RouteTable", () => {
         /Invalid schema/,
       );
 
-      // Test undefined
-      const badSchema = { kind: "event" } as MessageDescriptor;
+      // Test missing type
+      const badSchema = {} as MessageDescriptor;
       expect(() => table.register(badSchema, entry)).toThrow(/Invalid schema/);
 
-      // Test null (via descriptor with null type)
-      const nullSchema: any = { type: null, kind: "event" };
+      // Test null type
+      const nullSchema: any = { type: null };
       expect(() => table.register(nullSchema, entry)).toThrow(/Invalid schema/);
     });
 
@@ -73,8 +91,12 @@ describe("RouteTable", () => {
       const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
-      // Case-sensitive kind check
-      const invalidKind: any = { type: "REQUEST", kind: "Rpc" };
+      // Case-sensitive kind check - invalid kind in DESCRIPTOR
+      const invalidKind: any = { type: "REQUEST" };
+      Object.defineProperty(invalidKind, DESCRIPTOR, {
+        value: { type: "REQUEST", kind: "Rpc" }, // Wrong case
+        enumerable: false,
+      });
       expect(() => table.register(invalidKind, entry)).toThrow(
         /Invalid schema for type "REQUEST"/,
       );
@@ -85,7 +107,7 @@ describe("RouteTable", () => {
       const entry = createRouteEntry();
 
       // RPC without response should throw
-      const rpcSchema: any = { type: "REQUEST", kind: "rpc" };
+      const rpcSchema = createDescWithKind("REQUEST", "rpc");
       expect(() => table.register(rpcSchema, entry)).toThrow(
         'RPC schema for type "REQUEST" must have a response descriptor.',
       );
@@ -96,22 +118,20 @@ describe("RouteTable", () => {
       const entry = createRouteEntry();
 
       // RPC with response: true (not a descriptor)
-      const rpcSchema: any = { type: "REQUEST", kind: "rpc", response: true };
+      const rpcSchema = createDescWithKind("REQUEST", "rpc");
+      (rpcSchema as any).response = true;
       expect(() => table.register(rpcSchema, entry)).toThrow(
         /RPC schema for type "REQUEST" has invalid response descriptor/,
       );
     });
 
-    it("should reject RPC with response missing required fields", () => {
+    it("should reject RPC with response missing DESCRIPTOR symbol", () => {
       const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
-      // Response missing kind
-      const rpcSchema: any = {
-        type: "REQUEST",
-        kind: "rpc",
-        response: { type: "RESPONSE" },
-      };
+      // Response missing DESCRIPTOR symbol
+      const rpcSchema = createDescWithKind("REQUEST", "rpc");
+      (rpcSchema as any).response = { type: "RESPONSE" }; // No DESCRIPTOR
       expect(() => table.register(rpcSchema, entry)).toThrow(
         /RPC schema for type "REQUEST" has invalid response descriptor/,
       );
@@ -122,11 +142,9 @@ describe("RouteTable", () => {
       const entry = createRouteEntry();
 
       // Response with invalid version type
-      const rpcSchema: any = {
-        type: "REQUEST",
-        kind: "rpc",
-        response: { type: "RESPONSE", kind: "event", version: "bad" },
-      };
+      const responseSchema = createDescWithKind("RESPONSE", "event");
+      (responseSchema as any).version = "bad";
+      const rpcSchema = createDescWithKind("REQUEST", "rpc", responseSchema);
       expect(() => table.register(rpcSchema, entry)).toThrow(
         /RPC schema for type "REQUEST" has invalid response descriptor/,
       );
@@ -136,12 +154,13 @@ describe("RouteTable", () => {
       const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
-      // Response with empty type string
-      const rpcSchema: any = {
-        type: "REQUEST",
-        kind: "rpc",
-        response: { type: "", kind: "event" },
-      };
+      // Response with empty type string - create manually
+      const responseSchema: any = { type: "" };
+      Object.defineProperty(responseSchema, DESCRIPTOR, {
+        value: { type: "", kind: "event" },
+        enumerable: false,
+      });
+      const rpcSchema = createDescWithKind("REQUEST", "rpc", responseSchema);
       expect(() => table.register(rpcSchema, entry)).toThrow(
         /RPC schema for type "REQUEST" has invalid response descriptor/,
       );
@@ -152,11 +171,8 @@ describe("RouteTable", () => {
       const entry = createRouteEntry();
 
       // Event with response should throw
-      const eventSchema: any = {
-        type: "EVENT",
-        kind: "event",
-        response: { type: "RESPONSE", kind: "event" },
-      };
+      const responseSchema = createDescWithKind("RESPONSE", "event");
+      const eventSchema = createDescWithKind("EVENT", "event", responseSchema);
       expect(() => table.register(eventSchema, entry)).toThrow(
         'Event schema for type "EVENT" must not have a response descriptor.',
       );
@@ -166,12 +182,9 @@ describe("RouteTable", () => {
       const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
-      // Valid RPC with response
-      const rpcSchema: any = {
-        type: "REQUEST",
-        kind: "rpc",
-        response: { type: "RESPONSE", kind: "event" },
-      };
+      // Valid RPC with response (using DESCRIPTOR symbol)
+      const responseSchema = createDescWithKind("RESPONSE", "event");
+      const rpcSchema = createDescWithKind("REQUEST", "rpc", responseSchema);
       expect(() => table.register(rpcSchema, entry)).not.toThrow();
       expect(table.has("REQUEST")).toBe(true);
     });
@@ -180,11 +193,8 @@ describe("RouteTable", () => {
       const table = new RouteTable<TestContext>();
       const entry = createRouteEntry();
 
-      // Valid event without response
-      const eventSchema: MessageDescriptor = {
-        type: "NOTIFY",
-        kind: "event",
-      };
+      // Valid event without response (using DESCRIPTOR symbol)
+      const eventSchema = createDescWithKind("NOTIFY", "event");
       expect(() => table.register(eventSchema, entry)).not.toThrow();
       expect(table.has("NOTIFY")).toBe(true);
     });
@@ -371,10 +381,13 @@ describe("RouteTable", () => {
 
       const sourceSchema: MessageDescriptor & Record<string, unknown> = {
         type: "LOGIN",
-        kind: "event",
         version: 1,
         custom: "value",
       };
+      Object.defineProperty(sourceSchema, DESCRIPTOR, {
+        value: { type: "LOGIN", kind: "event" },
+        enumerable: false,
+      });
 
       const sourceEntry = {
         schema: sourceSchema,

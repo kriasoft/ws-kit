@@ -4,27 +4,24 @@
  * Every message (event or RPC) has this shape, regardless of validator.
  * Core reads only these fields; never introspects validator ASTs.
  *
- * Discriminators:
- * - kind: "event" | "rpc" → router.on() vs router.rpc() (stored in DESCRIPTOR symbol)
- * - response: MessageDescriptor → only for RPC; validated at registration
+ * Fields:
  * - type: literal string → handler lookup key
+ * - response: MessageDescriptor → only for RPC; validated at registration
  * - version (optional): rolling upgrades
  * - __runtime (optional): brand flag (usually "ws-kit-schema")
+ *
+ * The `kind` ("event" | "rpc") is stored in DESCRIPTOR symbol, not on the
+ * interface, to avoid polluting the schema namespace. Use getKind() to read it.
  *
  * Invariants enforced at RouteTable.register():
  * - RPC must have a response descriptor
  * - Event must not have a response descriptor
- *
- * Note: `kind` is read via getKind() from DESCRIPTOR symbol to avoid
- * polluting the schema object namespace and conflicts with validator internals.
  */
 
 import { getKind } from "../schema/metadata.js";
 
 export interface MessageDescriptor {
   readonly type: string;
-  /** @deprecated Use getKind() to read from DESCRIPTOR symbol */
-  readonly kind?: "event" | "rpc";
   readonly version?: number;
   readonly __runtime?: string;
   readonly response?: MessageDescriptor;

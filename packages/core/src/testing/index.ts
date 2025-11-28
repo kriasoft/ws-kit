@@ -87,6 +87,9 @@ export type {
 // Act helpers (optional convenience)
 export { act } from "./act";
 
+// Test schema helpers
+export { createDescriptor, createRpcDescriptor } from "./test-schemas";
+
 // Internal exports (for advanced use)
 export { InMemoryPlatformAdapter } from "./test-adapter";
 export { TestWebSocket, type ConnectionState } from "./test-websocket";

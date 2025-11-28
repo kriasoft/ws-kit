@@ -10,7 +10,7 @@
 
 import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
-import { test } from "@ws-kit/core/testing";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 
 describe("Handler routing integration", () => {
@@ -20,10 +20,7 @@ describe("Handler routing integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const Message: MessageDescriptor = createDescriptor("TEST", "event");
 
       let handlerExecuted = false;
 
@@ -43,8 +40,8 @@ describe("Handler routing integration", () => {
         create: () => createRouter(),
       });
 
-      const Msg1: MessageDescriptor = { type: "MSG1", kind: "event" };
-      const Msg2: MessageDescriptor = { type: "MSG2", kind: "event" };
+      const Msg1: MessageDescriptor = createDescriptor("MSG1", "event");
+      const Msg2: MessageDescriptor = createDescriptor("MSG2", "event");
 
       let msg1Count = 0;
       let msg2Count = 0;
@@ -73,7 +70,7 @@ describe("Handler routing integration", () => {
         create: () => createRouter(),
       });
 
-      const Request: MessageDescriptor = { type: "REQ", kind: "event" };
+      const Request: MessageDescriptor = createDescriptor("REQ", "event");
 
       let callCount = 0;
 
@@ -99,7 +96,7 @@ describe("Handler routing integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = { type: "TEST", kind: "event" };
+      const Message: MessageDescriptor = createDescriptor("TEST", "event");
 
       tr.on(Message, () => {
         throw new Error("Handler failed");
@@ -134,7 +131,7 @@ describe("Handler routing integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = { type: "MY_MSG", kind: "event" };
+      const Message: MessageDescriptor = createDescriptor("MY_MSG", "event");
 
       let capturedType: string | undefined;
 

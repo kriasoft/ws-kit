@@ -16,14 +16,14 @@
 
 import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
-import { test } from "@ws-kit/core/testing";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { withMessaging } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
 describe("dispatch pipeline", () => {
   // Helper to create a simple test schema
   function schema(type: string): MessageDescriptor {
-    return { type, kind: "event" } as const;
+    return createDescriptor(type, "event");
   }
 
   describe("middleware execution order", () => {

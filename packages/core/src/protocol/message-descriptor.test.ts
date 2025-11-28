@@ -53,21 +53,14 @@ describe("assertMessageDescriptor", () => {
   });
 
   it("should reject missing type field", () => {
-    const invalid = createInvalidDescriptor({ kind: "event" });
-    // Without DESCRIPTOR, kind will be undefined
+    const invalid = createInvalidDescriptor({});
     expect(() => assertMessageDescriptor(invalid)).toThrow(
       "Invalid MessageDescriptor",
     );
   });
 
-  it("should accept plain object with kind property (backwards compatibility)", () => {
-    // Plain object with kind property - should be accepted via fallback
-    const valid: any = { type: "TEST", kind: "event" };
-    expect(() => assertMessageDescriptor(valid)).not.toThrow();
-  });
-
-  it("should reject missing kind (no DESCRIPTOR, no kind property)", () => {
-    // Plain object without any kind - should be rejected
+  it("should reject missing DESCRIPTOR symbol", () => {
+    // Plain object without DESCRIPTOR symbol - should be rejected
     const invalid: any = { type: "TEST" };
     expect(() => assertMessageDescriptor(invalid)).toThrow(
       'Invalid MessageDescriptor.kind: expected "event" | "rpc", got undefined',

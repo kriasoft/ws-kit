@@ -7,19 +7,43 @@
  */
 
 import type { MessageDescriptor } from "@ws-kit/core";
+import { DESCRIPTOR } from "../schema/metadata";
 
-export const JOIN: MessageDescriptor = {
-  type: "JOIN",
-  kind: "event",
-};
+/**
+ * Create a test descriptor with DESCRIPTOR symbol properly set.
+ * Use this instead of plain objects with `kind` property.
+ */
+export function createDescriptor(
+  type: string,
+  kind: "event" | "rpc",
+): MessageDescriptor {
+  const obj: MessageDescriptor = { type };
+  Object.defineProperty(obj, DESCRIPTOR, {
+    value: { type, kind },
+    enumerable: false,
+  });
+  return obj;
+}
 
-export const MESSAGE: MessageDescriptor = {
-  type: "MESSAGE",
-  kind: "event",
-};
+/**
+ * Create a test RPC descriptor with response.
+ */
+export function createRpcDescriptor(
+  reqType: string,
+  resType: string,
+): MessageDescriptor & { response: MessageDescriptor } {
+  const response = createDescriptor(resType, "event");
+  const obj: MessageDescriptor & { response: MessageDescriptor } = {
+    type: reqType,
+    response,
+  };
+  Object.defineProperty(obj, DESCRIPTOR, {
+    value: { type: reqType, kind: "rpc" },
+    enumerable: false,
+  });
+  return obj;
+}
 
-export const GET_USER: MessageDescriptor & { response: MessageDescriptor } = {
-  type: "GET_USER",
-  kind: "rpc",
-  response: { type: "USER", kind: "event" },
-};
+export const JOIN = createDescriptor("JOIN", "event");
+export const MESSAGE = createDescriptor("MESSAGE", "event");
+export const GET_USER = createRpcDescriptor("GET_USER", "USER");

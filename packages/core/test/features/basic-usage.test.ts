@@ -12,9 +12,12 @@
  * - Real-world scenarios (chat, e-commerce)
  */
 
-import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
-import { test } from "@ws-kit/core/testing";
+import {
+  createDescriptor,
+  createRpcDescriptor,
+  test,
+} from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 
 // For tests that don't need validation, use plain MessageDescriptor
@@ -28,9 +31,9 @@ describe("basic usage patterns", () => {
     });
 
     it("should support handler chaining", async () => {
-      const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
-      const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
-      const Message3: MessageDescriptor = { type: "MSG3", kind: "event" };
+      const Message1 = createDescriptor("MSG1", "event");
+      const Message2 = createDescriptor("MSG2", "event");
+      const Message3 = createDescriptor("MSG3", "event");
 
       const calls: string[] = [];
 
@@ -59,8 +62,8 @@ describe("basic usage patterns", () => {
     });
 
     it("should register message and RPC-like handlers together", async () => {
-      const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
-      const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
+      const Message1 = createDescriptor("MSG1", "event");
+      const Message2 = createDescriptor("MSG2", "event");
 
       const calls: string[] = [];
 
@@ -87,7 +90,7 @@ describe("basic usage patterns", () => {
 
   describe("fire-and-forget messaging", () => {
     it("should execute handler for sent message", async () => {
-      const TestMessage: MessageDescriptor = { type: "TEST", kind: "event" };
+      const TestMessage = createDescriptor("TEST", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,
@@ -113,8 +116,8 @@ describe("basic usage patterns", () => {
     // requiring validator or messaging plugins.
 
     it("should route different message types to correct handlers", async () => {
-      const Message1: MessageDescriptor = { type: "MSG1", kind: "event" };
-      const Message2: MessageDescriptor = { type: "MSG2", kind: "event" };
+      const Message1 = createDescriptor("MSG1", "event");
+      const Message2 = createDescriptor("MSG2", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,
@@ -142,11 +145,7 @@ describe("basic usage patterns", () => {
 
   describe("request-response pattern", () => {
     it("should handle RPC-like request messages", async () => {
-      const Request: MessageDescriptor = {
-        type: "REQ",
-        kind: "rpc",
-        response: { type: "RES", kind: "event" },
-      };
+      const Request = createRpcDescriptor("REQ", "RES");
 
       const calls: string[] = [];
 
@@ -170,11 +169,7 @@ describe("basic usage patterns", () => {
     // test focuses on handler routing without requiring RPC plugin.
 
     it("should handle multiple sequential request messages", async () => {
-      const SequentialRequest: MessageDescriptor = {
-        type: "REQ_SEQ",
-        kind: "rpc",
-        response: { type: "RES_SEQ", kind: "event" },
-      };
+      const SequentialRequest = createRpcDescriptor("REQ_SEQ", "RES_SEQ");
 
       const calls: string[] = [];
 
@@ -198,7 +193,7 @@ describe("basic usage patterns", () => {
   });
   describe("context operations", () => {
     it("should access context properties in handlers", async () => {
-      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+      const Message = createDescriptor("MSG", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,
@@ -218,7 +213,7 @@ describe("basic usage patterns", () => {
     });
 
     it("should support middleware with use()", async () => {
-      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+      const Message = createDescriptor("MSG", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,
@@ -244,7 +239,7 @@ describe("basic usage patterns", () => {
     });
 
     it("should capture handler errors", async () => {
-      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+      const Message = createDescriptor("MSG", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,
@@ -267,9 +262,9 @@ describe("basic usage patterns", () => {
 
   describe("real-world chat scenario", () => {
     it("should support complete chat flow", async () => {
-      const Join: MessageDescriptor = { type: "JOIN", kind: "event" };
-      const ChatMsg: MessageDescriptor = { type: "CHAT", kind: "event" };
-      const Leave: MessageDescriptor = { type: "LEAVE", kind: "event" };
+      const Join = createDescriptor("JOIN", "event");
+      const ChatMsg = createDescriptor("CHAT", "event");
+      const Leave = createDescriptor("LEAVE", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,
@@ -300,18 +295,9 @@ describe("basic usage patterns", () => {
     });
 
     it("should support e-commerce patterns", async () => {
-      const ViewProduct: MessageDescriptor = {
-        type: "VIEW_PRODUCT",
-        kind: "event",
-      };
-      const AddToCart: MessageDescriptor = {
-        type: "ADD_TO_CART",
-        kind: "event",
-      };
-      const Checkout: MessageDescriptor = {
-        type: "CHECKOUT",
-        kind: "event",
-      };
+      const ViewProduct = createDescriptor("VIEW_PRODUCT", "event");
+      const AddToCart = createDescriptor("ADD_TO_CART", "event");
+      const Checkout = createDescriptor("CHECKOUT", "event");
 
       const tr = test.createTestRouter({
         create: createSimpleRouter,

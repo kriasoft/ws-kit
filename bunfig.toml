@@ -6,7 +6,12 @@
 # Enables module resolution for @ws-kit/* imports at runtime
 "@ws-kit/*" = "packages/*/src"
 # Sub-path exports (explicit mappings for subpath imports in tests)
-"@ws-kit/pubsub/internal" = "packages/pubsub/src/internal"
+"@ws-kit/core/testing" = "packages/core/src/testing/index.ts"
+"@ws-kit/core/plugin" = "packages/core/src/plugin/index.ts"
+"@ws-kit/core/pubsub" = "packages/core/src/capabilities/pubsub/index.ts"
+"@ws-kit/core/internal" = "packages/core/src/internal.ts"
+"@ws-kit/pubsub/internal" = "packages/pubsub/src/internal.ts"
+"@ws-kit/cloudflare/sharding" = "packages/cloudflare/src/sharding.ts"
 # Backward compatibility (deprecated, use @ws-kit/memory, @ws-kit/redis, @ws-kit/cloudflare)
 "@ws-kit/adapters/memory" = "packages/memory/src"
 "@ws-kit/adapters/redis" = "packages/redis/src"

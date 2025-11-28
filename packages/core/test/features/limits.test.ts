@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import { test } from "../../src/testing";
-import { createRouter } from "../../src/index";
+import { createDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
+import { createRouter } from "../../src/index";
+import { test } from "../../src/testing";
 
 describe("limits", () => {
   describe("maxPayloadBytes", () => {
@@ -16,7 +17,7 @@ describe("limits", () => {
       });
 
       let handled = false;
-      tr.on({ type: "PING", kind: "event" }, () => {
+      tr.on(createDescriptor("PING", "event"), () => {
         handled = true;
       });
 
@@ -36,7 +37,7 @@ describe("limits", () => {
           }),
       });
 
-      tr.on({ type: "PING", kind: "event" }, () => {
+      tr.on(createDescriptor("PING", "event"), () => {
         throw new Error("Handler should not be called");
       });
 
@@ -60,7 +61,7 @@ describe("limits", () => {
       });
 
       let handled = false;
-      tr.on({ type: "PING", kind: "event" }, () => {
+      tr.on(createDescriptor("PING", "event"), () => {
         handled = true;
       });
 
@@ -107,7 +108,7 @@ describe("limits", () => {
       });
 
       let handleCount = 0;
-      tr.on({ type: "PING", kind: "event" }, async () => {
+      tr.on(createDescriptor("PING", "event"), async () => {
         handleCount++;
       });
 
@@ -131,7 +132,7 @@ describe("limits", () => {
 
       let handleCount = 0;
 
-      tr.on({ type: "SLOW", kind: "event" }, async () => {
+      tr.on(createDescriptor("SLOW", "event"), async () => {
         // Simulate slow handler
         await new Promise((resolve) => setTimeout(resolve, 10));
         handleCount++;
@@ -160,7 +161,7 @@ describe("limits", () => {
       });
 
       let completedCount = 0;
-      tr.on({ type: "TASK", kind: "event" }, async () => {
+      tr.on(createDescriptor("TASK", "event"), async () => {
         completedCount++;
       });
 
@@ -186,7 +187,7 @@ describe("limits", () => {
       });
 
       let handleCount = 0;
-      tr.on({ type: "PING", kind: "event" }, async () => {
+      tr.on(createDescriptor("PING", "event"), async () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
         handleCount++;
       });
@@ -210,7 +211,7 @@ describe("limits", () => {
           }),
       });
 
-      tr.on({ type: "WORK", kind: "event" }, async () => {
+      tr.on(createDescriptor("WORK", "event"), async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
 
@@ -239,7 +240,7 @@ describe("limits", () => {
 
       let handled = 0;
 
-      tr.on({ type: "MSG", kind: "event" }, async () => {
+      tr.on(createDescriptor("MSG", "event"), async () => {
         handled++;
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
@@ -270,7 +271,7 @@ describe("limits", () => {
       });
 
       let handled = false;
-      tr.on({ type: "PING", kind: "event" }, () => {
+      tr.on(createDescriptor("PING", "event"), () => {
         handled = true;
       });
 
@@ -293,7 +294,7 @@ describe("limits", () => {
           }),
       });
 
-      tr.on({ type: "PING", kind: "event" }, () => {
+      tr.on(createDescriptor("PING", "event"), () => {
         // handler
       });
 

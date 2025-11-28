@@ -6,7 +6,7 @@
  */
 
 import { createRouter } from "@ws-kit/core";
-import { test } from "@ws-kit/core/testing";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 
 interface TestAppData extends Record<string, unknown> {
@@ -27,14 +27,14 @@ describe("Connection data persistence", () => {
 
     // Simulate first message handler that sets data
     const route1Called: boolean[] = [];
-    router.on({ type: "SET_USER", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("SET_USER", "event"), (ctx) => {
       ctx.assignData({ userId: "user-123" });
       route1Called.push(true);
     });
 
     // Simulate second message handler that reads and updates data
     const route2Called: any[] = [];
-    router.on({ type: "UPDATE_COUNT", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("UPDATE_COUNT", "event"), (ctx) => {
       // This should have access to the previously set userId
       const currentData = ctx.data;
       route2Called.push({
@@ -62,7 +62,7 @@ describe("Connection data persistence", () => {
 
     // Send third message and verify count persists
     const route3Called: any[] = [];
-    router.on({ type: "GET_COUNT", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("GET_COUNT", "event"), (ctx) => {
       route3Called.push({
         count: ctx.data.messageCount,
         userId: ctx.data.userId,
@@ -90,7 +90,7 @@ describe("Connection data persistence", () => {
 
     const dataLog: any[] = [];
 
-    router.on({ type: "TEST", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("TEST", "event"), (ctx) => {
       dataLog.push({
         clientId: (ctx.ws as any).clientId,
         data: { ...ctx.data },
@@ -98,7 +98,7 @@ describe("Connection data persistence", () => {
     });
 
     // Connection 1: set userId A
-    router.on({ type: "SET_ID", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("SET_ID", "event"), (ctx) => {
       ctx.assignData({ userId: "user-A", name: "Alice" });
     });
 
@@ -110,7 +110,7 @@ describe("Connection data persistence", () => {
     await router.flush();
 
     // Now change conn2's name
-    router.on({ type: "SET_NAME", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("SET_NAME", "event"), (ctx) => {
       ctx.assignData({ name: "Bob" });
     });
 
@@ -150,7 +150,7 @@ describe("Connection data persistence", () => {
     const conn = await router.connect();
     const dataSnapshots: any[] = [];
 
-    router.on({ type: "CHECK", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("CHECK", "event"), (ctx) => {
       dataSnapshots.push({ ...ctx.data });
     });
 
@@ -161,7 +161,7 @@ describe("Connection data persistence", () => {
     expect(dataSnapshots[0]).toEqual({});
 
     // Set some data
-    router.on({ type: "SET", kind: "event" } as any, (ctx) => {
+    router.on(createDescriptor("SET", "event"), (ctx) => {
       ctx.assignData({ userId: "test-user" });
     });
 
