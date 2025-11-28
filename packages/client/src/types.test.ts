@@ -48,25 +48,24 @@ expectTypeOf<WebSocketClient["onUnhandled"]>().toBeFunction();
 // Type: onError callback receives Error and context
 expectTypeOf<WebSocketClient["onError"]>().toBeFunction();
 
-// Type: ClientOptions validation
-type ValidClientOptions = ClientOptions;
-expectTypeOf<{
-  url: "ws://localhost";
-  protocols?: string[];
-  reconnect?: {
-    enabled?: boolean;
-    maxAttempts?: number;
-    initialDelayMs?: number;
-    maxDelayMs?: number;
-    jitter?: "full" | "none";
-  };
-  queue?: "drop-newest" | "drop-oldest";
-  queueSize?: number;
-  autoConnect?: boolean;
-  pendingRequestsLimit?: number;
-  auth?: {
-    attach?: "query" | "header";
-    queryParam?: string;
-    getToken?: () => Promise<string>;
-  };
-}>().toMatchTypeOf<ValidClientOptions>();
+// Type: ClientOptions requires all fields to be valid
+const _options: ClientOptions = {
+  url: "ws://localhost",
+  protocols: ["chat"],
+  reconnect: {
+    enabled: true,
+    maxAttempts: 5,
+    initialDelayMs: 1000,
+    maxDelayMs: 5000,
+    jitter: "full",
+  },
+  queue: "drop-newest",
+  queueSize: 100,
+  autoConnect: true,
+  pendingRequestsLimit: 50,
+  auth: {
+    attach: "query",
+    queryParam: "token",
+    getToken: async () => "secret",
+  },
+};

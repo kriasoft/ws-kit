@@ -498,7 +498,7 @@ describe("Client: Request/Response Correlation", () => {
         payload: { reply: "world" },
       });
 
-      const reply = (await promise) as z.infer<typeof Ping>["response"];
+      const reply = (await promise) as z.infer<(typeof Ping)["response"]>;
       expect(reply.type).toBe("PONG");
       expect(reply.payload.reply).toBe("world");
     });
@@ -711,7 +711,7 @@ describe("Client: Request/Response Correlation", () => {
         {
           timeoutMs: 5000,
           correlationId: "progress-test",
-          onProgress: (data) => progressUpdates.push(data),
+          onProgress: (data: unknown) => progressUpdates.push(data),
         },
       );
 
@@ -738,7 +738,7 @@ describe("Client: Request/Response Correlation", () => {
         payload: { reply: "done" },
       });
 
-      const reply = (await promise) as z.infer<typeof Ping>;
+      const reply = (await promise) as z.infer<(typeof Ping)["response"]>;
       expect(reply.payload.reply).toBe("done");
       expect(progressUpdates).toEqual([{ processed: 1 }, { processed: 2 }]);
     });
@@ -769,7 +769,7 @@ describe("Client: Request/Response Correlation", () => {
         payload: { reply: "done" },
       });
 
-      const reply = (await promise) as z.infer<typeof Ping>;
+      const reply = (await promise) as z.infer<(typeof Ping)["response"]>;
       expect(reply.payload.reply).toBe("done");
     });
   });
