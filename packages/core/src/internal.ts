@@ -30,16 +30,16 @@ export { ROUTER_IMPL } from "./core/symbols";
 
 // Schema metadata infrastructure (shared by all validator adapters)
 export {
-  DESCRIPTOR,
-  SCHEMA_OPTS,
-  setSchemaOpts,
-  getSchemaOpts,
   cloneWithOpts,
+  DESCRIPTOR,
   getDescriptor,
   getKind,
+  getSchemaOpts,
+  SCHEMA_OPTS,
+  setSchemaOpts,
   typeOf,
-} from "./schema/metadata.js";
-export type { SchemaOpts, DescriptorValue } from "./schema/metadata.js";
+} from "./schema/metadata";
+export type { DescriptorValue, SchemaOpts } from "./schema/metadata";
 
 /**
  * Function signature for context enhancers.
