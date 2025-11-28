@@ -9,9 +9,10 @@
 import type { ConnectionData, MinimalContext } from "../context/base-context";
 import { ROUTE_TABLE } from "../core/symbols";
 import type { EventHandler, Middleware } from "../core/types";
-import type { RouterImpl } from "../internal";
+import type { RouterImpl, WsKitInternalState } from "../internal";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { isMessageDescriptor } from "../schema/guards";
+import { getKind } from "../schema/metadata";
 import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved";
 import { safeJsonParse } from "../utils/json";
 import type { ServerWebSocket } from "../ws/platform-adapter";
@@ -232,6 +233,22 @@ export async function dispatchMessage<TContext extends ConnectionData>(
       routeMiddleware,
       handler: entry.handler,
     });
+
+    // 10) Check for incomplete RPC handlers
+    const kind = getKind(schema);
+    const shouldWarn = impl.getWarnIncompleteRpc();
+
+    if (kind === "rpc" && shouldWarn) {
+      const wskit = (ctx as any).__wskit as WsKitInternalState | undefined;
+      // If handler completed without replying (and no error was thrown), warn.
+      // Note: ctx.error() sets replied=true, so we only check replied flag.
+      if (wskit?.rpc && !wskit.rpc.replied) {
+        console.warn(
+          `[ws] RPC handler for "${schema.type}" completed without calling ctx.reply() or ctx.error(). ` +
+            `If this is intentional (async response), set { warnIncompleteRpc: false } in createRouter().`,
+        );
+      }
+    }
   } catch (err) {
     // Catch errors from middleware or handler
     const lifecycle = impl.getInternalLifecycle();

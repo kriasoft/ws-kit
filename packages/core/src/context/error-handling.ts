@@ -9,17 +9,16 @@
  * Infers retry hints from ERROR_CODE_META; routes all errors through router.onError() asynchronously.
  */
 
+import type { LifecycleManager } from "../engine/lifecycle";
 import {
-  WsKitError,
   ERROR_CODE_META,
   isStandardErrorCode,
-  type ExtErrorCode,
+  WsKitError,
   type ErrorCode,
+  type ExtErrorCode,
 } from "../error";
-import type { MinimalContext } from "./base-context";
-import type { LifecycleManager } from "../engine/lifecycle";
-import type { ConnectionData } from "./base-context";
 import type { WsKitInternalState } from "../internal";
+import type { ConnectionData, MinimalContext } from "./base-context";
 
 /**
  * Options for ctx.error() calls.
@@ -125,20 +124,20 @@ export function createErrorMethod<TContext extends ConnectionData>(
   opts?: ErrorOptions,
 ) => void {
   return (code, message, details, opts) => {
+    // Synchronously mark as replied to prevent duplicate responses/warnings
+    const isRpc = !!ctx.__wskit?.rpc;
+    const rpcState = ctx.__wskit?.rpc;
+    if (isRpc && rpcState) {
+      if (rpcState.replied) {
+        return undefined; // Already replied
+      }
+      rpcState.replied = true;
+    }
+
     // Fire-and-forget: async enqueue, return void immediately
     scheduleAsync(async () => {
       try {
-        const isRpc = !!ctx.__wskit?.rpc;
-        const rpcState = ctx.__wskit?.rpc;
         const correlationId = rpcState?.correlationId;
-
-        // One-shot: skip if already sent (reply/error)
-        if (isRpc && rpcState!.replied) {
-          return;
-        }
-        if (isRpc) {
-          rpcState!.replied = true;
-        }
 
         // Build error: infer retry hints, apply user overrides
         const { error: err, retryableOverride } = createErrorFromArgs(
@@ -155,7 +154,7 @@ export function createErrorMethod<TContext extends ConnectionData>(
         });
 
         // Convert to client-safe payload
-        let payload = err.toPayload();
+        const payload = err.toPayload();
         if (retryableOverride !== undefined) {
           payload.retryable = retryableOverride;
         }

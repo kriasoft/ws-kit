@@ -47,6 +47,11 @@ export interface CreateRouterOptions {
     maxPending?: number;
     maxPayloadBytes?: number;
   };
+  /**
+   * Warn if an RPC handler returns without calling ctx.reply() or ctx.error().
+   * Default: true in development, false in production.
+   */
+  warnIncompleteRpc?: boolean;
 }
 
 /**

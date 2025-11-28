@@ -18,14 +18,13 @@
  */
 
 import type { ConnectionData, MinimalContext } from "../context/base-context";
+import { createCoreErrorEnhancer } from "../context/error-handling";
 import type { EventContext } from "../context/event-context";
 import type { RpcContext } from "../context/rpc-context";
-import { createCoreErrorEnhancer } from "../context/error-handling";
 import { dispatchMessage } from "../engine/dispatch";
 import { LifecycleManager } from "../engine/lifecycle";
 import { LimitsManager } from "../engine/limits-manager";
 import type { ContextEnhancer } from "../internal";
-import { getKind } from "../schema/metadata";
 import { PluginHost } from "../plugin/manager";
 import type { Plugin } from "../plugin/types";
 import type {
@@ -35,6 +34,7 @@ import type {
   InferType,
   MessageDescriptor,
 } from "../protocol/schema";
+import { getKind } from "../schema/metadata";
 import type { AdapterWebSocket, ServerWebSocket } from "../ws/platform-adapter";
 import { RouteTable } from "./route-table";
 import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols";
@@ -407,8 +407,15 @@ export class RouterImpl<
    */
   private nextEnhancerOrder = 0;
 
-  constructor(private limitsConfig?: CreateRouterOptions["limits"]) {
-    this.limitsManager = new LimitsManager(limitsConfig);
+  private warnIncompleteRpc: boolean;
+  private limitsConfig?: CreateRouterOptions["limits"];
+
+  constructor(options: CreateRouterOptions = {}) {
+    this.limitsConfig = options.limits;
+    this.limitsManager = new LimitsManager(this.limitsConfig);
+    this.warnIncompleteRpc =
+      options.warnIncompleteRpc ?? process.env.NODE_ENV !== "production";
+
     // Initialize plugin host with self reference (cast to bypass recursive type)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pluginHost = new PluginHost<TContext>(this as any as Router<TContext>);
@@ -421,6 +428,14 @@ export class RouterImpl<
     this.addContextEnhancer(createCoreErrorEnhancer(this.lifecycle), {
       priority: -1000,
     });
+  }
+
+  /**
+   * Get warning configuration for incomplete RPC handlers.
+   * @internal
+   */
+  getWarnIncompleteRpc(): boolean {
+    return this.warnIncompleteRpc;
   }
 
   /**

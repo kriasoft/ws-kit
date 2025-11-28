@@ -35,7 +35,7 @@ import type { CreateRouterOptions } from "./types";
 export function createRouter<TContext extends ConnectionData = ConnectionData>(
   opts?: CreateRouterOptions,
 ): Router<TContext> {
-  const router = new RouterImpl<TContext>(opts?.limits);
+  const router = new RouterImpl<TContext>(opts);
 
   // Options are stored and enforced in dispatch/adapter layer
   // heartbeat: implemented by adapters (Bun, Cloudflare, etc.)
