@@ -107,4 +107,36 @@ describe("Client: Schema Compatibility", () => {
       expect(received).toHaveLength(1);
     });
   });
+
+  describe("raw Valibot schemas (Standard Schema)", () => {
+    it("supports raw Valibot schemas via Standard Schema", async () => {
+      // Raw Valibot schema (not wrapped with message())
+      const RawSchema = v.object({
+        type: v.literal("RAW_VALIBOT"),
+        payload: v.object({ value: v.string() }),
+      });
+      const received: unknown[] = [];
+
+      await client.connect();
+      client.on(RawSchema as any, (msg) => received.push(msg));
+
+      simulateReceive({ type: "RAW_VALIBOT", payload: { value: "test" } });
+      expect(received).toHaveLength(1);
+    });
+
+    it("rejects invalid data with Standard Schema", async () => {
+      const RawSchema = v.object({
+        type: v.literal("RAW_VALIBOT"),
+        payload: v.object({ value: v.string() }),
+      });
+      const received: unknown[] = [];
+
+      await client.connect();
+      client.on(RawSchema as any, (msg) => received.push(msg));
+
+      // Invalid payload (number instead of string)
+      simulateReceive({ type: "RAW_VALIBOT", payload: { value: 123 } });
+      expect(received).toHaveLength(0);
+    });
+  });
 });

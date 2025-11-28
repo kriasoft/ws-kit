@@ -114,16 +114,45 @@ export function createClient(opts: ClientOptions): WebSocketClient {
     throw new Error("Unable to extract message type from schema");
   }
 
-  // Helper for safeParse (works with both Zod and Valibot)
+  // Helper for safeParse (works with Zod, Valibot, and Standard Schema)
   function safeParse(
     schema: AnyMessageSchema,
     data: unknown,
   ): { success: boolean; data?: unknown; error?: unknown } {
-    return schema.safeParse(data) as {
-      success: boolean;
-      data?: unknown;
-      error?: unknown;
+    // 1. Prefer .safeParse() method (wrapped schemas from message()/rpc())
+    if (typeof schema.safeParse === "function") {
+      return schema.safeParse(data) as {
+        success: boolean;
+        data?: unknown;
+        error?: unknown;
+      };
+    }
+
+    // 2. Fall back to Standard Schema interface (~standard.validate)
+    const standardSchema = schema as {
+      "~standard"?: {
+        validate: (
+          data: unknown,
+        ) => Promise<{ value: unknown; issues?: unknown[] }>;
+      };
     };
+    if (standardSchema["~standard"]?.validate) {
+      // Standard Schema validate() returns Promise, but we need sync result.
+      // Valibot's validate is sync despite the Promise type signature.
+      const result = standardSchema["~standard"].validate(data) as unknown as {
+        value: unknown;
+        issues?: unknown[];
+      };
+      return {
+        success: !result.issues,
+        data: result.value,
+        error: result.issues,
+      };
+    }
+
+    throw new Error(
+      "Schema must have .safeParse() method or implement Standard Schema (~standard.validate)",
+    );
   }
 
   // State transitions
