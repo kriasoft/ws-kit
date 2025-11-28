@@ -16,7 +16,7 @@
  * Run with: `bun tsc --noEmit` or `bun test`
  */
 
-import type { MessageDescriptor, Router } from "@ws-kit/core";
+import type { MessageDescriptor, Plugin, Router } from "@ws-kit/core";
 import { describe, expectTypeOf, it } from "bun:test";
 import { createRouter, message, v, withValibot } from "./index.js";
 
@@ -54,7 +54,7 @@ describe("validator plugin narrowing - Valibot (types)", () => {
   it("fluent chaining preserves validation capability", () => {
     const validated = createRouter<{ userId?: string }>()
       .plugin(withValibot())
-      .use(async (ctx, next) => {
+      .use(async (_ctx, next) => {
         await next();
       });
 
@@ -95,14 +95,16 @@ describe("validator plugin narrowing - Valibot (types)", () => {
 
     // With custom error hook
     const configWithHook = withValibot({
-      onValidationError: async (err, ctx) => {
+      onValidationError: async (err, validationCtx) => {
         // err should have code and details
         expectTypeOf(err.code).toBeString();
         expectTypeOf(err.details).not.toBeUndefined();
 
-        // ctx should have type and direction
-        expectTypeOf(ctx.type).toBeString();
-        expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
+        // validationCtx should have type and direction
+        expectTypeOf(validationCtx.type).toBeString();
+        expectTypeOf(validationCtx.direction).toEqualTypeOf<
+          "inbound" | "outbound"
+        >();
       },
     });
     expectTypeOf(configWithHook).toBeFunction();
@@ -120,27 +122,38 @@ describe("validator plugin narrowing - Valibot (types)", () => {
   // Test 8: Multiple plugins merge capabilities
   it("multiple plugins merge capabilities correctly", () => {
     // Mock pubsub plugin for testing capability merging
-    const withMockPubSub: (r: Router<any>) => Router<any, { pubsub: true }> = (
-      r: Router<any>,
-    ) => {
-      const enhanced = Object.assign(r, {
+    // Define API type with pubsub marker and methods
+    interface MockPubSubAPI {
+      pubsub: true;
+      publish(
+        topic: string,
+        schema: MessageDescriptor,
+        payload: unknown,
+      ): Promise<{ ok: true; matched: number; capability: "exact" }>;
+      topics: {
+        list(): readonly string[];
+        has(t: string): boolean;
+      };
+    }
+
+    const withMockPubSub: Plugin<any, MockPubSubAPI> = ((r: Router<any>) => {
+      return Object.assign(r, {
+        pubsub: true as const,
         publish: async (
-          topic: string,
-          schema: MessageDescriptor,
-          payload: unknown,
+          _topic: string,
+          _schema: MessageDescriptor,
+          _payload: unknown,
         ) => ({ ok: true as const, matched: 0, capability: "exact" as const }),
         topics: {
           list: () => [] as readonly string[],
-          has: (t: string) => false,
+          has: (_t: string) => false,
         },
-      }) as unknown as Router<any, { pubsub: true }>;
-      (enhanced as any).__caps = { pubsub: true };
-      return enhanced;
-    };
+      });
+    }) as Plugin<any, MockPubSubAPI>;
 
     const router = createRouter<{ userId?: string }>()
       .plugin(withValibot())
-      .plugin(withMockPubSub as any);
+      .plugin(withMockPubSub);
 
     // Both validation and pubsub methods should be available
     expectTypeOf(router).toHaveProperty("rpc");
@@ -172,7 +185,7 @@ describe("validator plugin narrowing - Valibot (types)", () => {
     });
 
     const withHook = withValibot({
-      onValidationError: (err, ctx) => {
+      onValidationError: (_err, _ctx) => {
         // Just for type testing
       },
     });
@@ -191,15 +204,17 @@ describe("validator plugin narrowing - Valibot (types)", () => {
   // Test 11: Error hook callback signature
   it("error hook callback signature is type-safe", () => {
     const plugin = withValibot({
-      onValidationError: (err, ctx) => {
+      onValidationError: (err, validationCtx) => {
         // Error structure
         expectTypeOf(err.code).toBeString();
         expectTypeOf(err.details).not.toBeUndefined();
 
         // Context structure
-        expectTypeOf(ctx.type).toBeString();
-        expectTypeOf(ctx.direction).toMatchTypeOf<"inbound" | "outbound">();
-        expectTypeOf(ctx.payload).not.toBeUndefined();
+        expectTypeOf(validationCtx.type).toBeString();
+        expectTypeOf(validationCtx.direction).toEqualTypeOf<
+          "inbound" | "outbound"
+        >();
+        expectTypeOf(validationCtx.payload).not.toBeUndefined();
       },
     });
 

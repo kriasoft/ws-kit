@@ -59,6 +59,12 @@ export type {
   PublishResult,
 };
 
+/**
+ * Extracts the API type a plugin contributes.
+ * @internal
+ */
+type InferPluginAPI<P> = P extends Plugin<any, infer Api> ? Api : never;
+
 export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
   use(mw: Middleware<TContext>): this;
   on(schema: MessageDescriptor, handler: EventHandler<TContext>): this;
@@ -72,7 +78,17 @@ export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
     other: Router<any>,
     opts?: { onConflict?: "error" | "skip" | "replace" },
   ): this;
-  plugin<P extends Plugin<TContext>>(plugin: P): ReturnType<P>;
+  /**
+   * Apply a plugin to extend the router's capabilities.
+   * Uses this-aware inference to preserve existing extensions through chaining.
+   *
+   * @typeParam E - Current extensions (inferred from this)
+   * @typeParam P - Plugin type
+   */
+  plugin<E extends object, P extends Plugin<TContext, any>>(
+    this: Router<TContext, E>,
+    plugin: P,
+  ): RouterWithExtensions<TContext, E & InferPluginAPI<P>>;
   onError(
     fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
   ): this;
@@ -120,40 +136,130 @@ export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
 }
 
 /**
- * Router<TContext, TExtensions> = RouterCore + capability-gated APIs.
+ * Router<TContext, TExtensions> = RouterCore + plugin-contributed APIs.
  *
  * TExtensions is an object type representing all APIs added by plugins.
  * Plugins use definePlugin<TContext, TPluginApi> to add their extensions.
  * Type is automatically widened: each .plugin(p) call intersects new APIs.
  *
- * Capability-gating: API inclusion is controlled by markers in TExtensions:
- * - { validation: true } → includes ValidationAPI (rpc, reply, progress, send)
- * - { pubsub: true } → includes PubSubAPI (publish, topics)
- *
- * This ensures methods only appear in keyof when explicitly marked by plugins,
- * preventing misuse of gated APIs at compile-time.
+ * Per ADR-028, Router uses pure structural composition. Plugin APIs
+ * (rpc, publish, topics, etc.) are included directly via TExtensions.
+ * Plugins contribute their full API through their TPluginApi type parameter.
  *
  * @example
  * ```typescript
  * // Base (no plugins):
  * Router<MyContext, {}> → RouterCore<MyContext>
  *
- * // After withZod (adds { validation: true } marker):
- * Router<MyContext, { validation: true } & ValidationAPI<MyContext>>
- * → RouterCore<MyContext> & ValidationAPI<MyContext>
+ * // After withZod (adds validation API):
+ * Router<MyContext, WithZodCapability>
+ * → RouterCore<MyContext> & { validation: true, rpc(), ... }
  *
  * // After both withZod and withPubSub:
- * Router<MyContext, { validation: true, pubsub: true } & {...}>
- * → RouterCore<MyContext> & ValidationAPI<MyContext> & PubSubAPI<MyContext>
+ * Router<MyContext, WithZodCapability & WithPubSubAPI>
+ * → RouterCore<MyContext> & { rpc(), publish(), topics, ... }
  * ```
  */
-export type Router<
+export interface Router<
   TContext extends ConnectionData = ConnectionData,
   TExtensions extends object = {},
-> = RouterCore<TContext> &
-  (TExtensions extends { validation: true } ? ValidationAPI<TContext> : {}) &
-  (TExtensions extends { pubsub: true } ? PubSubAPI<TContext> : {}) &
-  Omit<TExtensions, "validation" | "pubsub">;
+> extends Omit<
+  RouterCore<TContext>,
+  "plugin" | "use" | "on" | "onError" | "merge" | "mount"
+> {
+  /**
+   * Register global middleware. Preserves extension types through fluent chaining.
+   */
+  use(mw: Middleware<TContext>): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Register an event handler. Preserves extension types through fluent chaining.
+   */
+  on(
+    schema: MessageDescriptor,
+    handler: EventHandler<TContext>,
+  ): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Register an error handler. Preserves extension types through fluent chaining.
+   */
+  onError(
+    fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
+  ): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Merge routes from another router. Preserves extension types through fluent chaining.
+   */
+  merge(
+    other: Router<any>,
+    opts?: { onConflict?: "error" | "skip" | "replace" },
+  ): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Mount routes from another router with a prefix. Preserves extension types through fluent chaining.
+   */
+  mount(
+    prefix: string,
+    other: Router<any>,
+    opts?: { onConflict?: "error" | "skip" | "replace" },
+  ): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Apply a plugin to extend the router's capabilities.
+   * Uses this-aware inference to preserve existing extensions through chaining.
+   *
+   * @typeParam E - Current extensions (inferred from this)
+   * @typeParam P - Plugin type
+   */
+  plugin<E extends object, P extends Plugin<TContext, any>>(
+    this: Router<TContext, E>,
+    plugin: P,
+  ): RouterWithExtensions<TContext, E & InferPluginAPI<P>>;
+}
+
+/**
+ * Capability detection helper.
+ *
+ * Checks for capability markers in two forms:
+ * 1. Modern: `__caps: { validation: true }` or `__caps: { pubsub: true }`
+ * 2. Legacy: `{ validation: true }` or `{ pubsub: true }` at top level
+ *
+ * This allows plugins to migrate to __caps gradually while maintaining
+ * backwards compatibility with existing boolean markers.
+ */
+type HasCapability<T, K extends string> = T extends { __caps: infer C }
+  ? C extends Record<K, true>
+    ? true
+    : false
+  : T extends Record<K, true>
+    ? true
+    : false;
+
+/**
+ * Full Router type with extensions and capability-gated APIs applied.
+ *
+ * Combines Router interface with:
+ * - Direct extensions from plugins (minus internal markers)
+ * - Capability-gated APIs based on extension markers:
+ *   - { validation: true } or { __caps: { validation: true } } → ValidationAPI
+ *   - { pubsub: true } or { __caps: { pubsub: true } } → PubSubAPI
+ *
+ * Note: We only omit `__caps` and `validation` (boolean marker).
+ * The `pubsub` property is preserved if it's a runtime object (tap/init/shutdown).
+ *
+ * This is the type returned by plugin() and definePlugin().
+ */
+export type RouterWithExtensions<
+  TContext extends ConnectionData = ConnectionData,
+  TExtensions extends object = {},
+> = Router<TContext, TExtensions> &
+  Omit<TExtensions, "__caps" | "validation"> &
+  (HasCapability<TExtensions, "validation"> extends true
+    ? ValidationAPI<TContext>
+    : {}) &
+  (HasCapability<TExtensions, "pubsub"> extends true
+    ? PubSubAPI<TContext>
+    : {});
 
 /**
  * Validation API appears when withZod() or withValibot() is plugged.
@@ -596,8 +702,16 @@ export class RouterImpl<
     return this;
   }
 
-  plugin<P extends Plugin<TContext>>(plugin: P): ReturnType<P> {
-    return this.pluginHost.apply(plugin);
+  plugin<E extends object, P extends Plugin<TContext, any>>(
+    this: Router<TContext, E>,
+    plugin: P,
+  ): RouterWithExtensions<TContext, E & InferPluginAPI<P>> {
+    // Cast this to RouterImpl to access pluginHost
+    const impl = this as unknown as RouterImpl<TContext>;
+    return impl.pluginHost.apply(plugin) as RouterWithExtensions<
+      TContext,
+      E & InferPluginAPI<P>
+    >;
   }
 
   onError(
@@ -817,8 +931,22 @@ export class RouterImpl<
     }
 
     // Run enhancers in priority order, with conflict detection in dev mode
-    const prevKeys = new Set(Object.keys(ctx));
+    const isDev = process.env.NODE_ENV !== "production";
+
+    // Track protected keys (base keys + keys added by previous enhancers)
+    // We use value comparison to detect actual overwrites, not just key presence
+    const protectedKeys = isDev ? new Set(Object.keys(ctx)) : null;
+
+    // Allow specific overwrites (e.g. 'error' placeholder is overwritten by core enhancer)
+    const allowedOverwrites = new Set(["error"]);
+
     for (const enhance of this.getSortedEnhancers()) {
+      // Snapshot values of protected keys before this enhancer runs
+      const valuesBefore =
+        isDev && protectedKeys
+          ? new Map(Array.from(protectedKeys).map((k) => [k, (ctx as any)[k]]))
+          : null;
+
       try {
         await enhance(ctx);
       } catch (err) {
@@ -828,16 +956,32 @@ export class RouterImpl<
       }
 
       // Conflict detection (dev mode only)
-      if (process.env.NODE_ENV !== "production") {
-        const newKeys = Object.keys(ctx);
-        const overwrites = newKeys.filter(
-          (k) => prevKeys.has(k) && k !== "extensions",
-        );
+      // Warn if an enhancer actually changes a protected key's value
+      if (valuesBefore && protectedKeys) {
+        const overwrites: string[] = [];
+
+        // Check if any protected key's value was changed
+        for (const [key, oldVal] of valuesBefore) {
+          // Use strict equality - if reference changes, it's an overwrite
+          if (
+            (ctx as any)[key] !== oldVal &&
+            !allowedOverwrites.has(key) &&
+            key !== "extensions"
+          ) {
+            overwrites.push(key);
+          }
+        }
+
         if (overwrites.length > 0) {
           console.warn(
             `[ws-kit] Enhancer overwrote ctx properties: ${overwrites.join(", ")}. ` +
               `Consider using ctx.extensions for plugin-specific data.`,
           );
+        }
+
+        // Add newly added keys to protected set for future enhancers
+        for (const k of Object.keys(ctx)) {
+          protectedKeys.add(k);
         }
       }
     }

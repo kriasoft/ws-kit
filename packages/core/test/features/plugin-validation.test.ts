@@ -15,7 +15,11 @@
 import { createDescriptor, createRpcDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
-import type { MessageDescriptor, Router } from "../../src/index";
+import type {
+  MessageDescriptor,
+  Router,
+  RouterWithExtensions,
+} from "../../src/index";
 
 describe("Validation Plugin - Capability Gating", () => {
   it("guards rpc() before validation plugin", () => {
@@ -30,7 +34,7 @@ describe("Validation Plugin - Capability Gating", () => {
     // Create a mock validation plugin
     const withMockValidation = <TCurrentExt extends object>(
       r: Router<any, TCurrentExt>,
-    ): Router<any, TCurrentExt & { validation: true }> => {
+    ): RouterWithExtensions<any, TCurrentExt & { validation: true }> => {
       const rpcMethod = (
         schema: MessageDescriptor & { response: MessageDescriptor },
         handler: any,
@@ -40,7 +44,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
       const enhanced = Object.assign(r, {
         rpc: rpcMethod,
-      }) as Router<any, TCurrentExt & { validation: true }>;
+      }) as unknown as RouterWithExtensions<
+        any,
+        TCurrentExt & { validation: true }
+      >;
 
       (enhanced as any).__caps = { validation: true };
       return enhanced;
@@ -54,7 +61,7 @@ describe("Validation Plugin - Capability Gating", () => {
   it("should allow rpc handler registration after validation plugin", () => {
     const withMockValidation = <TCurrentExt extends object>(
       r: Router<any, TCurrentExt>,
-    ): Router<any, TCurrentExt & { validation: true }> => {
+    ): RouterWithExtensions<any, TCurrentExt & { validation: true }> => {
       const rpcMethod = (
         schema: MessageDescriptor & { response: MessageDescriptor },
         handler: any,
@@ -64,7 +71,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
       const enhanced = Object.assign(r, {
         rpc: rpcMethod,
-      }) as Router<any, TCurrentExt & { validation: true }>;
+      }) as unknown as RouterWithExtensions<
+        any,
+        TCurrentExt & { validation: true }
+      >;
 
       (enhanced as any).__caps = { validation: true };
       return enhanced;
@@ -87,7 +97,7 @@ describe("Validation Plugin - Capability Gating", () => {
   it("should track capability from validation plugin", () => {
     const withMockValidation = <TCurrentExt extends object>(
       r: Router<any, TCurrentExt>,
-    ): Router<any, TCurrentExt & { validation: true }> => {
+    ): RouterWithExtensions<any, TCurrentExt & { validation: true }> => {
       const rpcMethod = (
         schema: MessageDescriptor & { response: MessageDescriptor },
         handler: any,
@@ -97,7 +107,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
       const enhanced = Object.assign(r, {
         rpc: rpcMethod,
-      }) as Router<any, TCurrentExt & { validation: true }>;
+      }) as unknown as RouterWithExtensions<
+        any,
+        TCurrentExt & { validation: true }
+      >;
 
       (enhanced as any).__caps = { validation: true };
       return enhanced;
@@ -132,7 +145,7 @@ describe("Validation Plugin - Capability Gating", () => {
   it("should maintain fluent interface after plugin", () => {
     const withMockValidation = <TCurrentExt extends object>(
       r: Router<any, TCurrentExt>,
-    ): Router<any, TCurrentExt & { validation: true }> => {
+    ): RouterWithExtensions<any, TCurrentExt & { validation: true }> => {
       const rpcMethod = (
         schema: MessageDescriptor & { response: MessageDescriptor },
         handler: any,
@@ -142,7 +155,10 @@ describe("Validation Plugin - Capability Gating", () => {
 
       const enhanced = Object.assign(r, {
         rpc: rpcMethod,
-      }) as Router<any, TCurrentExt & { validation: true }>;
+      }) as unknown as RouterWithExtensions<
+        any,
+        TCurrentExt & { validation: true }
+      >;
 
       (enhanced as any).__caps = { validation: true };
       return enhanced;

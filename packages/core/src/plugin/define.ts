@@ -29,7 +29,8 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
-import type { Plugin, Router } from "../core/router";
+import type { Router, RouterWithExtensions } from "../core/router";
+import type { Plugin } from "./types";
 
 /**
  * Define a plugin with compile-time API validation.
@@ -128,7 +129,7 @@ export function definePlugin<
 
     // Merge extensions into router using Object.assign to preserve prototype chain
     // This ensures all router methods (on, use, plugin, etc.) remain available
-    return Object.assign(router, extensions) as Router<
+    return Object.assign(router, extensions) as RouterWithExtensions<
       TContext,
       TCurrentExt & TPluginApi
     >;

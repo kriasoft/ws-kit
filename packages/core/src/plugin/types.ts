@@ -18,7 +18,7 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
-import type { Router } from "../core/router";
+import type { Router, RouterWithExtensions } from "../core/router";
 
 /**
  * Runtime capabilities record: tracks which plugins have been applied.
@@ -62,4 +62,4 @@ export type Plugin<
   TPluginApi extends object = {},
 > = <TCurrentExt extends object>(
   router: Router<TContext, TCurrentExt>,
-) => Router<TContext, TCurrentExt & TPluginApi>;
+) => RouterWithExtensions<TContext, TCurrentExt & TPluginApi>;

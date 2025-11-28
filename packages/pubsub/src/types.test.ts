@@ -17,6 +17,7 @@
 import type { Router } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
 import { memoryPubSub } from "@ws-kit/memory";
+import { withZod } from "@ws-kit/zod";
 import { describe, expectTypeOf, it } from "bun:test";
 import { withPubSub } from "./plugin.js";
 
@@ -87,5 +88,15 @@ describe("pubsub plugin narrowing - types", () => {
     // Type should be same after both applications
     expectTypeOf(publisher1).toHaveProperty("publish");
     expectTypeOf(publisher2).toHaveProperty("publish");
+  });
+
+  // Test 7: withZod + withPubSub preserves validation capability
+  it("keeps rpc() available after chaining withPubSub()", () => {
+    const router = createRouter()
+      .plugin(withZod())
+      .plugin(withPubSub({ adapter: memoryPubSub() }));
+
+    expectTypeOf(router).toHaveProperty("publish");
+    expectTypeOf(router).toHaveProperty("rpc");
   });
 });

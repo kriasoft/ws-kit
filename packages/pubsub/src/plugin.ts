@@ -80,22 +80,43 @@ import type { PubSubObserver, WithPubSubOptions } from "./types";
  * ```
  */
 /**
+ * Pub/Sub runtime management API.
+ * Exposed on router.pubsub after withPubSub() is applied.
+ */
+export interface PubSubRuntime {
+  /**
+   * Register an observer for pub/sub operations (testing, instrumentation).
+   * @returns Unsubscribe function
+   */
+  tap(observer: PubSubObserver): () => void;
+
+  /**
+   * Initialize distributed broker consumer (idempotent).
+   * Platforms MUST call this after routes are registered and before traffic.
+   */
+  init(): Promise<void>;
+
+  /**
+   * Shutdown broker consumer and close adapter (idempotent).
+   */
+  shutdown(): Promise<void>;
+}
+
+/**
  * Pub/Sub plugin API interface.
  * Added to the router when withPubSub() is applied.
  */
 interface WithPubSubAPI {
   /**
-   * Marker for capability-gating in Router type system.
-   * Ensures publish() and topics only appear in keyof when withPubSub() is applied.
+   * Capability marker for type-level gating.
    * @internal
    */
-  readonly pubsub:
-    | true
-    | {
-        tap(observer: PubSubObserver): () => void;
-        init(): Promise<void>;
-        shutdown(): Promise<void>;
-      };
+  readonly __caps: { pubsub: true };
+
+  /**
+   * Runtime management API (init, shutdown, tap).
+   */
+  readonly pubsub: PubSubRuntime;
 
   /**
    * Publish a message to a topic.
@@ -410,6 +431,7 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
 
     // Return the plugin API extensions with capability marker
     return {
+      __caps: { pubsub: true } as const,
       pubsub: {
         /**
          * Register an observer for pub/sub operations (testing, instrumentation).
