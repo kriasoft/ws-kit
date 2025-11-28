@@ -20,7 +20,7 @@ import type {
   PublishOptions,
   PublishResult,
 } from "@ws-kit/core";
-import { ROUTER_IMPL } from "@ws-kit/core/internal";
+import { getRouterPluginAPI, ROUTER_IMPL } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
 import type { PublishEnvelope } from "@ws-kit/core/pubsub";
 import type { PubSubObserver, WithPubSubOptions } from "./types";
@@ -272,10 +272,11 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
         (envelope.meta as any).excludeClientId = senderClientId;
       }
 
-      // Construct adapter options (partitionKey, signal)
+      // Construct adapter options (partitionKey, excludeSelf, signal)
       const publishOpts: PublishOptions | undefined = opts
         ? {
             ...(opts.partitionKey && { partitionKey: opts.partitionKey }),
+            ...(opts.excludeSelf && { excludeSelf: opts.excludeSelf }),
             ...(opts.meta && { meta: opts.meta }),
             ...(opts.signal && { signal: opts.signal }),
           }
@@ -344,23 +345,15 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
     }
 
     /**
-     * Wrap createContext to attach pub/sub methods to the context.
-     * These methods are only added when withPubSub() is plugged.
+     * Register context enhancer to attach pub/sub methods.
+     * Uses negative priority (-10) to run before validation plugins (priority 0),
+     * ensuring ctx.publish exists when validation enhancers try to wrap it.
      */
-    const routerImpl = (router as any)[ROUTER_IMPL];
-    if (!routerImpl) {
-      throw new Error(
-        "withPubSub requires internal router access (ROUTER_IMPL symbol)",
-      );
-    }
-    const originalCreateContext = routerImpl.createContext?.bind(routerImpl);
-
-    if (originalCreateContext) {
-      routerImpl.createContext = function (params: any) {
-        const ctx = originalCreateContext(params);
-
+    const api = getRouterPluginAPI(router);
+    api.addContextEnhancer(
+      (ctx: any) => {
         // Attach publish() method for broadcasting to topic subscribers
-        (ctx as any).publish = async (
+        ctx.publish = async (
           topic: string,
           schema: MessageDescriptor,
           payload: any,
@@ -370,9 +363,12 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
           return await publish(topic, schema, payload, opts, ctx.clientId);
         };
 
+        // Also store in extensions for validator plugin access
+        ctx.extensions.set("pubsub", { publish: ctx.publish });
+
         // Attach topics helper for subscription management
         // Topics are scoped to this connection via ctx.clientId
-        (ctx as any).topics = {
+        ctx.topics = {
           subscribe: async (topic: string): Promise<void> => {
             // Subscribe this client to a topic via the adapter
             // clientId is stable and unique per connection
@@ -408,10 +404,9 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
             return false;
           },
         };
-
-        return ctx;
-      };
-    }
+      },
+      { priority: -10 }, // Run before validation plugins (priority 0)
+    );
 
     // Return the plugin API extensions with capability marker
     return {

@@ -33,6 +33,7 @@ export interface OutgoingFrame {
  */
 export interface PublishRecord {
   topic: string;
+  type?: string;
   schema?: MessageDescriptor;
   payload?: unknown;
   meta?: Record<string, unknown>;
