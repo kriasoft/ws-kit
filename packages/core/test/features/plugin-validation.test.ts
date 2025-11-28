@@ -12,6 +12,7 @@
  * - Validation errors flow to router.onError()
  */
 
+import { createDescriptor, createRpcDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
 import type { MessageDescriptor, Router } from "../../src/index";
@@ -21,10 +22,7 @@ describe("Validation Plugin - Capability Gating", () => {
     const router = createRouter();
     expect(typeof (router as any).rpc).toBe("function");
     expect(() =>
-      (router as any).rpc(
-        { type: "X", kind: "rpc", response: { type: "Y", kind: "event" } },
-        () => {},
-      ),
+      (router as any).rpc(createRpcDescriptor("X", "Y"), () => {}),
     ).toThrow(/validation plugin/);
   });
 
@@ -74,11 +72,7 @@ describe("Validation Plugin - Capability Gating", () => {
 
     const router = createRouter().plugin(withMockValidation);
 
-    const requestSchema: MessageDescriptor & { response: MessageDescriptor } = {
-      type: "GET_USER",
-      kind: "rpc",
-      response: { type: "USER", kind: "event" },
-    };
+    const requestSchema = createRpcDescriptor("GET_USER", "USER");
 
     let handlerCalled = false;
 
@@ -124,7 +118,7 @@ describe("Validation Plugin - Capability Gating", () => {
     });
 
     // Register a simple handler
-    const schema: MessageDescriptor = { type: "TEST", kind: "event" };
+    const schema = createDescriptor("TEST", "event");
     router.on(schema, (ctx: any) => {
       // Handler
     });
@@ -156,7 +150,7 @@ describe("Validation Plugin - Capability Gating", () => {
 
     const router = createRouter()
       .plugin(withMockValidation)
-      .on({ type: "MSG", kind: "event" }, (ctx: any) => {})
+      .on(createDescriptor("MSG", "event"), (ctx: any) => {})
       .use(async (ctx, next) => {
         await next();
       });

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import { createDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { createRouter } from "../../src/core/createRouter";
 import type { MessageDescriptor } from "../../src/protocol/message-descriptor";
@@ -23,14 +24,11 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema1: MessageDescriptor = {
-        type: "AUTH_LOGIN",
-        kind: "event",
-      };
-      const schema2: MessageDescriptor = {
-        type: "CHAT_SEND",
-        kind: "event",
-      };
+      const schema1: MessageDescriptor = createDescriptor(
+        "AUTH_LOGIN",
+        "event",
+      );
+      const schema2: MessageDescriptor = createDescriptor("CHAT_SEND", "event");
 
       let auth = false;
       let chat = false;
@@ -63,10 +61,7 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("MSG", "event");
 
       router1.on(schema, () => {});
       router2.on(schema, () => {});
@@ -85,10 +80,7 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("MSG", "event");
 
       let from1 = false;
       let from2 = false;
@@ -114,10 +106,7 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("MSG", "event");
 
       let from1 = false;
       let from2 = false;
@@ -143,10 +132,7 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("MSG", "event");
 
       router1.on(schema, () => {});
       router2.on(schema, () => {});
@@ -165,14 +151,8 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema1: MessageDescriptor = {
-        type: "MSG1",
-        kind: "event",
-      };
-      const schema2: MessageDescriptor = {
-        type: "MSG2",
-        kind: "event",
-      };
+      const schema1: MessageDescriptor = createDescriptor("MSG1", "event");
+      const schema2: MessageDescriptor = createDescriptor("MSG2", "event");
 
       let handler1Called = false;
       let handler2Called = false;
@@ -207,18 +187,12 @@ describe("merge & mount", () => {
       const chat = createRouter();
       const notifications = createRouter();
 
-      const authSchema: MessageDescriptor = {
-        type: "LOGIN",
-        kind: "event",
-      };
-      const chatSchema: MessageDescriptor = {
-        type: "SEND",
-        kind: "event",
-      };
-      const notifySchema: MessageDescriptor = {
-        type: "NOTIFY",
-        kind: "event",
-      };
+      const authSchema: MessageDescriptor = createDescriptor("LOGIN", "event");
+      const chatSchema: MessageDescriptor = createDescriptor("SEND", "event");
+      const notifySchema: MessageDescriptor = createDescriptor(
+        "NOTIFY",
+        "event",
+      );
 
       let authCalled = false;
       let chatCalled = false;
@@ -253,10 +227,7 @@ describe("merge & mount", () => {
       const main = createRouter();
       const auth = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "LOGIN",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("LOGIN", "event");
 
       let called = false;
       auth.on(schema, () => {
@@ -281,10 +252,7 @@ describe("merge & mount", () => {
       const api = createRouter();
       const auth = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "LOGIN",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("LOGIN", "event");
 
       let called = false;
       auth.on(schema, () => {
@@ -308,14 +276,8 @@ describe("merge & mount", () => {
       const users = createRouter();
       const posts = createRouter();
 
-      const userSchema: MessageDescriptor = {
-        type: "GET",
-        kind: "event",
-      };
-      const postSchema: MessageDescriptor = {
-        type: "GET",
-        kind: "event",
-      };
+      const userSchema: MessageDescriptor = createDescriptor("GET", "event");
+      const postSchema: MessageDescriptor = createDescriptor("GET", "event");
 
       let userCalled = false;
       let postCalled = false;
@@ -349,10 +311,7 @@ describe("merge & mount", () => {
       const auth1 = createRouter();
       const auth2 = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "LOGIN",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("LOGIN", "event");
 
       let from1 = false;
       let from2 = false;
@@ -381,10 +340,7 @@ describe("merge & mount", () => {
       const v1 = createRouter();
       const v2 = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "LOGIN",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("LOGIN", "event");
 
       let from1 = false;
       let from2 = false;
@@ -411,14 +367,8 @@ describe("merge & mount", () => {
       const auth = createRouter();
       const chat = createRouter();
 
-      const authSchema: MessageDescriptor = {
-        type: "LOGIN",
-        kind: "event",
-      };
-      const chatSchema: MessageDescriptor = {
-        type: "SEND",
-        kind: "event",
-      };
+      const authSchema: MessageDescriptor = createDescriptor("LOGIN", "event");
+      const chatSchema: MessageDescriptor = createDescriptor("SEND", "event");
 
       let authCalled = false;
       let chatCalled = false;
@@ -445,10 +395,7 @@ describe("merge & mount", () => {
       const main = createRouter();
       const sub = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("MSG", "event");
 
       let called = false;
       sub.on(schema, () => {
@@ -469,10 +416,7 @@ describe("merge & mount", () => {
       const main = createRouter();
       const module = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "ACTION",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("ACTION", "event");
 
       let called = false;
       module.on(schema, () => {
@@ -492,10 +436,7 @@ describe("merge & mount", () => {
       const mounted = createRouter();
       const module = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "ACTION",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("ACTION", "event");
 
       let mergeCalled = false;
       let mountCalled = false;
@@ -539,10 +480,7 @@ describe("merge & mount", () => {
       const main = createRouter();
       const sub = createRouter();
 
-      const schema: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const schema: MessageDescriptor = createDescriptor("MSG", "event");
 
       let handlerCalled = false;
 
@@ -564,14 +502,8 @@ describe("merge & mount", () => {
       const router1 = createRouter();
       const router2 = createRouter();
 
-      const schema1: MessageDescriptor = {
-        type: "MSG1",
-        kind: "event",
-      };
-      const schema2: MessageDescriptor = {
-        type: "MSG2",
-        kind: "event",
-      };
+      const schema1: MessageDescriptor = createDescriptor("MSG1", "event");
+      const schema2: MessageDescriptor = createDescriptor("MSG2", "event");
 
       let router1Called = false;
       let handler2Called = false;

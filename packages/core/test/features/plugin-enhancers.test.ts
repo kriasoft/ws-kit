@@ -22,6 +22,7 @@ import {
   getRouterPluginAPI,
   type RouterPluginAPI,
 } from "@ws-kit/core/internal";
+import { createDescriptor } from "@ws-kit/core/testing";
 import { beforeEach, describe, expect, it } from "bun:test";
 
 describe("Plugin Enhancer System", () => {
@@ -372,10 +373,7 @@ describe("Plugin Enhancer System", () => {
     });
 
     it("route registry populated after routes registered", () => {
-      const TestMessage = {
-        type: "TEST_MESSAGE",
-        kind: "event",
-      } as const;
+      const TestMessage = createDescriptor("TEST_MESSAGE", "event");
 
       router.on(TestMessage, () => {});
 

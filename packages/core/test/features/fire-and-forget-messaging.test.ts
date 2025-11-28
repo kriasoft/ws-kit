@@ -10,7 +10,7 @@
 
 import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
-import { test } from "@ws-kit/core/testing";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 
 describe("messaging patterns integration", () => {
@@ -20,10 +20,7 @@ describe("messaging patterns integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = {
-        type: "MSG",
-        kind: "event",
-      };
+      const Message: MessageDescriptor = createDescriptor("MSG", "event");
 
       let handlerExecuted = false;
 
@@ -43,7 +40,7 @@ describe("messaging patterns integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+      const Message: MessageDescriptor = createDescriptor("MSG", "event");
 
       const executedMessages: unknown[] = [];
 
@@ -67,8 +64,8 @@ describe("messaging patterns integration", () => {
         create: () => createRouter(),
       });
 
-      const Msg1: MessageDescriptor = { type: "CHAT", kind: "event" };
-      const Msg2: MessageDescriptor = { type: "NOTIFY", kind: "event" };
+      const Msg1: MessageDescriptor = createDescriptor("CHAT", "event");
+      const Msg2: MessageDescriptor = createDescriptor("NOTIFY", "event");
 
       let chatCount = 0;
       let notifyCount = 0;
@@ -99,7 +96,7 @@ describe("messaging patterns integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+      const Message: MessageDescriptor = createDescriptor("MSG", "event");
 
       let messageCount = 0;
 
@@ -125,7 +122,7 @@ describe("messaging patterns integration", () => {
         create: () => createRouter(),
       });
 
-      const Message: MessageDescriptor = { type: "MSG", kind: "event" };
+      const Message: MessageDescriptor = createDescriptor("MSG", "event");
 
       tr.on(Message, () => {
         throw new Error("Test error");

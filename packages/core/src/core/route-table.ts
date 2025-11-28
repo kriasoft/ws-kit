@@ -9,7 +9,7 @@
 import type { ConnectionData } from "../context/base-context";
 import type { MessageDescriptor } from "../protocol/message-descriptor";
 import { assertMessageDescriptor } from "../protocol/message-descriptor";
-import { getKind } from "../schema/metadata";
+import { DESCRIPTOR, getDescriptor, getKind } from "../schema/metadata";
 import type { RouteEntry } from "./types";
 
 export interface RouteTableOptions {
@@ -165,12 +165,21 @@ export class RouteTable<TContext extends ConnectionData = ConnectionData> {
 
     for (const [type, entry] of other.list()) {
       const prefixedType = prefix + type;
+      // Create new schema with prefixed type, preserving DESCRIPTOR symbol
+      const originalDesc = getDescriptor(entry.schema);
+      const newSchema: MessageDescriptor = {
+        ...entry.schema,
+        type: prefixedType,
+      };
+      if (originalDesc) {
+        Object.defineProperty(newSchema, DESCRIPTOR, {
+          value: { ...originalDesc, type: prefixedType },
+          enumerable: false,
+        });
+      }
       const nextEntry: RouteEntry<TContext> = {
         ...entry,
-        schema: {
-          ...entry.schema,
-          type: prefixedType,
-        },
+        schema: newSchema,
       };
 
       if (this.handlers.has(prefixedType)) {

@@ -109,18 +109,12 @@ export function getDescriptor(schema: any): DescriptorValue | undefined {
 }
 
 /**
- * Get schema kind from descriptor.
- * Prefers DESCRIPTOR symbol, falls back to schema.kind for compatibility.
- * Returns undefined if neither is present.
+ * Get schema kind from DESCRIPTOR symbol.
+ * Returns undefined if descriptor is not set.
  * @internal
  */
 export function getKind(schema: any): "event" | "rpc" | undefined {
-  const desc = getDescriptor(schema);
-  if (desc?.kind) return desc.kind;
-  // Fallback for plain objects and backwards compatibility
-  const kind = schema?.kind;
-  if (kind === "event" || kind === "rpc") return kind;
-  return undefined;
+  return getDescriptor(schema)?.kind;
 }
 
 /**

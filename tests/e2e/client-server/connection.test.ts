@@ -10,6 +10,7 @@
 
 import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
+import { createDescriptor } from "@ws-kit/core/testing";
 import { withMessaging } from "@ws-kit/zod";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
@@ -21,7 +22,7 @@ import {
 
 // Simple schema helper for testing
 function schema(type: string): MessageDescriptor {
-  return { type, kind: "event" } as const;
+  return createDescriptor(type, "event");
 }
 
 describe("E2E: Client-Server Connection", () => {

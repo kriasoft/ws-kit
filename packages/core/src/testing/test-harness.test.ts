@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { MessageDescriptor } from "@ws-kit/core";
 import { createRouter } from "@ws-kit/core";
 import { test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
+import { createDescriptor } from "./test-schemas";
 
 describe("Test Router - Basic", () => {
   describe("Connection management", () => {
@@ -47,10 +47,7 @@ describe("Test Router - Basic", () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
       const calls: string[] = [];
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.on(TestMessage, () => {
         calls.push("handler");
@@ -68,10 +65,7 @@ describe("Test Router - Basic", () => {
         create: () => createRouter(),
       });
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       let capturedType: string | undefined;
       let capturedUserId: string | undefined;
@@ -109,10 +103,7 @@ describe("Test Router - Basic", () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
       const calls: string[] = [];
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.use((ctx, next) => {
         calls.push("middleware");
@@ -134,10 +125,7 @@ describe("Test Router - Basic", () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
       const calls: string[] = [];
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.use((ctx, next) => {
         calls.push("mw1");
@@ -165,10 +153,7 @@ describe("Test Router - Basic", () => {
     it("should capture errors in handlers", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.on(TestMessage, () => {
         throw new Error("Handler error");
@@ -186,10 +171,7 @@ describe("Test Router - Basic", () => {
     it("should capture errors from middleware", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.use((ctx, next) => {
         throw new Error("Middleware error");
@@ -211,10 +193,7 @@ describe("Test Router - Basic", () => {
     it("should clear capture on demand", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.on(TestMessage, () => {
         throw new Error("Test error");
@@ -250,10 +229,7 @@ describe("Test Router - Basic", () => {
     it("should capture all messages sent to a connection", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.on(TestMessage, (ctx) => {
         // Manually send a response (since we don't have validation plugin)
@@ -350,10 +326,7 @@ describe("Test Router - Basic", () => {
     it("should capture both parsed and raw messages", async () => {
       const tr = test.createTestRouter({ create: () => createRouter() });
 
-      const TestMessage: MessageDescriptor = {
-        type: "TEST",
-        kind: "event",
-      };
+      const TestMessage = createDescriptor("TEST", "event");
 
       tr.on(TestMessage, (ctx) => {
         ctx.ws.send(
