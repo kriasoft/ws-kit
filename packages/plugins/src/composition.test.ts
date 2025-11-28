@@ -13,14 +13,20 @@
  */
 
 import { createRouter } from "@ws-kit/core";
-import { createDescriptor, test } from "@ws-kit/core/testing";
+import {
+  createDescriptor,
+  createRpcDescriptor,
+  test,
+} from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { withMessaging, withRpc } from "../src/index.js";
 
 // Test descriptors (proper MessageDescriptor with DESCRIPTOR symbol)
 const MESSAGE = createDescriptor("MESSAGE", "event");
+const REQUEST = createRpcDescriptor("REQUEST", "RESPONSE");
 const PING = createDescriptor("PING", "event");
 const PONG = createDescriptor("PONG", "event");
+const GET_USER = createRpcDescriptor("GET_USER", "USER");
 const TEST = createDescriptor("TEST", "event");
 const RESPONSE = createDescriptor("RESPONSE", "event");
 
@@ -44,28 +50,28 @@ describe("Plugin composition - withMessaging + withRpc", () => {
       await tr.close();
     });
 
-    it("reply() and progress() methods exist on context", async () => {
+    it("send() available in RPC handlers", async () => {
       const tr = test.createTestRouter({
         create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
 
-      let replyAvailable = false;
-      let progressAvailable = false;
-      tr.on(MESSAGE, (ctx: any) => {
-        replyAvailable = typeof ctx.reply === "function";
-        progressAvailable = typeof ctx.progress === "function";
+      let sendAvailable = false;
+      tr.on(REQUEST, (ctx: any) => {
+        sendAvailable = typeof ctx.send === "function";
+        ctx.reply({ result: "ok" }); // complete RPC
       });
 
       const conn = await tr.connect();
-      conn.send("MESSAGE");
+      conn.send("REQUEST", {}, { correlationId: "test-1" });
       await tr.flush();
 
-      expect(replyAvailable).toBe(true);
-      expect(progressAvailable).toBe(true);
+      expect(sendAvailable).toBe(true);
       await tr.close();
     });
 
-    it("reply() throws in non-RPC handlers (guards work)", async () => {
+    it("reply() throws without validator plugin (guard)", async () => {
+      // Without withZod/withValibot, __wskit.response is never set
+      // so reply() throws regardless of handler type
       const tr = test.createTestRouter({
         create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
@@ -84,7 +90,29 @@ describe("Plugin composition - withMessaging + withRpc", () => {
       await tr.close();
     });
 
-    it("progress() throws in non-RPC handlers (guards work)", async () => {
+    it("reply() requires validator plugin even in RPC handlers", async () => {
+      // Core RPC plugin provides reply() method, but the guard requires
+      // __wskit.response which is only set by validator plugins
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
+      });
+
+      tr.on(REQUEST, (ctx: any) => {
+        ctx.reply({ result: "ok" });
+      });
+
+      const conn = await tr.connect();
+      conn.send("REQUEST", {}, { correlationId: "test-1" });
+      await tr.flush();
+
+      // Without validator plugin, reply() guard fails
+      const errors = tr.capture.errors();
+      expect(errors.length).toBeGreaterThan(0);
+      expect(String(errors[0])).toContain("only in RPC handlers");
+      await tr.close();
+    });
+
+    it("progress() throws without validator plugin (guard)", async () => {
       const tr = test.createTestRouter({
         create: () => createRouter().plugin(withMessaging()).plugin(withRpc()),
       });
