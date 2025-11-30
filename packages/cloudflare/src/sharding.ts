@@ -73,7 +73,7 @@ export function topicToDoName(
  * ```
  */
 export function getShardedDoId(
-  env: { ROUTER: DurableObjectNamespace },
+  env: { ROUTER: Pick<DurableObjectNamespace, "idFromName"> },
   topic: string,
   shards: number,
   prefix?: string,
@@ -117,7 +117,7 @@ export function getShardedDoId(
  * ```
  */
 export function getShardedStub(
-  env: { ROUTER: DurableObjectNamespace },
+  env: { ROUTER: Pick<DurableObjectNamespace, "idFromName" | "get"> },
   topic: string,
   shards: number,
   prefix?: string,

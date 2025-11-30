@@ -30,6 +30,7 @@ export type { Policy, RateLimitDecision, RateLimiter } from "./types";
 
 // Key functions
 export {
+  type IngressContext,
   keyPerUserOrIpPerType,
   keyPerUserPerType,
   perUserKey,

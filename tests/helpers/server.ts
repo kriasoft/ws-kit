@@ -10,8 +10,8 @@ import type { Server } from "bun";
  * Test server utilities for e2e and integration tests.
  */
 
-export interface TestServer {
-  server: Server;
+export interface TestServer<TContext extends ConnectionData = ConnectionData> {
+  server: Server<TContext>;
   url: string;
   wsUrl: string;
   close: () => void;
@@ -24,7 +24,7 @@ export interface TestServer {
 export function createTestServer<TContext extends ConnectionData>(
   router: Router<TContext>,
   options?: BunHandlerOptions<TContext>,
-): TestServer {
+): TestServer<TContext> {
   const { fetch, websocket } = createBunHandler(router, options);
 
   const server = Bun.serve({

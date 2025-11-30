@@ -47,9 +47,9 @@ describe("federate", () => {
     });
 
     expect(settled).toHaveLength(3);
-    expect(settled[0].status).toBe("fulfilled");
-    expect(settled[1].status).toBe("rejected");
-    expect(settled[2].status).toBe("fulfilled");
+    expect(settled[0]!.status).toBe("fulfilled");
+    expect(settled[1]!.status).toBe("rejected");
+    expect(settled[2]!.status).toBe("fulfilled");
   });
 
   it("should work with empty shard list", async () => {
@@ -81,12 +81,12 @@ describe("federateWithErrors", () => {
       },
     );
 
-    expect(results[0].status).toBe("fulfilled");
-    expect(results[1].status).toBe("rejected");
-    if (results[1].status === "rejected") {
-      expect(results[1].reason).toBeInstanceOf(Error);
+    expect(results[0]!.status).toBe("fulfilled");
+    expect(results[1]!.status).toBe("rejected");
+    if (results[1]!.status === "rejected") {
+      expect(results[1]!.reason).toBeInstanceOf(Error);
     }
-    expect(results[2].status).toBe("fulfilled");
+    expect(results[2]!.status).toBe("fulfilled");
   });
 });
 
