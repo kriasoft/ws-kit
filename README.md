@@ -812,7 +812,7 @@ const router = createRouter();
 // Apply rate limiting to all messages
 router.use(
   rateLimit({
-    adapter: memoryRateLimiter({
+    limiter: memoryRateLimiter({
       capacity: 200, // Max 200 tokens per bucket
       tokensPerSecond: 100, // Refill at 100 tokens/second
     }),
@@ -842,7 +842,7 @@ await redisClient.connect();
 
 router.use(
   rateLimit({
-    adapter: redisRateLimiter(redisClient, {
+    limiter: redisRateLimiter(redisClient, {
       capacity: 200,
       tokensPerSecond: 100,
     }),
@@ -863,7 +863,7 @@ Create custom key functions:
 ```ts
 router.use(
   rateLimit({
-    adapter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
+    limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
     key: (ctx) => `${ctx.data?.userId}:${ctx.type}`, // Custom keying
     cost: (ctx) => (ctx.type === "ExpensiveOp" ? 10 : 1),
   }),
