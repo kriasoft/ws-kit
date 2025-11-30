@@ -6,12 +6,11 @@
  *
  * Scenarios:
  * - Parse JSON frame → validate shape → lookup handler
- * - Middleware execution order: global → per-route → handler
+ * - Global middleware execution order (per-route tested in middleware.test.ts)
  * - Heartbeat short-circuit: __heartbeat → __heartbeat_ack
  * - Reserved types blocked from user handlers
  * - Unknown message types → onError
  * - Middleware/handler errors → onError
- * - Limits enforcement: maxPending
  */
 
 import type { MessageDescriptor } from "@ws-kit/core";
@@ -27,7 +26,7 @@ describe("dispatch pipeline", () => {
   }
 
   describe("middleware execution order", () => {
-    it("executes global middleware before per-route middleware", async () => {
+    it("executes global middleware in registration order", async () => {
       const calls: string[] = [];
 
       const router = createRouter().plugin(withMessaging());
@@ -323,6 +322,10 @@ describe("dispatch pipeline", () => {
         assignDataWasCalled = true;
       });
 
+      router.on(schema("CHECK"), async (ctx) => {
+        expect(ctx.data.count).toBe(42);
+      });
+
       const tr = test.createTestRouter<AppData>({
         create: () => router,
       });
@@ -330,8 +333,77 @@ describe("dispatch pipeline", () => {
       const conn = await tr.connect();
       conn.send("UPDATE");
       await conn.drain();
+      conn.send("CHECK");
+      await conn.drain();
 
       expect(assignDataWasCalled).toBe(true);
+
+      await tr.close();
+    });
+  });
+
+  describe("JSON parsing errors", () => {
+    it("routes invalid JSON to onError", async () => {
+      const router = createRouter();
+      const errors: unknown[] = [];
+
+      router.onError((err) => {
+        errors.push(err);
+      });
+
+      router.on(schema("TEST"), async () => {
+        // should not be called
+      });
+
+      const tr = test.createTestRouter({
+        create: () => router,
+        onErrorCapture: false,
+      });
+
+      const conn = await tr.connect();
+      // Bypass conn.send() which always produces valid JSON - we need raw malformed
+      // data to test the parse error path. Uses internal harness API.
+      await (tr as any).websocket.message((conn as any).ws, "not valid json {");
+      await conn.drain();
+
+      // Should have JSON parse error
+      const parseError = errors.find((e) => String(e).includes("Invalid JSON"));
+      expect(parseError).toBeDefined();
+
+      await tr.close();
+    });
+
+    it("routes missing type field to onError", async () => {
+      const router = createRouter();
+      const errors: unknown[] = [];
+
+      router.onError((err) => {
+        errors.push(err);
+      });
+
+      router.on(schema("TEST"), async () => {
+        // should not be called
+      });
+
+      const tr = test.createTestRouter({
+        create: () => router,
+        onErrorCapture: false,
+      });
+
+      const conn = await tr.connect();
+      // Bypass conn.send() which always adds a type field - we need a malformed
+      // envelope to test the validation error path. Uses internal harness API.
+      await (tr as any).websocket.message(
+        (conn as any).ws,
+        JSON.stringify({ payload: "data without type" }),
+      );
+      await conn.drain();
+
+      // Should have envelope error
+      const envelopeError = errors.find((e) =>
+        String(e).includes("Invalid message envelope"),
+      );
+      expect(envelopeError).toBeDefined();
 
       await tr.close();
     });

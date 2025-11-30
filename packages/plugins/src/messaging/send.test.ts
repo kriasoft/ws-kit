@@ -2,207 +2,197 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Core tests for ctx.send() - validator-agnostic messaging
+ * Integration tests for ctx.send() - actually triggers handlers and verifies message sending.
  *
- * Validates:
- * - send() accepts schema and payload
- * - send() returns void by default (fire-and-forget)
- * - send() with {waitFor} returns Promise<boolean>
- * - send() with {signal} cancels gracefully
+ * Validates fire-and-forget paths:
+ * - send() sends message to WebSocket
  * - send() with {meta} merges metadata
  * - send() with {preserveCorrelation} copies correlationId
+ * - send() with {signal} cancels gracefully
+ * - send() with {waitFor} returns Promise
  *
- * These tests verify core plugin behavior independent of validation.
- * Validator-specific send() tests (payload validation, outbound validation)
- * belong in @ws-kit/zod or @ws-kit/valibot.
+ * These tests exercise the actual code paths by dispatching messages through the router.
  *
  * Spec: docs/specs/context-methods.md#ctx-send
- *       ADR-030#ctx-send
  */
 
 import { createRouter } from "@ws-kit/core";
-import { createDescriptor } from "@ws-kit/core/testing";
+import { createDescriptor, test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
 import { withMessaging } from "../index.js";
 
-// Test descriptors with proper DESCRIPTOR symbol
-const TEST = createDescriptor("TEST", "event");
-const RESPONSE = createDescriptor("RESPONSE", "event");
+const PING = createDescriptor("PING", "event");
+const PONG = createDescriptor("PONG", "event");
 
-describe("withMessaging() plugin - ctx.send()", () => {
-  describe("method signature", () => {
-    it("send() is available after withMessaging() plugin", () => {
-      const router = createRouter().plugin(withMessaging());
+// Helper to wait for setImmediate to execute (fire-and-forget uses setImmediate)
+const waitForImmediate = () => new Promise((r) => setImmediate(r));
 
-      let sendMethod: any;
-      router.on(TEST, (ctx: any) => {
-        sendMethod = ctx.send;
+describe("withMessaging() - ctx.send() integration", () => {
+  describe("fire-and-forget messaging", () => {
+    it("sends message to WebSocket", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(typeof sendMethod).toBe("undefined"); // Handler not executed yet
-      expect(router.on).toBeDefined();
+      tr.on(PING, (ctx: any) => {
+        ctx.send(PONG, { reply: "pong" });
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING", { text: "hello" });
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect(pong!.payload).toEqual({ reply: "pong" });
     });
 
-    it("send() accepts schema and payload", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      let sendCalled = false;
-      router.on(TEST, (ctx: any) => {
-        // Should not throw
-        ctx.send(RESPONSE, { data: "test" });
-        sendCalled = true;
+    it("omits payload field when payload is undefined", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(router.on).toBeDefined();
+      tr.on(PING, (ctx: any) => {
+        ctx.send(PONG, undefined);
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect("payload" in pong!).toBe(false);
     });
 
-    it("send() returns void by default (fire-and-forget)", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      router.on(TEST, (ctx: any) => {
-        const result = ctx.send(RESPONSE, { data: "test" });
-        // Should return undefined (void)
-        expect(result).toBeUndefined();
+    it("returns void by default (fire-and-forget)", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(router.on).toBeDefined();
-    });
-
-    it("send() with {waitFor} returns Promise<boolean>", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      router.on(TEST, (ctx: any) => {
-        const result = ctx.send(
-          RESPONSE,
-          { data: "test" },
-          { waitFor: "drain" },
-        );
-        // Should return Promise
-        expect(result).toBeInstanceOf(Promise);
+      let returnValue: any;
+      tr.on(PING, (ctx: any) => {
+        returnValue = ctx.send(PONG, { data: "test" });
       });
 
-      expect(router.on).toBeDefined();
-    });
-  });
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
 
-  describe("{signal} option - cancellation", () => {
-    it("gracefully skips send if signal is aborted before enqueue", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      router.on(TEST, (ctx: any) => {
-        const controller = new AbortController();
-        controller.abort();
-
-        // Should return immediately without error
-        const result = ctx.send(
-          RESPONSE,
-          { data: "test" },
-          { signal: controller.signal },
-        );
-        expect(result).toBeUndefined();
-      });
-
-      expect(router.on).toBeDefined();
-    });
-
-    it("gracefully skips send with {waitFor} if signal is aborted", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      router.on(TEST, (ctx: any) => {
-        const controller = new AbortController();
-        controller.abort();
-
-        // Should return resolved Promise without error
-        const result = ctx.send(
-          RESPONSE,
-          { data: "test" },
-          { waitFor: "drain", signal: controller.signal },
-        );
-
-        if (result instanceof Promise) {
-          result.then((sent) => {
-            expect(sent).toBe(false);
-          });
-        }
-      });
-
-      expect(router.on).toBeDefined();
+      expect(returnValue).toBeUndefined();
     });
   });
 
   describe("{meta} option - custom metadata", () => {
     it("merges custom metadata into outgoing message", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      let sentMessage: any;
-      router.on(TEST, (ctx: any) => {
-        ctx.send(RESPONSE, { data: "test" }, { meta: { traceId: "abc123" } });
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(router.on).toBeDefined();
+      tr.on(PING, (ctx: any) => {
+        ctx.send(PONG, { reply: "ok" }, { meta: { traceId: "abc123" } });
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect(pong!.meta?.traceId).toBe("abc123");
     });
 
-    it("sanitizes metadata to prevent reserved key override", async () => {
-      const router = createRouter().plugin(withMessaging());
+    it("sanitizes metadata - strips reserved keys", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
+      });
 
-      router.on(TEST, (ctx: any) => {
-        // Should not throw; reserved keys are stripped
+      tr.on(PING, (ctx: any) => {
         ctx.send(
-          RESPONSE,
-          { data: "test" },
+          PONG,
+          { reply: "ok" },
           {
             meta: {
               type: "HACKED", // Reserved: should be stripped
               correlationId: "fake", // Reserved: should be stripped
-              customField: "ok", // Non-reserved: should be preserved
+              customField: "preserved", // Non-reserved: should be preserved
             },
           },
         );
       });
 
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect(pong!.type).toBe("PONG"); // Not overridden
+      expect(pong!.meta?.correlationId).toBeUndefined(); // Not overridden
+      expect(pong!.meta?.customField).toBe("preserved");
     });
   });
 
-  describe("{preserveCorrelation} option - auto-correlation", () => {
-    it("copies correlationId from inbound meta if present", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      router.on(TEST, (ctx: any) => {
-        // Simulate inbound message with correlationId
-        ctx.meta = { correlationId: "req-123" };
-
-        // Should preserve it automatically
-        ctx.send(RESPONSE, { data: "test" }, { preserveCorrelation: true });
+  describe("{preserveCorrelation} option", () => {
+    it("copies correlationId from inbound meta", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(router.on).toBeDefined();
+      tr.on(PING, (ctx: any) => {
+        ctx.send(PONG, { reply: "ok" }, { preserveCorrelation: true });
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING", { text: "hello" }, { correlationId: "req-123" });
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect(pong!.meta?.correlationId).toBe("req-123");
     });
 
-    it("gracefully skips correlation if not present in inbound meta", async () => {
-      const router = createRouter().plugin(withMessaging());
-
-      router.on(TEST, (ctx: any) => {
-        // No correlationId in inbound meta
-        ctx.meta = {};
-
-        // Should not throw, just skip
-        ctx.send(RESPONSE, { data: "test" }, { preserveCorrelation: true });
+    it("gracefully skips if no correlationId in inbound meta", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(router.on).toBeDefined();
+      tr.on(PING, (ctx: any) => {
+        ctx.send(PONG, { reply: "ok" }, { preserveCorrelation: true });
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING", { text: "hello" }); // No correlationId
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      // Should not have correlationId
+      expect(pong!.meta?.correlationId).toBeUndefined();
     });
 
     it("works together with custom {meta}", async () => {
-      const router = createRouter().plugin(withMessaging());
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
+      });
 
-      router.on(TEST, (ctx: any) => {
-        ctx.meta = { correlationId: "req-123" };
-
-        // Should preserve correlation AND merge custom meta
+      tr.on(PING, (ctx: any) => {
         ctx.send(
-          RESPONSE,
-          { data: "test" },
+          PONG,
+          { reply: "ok" },
           {
             preserveCorrelation: true,
             meta: { customField: "value" },
@@ -210,32 +200,146 @@ describe("withMessaging() plugin - ctx.send()", () => {
         );
       });
 
-      expect(router.on).toBeDefined();
+      const conn = await tr.connect();
+      conn.send("PING", { text: "hello" }, { correlationId: "req-456" });
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect(pong!.meta?.correlationId).toBe("req-456");
+      expect(pong!.meta?.customField).toBe("value");
     });
   });
 
-  describe("composition with other plugins", () => {
-    it("works when applied before other plugins", () => {
-      const router = createRouter()
-        .plugin(withMessaging())
-        .on(TEST, (ctx: any) => {
-          expect(typeof ctx.send).toBe("function");
-        });
-
-      expect(router.on).toBeDefined();
-    });
-
-    it("can be wrapped by validator plugins", () => {
-      // Validator plugins wrap core send() with validation
-      const router = createRouter().plugin(withMessaging());
-
-      let originalSend: any;
-      router.on(TEST, (ctx: any) => {
-        originalSend = ctx.send;
-        expect(typeof ctx.send).toBe("function");
+  describe("{signal} option - cancellation", () => {
+    it("gracefully skips send if signal is aborted before enqueue", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
       });
 
-      expect(router.on).toBeDefined();
+      let returnValue: any;
+      tr.on(PING, (ctx: any) => {
+        const controller = new AbortController();
+        controller.abort();
+        returnValue = ctx.send(
+          PONG,
+          { reply: "ok" },
+          { signal: controller.signal },
+        );
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      expect(returnValue).toBeUndefined();
+      // Message should not be sent
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeUndefined();
+    });
+
+    it("returns false with {waitFor} if signal is aborted", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
+      });
+
+      let returnValue: any;
+      tr.on(PING, async (ctx: any) => {
+        const controller = new AbortController();
+        controller.abort();
+        returnValue = await ctx.send(
+          PONG,
+          { reply: "ok" },
+          { waitFor: "drain", signal: controller.signal },
+        );
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      expect(returnValue).toBe(false);
+      // Message should not be sent
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeUndefined();
+    });
+  });
+
+  // NOTE: {waitFor} is currently stubbed to resolve immediately (true).
+  // When real drain/ack tracking is implemented, these tests should be updated to:
+  // 1. Verify actual buffer drain behavior
+  // 2. Test signal abort after enqueue (not just before)
+  // 3. Test backpressure scenarios
+  describe("{waitFor} option - async confirmation", () => {
+    it("returns Promise<boolean> with waitFor", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
+      });
+
+      let returnValue: any;
+      tr.on(PING, async (ctx: any) => {
+        returnValue = ctx.send(PONG, { reply: "ok" }, { waitFor: "drain" });
+        expect(returnValue).toBeInstanceOf(Promise);
+        await returnValue;
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      expect(returnValue).toBeInstanceOf(Promise);
+    });
+
+    it("resolves to true after send", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
+      });
+
+      let result: any;
+      tr.on(PING, async (ctx: any) => {
+        result = await ctx.send(PONG, { reply: "ok" }, { waitFor: "drain" });
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING");
+      await tr.flush();
+      await waitForImmediate();
+
+      expect(result).toBe(true);
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+    });
+
+    it("with {waitFor} + {preserveCorrelation} preserves correlationId", async () => {
+      const tr = test.createTestRouter({
+        create: () => createRouter().plugin(withMessaging()),
+      });
+
+      tr.on(PING, async (ctx: any) => {
+        await ctx.send(
+          PONG,
+          { reply: "ok" },
+          { waitFor: "drain", preserveCorrelation: true },
+        );
+      });
+
+      const conn = await tr.connect();
+      conn.send("PING", { text: "hello" }, { correlationId: "req-789" });
+      await tr.flush();
+      await waitForImmediate();
+
+      const messages = conn.outgoing();
+      const pong = messages.find((m) => m.type === "PONG");
+      expect(pong).toBeDefined();
+      expect(pong!.meta?.correlationId).toBe("req-789");
     });
   });
 });
