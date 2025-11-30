@@ -1,8 +1,8 @@
 {
   "name": "@ws-kit/plugins",
   "version": "0.7.0",
-  "type": "module",
   "description": "Core plugins for WS-Kit routers (messaging, RPC, pub/sub)",
+  "type": "module",
   "sideEffects": false,
   "license": "MIT",
   "author": "Konstantin Tarkus",

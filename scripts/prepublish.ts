@@ -4,7 +4,7 @@
 // Prepublish script run before `changeset publish`:
 // 1. Replaces `workspace:^` with actual versions (npm doesn't understand workspace protocol)
 // 2. Removes the `bun` export condition (only needed for local dev)
-// 3. Copies LICENSE to each package's dist/
+// 3. Copies LICENSE to each package root (npm includes it automatically)
 
 import { readdirSync } from "fs";
 import { join } from "path";
@@ -39,7 +39,6 @@ const depFields = [
 
 for (const pkg of packages) {
   const pkgPath = join(packagesDir, pkg, "package.json");
-  const distDir = join(packagesDir, pkg, "dist");
   const pkgJson = JSON.parse(await Bun.file(pkgPath).text());
 
   let updated = false;
@@ -77,10 +76,10 @@ for (const pkg of packages) {
     console.log(`✓ Updated ${pkgJson.name}`);
   }
 
-  // Copy LICENSE to dist/
+  // Copy LICENSE to package root
   try {
     const license = await Bun.file(licenseFile).text();
-    await Bun.write(join(distDir, "LICENSE"), license);
+    await Bun.write(join(packagesDir, pkg, "LICENSE"), license);
   } catch {
     console.warn(`⚠ Failed to copy LICENSE for ${pkgJson.name}`);
   }
