@@ -81,7 +81,7 @@ export function keyPerUserPerType<
  * **Note**: This is an example key function assuming `tenantId` and `userId` fields.
  * Create your own key function if your app uses different field names.
  */
-export function perUserKey<
+export function keyPerUser<
   TData extends WebSocketData & RateLimitContext = WebSocketData &
     RateLimitContext,
 >(ctx: IngressContext<TData>): string {

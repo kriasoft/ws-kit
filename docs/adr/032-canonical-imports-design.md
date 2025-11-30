@@ -80,12 +80,7 @@ These live in **their respective packages**:
 
 ```typescript
 // Rate limiting (token bucket via middleware)
-import {
-  rateLimit,
-  keyPerUserPerType,
-  keyPerUserOrIpPerType,
-  perUserKey,
-} from "@ws-kit/rate-limit";
+import { rateLimit, keyPerUser, keyPerUserPerType } from "@ws-kit/rate-limit";
 
 // Authentication, logging, metrics, telemetry
 import { useAuth, useLogging, useMetrics } from "@ws-kit/middleware";

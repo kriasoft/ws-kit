@@ -802,8 +802,7 @@ router.use(rateLimitMiddleware);
 **Key Functions**:
 
 - `keyPerUserPerType(ctx)` — Fair isolation: tenant + user + message type (recommended)
-- `perUserKey(ctx)` — Lighter footprint: tenant + user only
-- `keyPerUserOrIpPerType(ctx)` — Falls back to user if authenticated; note: IP not available at middleware layer
+- `keyPerUser(ctx)` — Lighter footprint: tenant + user only
 
 **Rate Limit Errors**: When rate limited, the router sends `RESOURCE_EXHAUSTED` (retryable) or `FAILED_PRECONDITION` (impossible cost) error. The error includes a computed `retryAfterMs` backoff hint for clients.
 

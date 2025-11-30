@@ -405,7 +405,7 @@ export function keyPerUserPerType(ctx: IngressContext): string {
 }
 ```
 
-**`perUserKey(ctx)`** — Lighter footprint for high-type-count apps
+**`keyPerUser(ctx)`** — Lighter footprint for high-type-count apps
 
 ```typescript
 /**
@@ -413,25 +413,10 @@ export function keyPerUserPerType(ctx: IngressContext): string {
  * Use when you have many heterogeneous routes (100+ message types) or memory is tight.
  * Differentiate cost via weight config; all operations share the same user ceiling.
  */
-export function perUserKey(ctx: IngressContext): string {
+export function keyPerUser(ctx: IngressContext): string {
   const tenant = ctx.data?.tenantId ?? "public";
   const user = ctx.data?.userId ?? "anon";
   return `rl:${tenant}:${user}`;
-}
-```
-
-**`keyPerUserOrIpPerType(ctx)`** — IP-based fallback when authentication is unavailable (safer default)
-
-```typescript
-/**
- * Tenant + (user or IP) + type: Fair isolation across message types.
- * Use as a safer default when some connections may not be authenticated.
- * Falls back to IP if user ID is not available, ensuring all traffic is limited.
- */
-export function keyPerUserOrIpPerType(ctx: IngressContext): string {
-  const tenant = ctx.data?.tenantId ?? "public";
-  const identifier = ctx.data?.userId ?? ctx.ip ?? "anon";
-  return `rl:${tenant}:${identifier}:${ctx.type}`;
 }
 ```
 
@@ -441,13 +426,13 @@ export function keyPerUserOrIpPerType(ctx: IngressContext): string {
 >
 > **When to keep it (recommended)**: Fairness is worth the cost in most cases. A typical app has 5–30 active message types; even with 10k users, that's ~150k buckets in Redis—acceptable and worth the isolation guarantee that prevents one bursty operation from starving others.
 >
-> **When to switch to `perUserKey`**: If your app has 100+ distinct message types (forwarding heterogeneous RPCs across microservices) or monitoring shows key cardinality exceeding your backend's comfort zone, switch to per-user keying and use `cost(ctx)` to weight operations within a shared budget.
+> **When to switch to `keyPerUser`**: If your app has 100+ distinct message types (forwarding heterogeneous RPCs across microservices) or monitoring shows key cardinality exceeding your backend's comfort zone, switch to per-user keying and use `cost(ctx)` to weight operations within a shared budget.
 >
 > **Automatic cleanup**: Redis (via `PEXPIRE` TTL) and Durable Objects (mark-and-sweep) automatically evict idle buckets after ~24h, capping unbounded growth. Memory and in-process stores do not evict; use external cleanup if needed or scope to single-deployment apps.
 
 **Cost function as tuning, not isolation:**
 
-The `cost()` function (optional; defaults to `1`) lets you weight operations within a _single policy_—e.g., "Compute costs 5 tokens, others cost 1" under the same capacity/refill budget. It is **not a substitute for per-type isolation**. If you need completely independent fairness budgets (cheap queries should not starve expensive reports), use separate `rateLimit()` instances with different policies. The per-type key default (`keyPerUserPerType`) ensures that even with `cost: () => 1`, one operation type cannot starve others—a fairness guarantee that `perUserKey` + variable cost cannot provide.
+The `cost()` function (optional; defaults to `1`) lets you weight operations within a _single policy_—e.g., "Compute costs 5 tokens, others cost 1" under the same capacity/refill budget. It is **not a substitute for per-type isolation**. If you need completely independent fairness budgets (cheap queries should not starve expensive reports), use separate `rateLimit()` instances with different policies. The per-type key default (`keyPerUserPerType`) ensures that even with `cost: () => 1`, one operation type cannot starve others—a fairness guarantee that `keyPerUser` + variable cost cannot provide.
 
 **Custom key examples** (documented in guides, not exported; all use safe IngressContext fields):
 
@@ -1430,14 +1415,13 @@ export type IngressContext<AppData = unknown> = {
 // Middleware
 export function rateLimit(opts: {
   limiter: RateLimiter;
-  key?: (ctx: IngressContext) => string; // default: keyPerUserOrIpPerType
+  key?: (ctx: IngressContext) => string; // default: keyPerUserPerType
   cost?: (ctx: IngressContext) => number; // default: 1; must be a positive integer
 }): Middleware;
 
 // Key functions
 export function keyPerUserPerType(ctx: IngressContext): string; // tenant + user + type (fairness default)
-export function keyPerUserOrIpPerType(ctx: IngressContext): string; // tenant + (user or IP) + type (safer default)
-export function perUserKey(ctx: IngressContext): string; // tenant + user (lighter footprint)
+export function keyPerUser(ctx: IngressContext): string; // tenant + user (lighter footprint)
 
 // Factory functions (validate policy at creation time)
 export function memoryRateLimiter(

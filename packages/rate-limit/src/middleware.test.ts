@@ -3,8 +3,8 @@
 
 import { memoryRateLimiter } from "@ws-kit/memory";
 import {
+  keyPerUser,
   keyPerUserPerType,
-  perUserKey,
   rateLimit,
   type IngressContext,
 } from "@ws-kit/rate-limit";
@@ -222,10 +222,10 @@ describe("Rate Limit Middleware", () => {
       expect(errors).toHaveLength(0);
     });
 
-    it("should use perUserKey for lighter per-user isolation", async () => {
+    it("should use keyPerUser for lighter per-user isolation", async () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
-        key: perUserKey,
+        key: keyPerUser,
       });
 
       const { ctx, errors } = createMockContext();

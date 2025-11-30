@@ -35,7 +35,7 @@ const router = createRouter().use(
 ## Keys and cost
 
 - `keyPerUserPerType` (default): per-user, per-message-type fairness.
-- `perUserKey`: single bucket per user (lighter memory).
+- `keyPerUser`: single bucket per user (lighter memory).
 - Custom: `key: (ctx) => "rl:tenant:user:type"`; include tenant/user/type as needed.
 - `cost`: weight expensive operations (`return ctx.type === "Compute" ? 10 : 1`).
 - Anonymous users: built-in keys fall back to `"anon"`, so guests share one bucket; use a custom key with IP/session when you need per-guest isolation.

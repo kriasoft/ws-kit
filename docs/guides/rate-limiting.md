@@ -239,16 +239,16 @@ const limiter = rateLimit({
 - Fair isolation across message types
 - Typical cardinality: 5-30 types × 10k users = 150k buckets (acceptable)
 
-### perUserKey (Lighter Footprint)
+### keyPerUser (Lighter Footprint)
 
 One bucket per (tenant, user). Use cost() to weight operations.
 
 ```typescript
-import { perUserKey } from "@ws-kit/rate-limit";
+import { keyPerUser } from "@ws-kit/rate-limit";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),
-  key: perUserKey,
+  key: keyPerUser,
   cost: (ctx) => (ctx.type === "ExpensiveOp" ? 10 : 1),
 });
 
@@ -261,27 +261,6 @@ const limiter = rateLimit({
 - High-type-count apps (100+ distinct message types)
 - Memory-constrained deployments
 - Acceptable to weight operations within shared budget
-
-### keyPerUserOrIpPerType (Future IP Support)
-
-Per-user for authenticated, IP fallback for anonymous. Currently falls back to "anon" (IP not available at middleware layer).
-
-```typescript
-import { keyPerUserOrIpPerType } from "@ws-kit/rate-limit";
-
-const limiter = rateLimit({
-  limiter,
-  key: keyPerUserOrIpPerType,
-});
-
-// Key format: "rl:{tenantId}:{userId|ip|anon}:{type}"
-// Note: IP is not available at middleware layer; uses "anon" for all unauthenticated
-```
-
-**When to use**:
-
-- Apps with primarily authenticated users
-- Designed for future router-level integration (which has access to IP)
 
 ### Custom Key Functions
 
