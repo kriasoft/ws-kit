@@ -251,14 +251,17 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
           }
 
           // Stash schema info for later use in reply/progress/send validation
+          const kind = getKind(schemaInfo.schema); // read from DESCRIPTOR symbol
+          const existingWskit = enhCtx.__wskit || {};
           Object.defineProperty(enhCtx, "__wskit", {
             enumerable: false,
             configurable: true,
             value: {
-              kind: getKind(schemaInfo.schema), // read from DESCRIPTOR symbol
+              ...existingWskit,
+              ...(kind !== undefined && { kind }),
               request: schema,
               response: schema.response,
-            },
+            } satisfies WsContext,
           });
         }
       }

@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/rate-limit",
   "version": "1.0.0",
-  "description": "Rate limiter interface and types for WS-Kit adapters",
+  "description": "Token-bucket rate limiting middleware for WS-Kit",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -39,6 +39,9 @@
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:^"
+  },
   "devDependencies": {
     "@types/bun": "^1.3.3",
     "@ws-kit/core": "workspace:^",

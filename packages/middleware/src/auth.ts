@@ -30,11 +30,13 @@ import type { ConnectionData, Middleware } from "@ws-kit/core";
  *
  * @internal This is a placeholder. Full implementation coming soon.
  */
-export interface UseAuthOptions<TData extends ConnectionData = ConnectionData> {
+export interface UseAuthOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Verify token and return user data or undefined if invalid.
    */
-  verify?: (token: string, ctx: any) => Promise<Partial<TData> | undefined>;
+  verify?: (token: string, ctx: any) => Promise<Partial<TContext> | undefined>;
 
   /**
    * Hook called when authentication fails.
@@ -47,9 +49,9 @@ export interface UseAuthOptions<TData extends ConnectionData = ConnectionData> {
  *
  * @internal This is a placeholder. Full implementation coming soon.
  */
-export function useAuth<TData extends ConnectionData = ConnectionData>(
-  options?: UseAuthOptions<TData>,
-): Middleware<TData> {
+export function useAuth<TContext extends ConnectionData = ConnectionData>(
+  options?: UseAuthOptions<TContext>,
+): Middleware<TContext> {
   return async (ctx, next) => {
     // Placeholder: just continue to next middleware
     await next();

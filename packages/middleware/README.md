@@ -110,7 +110,7 @@ Creates rate limit middleware for the router.
 **Options:**
 
 - `limiter` — RateLimiter instance (required). Adapter implementation (memory, redis, or durable objects)
-- `key` — Key function to extract rate limit bucket (optional, default: `keyPerUserOrIpPerType`)
+- `key` — Key function to extract rate limit bucket (optional, default: `keyPerUserPerType`)
 - `cost` — Cost function returning positive integer tokens (optional, default: `1`)
 
 **Returns:** Middleware function
@@ -118,14 +118,14 @@ Creates rate limit middleware for the router.
 ```typescript
 type RateLimitOptions = {
   limiter: RateLimiter;
-  key?: (ctx: IngressContext) => string;
-  cost?: (ctx: IngressContext) => number;
+  key?: (ctx: MinimalContext) => string;
+  cost?: (ctx: MinimalContext) => number;
 };
 ```
 
 ### Key Functions
 
-Three key functions ship by default:
+Two key functions ship by default:
 
 #### `keyPerUserPerType(ctx)`
 
@@ -141,7 +141,7 @@ rateLimit({
 });
 ```
 
-#### `perUserKey(ctx)`
+#### `keyPerUser(ctx)`
 
 Lighter memory footprint. Creates a bucket per (tenant, user).
 
@@ -150,24 +150,8 @@ Lighter memory footprint. Creates a bucket per (tenant, user).
 ```typescript
 rateLimit({
   limiter,
-  key: perUserKey,
+  key: keyPerUser,
   cost: (ctx) => (ctx.type === "Compute" ? 5 : 1), // Weight operations
-});
-```
-
-#### `keyPerUserOrIpPerType(ctx)`
-
-IP-based fallback for unauthenticated traffic. Creates a bucket per (tenant, user or IP, message type).
-
-**Note:** IP is not available at middleware layer; defaults to "anon" for all unauthenticated traffic.
-
-**Use when:** You expect mixed authenticated/unauthenticated traffic.
-
-```typescript
-rateLimit({
-  limiter,
-  key: keyPerUserOrIpPerType, // Default
-  cost: () => 1,
 });
 ```
 
@@ -179,7 +163,7 @@ The cost function determines how many tokens each message consumes.
 
 - Must return a **positive integer** (validated at runtime)
 - Must be deterministic (same message always costs same)
-- Receives only `IngressContext` (payload not validated yet)
+- Receives only `MinimalContext` (payload not validated yet)
 
 **Examples:**
 
@@ -306,12 +290,12 @@ router.use((ctx, next) => {
 ### After (Adapter-Based)
 
 ```typescript
-import { rateLimit, perUserKey } from "@ws-kit/middleware";
+import { rateLimit, keyPerUser } from "@ws-kit/middleware";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
 const limiter = rateLimit({
   limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 1 }),
-  key: perUserKey,
+  key: keyPerUser,
   cost: () => 1,
 });
 
@@ -348,7 +332,7 @@ This separation means:
 
 - **Execution timing**: Rate limiting runs after schema validation. This means the payload is validated even if the request will be rate limited. For most applications, this is fine; if you need rate limiting before validation, consider implementing it at the router level.
 
-- **IP address not available**: The middleware layer doesn't have access to client IP. The `keyPerUserOrIpPerType` key function falls back to "anon" for unauthenticated traffic. Use `keyPerUserPerType` or `perUserKey` for better isolation of unauthenticated users.
+- **IP address not available**: The middleware layer doesn't have access to client IP. Both `keyPerUserPerType` and `keyPerUser` fall back to "anon" for unauthenticated traffic. For per-guest isolation, implement a custom key function using session tokens or other identifiers.
 
 ## Future Enhancements
 

@@ -189,7 +189,7 @@ This **races in**:
 Define a single public interface that adapters implement atomically:
 
 ```typescript
-export type Policy = {
+export type RateLimitPolicy = {
   /** Bucket capacity (positive integer). Maximum tokens available. */
   capacity: number; // Must be ≥ 1, integer
 
@@ -398,14 +398,14 @@ Three named key functions ship by default; choose based on your app's needs:
  * Use when message shapes have different costs or when preventing
  * one brusty RPC from starving others is important.
  */
-export function keyPerUserPerType(ctx: IngressContext): string {
+export function keyPerUserPerType(ctx: MinimalContext): string {
   const tenant = ctx.data?.tenantId ?? "public";
   const user = ctx.data?.userId ?? "anon";
   return `rl:${tenant}:${user}:${ctx.type}`;
 }
 ```
 
-**`perUserKey(ctx)`** — Lighter footprint for high-type-count apps
+**`keyPerUser(ctx)`** — Lighter footprint for high-type-count apps
 
 ```typescript
 /**
@@ -413,25 +413,10 @@ export function keyPerUserPerType(ctx: IngressContext): string {
  * Use when you have many heterogeneous routes (100+ message types) or memory is tight.
  * Differentiate cost via weight config; all operations share the same user ceiling.
  */
-export function perUserKey(ctx: IngressContext): string {
+export function keyPerUser(ctx: MinimalContext): string {
   const tenant = ctx.data?.tenantId ?? "public";
   const user = ctx.data?.userId ?? "anon";
   return `rl:${tenant}:${user}`;
-}
-```
-
-**`keyPerUserOrIpPerType(ctx)`** — IP-based fallback when authentication is unavailable (safer default)
-
-```typescript
-/**
- * Tenant + (user or IP) + type: Fair isolation across message types.
- * Use as a safer default when some connections may not be authenticated.
- * Falls back to IP if user ID is not available, ensuring all traffic is limited.
- */
-export function keyPerUserOrIpPerType(ctx: IngressContext): string {
-  const tenant = ctx.data?.tenantId ?? "public";
-  const identifier = ctx.data?.userId ?? ctx.ip ?? "anon";
-  return `rl:${tenant}:${identifier}:${ctx.type}`;
 }
 ```
 
@@ -441,15 +426,15 @@ export function keyPerUserOrIpPerType(ctx: IngressContext): string {
 >
 > **When to keep it (recommended)**: Fairness is worth the cost in most cases. A typical app has 5–30 active message types; even with 10k users, that's ~150k buckets in Redis—acceptable and worth the isolation guarantee that prevents one bursty operation from starving others.
 >
-> **When to switch to `perUserKey`**: If your app has 100+ distinct message types (forwarding heterogeneous RPCs across microservices) or monitoring shows key cardinality exceeding your backend's comfort zone, switch to per-user keying and use `cost(ctx)` to weight operations within a shared budget.
+> **When to switch to `keyPerUser`**: If your app has 100+ distinct message types (forwarding heterogeneous RPCs across microservices) or monitoring shows key cardinality exceeding your backend's comfort zone, switch to per-user keying and use `cost(ctx)` to weight operations within a shared budget.
 >
 > **Automatic cleanup**: Redis (via `PEXPIRE` TTL) and Durable Objects (mark-and-sweep) automatically evict idle buckets after ~24h, capping unbounded growth. Memory and in-process stores do not evict; use external cleanup if needed or scope to single-deployment apps.
 
 **Cost function as tuning, not isolation:**
 
-The `cost()` function (optional; defaults to `1`) lets you weight operations within a _single policy_—e.g., "Compute costs 5 tokens, others cost 1" under the same capacity/refill budget. It is **not a substitute for per-type isolation**. If you need completely independent fairness budgets (cheap queries should not starve expensive reports), use separate `rateLimit()` instances with different policies. The per-type key default (`keyPerUserPerType`) ensures that even with `cost: () => 1`, one operation type cannot starve others—a fairness guarantee that `perUserKey` + variable cost cannot provide.
+The `cost()` function (optional; defaults to `1`) lets you weight operations within a _single policy_—e.g., "Compute costs 5 tokens, others cost 1" under the same capacity/refill budget. It is **not a substitute for per-type isolation**. If you need completely independent fairness budgets (cheap queries should not starve expensive reports), use separate `rateLimit()` instances with different policies. The per-type key default (`keyPerUserPerType`) ensures that even with `cost: () => 1`, one operation type cannot starve others—a fairness guarantee that `keyPerUser` + variable cost cannot provide.
 
-**Custom key examples** (documented in guides, not exported; all use safe IngressContext fields):
+**Custom key examples** (documented in guides, not exported; all use safe MinimalContext fields):
 
 - **Per-connection**: `(ctx) => rl:conn:${ctx.id}:${ctx.type}` — strict fairness, doesn't stop distributed attacks
 - **Per-IP** (behind trusted load balancer): `(ctx) => rl:ip:${ctx.ip}:${ctx.type}` — breaks without proper `CF-Connecting-IP` / `X-Forwarded-For`
@@ -566,7 +551,7 @@ for (let i = 0; i < 15; i++) {
 
 **1. Multi-dimensional keying (prefer user/tenant over IP):**
 
-All examples use safe IngressContext fields (no payload access):
+All examples use safe MinimalContext fields (no payload access):
 
 ```typescript
 // Safe: User + tenant + route (recommended)
@@ -583,7 +568,7 @@ key: (ctx) => `rt:${ctx.ip}:${ctx.type}`;
 
 **2. Cost function (message count is simplest):**
 
-The cost function receives only **safe, pre-validated fields** (IngressContext). It runs _before_ schema validation, so `ctx.payload` is not available. This prevents brittle code that depends on unvalidated data.
+The cost function receives only **safe, pre-validated fields** (MinimalContext). It runs _before_ schema validation, so `ctx.payload` is not available. This prevents brittle code that depends on unvalidated data.
 
 **Cost Contract**: `cost` must be a **positive integer** (e.g., `1`, `5`, `10`). Middleware validates this at runtime; non-integers or non-positive values are rejected with `INVALID_ARGUMENT`.
 
@@ -620,7 +605,7 @@ cost: (ctx) => {
 };
 ```
 
-**Why IngressContext, not full Ctx?** Rate limiting runs _before_ schema validation. To prevent accidental dependencies on unvalidated payload, only parsed fields are available:
+**Why MinimalContext, not full Ctx?** Rate limiting runs _before_ schema validation. To prevent accidental dependencies on unvalidated payload, only parsed fields are available:
 
 - ✅ `ctx.type` — message type (extracted from frame)
 - ✅ `ctx.data` — app connection state (from authenticate)
@@ -1412,14 +1397,14 @@ export type RateLimitDecision =
     };
 
 /**
- * IngressContext: Context available before schema validation runs.
+ * MinimalContext: Context available before schema validation runs.
  *
  * Rate limiting and other pre-validation checks use this context. Only includes
  * parsed, trusted fields (connection metadata, app state from authenticate).
  * Prevents accidental access to unvalidated payload, ensuring middleware stays
  * correct even as schema changes.
  */
-export type IngressContext<AppData = unknown> = {
+export type MinimalContext<AppData = unknown> = {
   type: string; // Message type
   id: string; // Connection ID
   ip: string; // Client IP
@@ -1428,30 +1413,29 @@ export type IngressContext<AppData = unknown> = {
 };
 
 // Middleware
-export function rateLimit(opts: {
+export function rateLimit(config: {
   limiter: RateLimiter;
-  key?: (ctx: IngressContext) => string; // default: keyPerUserOrIpPerType
-  cost?: (ctx: IngressContext) => number; // default: 1; must be a positive integer
+  key?: (ctx: MinimalContext) => string; // default: keyPerUserPerType
+  cost?: (ctx: MinimalContext) => number; // default: 1; must be a positive integer
 }): Middleware;
 
 // Key functions
-export function keyPerUserPerType(ctx: IngressContext): string; // tenant + user + type (fairness default)
-export function keyPerUserOrIpPerType(ctx: IngressContext): string; // tenant + (user or IP) + type (safer default)
-export function perUserKey(ctx: IngressContext): string; // tenant + user (lighter footprint)
+export function keyPerUserPerType(ctx: MinimalContext): string; // tenant + user + type (fairness default)
+export function keyPerUser(ctx: MinimalContext): string; // tenant + user (lighter footprint)
 
 // Factory functions (validate policy at creation time)
 export function memoryRateLimiter(
-  policy: Policy,
+  policy: RateLimitPolicy,
   opts?: { clock?: { now(): number } },
 ): RateLimiter;
 export function redisRateLimiter(
   client: RedisClient,
-  policy: Policy,
+  policy: RateLimitPolicy,
   opts?: { ttlMs?: number },
 ): RateLimiter;
 export function durableObjectRateLimiter(
   namespace: DurableObjectNamespace,
-  policy: Policy,
+  policy: RateLimitPolicy,
   opts?: { shards?: number },
 ): RateLimiter;
 ```

@@ -1019,7 +1019,7 @@ const router = createRouter()
   )
   .plugin(
     withRateLimit({
-      adapter: redisRateLimiter(redis), // ← Swap adapter
+      limiter: redisRateLimiter(redis), // ← Swap adapter
       capacity: 1000,
       tokensPerSecond: 50,
     }),
@@ -1037,7 +1037,7 @@ export default {
       .plugin(withZod())
       .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
       .plugin(
-        withRateLimit({ adapter: cloudflareRateLimiter(env.RATE_LIMIT) }),
+        withRateLimit({ limiter: cloudflareRateLimiter(env.RATE_LIMIT) }),
       );
     return router.handle(req);
   },

@@ -7,7 +7,7 @@
       "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
         "@changesets/cli": "^2.29.8",
-        "@cloudflare/workers-types": "^4.20251127.0",
+        "@cloudflare/workers-types": "^4.20251128.0",
         "@eslint/js": "^9.39.1",
         "@types/bun": "^1.3.3",
         "eslint": "^9.39.1",
@@ -20,7 +20,7 @@
         "jiti": "^2.6.1",
         "lint-staged": "^16.2.7",
         "mermaid": "^11.12.1",
-        "prettier": "^3.7.1",
+        "prettier": "^3.7.3",
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.48.0",
         "valibot": "^1.2.0",
@@ -93,7 +93,7 @@
         "@types/bun": "^1.3.3",
       },
       "peerDependencies": {
-        "@cloudflare/workers-types": ">4.20251127.0",
+        "@cloudflare/workers-types": ">4.20251128.0",
       },
     },
     "packages/core": {
@@ -169,6 +169,9 @@
         "@ws-kit/core": "workspace:^",
         "@ws-kit/memory": "workspace:^",
         "@ws-kit/zod": "workspace:^",
+      },
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:^",
       },
     },
     "packages/redis": {
@@ -290,7 +293,7 @@
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
-    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20251127.0", "", {}, "sha512-3hGAWcQTlR10HjnwDb0DVDlXTBByBqgDidHmBQ844FTiwO3doecOCufSh1HUM0ztbiIm7Lf7N43CHO22TSRwPg=="],
+    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20251128.0", "", {}, "sha512-gQxQvxLRsFb+mDlaBKGoJwEHWt+ox9telZZEuRMbNUAD6v78XYqZepTI4yPDdKhkRTlqYcDqDhIdAI3HrsGk7w=="],
 
     "@docsearch/css": ["@docsearch/css@4.3.2", "", {}, "sha512-K3Yhay9MgkBjJJ0WEL5MxnACModX9xuNt3UlQQkDEDZJZ0+aeWKtOkxHNndMRkMBnHdYvQjxkm6mdlneOtU1IQ=="],
 
@@ -1108,7 +1111,7 @@
 
     "prelude-ls": ["prelude-ls@1.2.1", "", {}, "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g=="],
 
-    "prettier": ["prettier@3.7.1", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-RWKXE4qB3u5Z6yz7omJkjWwmTfLdcbv44jUVHC5NpfXwFGzvpQM798FGv/6WNK879tc+Cn0AAyherCl1KjbyZQ=="],
+    "prettier": ["prettier@3.7.3", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-QgODejq9K3OzoBbuyobZlUhznP5SKwPqp+6Q6xw6o8gnhr4O85L2U915iM2IDcfF2NPXVaM9zlo9tdwipnYwzg=="],
 
     "property-information": ["property-information@7.1.0", "", {}, "sha512-TwEZ+X+yCJmYfL7TPUOcvBZ4QfoT5YenQiJuX//0th53DE6w0xxLEtfK3iyryQFddXuvkIk51EEgrJQ0WJkOmQ=="],
 

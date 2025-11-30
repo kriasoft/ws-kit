@@ -21,7 +21,7 @@ export type RateLimitDecision =
  * Defines the token bucket parameters: capacity (max tokens) and refill rate.
  * Optional prefix isolates multiple policies sharing the same backend connection.
  */
-export interface Policy {
+export interface RateLimitPolicy {
   /** Bucket capacity (positive integer). Maximum tokens available. */
   capacity: number;
 
@@ -62,9 +62,9 @@ export interface RateLimiter {
    * Get the policy configuration for this rate limiter.
    * **Required by all adapters.** Used by middleware to report accurate capacity in error responses.
    *
-   * @returns Policy object with capacity, tokensPerSecond, and optional prefix
+   * @returns RateLimitPolicy object with capacity, tokensPerSecond, and optional prefix
    */
-  getPolicy(): Policy;
+  getPolicy(): RateLimitPolicy;
 
   /**
    * Optional: cleanup resources (connection, timers, etc.).

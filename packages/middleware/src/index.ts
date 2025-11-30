@@ -35,22 +35,21 @@
  */
 
 // === Rate Limiting (from @ws-kit/rate-limit) ===
-// Re-export for backward compatibility and convenience
+// Re-export for convenience
 
 export { rateLimit } from "@ws-kit/rate-limit";
 export type { RateLimitOptions } from "@ws-kit/rate-limit";
 
 export {
-  keyPerUserOrIpPerType,
+  keyPerUser,
   keyPerUserPerType,
-  perUserKey,
-  type RateLimitContext,
+  type RateLimitIdentity,
 } from "@ws-kit/rate-limit";
 
 export type {
-  Policy,
   RateLimitDecision,
   RateLimiter,
+  RateLimitPolicy,
 } from "@ws-kit/rate-limit";
 
 // === Authentication & Authorization ===

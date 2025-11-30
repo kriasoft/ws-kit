@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import type {
-  Policy,
   RateLimitDecision,
   RateLimiter,
+  RateLimitPolicy,
 } from "@ws-kit/rate-limit";
 import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core/pubsub";
 
@@ -107,7 +107,7 @@ export interface RedisRateLimiterOptions {
  */
 export function redisRateLimiter(
   client: RedisClient,
-  policy: Policy,
+  policy: RateLimitPolicy,
   opts?: RedisRateLimiterOptions,
 ): RateLimiter {
   // Validate policy at factory creation time
@@ -128,11 +128,11 @@ export function redisRateLimiter(
     Math.max(Math.ceil(((2 * capacity) / tokensPerSecond) * 1000), 60_000);
 
   // Create immutable policy snapshot for getPolicy()
-  const policySnapshot: Policy = Object.freeze({
+  const policySnapshot: RateLimitPolicy = Object.freeze({
     capacity,
     tokensPerSecond,
     ...(prefix !== undefined && { prefix }),
-  }) as Policy;
+  }) as RateLimitPolicy;
 
   let scriptSha = "";
   let scriptLoadingPromise: Promise<string> | null = null;

@@ -1,22 +1,16 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type {
-  ConnectionData,
-  EventContext,
-  Middleware,
-  MinimalContext,
-} from "@ws-kit/core";
-import type { RateLimiter } from "@ws-kit/rate-limit";
-import { keyPerUserOrIpPerType } from "./keys";
-
-// Type aliases for clarity
-type WebSocketData = ConnectionData;
+import type { ConnectionData, Middleware, MinimalContext } from "@ws-kit/core";
+import type { RateLimiter } from "./types";
+import { keyPerUserPerType } from "./keys";
 
 /**
- * Options for rate limit middleware
+ * Rate limit middleware options.
  */
-export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
+export interface RateLimitOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Rate limiter adapter instance (memory, redis, or durable objects)
    */
@@ -25,138 +19,114 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
   /**
    * Key function to extract rate limit bucket key from context.
    *
-   * @default keyPerUserOrIpPerType — tenant + (user or IP) + type
-   *
-   * ⚠️ **Note on default**: `keyPerUserOrIpPerType` is designed to use IP for unauthenticated traffic,
-   * but IP is not available at middleware layer. It falls back to a shared "anon" bucket.
-   * For authenticated-first apps, this is fine. For significant unauthenticated traffic,
-   * consider `keyPerUserPerType` or a custom key function.
+   * @default keyPerUserPerType — tenant + user + type
    *
    * @example
-   * // Fair per-user per-message-type isolation (works at middleware layer)
+   * // Custom key function
    * key: (ctx) => {
    *   const tenant = ctx.data?.tenantId ?? "public";
    *   const user = ctx.data?.userId ?? "anon";
    *   return `rl:${tenant}:${user}:${ctx.type}`;
    * }
    */
-  key?: (ctx: MinimalContext<TData>) => string;
+  key?: (ctx: MinimalContext<TContext>) => string;
 
   /**
    * Cost function to calculate token cost for this request.
    *
-   * Must return a **positive integer**. Non-integers and zero/negative values
+   * Must return a **non-negative integer**. Negative or non-integer values
    * are rejected with INVALID_ARGUMENT error at runtime.
+   *
+   * Return `0` to bypass rate limiting for specific messages (e.g., heartbeats).
    *
    * @default () => 1 — each message costs 1 token
    *
    * @example
-   * // Expensive compute operations cost more
-   * cost: (ctx) => ctx.type === "Compute" ? 10 : 1
-   *
-   * @example
-   * // Differentiate by user tier (with separate limiters per tier)
+   * // Expensive operations cost more; heartbeats are free
    * cost: (ctx) => {
-   *   const tier = ctx.data?.tier ?? "free";
-   *   return { free: 2, basic: 1, pro: 1 }[tier];
+   *   if (ctx.type === "HEARTBEAT") return 0;
+   *   if (ctx.type === "SEARCH") return 10;
+   *   return 1;
    * }
-   *
-   * ❌ NOT ALLOWED: Non-integer or non-positive
-   * cost: (ctx) => ctx.data?.isPremium ? 0.5 : 1  // ERROR
-   * cost: (ctx) => -1  // ERROR
    */
-  cost?: (ctx: MinimalContext<TData>) => number;
+  cost?: (ctx: MinimalContext<TContext>) => number;
 }
 
 /**
  * Rate limit middleware using adapter pattern.
  *
  * Applies token bucket rate limiting atomically via the provided adapter.
+ * When rate limited, sends RESOURCE_EXHAUSTED error with retryAfterMs backoff hint.
+ * When cost exceeds capacity, sends FAILED_PRECONDITION (non-retryable).
  *
- * **⚠️ EXECUTION TIMING**: This middleware runs at step 6 of the ingress pipeline
- * (after schema validation and authentication). The proposal recommends step 3
- * (after frame parsing, before validation) for security and efficiency.
+ * **Note**: This middleware runs post-validation. For transport-level protection,
+ * use platform-specific rate limiting (e.g., Cloudflare rate limiting rules).
  *
- * **Today's benefits**: Per-user fairness, atomic token consumption, adapter portability
- * **Today's limitations**:
- * - Cannot access client IP (only available during adapter processing)
- * - Runs after schema validation (no protection against payload work)
- * - No IP-based rate limiting for unauthenticated traffic
- *
- * **Future improvement**: When rate limiting moves to the router at step 3,
- * it will have access to IP and can prevent wasteful validation of rate-limited requests.
- *
- * When rate limited, returns RESOURCE_EXHAUSTED (if retryable) or FAILED_PRECONDITION
- * (if cost > capacity) error. Error includes computed retryAfterMs backoff hint.
- *
- * @param options - Rate limit configuration
+ * @param options - Rate limit options
  * @returns Middleware function
  *
  * @example
- * import { rateLimit, keyPerUserPerType } from "@ws-kit/middleware";
+ * import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
  * import { memoryRateLimiter } from "@ws-kit/memory";
  *
- * const limiter = rateLimit({
+ * const middleware = rateLimit({
  *   limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),
  *   key: keyPerUserPerType,
  *   cost: (ctx) => 1,
  * });
  *
- * router.use(limiter);
+ * router.use(middleware);
  */
-export function rateLimit<TData extends WebSocketData = WebSocketData>(
-  options: RateLimitOptions<TData>,
-): Middleware<TData> {
-  const { limiter, key = keyPerUserOrIpPerType, cost: costFn } = options;
+export function rateLimit<TContext extends ConnectionData = ConnectionData>(
+  options: RateLimitOptions<TContext>,
+): Middleware<TContext> {
+  const { limiter, key = keyPerUserPerType, cost: costFn } = options;
 
-  return async (ctx: MinimalContext<TData>, next: () => Promise<void>) => {
-    // Compute cost
+  return async (ctx: MinimalContext<TContext>, next: () => Promise<void>) => {
     const cost = costFn?.(ctx) ?? 1;
 
-    // Validate cost is a positive integer
-    if (!Number.isInteger(cost) || cost <= 0) {
-      (ctx as any).error(
+    if (!Number.isInteger(cost) || cost < 0) {
+      ctx.error(
         "INVALID_ARGUMENT",
-        "Rate limit cost must be a positive integer",
+        "Rate limit cost must be a non-negative integer",
       );
       return;
     }
 
-    // Compute key
+    // Zero cost bypasses rate limiting (e.g., heartbeats, acks)
+    if (cost === 0) {
+      await next();
+      return;
+    }
+
     const rateLimitKey = key(ctx);
 
     // Atomically consume tokens
     const decision = await limiter.consume(rateLimitKey, cost);
 
     if (!decision.allowed) {
-      // Rate limited: synthesize _limitExceeded error for router's limit handling pipeline
-      const error = new Error(
-        decision.retryAfterMs === null
-          ? "Operation cost exceeds rate limit capacity"
-          : "Rate limit exceeded",
+      const capacity = limiter.getPolicy().capacity;
+
+      // Cost exceeds capacity: impossible under policy (non-retryable)
+      if (decision.retryAfterMs === null) {
+        ctx.error("FAILED_PRECONDITION", "Operation cost exceeds capacity", {
+          cost,
+          capacity,
+        });
+        return;
+      }
+
+      // Rate limited: retryable with backoff hint
+      ctx.error(
+        "RESOURCE_EXHAUSTED",
+        "Rate limit exceeded",
+        { cost, capacity, remaining: decision.remaining },
+        { retryAfterMs: decision.retryAfterMs },
       );
-
-      // Attach limit metadata (same contract as payload size limits)
-      // Get the real capacity from the adapter's policy (required on all adapters)
-      const limit = limiter.getPolicy().capacity; // Always available; no fallback needed
-
-      (error as unknown as Record<string, unknown>)._limitExceeded = {
-        type: "rate" as const,
-        observed: cost,
-        limit, // Real capacity from adapter
-        retryAfterMs: decision.retryAfterMs,
-      };
-
-      throw error;
+      return;
     }
 
     // Rate limit passed, continue middleware chain
     await next();
   };
 }
-export type {
-  Policy,
-  RateLimitDecision,
-  RateLimiter,
-} from "@ws-kit/rate-limit";
-export { keyPerUserOrIpPerType, keyPerUserPerType, perUserKey } from "./keys";

@@ -33,7 +33,7 @@ import type { ConnectionData, Middleware } from "@ws-kit/core";
  * @internal This is a placeholder. Full implementation coming soon.
  */
 export interface UseLoggingOptions<
-  TData extends ConnectionData = ConnectionData,
+  TContext extends ConnectionData = ConnectionData,
 > {
   /**
    * Log level (debug, info, warn, error).
@@ -56,9 +56,9 @@ export interface UseLoggingOptions<
  *
  * @internal This is a placeholder. Full implementation coming soon.
  */
-export function useLogging<TData extends ConnectionData = ConnectionData>(
-  options?: UseLoggingOptions<TData>,
-): Middleware<TData> {
+export function useLogging<TContext extends ConnectionData = ConnectionData>(
+  options?: UseLoggingOptions<TContext>,
+): Middleware<TContext> {
   return async (ctx, next) => {
     // Placeholder: just continue to next middleware
     await next();

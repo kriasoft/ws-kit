@@ -32,7 +32,7 @@ import type { ConnectionData, Middleware } from "@ws-kit/core";
  * @internal This is a placeholder. Full implementation coming soon.
  */
 export interface UseMetricsOptions<
-  TData extends ConnectionData = ConnectionData,
+  TContext extends ConnectionData = ConnectionData,
 > {
   /**
    * Hook called for each metric.
@@ -50,9 +50,9 @@ export interface UseMetricsOptions<
  *
  * @internal This is a placeholder. Full implementation coming soon.
  */
-export function useMetrics<TData extends ConnectionData = ConnectionData>(
-  options?: UseMetricsOptions<TData>,
-): Middleware<TData> {
+export function useMetrics<TContext extends ConnectionData = ConnectionData>(
+  options?: UseMetricsOptions<TContext>,
+): Middleware<TContext> {
   return async (ctx, next) => {
     // Placeholder: just continue to next middleware
     await next();

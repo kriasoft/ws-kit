@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run --watch index.ts",
-    "smoke": "bun test smoke.test.ts"
+    "dev": "bun run --watch index.ts"
   },
   "dependencies": {
     "@ws-kit/bun": "workspace:*",

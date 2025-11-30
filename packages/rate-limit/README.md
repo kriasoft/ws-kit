@@ -1,14 +1,6 @@
 # @ws-kit/rate-limit
 
-Rate limiter interface and middleware for WS-Kit. Provides token bucket rate limiting with pluggable adapters and key functions for fair resource allocation.
-
-## Features
-
-- **Adapter-based architecture**: Use memory, Redis, or Durable Objects adapters
-- **Token bucket algorithm**: Atomic token consumption with precise rate control
-- **Key functions**: Built-in strategies for per-user, per-type, and per-IP rate limiting
-- **Type-safe**: Full TypeScript support with generics
-- **Middleware integration**: Seamless integration with WS-Kit router
+Token-bucket rate limiting for WS-Kit with pluggable backends and ready-to-use key functions.
 
 ## Installation
 
@@ -16,164 +8,54 @@ Rate limiter interface and middleware for WS-Kit. Provides token bucket rate lim
 npm install @ws-kit/rate-limit @ws-kit/memory @ws-kit/core
 ```
 
-## Quick Start
+## Quick start
 
 ```typescript
 import { createRouter } from "@ws-kit/core";
 import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
-const router = createRouter();
+const limiter = memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 });
 
-// Create a rate limiter instance
-const limiter = memoryRateLimiter({
-  capacity: 100,
-  tokensPerSecond: 10,
-});
-
-// Add rate limit middleware
-router.use(
+const router = createRouter().use(
   rateLimit({
     limiter,
-    key: keyPerUserPerType, // Per-user per-message-type isolation
-    cost: (ctx) => 1, // Each message costs 1 token
+    key: keyPerUserPerType, // rl:tenant:user:type
+    cost: () => 1,
   }),
 );
 ```
 
 ## Adapters
 
-### Memory (Single Instance)
+- **Memory (`@ws-kit/memory`)** — Single-process dev/test. Zero dependencies. Optional `prefix` to isolate policies sharing a backend.
+- **Redis (`@ws-kit/redis`)** — Distributed, atomic via Lua and server clock. Use when running multiple pods/servers.
+- **Durable Objects** — See Cloudflare adapter for serverless deployments.
+
+## Keys and cost
+
+- `keyPerUserPerType` (default): per-user, per-message-type fairness.
+- `keyPerUser`: single bucket per user (lighter memory).
+- Custom: `key: (ctx) => "rl:tenant:user:type"`; include tenant/user/type as needed.
+- `cost`: weight expensive operations (`return ctx.type === "Compute" ? 10 : 1`).
+- Anonymous users: built-in keys fall back to `"anon"`, so guests share one bucket; use a custom key with IP/session when you need per-guest isolation.
+
+## Policy shape
 
 ```typescript
-import { memoryRateLimiter } from "@ws-kit/memory";
-
-const limiter = memoryRateLimiter({
-  capacity: 100,
-  tokensPerSecond: 10,
-});
-```
-
-### Redis (Distributed)
-
-```typescript
-import { createClient } from "redis";
-import { redisRateLimiter } from "@ws-kit/redis";
-
-const client = createClient({ url: "redis://localhost:6379" });
-await client.connect();
-
-const limiter = redisRateLimiter(client, {
-  capacity: 100,
-  tokensPerSecond: 10,
-});
-```
-
-## Key Functions
-
-### `keyPerUserPerType` (Default)
-
-Per-user per-message-type rate limiting. Prevents one message type from starving others and ensures fair user isolation.
-
-```typescript
-rateLimit({
-  limiter,
-  key: keyPerUserPerType, // rl:tenant:user:type
-});
-```
-
-### `perUserKey`
-
-Per-user rate limiting (lighter footprint). All message types share the same budget.
-
-```typescript
-rateLimit({
-  limiter,
-  key: perUserKey, // rl:tenant:user
-  cost: (ctx) => {
-    // Use cost to weight expensive operations
-    return ctx.type === "Compute" ? 10 : 1;
-  },
-});
-```
-
-### `keyPerUserOrIpPerType`
-
-Per-user with IP fallback for unauthenticated traffic.
-
-```typescript
-rateLimit({
-  limiter,
-  key: keyPerUserOrIpPerType, // rl:tenant:user|ip:type
-});
-```
-
-### Custom Key Function
-
-```typescript
-rateLimit({
-  limiter,
-  key: (ctx) => {
-    const org = ctx.data.organizationId ?? "public";
-    const user = ctx.data.userId ?? "anon";
-    return `rl:${org}:${user}:${ctx.type}`;
-  },
-});
-```
-
-## Cost Functions
-
-Control token cost per operation for weighted rate limiting:
-
-```typescript
-rateLimit({
-  limiter,
-  cost: (ctx) => {
-    // Expensive compute operations cost more
-    if (ctx.type === "Compute") return 10;
-    if (ctx.type === "Search") return 3;
-    return 1; // Default cost
-  },
-});
-```
-
-## Policy Configuration
-
-```typescript
-interface Policy {
-  // Bucket capacity (max tokens available)
-  capacity: number;
-
-  // Refill rate in tokens per second
-  tokensPerSecond: number;
-
-  // Optional key prefix for isolating multiple policies
-  prefix?: string;
+interface RateLimitPolicy {
+  capacity: number; // max tokens
+  tokensPerSecond: number; // refill rate
+  prefix?: string; // optional key namespace
 }
 ```
 
-## Rate Limit Decision
+## Decisions
 
-When a request is rate limited:
+`consume()` returns `{ allowed: boolean; remaining: number; retryAfterMs: number | null; }`. `retryAfterMs` is `null` when cost exceeds capacity.
 
-```typescript
-{
-  allowed: false,
-  remaining: 0,
-  retryAfterMs: 5000, // null if cost > capacity
-}
-```
+## Tips
 
-## Types
-
-- `RateLimiter` — Adapter interface for consume/getPolicy/dispose
-- `RateLimitDecision` — Result of consume operation
-- `Policy` — Rate limit configuration
-- `RateLimitOptions` — Middleware options
-- `RateLimitContext` — Suggested WebSocket data structure
-
-## See Also
-
-- [@ws-kit/memory](../memory) — In-memory adapter
-- [@ws-kit/redis](../redis) — Redis adapter
-- [@ws-kit/middleware](../middleware) — Other middleware patterns
+- Memory adapter is not shared across processes; pick Redis/DO for multi-instance limits.
+- Inject a clock into `memoryRateLimiter()` for deterministic tests.
+- Keep keys stable and short; prefix when sharing a backend across multiple policies.
