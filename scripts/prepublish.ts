@@ -62,10 +62,14 @@ for (const pkg of packages) {
     }
   }
 
-  // Remove bun export condition
-  if (pkgJson.exports?.["."]?.bun) {
-    delete pkgJson.exports["."].bun;
-    updated = true;
+  // Remove bun export condition from all subpaths
+  if (pkgJson.exports) {
+    for (const conditions of Object.values(pkgJson.exports)) {
+      if (conditions && typeof conditions === "object" && "bun" in conditions) {
+        delete (conditions as Record<string, unknown>).bun;
+        updated = true;
+      }
+    }
   }
 
   if (updated) {

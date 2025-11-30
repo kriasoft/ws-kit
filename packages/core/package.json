@@ -54,5 +54,8 @@
     "rpc",
     "pub-sub"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }
