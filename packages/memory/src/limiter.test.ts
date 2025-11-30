@@ -200,6 +200,27 @@ describe("memoryRateLimiter", () => {
       limiter.dispose?.();
     });
 
+    it("accumulates fractional time over multiple small intervals", async () => {
+      const clock = createMockClock();
+      const limiter = memoryRateLimiter(
+        { capacity: 10, tokensPerSecond: 1 },
+        { clock },
+      );
+
+      await limiter.consume("key", 5); // 5 remaining
+
+      // 10 × 100ms = 1000ms total → should yield 1 token
+      for (let i = 0; i < 10; i++) {
+        clock.advance(100);
+      }
+
+      const result = await limiter.consume("key", 1);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(5); // 5 + 1 - 1
+
+      limiter.dispose?.();
+    });
+
     it("tolerates non-monotonic clocks (negative elapsed clamped to 0)", async () => {
       let currentTime = 10000;
       const clock: Clock = { now: () => currentTime };

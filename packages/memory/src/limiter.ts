@@ -181,16 +181,17 @@ export function memoryRateLimiter(
           bucket = { tokens: capacity, lastRefill: now };
         }
 
-        // Refill based on elapsed time
-        // Clamp negative elapsed to 0 to tolerate non-monotonic clocks (NTP adjustments)
+        // Refill based on elapsed time (clamp negative to handle NTP adjustments)
         const elapsed = Math.max(0, (now - bucket.lastRefill) / 1000);
+        const tokensToAdd = Math.floor(elapsed * tokensPerSecond);
+        bucket.tokens = Math.min(capacity, bucket.tokens + tokensToAdd);
 
-        // Integer arithmetic: accumulate refill per proposal specification
-        bucket.tokens = Math.min(
-          capacity,
-          bucket.tokens + Math.floor(elapsed * tokensPerSecond),
-        );
-        bucket.lastRefill = now;
+        // Only advance lastRefill when tokens are added, preserving fractional time.
+        // Without this, rapid polling (e.g., every 100ms at 1 token/sec) would
+        // discard fractional time on each call, causing token starvation.
+        if (tokensToAdd > 0) {
+          bucket.lastRefill = now;
+        }
 
         // Check if cost can be satisfied
         if (bucket.tokens < cost) {
