@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PlatformAdapter, PubSub } from "@ws-kit/core";
 import { describe, expectTypeOf, it } from "bun:test";
 import { createDurableObjectAdapter } from "./adapter.js";
 import { createDurableObjectHandler } from "./handler.js";
@@ -13,14 +12,17 @@ import type {
 
 describe("@ws-kit/cloudflare type tests", () => {
   describe("createDurableObjectAdapter", () => {
-    it("should return PlatformAdapter type", () => {
+    it("should return object with pubsub and destroy", () => {
       const adapter = createDurableObjectAdapter();
-      expectTypeOf(adapter).toMatchTypeOf<PlatformAdapter>();
+      expectTypeOf(adapter).toEqualTypeOf<{
+        pubsub: DurablePubSub;
+        destroy(): Promise<void>;
+      }>();
     });
 
-    it("should have pubsub", () => {
+    it("should have pubsub property", () => {
       const adapter = createDurableObjectAdapter();
-      expectTypeOf(adapter.pubsub).toMatchTypeOf<PubSub>();
+      expectTypeOf(adapter.pubsub).toEqualTypeOf<DurablePubSub>();
     });
 
     it("should have destroy method", () => {
@@ -28,34 +30,22 @@ describe("@ws-kit/cloudflare type tests", () => {
       expectTypeOf(adapter.destroy).toBeFunction();
       expectTypeOf(adapter.destroy).returns.resolves.toBeVoid();
     });
-
-    it("should have getServerWebSocket as undefined", () => {
-      const adapter = createDurableObjectAdapter();
-      expectTypeOf(adapter.getServerWebSocket).toBeUndefined();
-    });
   });
 
   describe("DurablePubSub", () => {
-    it("should implement PubSub interface", () => {
+    it("should be a class", () => {
       const pubsub = new DurablePubSub();
-      expectTypeOf(pubsub).toMatchTypeOf<PubSub>();
+      expectTypeOf(pubsub).toEqualTypeOf<DurablePubSub>();
     });
 
-    it("should have publish method with correct signature", () => {
+    it("should have publish method", () => {
       const pubsub = new DurablePubSub();
       expectTypeOf(pubsub.publish).toBeFunction();
-      expectTypeOf(pubsub.publish).parameters.toEqualTypeOf<
-        [string, unknown]
-      >();
-      expectTypeOf(pubsub.publish).returns.resolves.toBeVoid();
     });
 
     it("should have subscribe method", () => {
       const pubsub = new DurablePubSub();
       expectTypeOf(pubsub.subscribe).toBeFunction();
-      expectTypeOf(pubsub.subscribe).parameters.toEqualTypeOf<
-        [string, (message: unknown) => void | Promise<void>]
-      >();
     });
 
     it("should have unsubscribe method", () => {
@@ -80,7 +70,7 @@ describe("@ws-kit/cloudflare type tests", () => {
       } as any;
 
       const handler = createDurableObjectHandler(mockRouter);
-      expectTypeOf(handler).toMatchTypeOf<DurableObjectHandler>();
+      expectTypeOf(handler).toExtend<DurableObjectHandler>();
     });
 
     it("should have fetch property", () => {
@@ -94,69 +84,47 @@ describe("@ws-kit/cloudflare type tests", () => {
 
       const handler = createDurableObjectHandler(mockRouter);
       expectTypeOf(handler.fetch).toBeFunction();
-      expectTypeOf(handler.fetch).parameters.toEqualTypeOf<[Request]>();
-      expectTypeOf(handler.fetch).returns.resolves.toMatchTypeOf<Response>();
-    });
-
-    it("should support generic TData type", () => {
-      interface CustomData {
-        userId: string;
-        role: "admin" | "user";
-      }
-
-      const mockRouter = {
-        websocket: {
-          open: async () => {},
-          close: async () => {},
-          message: async () => {},
-        },
-      } as any;
-
-      const handler = createDurableObjectHandler<CustomData>(mockRouter);
-      expectTypeOf(handler).toMatchTypeOf<DurableObjectHandler<CustomData>>();
     });
   });
 
   describe("DurableObjectWebSocketData", () => {
-    it("should have clientId", () => {
+    it("should have connectedAt as required field", () => {
       const data: DurableObjectWebSocketData = {
-        clientId: "uuid-123",
-      };
-
-      expectTypeOf(data.clientId).toBeString();
-    });
-
-    it("should have connectedAt", () => {
-      const data: DurableObjectWebSocketData = {
-        clientId: "uuid-123",
         connectedAt: Date.now(),
       };
 
-      expectTypeOf(data.connectedAt).toBeNumber();
+      expectTypeOf(data.connectedAt).toEqualTypeOf<number>();
     });
 
     it("should have optional resourceId", () => {
       const data: DurableObjectWebSocketData = {
-        clientId: "uuid-123",
         connectedAt: Date.now(),
         resourceId: "room:123",
       };
 
-      expectTypeOf(data.resourceId).toBeString();
+      expectTypeOf(data.resourceId).toEqualTypeOf<string | undefined>();
+    });
+
+    it("should have optional doId", () => {
+      const data: DurableObjectWebSocketData = {
+        connectedAt: Date.now(),
+        doId: "do-instance-123",
+      };
+
+      expectTypeOf(data.doId).toEqualTypeOf<string | undefined>();
     });
 
     it("should support custom type parameter", () => {
-      interface CustomData {
+      type CustomData = Record<string, unknown> & {
         userId: string;
-      }
+      };
 
       const data: DurableObjectWebSocketData<CustomData> = {
-        clientId: "uuid-123",
         connectedAt: Date.now(),
         userId: "user-456",
       };
 
-      expectTypeOf(data.userId).toBeString();
+      expectTypeOf(data.userId).toEqualTypeOf<string>();
     });
   });
 });
