@@ -660,6 +660,50 @@ describe("RPC outgoing messages integration", () => {
       expect(messages.filter((m) => m.type === "STRICT_USER").length).toBe(0);
       await tr.close();
     });
+
+    it("rejects invalid progress payload at runtime", async () => {
+      const StrictUser = rpc(
+        "GET_STRICT_USER",
+        { id: v.string() },
+        "STRICT_USER",
+        { id: v.string(), name: v.pipe(v.string(), v.minLength(1)) },
+      );
+
+      let validationError: Error | undefined;
+
+      const tr = test.createTestRouter({
+        create: () => {
+          const router = createRouter().plugin(withValibot());
+          router.rpc(StrictUser, async (ctx) => {
+            try {
+              // Invalid: name is empty string (violates minLength(1))
+              await ctx.progress({ id: ctx.payload.id, name: "" });
+            } catch (err) {
+              validationError = err as Error;
+            }
+            // Send valid reply to complete RPC
+            ctx.reply({ id: ctx.payload.id, name: "Alice" });
+          });
+          return router;
+        },
+      });
+
+      const conn = await tr.connect();
+      conn.send("GET_STRICT_USER", { id: "u1" });
+      await tr.flush();
+      await waitForImmediate();
+
+      // Validation should reject the invalid progress payload
+      expect(validationError).toBeDefined();
+      expect(validationError!.message).toMatch(/validation|invalid|min/i);
+
+      // Invalid progress should not be sent to the wire
+      const messages = conn.outgoing();
+      expect(messages.filter((m) => m.type === RPC_PROGRESS).length).toBe(0);
+      // But valid reply should still be sent
+      expect(messages.filter((m) => m.type === "STRICT_USER").length).toBe(1);
+      await tr.close();
+    });
   });
 
   describe("ctx.progress() - throttling with immediate reply", () => {
