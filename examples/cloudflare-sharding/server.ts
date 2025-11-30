@@ -13,7 +13,8 @@
  */
 
 import { createDurableObjectHandler } from "@ws-kit/cloudflare";
-import { createRouter, message, z } from "@ws-kit/zod";
+import { memoryPubSub } from "@ws-kit/memory";
+import { createRouter, message, withPubSub, withZod, z } from "@ws-kit/zod";
 
 // Message schemas
 const JoinRoom = message("JOIN_ROOM", { roomId: z.string() });
@@ -25,17 +26,16 @@ const RoomUpdate = message("ROOM_UPDATE", {
   userId: z.string(),
 });
 
-// Type-safe app data - module augmentation for production
-declare module "@ws-kit/core" {
-  interface ConnectionData {
-    clientId: string;
-    userId?: string;
-    roomId?: string;
-  }
-}
+type ShardContext = Record<string, unknown> & {
+  clientId: string;
+  userId?: string;
+  roomId?: string;
+};
 
 // Create router for this DO instance
-const router = createRouter<ConnectionData>();
+const router = createRouter<ShardContext>()
+  .plugin(withZod())
+  .plugin(withPubSub({ adapter: memoryPubSub() }));
 
 // Join room: subscribe to scoped channel
 router.on(JoinRoom, async (ctx) => {
@@ -60,7 +60,7 @@ router.on(RoomMessage, (ctx) => {
   const userId = ctx.data?.userId || "anonymous";
 
   if (!roomId) {
-    ctx.send(ErrorMessage, { code: "NOT_FOUND", message: "Not in a room" });
+    ctx.error("NOT_FOUND", "Not in a room");
     return;
   }
 

@@ -11,7 +11,7 @@ export class Socket {
   send(data: string | ArrayBuffer): void {
     try {
       this.ws.send(data);
-    } catch (err) {
+    } catch {
       // Placeholder: handle send errors, propagate to onError
     }
   }

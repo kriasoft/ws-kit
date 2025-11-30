@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
 /**
  * Test utilities for Pub/Sub: TestPubSub wrapper for capturing published messages.
  *
@@ -128,7 +131,7 @@ export class TestPubSub implements PubSubAdapter {
   ): (() => void | Promise<void>) | Promise<() => void | Promise<void>> {
     const result = this.wrapped.start?.(onRemote);
     if (!result) {
-      return Promise.resolve(() => {});
+      return Promise.resolve(() => undefined);
     }
     return result;
   }

@@ -18,17 +18,36 @@ export class TelemetryBridge {
     size: number;
     ts: number;
   }): Promise<void> {
-    // Placeholder: call all observer.onMessage handlers
+    for (const observer of this.observers) {
+      try {
+        observer.onMessage?.(meta);
+      } catch (err) {
+        // Telemetry should never break the caller path
+        console.error("[ws-kit] telemetry onMessage failed", err);
+      }
+    }
   }
 
   async notifyError(
     err: unknown,
     meta?: Record<string, unknown>,
   ): Promise<void> {
-    // Placeholder: call all observer.onError handlers
+    for (const observer of this.observers) {
+      try {
+        observer.onError?.(err, meta);
+      } catch (handlerErr) {
+        console.error("[ws-kit] telemetry onError failed", handlerErr);
+      }
+    }
   }
 
   async notifyPublish(meta: { topic: string; type: string }): Promise<void> {
-    // Placeholder: call all observer.onPublish handlers
+    for (const observer of this.observers) {
+      try {
+        observer.onPublish?.(meta);
+      } catch (err) {
+        console.error("[ws-kit] telemetry onPublish failed", err);
+      }
+    }
   }
 }

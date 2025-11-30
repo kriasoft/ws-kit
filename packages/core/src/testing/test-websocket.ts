@@ -54,6 +54,8 @@ export class TestWebSocket implements AdapterWebSocket {
    * Close connection.
    */
   close(code?: number, reason?: string): void {
+    void code;
+    void reason;
     this.readyState = "CLOSED";
   }
 

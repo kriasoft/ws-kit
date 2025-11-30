@@ -46,8 +46,11 @@ export interface BunServeOptions<
  * serve(router, { port: 3000 });
  * ```
  */
-export async function serve<TContext extends ConnectionData = ConnectionData>(
-  router: Router<TContext>,
+export async function serve<
+  TContext extends ConnectionData = ConnectionData,
+  TExtensions extends object = any,
+>(
+  router: Router<TContext, TExtensions>,
   options: BunServeOptions<TContext> = {},
 ): Promise<void> {
   const { createBunHandler } = await import("./handler.js");

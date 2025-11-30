@@ -41,10 +41,10 @@
  */
 
 import type {
-  PubSubAdapter,
-  PubSubDriver,
   BrokerConsumer,
   PublishEnvelope,
+  PubSubAdapter,
+  PubSubDriver,
   StopFn,
 } from "@ws-kit/core/pubsub";
 
@@ -69,7 +69,7 @@ export type BrokerStartMode = "sequential" | "parallel";
  */
 function onceStop(stop: StopFn | undefined): StopFn {
   if (!stop) {
-    return async () => {};
+    return async () => undefined;
   }
 
   let called = false;
@@ -95,7 +95,7 @@ function normalizeStop(stop: unknown, strict = false): StopFn {
   }
   if (!stop) {
     // Tolerate undefined/null (consumer forgot to return, or sync no-op)
-    return async () => {};
+    return async () => undefined;
   }
   // If strict mode, fail here; otherwise produce no-op and warn
   if (strict) {
@@ -107,7 +107,7 @@ function normalizeStop(stop: unknown, strict = false): StopFn {
   console.warn(
     `[pubsub] BrokerConsumer.start() returned invalid stop type: ${typeof stop}`,
   );
-  return async () => {};
+  return async () => undefined;
 }
 
 /**

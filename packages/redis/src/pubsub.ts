@@ -66,11 +66,7 @@ export function redisPubSub(
   redis: RedisClient,
   opts?: RedisPubSubOptions,
 ): PubSubDriver {
-  const {
-    channelPrefix = "",
-    encode = JSON.stringify,
-    decode = JSON.parse,
-  } = opts ?? {};
+  const { channelPrefix = "", encode = JSON.stringify } = opts ?? {};
 
   // Maintain local subscription index
   const local = memoryPubSub();

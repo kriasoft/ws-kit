@@ -31,9 +31,7 @@ import type { ConnectionData, Middleware } from "@ws-kit/core";
  *
  * @internal This is a placeholder. Full implementation coming soon.
  */
-export interface UseTelemetryOptions<
-  TContext extends ConnectionData = ConnectionData,
-> {
+export interface UseTelemetryOptions {
   /**
    * Custom tracer instance (e.g., from @opentelemetry/api).
    */
@@ -56,9 +54,10 @@ export interface UseTelemetryOptions<
  * @internal This is a placeholder. Full implementation coming soon.
  */
 export function useTelemetry<TContext extends ConnectionData = ConnectionData>(
-  options?: UseTelemetryOptions<TContext>,
+  options?: UseTelemetryOptions,
 ): Middleware<TContext> {
   return async (ctx, next) => {
+    void options;
     // Placeholder: just continue to next middleware
     await next();
   };

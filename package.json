@@ -67,6 +67,15 @@
     "docs:preview": "vitepress preview",
     "docs:deploy": "gh-pages -d .vitepress/dist"
   },
+  "lint-staged": {
+    "*.{ts,tsx,js}": [
+      "prettier --write",
+      "eslint"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
   "prettier": {
     "singleQuote": false,
     "semi": true,

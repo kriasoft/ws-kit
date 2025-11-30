@@ -170,7 +170,7 @@ function resolveOptions(
  * when the { validation: true } capability is present. We only add the runtime
  * rpc() implementation; router.on remains untouched to avoid collisions.
  */
-interface WithZodCapability<TContext extends ConnectionData = ConnectionData> {
+interface WithZodCapability {
   readonly validation: true;
   readonly __caps: { validation: true };
 }
@@ -183,7 +183,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
     onValidationError: options?.onValidationError,
   };
 
-  return definePlugin<TContext, WithZodCapability<TContext>>((router) => {
+  return definePlugin<TContext, WithZodCapability>((router) => {
     // Step 1: Apply core messaging and RPC plugins first
     // These provide ctx.send(), ctx.reply(), ctx.error(), ctx.progress()
     router.plugin(coreWithMessaging<TContext>());
@@ -512,6 +512,6 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
     return {
       validation: true as const,
       __caps: { validation: true as const },
-    } satisfies WithZodCapability<TContext>;
+    } satisfies WithZodCapability;
   });
 }

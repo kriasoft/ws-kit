@@ -193,7 +193,7 @@ describe("RPC outgoing messages integration", () => {
   // 3. Test backpressure scenarios
   describe("ctx.reply() - with {waitFor}", () => {
     it("returns Promise that resolves after send", async () => {
-      let replyResult: void | undefined;
+      let replyResult;
 
       const tr = test.createTestRouter({
         create: () => {
@@ -213,7 +213,7 @@ describe("RPC outgoing messages integration", () => {
       await tr.flush();
       await waitForImmediate();
 
-      expect(replyResult).toBeUndefined(); // Promise<void> resolves to undefined
+      expect(replyResult).toBeUndefined(); // Promise<void> resolves to void
       const messages = conn.outgoing();
       const response = messages.find((m) => m.type === "USER");
       expect(response).toBeDefined();
@@ -410,7 +410,7 @@ describe("RPC outgoing messages integration", () => {
   // See ctx.reply() {waitFor} note above.
   describe("ctx.progress() - with {waitFor}", () => {
     it("returns Promise that resolves after send", async () => {
-      let progressResult: void | undefined;
+      let progressResult;
 
       const tr = test.createTestRouter({
         create: () => {

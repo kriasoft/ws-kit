@@ -53,6 +53,7 @@ export function useAuth<TContext extends ConnectionData = ConnectionData>(
   options?: UseAuthOptions<TContext>,
 ): Middleware<TContext> {
   return async (ctx, next) => {
+    void options;
     // Placeholder: just continue to next middleware
     await next();
   };

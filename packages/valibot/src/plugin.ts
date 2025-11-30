@@ -166,9 +166,7 @@ function resolveOptions(
  * - Before plugin: Router<TContext, {}> → keyof excludes rpc()
  * - After plugin: Router<TContext, { validation: true }> → keyof includes rpc()
  */
-interface WithValibotCapability<
-  TContext extends ConnectionData = ConnectionData,
-> {
+interface WithValibotCapability {
   readonly validation: true;
   readonly __caps: { validation: true };
 }
@@ -181,7 +179,7 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
     onValidationError: options?.onValidationError,
   };
 
-  return definePlugin<TContext, WithValibotCapability<TContext>>((router) => {
+  return definePlugin<TContext, WithValibotCapability>((router) => {
     // Step 1: Apply core messaging and RPC plugins first
     // These provide ctx.send(), ctx.reply(), ctx.error(), ctx.progress()
     router.plugin(coreWithMessaging<TContext>());
@@ -508,6 +506,6 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
     return {
       validation: true as const,
       __caps: { validation: true as const },
-    } satisfies WithValibotCapability<TContext>;
+    } satisfies WithValibotCapability;
   });
 }

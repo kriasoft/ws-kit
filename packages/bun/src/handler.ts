@@ -76,8 +76,9 @@ function upgradeConnection<TContext extends ConnectionData = ConnectionData>(
  */
 export function createBunHandler<
   TContext extends ConnectionData = ConnectionData,
+  TExtensions extends object = any,
 >(
-  router: Router<TContext>,
+  router: Router<TContext, TExtensions>,
   options?: BunHandlerOptions<TContext>,
 ): BunServerHandlers<TContext> {
   // Per ADR-035: Unwrap typed routers (e.g., from @ws-kit/zod) to access core.

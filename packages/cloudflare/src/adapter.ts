@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PlatformAdapter, ServerWebSocket } from "@ws-kit/core";
+import type { ServerWebSocket } from "@ws-kit/core";
 import { DurablePubSub } from "./pubsub.js";
 
 /**
@@ -57,6 +57,10 @@ export function createDurableObjectAdapter(): {
 export function toDurableObjectServerWebSocket<TData = unknown>(
   ws: unknown,
 ): ServerWebSocket {
+  // Preserve the generic parameter for callers that still pass TData explicitly
+  const _typeHint: TData | undefined = undefined;
+  void _typeHint;
+
   // Verify the interface at compile time
   // At runtime, this is a no-op—we just return the WebSocket as-is
   // Note: The generic TData parameter is only for source compatibility.
@@ -73,6 +77,10 @@ export function toDurableObjectServerWebSocket<TData = unknown>(
 export function isDurableObjectServerWebSocket<TData = unknown>(
   ws: unknown,
 ): ws is ServerWebSocket {
+  // Preserve the generic parameter for callers that still pass TData explicitly
+  const _typeHint: TData | undefined = undefined;
+  void _typeHint;
+
   if (!ws || typeof ws !== "object") return false;
 
   const socket = ws as Record<string, unknown>;

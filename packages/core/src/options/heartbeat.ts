@@ -42,9 +42,13 @@ export class HeartbeatManager {
     state: HeartbeatState,
   ): Promise<void> {
     // Placeholder: send ping, check for timeout
+    void clientId;
+    void ws;
+    void state;
   }
 
   handlePong(state: HeartbeatState): void {
     // Placeholder
+    void state;
   }
 }

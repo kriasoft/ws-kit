@@ -16,10 +16,11 @@
  * Messages from one instance will be visible to all connected clients across all instances.
  */
 
-import { createClient } from "redis";
 import { createBunHandler } from "@ws-kit/bun";
 import { redisPubSub } from "@ws-kit/redis";
-import { createRouter, message, z } from "@ws-kit/zod";
+import { createRouter, message, withPubSub, withZod, z } from "@ws-kit/zod";
+// @ts-expect-error - redis package is optional for the example environment
+import { createClient } from "redis";
 
 // Configuration
 const INSTANCE_ID = process.env.INSTANCE_ID || "1";
@@ -101,29 +102,25 @@ redisClient.on("reconnecting", () => {
 
 await redisClient.connect();
 
-// Create pub/sub driver
-const pubsub = redisPubSub(redisClient);
+const router = createRouter<WebSocketData>()
+  .plugin(withZod())
+  .plugin(withPubSub({ adapter: redisPubSub(redisClient) }));
 
-const router = createRouter<WebSocketData>({
-  pubsub,
-});
+router.observe({
+  onConnectionClose: (clientId) => {
+    const user = connectedUsers.get(clientId);
+    if (!user) return;
 
-router.onClose((ctx) => {
-  const clientId = ctx.clientId;
-
-  const user = connectedUsers.get(clientId);
-  if (user) {
     connectedUsers.delete(clientId);
 
-    // Broadcast leave message
-    router.publish("chat:users", UserLeftEvent, {
+    void router.publish("chat:users", UserLeftEvent, {
       username: user.username,
       timestamp: Date.now(),
       instance: INSTANCE_ID,
     });
 
     console.log(`👋 ${user.username} left (instance #${INSTANCE_ID})`);
-  }
+  },
 });
 
 // Join handler - new user connects

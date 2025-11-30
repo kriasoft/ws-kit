@@ -20,9 +20,9 @@
  */
 
 import type { ConnectionData, MinimalContext } from "@ws-kit/core";
+import type { WsKitInternalState } from "@ws-kit/core/internal";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
-import type { WsKitInternalState } from "@ws-kit/core/internal";
 import type { ProgressOptions, ReplyOptions } from "./types";
 
 /**
@@ -45,7 +45,7 @@ interface EnhancedContext extends MinimalContext<any> {
  * Provides context methods for request-response (RPC) messaging with streaming.
  * These methods are only available in RPC handlers and require validation plugin.
  */
-interface WithRpcAPI<TContext extends ConnectionData = ConnectionData> {
+interface WithRpcAPI {
   /**
    * Marker for capability-gating in Router type system.
    * @internal
@@ -124,7 +124,7 @@ interface WithRpcAPI<TContext extends ConnectionData = ConnectionData> {
  * ```
  */
 export function withRpc<TContext extends ConnectionData = ConnectionData>() {
-  return definePlugin<TContext, WithRpcAPI<TContext>>((router) => {
+  return definePlugin<TContext, WithRpcAPI>((router) => {
     // Get plugin API for registering context enhancers
     const api = getRouterPluginAPI(router);
 
@@ -136,13 +136,20 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
         let lastProgressTime = 0;
 
         // RPC context guard: throw if reply/progress called outside RPC
-        function guardRpc() {
-          if (!enhCtx.__wskit?.response) {
+        // Returns internal state with rpc guaranteed initialized
+        function guardRpc(): WsKitInternalState & {
+          rpc: NonNullable<WsKitInternalState["rpc"]>;
+          response: unknown;
+        } {
+          if (!enhCtx.__wskit?.response || !enhCtx.__wskit.rpc) {
             throw new Error(
               "ctx.reply() and ctx.progress() only in RPC handlers",
             );
           }
-          return enhCtx.__wskit;
+          return enhCtx.__wskit as WsKitInternalState & {
+            rpc: NonNullable<WsKitInternalState["rpc"]>;
+            response: unknown;
+          };
         }
 
         // Set up RPC state: replied flag, correlationId (shared with core error method)
@@ -209,7 +216,7 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
                 ...(payload !== undefined ? { payload } : {}),
               }),
             );
-          } catch (err) {
+          } catch {
             // Connection closed; no-op (fire-and-forget)
           }
         }
@@ -234,10 +241,10 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           payload: any,
           opts?: ReplyOptions,
         ): void | Promise<void> => {
-          guardRpc();
+          const wskit = guardRpc();
 
           // Skip if already replied (one-shot)
-          if (enhCtx.__wskit!.rpc!.replied) {
+          if (wskit.rpc.replied) {
             return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
@@ -247,12 +254,11 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           }
 
           // Mark as replied
-          enhCtx.__wskit!.rpc!.replied = true;
+          wskit.rpc.replied = true;
 
           // Fire-and-forget if no waitFor
           if (!opts?.waitFor) {
             setImmediate(() => {
-              const wskit = enhCtx.__wskit!;
               const responseType = getResponseType(wskit.response);
 
               // Build response: auto-preserve correlation
@@ -278,7 +284,6 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           // With waitFor, return promise
           return new Promise<void>((resolve) => {
             setImmediate(() => {
-              const wskit = enhCtx.__wskit!;
               const responseSchema = wskit.response as any;
               const responseType = getResponseType(responseSchema);
 
@@ -312,10 +317,10 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
           update: any,
           opts?: ProgressOptions,
         ): void | Promise<void> => {
-          guardRpc();
+          const wskit = guardRpc();
 
           // Skip if terminal response already sent
-          if (enhCtx.__wskit!.rpc!.replied) {
+          if (wskit.rpc.replied) {
             return opts?.waitFor ? Promise.resolve() : undefined;
           }
 
@@ -391,7 +396,7 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
     // Return capability marker for capability gating (non-enumerable to avoid collisions).
     return Object.create(null, {
       __caps: { value: { rpc: true as const }, enumerable: true },
-    }) as WithRpcAPI<TContext>;
+    }) as WithRpcAPI;
   });
 }
 
