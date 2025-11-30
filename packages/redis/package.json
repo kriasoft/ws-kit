@@ -42,7 +42,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ws-kit/pubsub": "workspace:^"
+    "@ws-kit/memory": "workspace:^"
   },
   "peerDependencies": {
     "@ws-kit/core": "workspace:^",

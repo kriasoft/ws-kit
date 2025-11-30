@@ -49,13 +49,19 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
-    "@ws-kit/core": "workspace:^"
-  },
   "peerDependencies": {
+    "@ws-kit/core": "workspace:^",
     "@ws-kit/plugins": "workspace:^",
     "@ws-kit/pubsub": "workspace:^",
     "valibot": ">=1.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@ws-kit/plugins": {
+      "optional": true
+    },
+    "@ws-kit/pubsub": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/bun": "^1.3.3",
