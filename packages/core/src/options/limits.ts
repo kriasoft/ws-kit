@@ -31,7 +31,19 @@ export class LimitsManager {
   }
 
   checkIncoming(payload: unknown, state: LimitState): boolean {
-    // Placeholder: check size + pending count
+    const { maxPending, maxPayloadBytes } = this.config;
+
+    if (maxPending !== undefined && state.pending >= maxPending) {
+      return false;
+    }
+
+    if (maxPayloadBytes !== undefined) {
+      const size = estimatePayloadSize(payload);
+      if (size > maxPayloadBytes) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -41,5 +53,26 @@ export class LimitsManager {
 
   releasePending(state: LimitState): void {
     state.pending--;
+  }
+}
+
+function estimatePayloadSize(payload: unknown): number {
+  if (typeof payload === "string") {
+    return Buffer.byteLength(payload);
+  }
+
+  if (payload instanceof ArrayBuffer) {
+    return payload.byteLength;
+  }
+
+  if (ArrayBuffer.isView(payload)) {
+    return payload.byteLength;
+  }
+
+  try {
+    return Buffer.byteLength(JSON.stringify(payload));
+  } catch {
+    // Fallback to zero if serialization fails; caller can decide how to handle
+    return 0;
   }
 }

@@ -175,7 +175,7 @@ export function createErrorMethod<TContext extends ConnectionData>(
 
         try {
           ctx.ws.send(JSON.stringify(envelope));
-        } catch (serializationErr) {
+        } catch {
           // Serialization failed (circular refs, BigInts). Fallback: minimal payload.
           try {
             ctx.ws.send(
@@ -185,7 +185,7 @@ export function createErrorMethod<TContext extends ConnectionData>(
                 payload: { code: err.code, message: err.message || "Error" },
               }),
             );
-          } catch (fallbackErr) {
+          } catch {
             // Both attempts failed; log only
             if (
               typeof process !== "undefined" &&

@@ -14,18 +14,14 @@
  * @see docs/specs/client.md - Full client API
  */
 
-import { z, message, wsClient } from "@ws-kit/client/zod";
+import { message, wsClient, z } from "@ws-kit/client/zod";
 
 // Define message schemas
 const Hello = message("HELLO", { name: z.string() });
 const HelloOk = message("HELLO_OK", { text: z.string() });
 const Logout = message("LOGOUT"); // No payload
 const LogoutOk = message("LOGOUT_OK"); // No payload
-const ChatMessage = message(
-  "CHAT",
-  { text: z.string() },
-  { roomId: z.string() }, // Required extended meta
-);
+const ChatMessage = message("CHAT", { text: z.string() });
 
 // Create typed client
 const client = wsClient({
@@ -45,11 +41,6 @@ client.on(HelloOk, (msg) => {
 
   // msg.payload is { text: string }
   console.log(`Text: ${msg.payload.text.toUpperCase()}`);
-
-  // msg.meta has timestamp and correlationId
-  if (msg.meta.timestamp) {
-    console.log(`Received at: ${new Date(msg.meta.timestamp).toISOString()}`);
-  }
 });
 
 // ✅ No-payload schema - handler has no payload access
@@ -61,8 +52,7 @@ client.on(Logout, (msg) => {
 
 // ✅ Extended meta - required field enforced
 client.on(ChatMessage, (msg) => {
-  // msg.meta.roomId is string (required field)
-  console.log(`Message in room ${msg.meta.roomId}: ${msg.payload.text}`);
+  console.log(`Chat message: ${msg.payload.text}`);
 });
 
 // ============================================================================
@@ -85,11 +75,7 @@ async function sendExamples() {
   // client.send(Logout, {}); // Type error!
 
   // ✅ Send with extended meta
-  client.send(
-    ChatMessage,
-    { text: "Hello everyone!" },
-    { meta: { roomId: "general" } },
-  );
+  client.send(ChatMessage, { text: "Hello everyone!" });
 
   // ❌ Compile error - opts.meta.roomId is required
   // client.send(ChatMessage, { text: "Hello" }); // Type error: meta.roomId is required

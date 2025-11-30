@@ -203,7 +203,10 @@ export function wrapTestRouter<
 
     const ws = adapter.getOrCreateConnection(init) as any;
     const actualClientId = ws.clientId;
-    const state = adapter.getConnection(actualClientId)!;
+    const state = adapter.getConnection(actualClientId);
+    if (!state) {
+      throw new Error(`Connection state missing for client ${actualClientId}`);
+    }
 
     conn = new TestConnectionImpl(
       actualClientId,

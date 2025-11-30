@@ -151,7 +151,8 @@ export class FakeClock implements Clock {
     // Insert in sorted order (FIFO for same dueAt)
     let inserted = false;
     for (let i = 0; i < this.queue.length; i++) {
-      if (timer.dueAt < this.queue[i]!.dueAt) {
+      const existing = this.queue[i];
+      if (existing !== undefined && timer.dueAt < existing.dueAt) {
         this.queue.splice(i, 0, timer);
         inserted = true;
         break;
@@ -166,8 +167,16 @@ export class FakeClock implements Clock {
     // Record the initial time; only run timers that were due at or before current time
     const runUntil = this.now_;
 
-    while (this.queue.length > 0 && this.queue[0]!.dueAt <= runUntil) {
-      const timer = this.queue.shift()!;
+    while (this.queue.length > 0) {
+      const next = this.queue[0];
+      if (!next || next.dueAt > runUntil) {
+        break;
+      }
+
+      const timer = this.queue.shift();
+      if (!timer) {
+        break;
+      }
 
       // Skip if timer was cleared
       if (!this.timers.has(timer.id)) {
@@ -177,13 +186,13 @@ export class FakeClock implements Clock {
       // Run the timer
       try {
         timer.fn();
-      } catch (err) {
+      } catch {
         // Swallow errors in timers (matches native behavior)
       }
 
       // If interval, reschedule for next occurrence; otherwise remove from map
       if (timer.isInterval && this.timers.has(timer.id)) {
-        timer.dueAt += timer.interval!;
+        timer.dueAt += timer.interval ?? 0;
         this.enqueueTimer(timer);
       } else {
         // One-shot timer: remove it

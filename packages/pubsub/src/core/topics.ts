@@ -35,16 +35,16 @@ function composeSignal(base?: AbortSignal, timeoutMs?: number): AbortSignal {
   }
 
   // Only base: return as-is
-  if (!timeoutMs) {
-    return base!; // base is guaranteed to exist here due to the conditions above
+  if (!timeoutMs && base) {
+    return base;
   }
 
-  // Both: create a composite controller
+  // Both base and timeoutMs: create a composite controller
   // This controller aborts if either the base aborts or timeout fires
   const composite = new AbortController();
 
-  // Abort on base signal (base is guaranteed to exist here)
-  const baseSignal = base!;
+  // Abort on base signal (base is guaranteed to exist here due to conditions above)
+  const baseSignal = base as AbortSignal;
   if (baseSignal.aborted) {
     composite.abort(baseSignal.reason);
   } else {
@@ -184,9 +184,7 @@ export function isSubscribed(
  * await topics.subscribe("room:123");
  * ```
  */
-export function createTopics<
-  TContext extends { clientId: string } = { clientId: string },
->(
+export function createTopics(
   ws: ServerWebSocket & Record<string, unknown>,
   options?: {
     maxTopicsPerConnection?: number;
@@ -228,11 +226,8 @@ export function createTopics<
  * **Error semantics**: Throws PubSubError on validation, authorization, or adapter failure.
  * No rollback: if adapter call fails, local state remains unchanged.
  *
- * @template TContext - Connection data type
  */
-export class OptimisticTopics<
-  TContext extends { clientId: string } = { clientId: string },
-> implements Topics {
+export class OptimisticTopics implements Topics {
   private readonly subscriptions = new Set<string>();
   private readonly ws: ServerWebSocket & Record<string, unknown>;
   private readonly maxTopicsPerConnection: number;
@@ -1156,23 +1151,11 @@ export class OptimisticTopics<
 
     // If adapter supports replace(), use it directly
     if (typeof (this.ws as any).replace === "function") {
-      return this.setWithAdapterSupport(
-        toAdd,
-        toRemove,
-        options?.signal,
-        options?.waitFor,
-        options?.timeoutMs,
-      );
+      return this.setWithAdapterSupport(toAdd, toRemove);
     }
 
     // Fallback: use per-connection lock to serialize against per-topic ops
-    return this.setWithFallback(
-      toAdd,
-      toRemove,
-      options?.signal,
-      options?.waitFor,
-      options?.timeoutMs,
-    );
+    return this.setWithFallback(toAdd, toRemove, options?.signal);
   }
 
   /**
@@ -1183,9 +1166,6 @@ export class OptimisticTopics<
   private async setWithAdapterSupport(
     toAdd: Set<string>,
     toRemove: Set<string>,
-    _signal?: AbortSignal,
-    _confirm?: "optimistic" | "settled",
-    _timeoutMs?: number,
   ): Promise<{ added: number; removed: number; total: number }> {
     const prev = new Set(this.subscriptions);
 
@@ -1234,8 +1214,6 @@ export class OptimisticTopics<
     toAdd: Set<string>,
     toRemove: Set<string>,
     signal?: AbortSignal,
-    _confirm?: "optimistic" | "settled",
-    _timeoutMs?: number,
   ): Promise<{ added: number; removed: number; total: number }> {
     // Wait for previous set operation to complete
     const prevSet = this.setQueue.current;

@@ -15,8 +15,8 @@
  */
 
 import { createBunHandler } from "@ws-kit/bun";
-import type { WsKitError } from "@ws-kit/core";
-import { createRouter, message, withZod, z } from "@ws-kit/zod";
+import { memoryPubSub } from "@ws-kit/memory";
+import { createRouter, message, withPubSub, withZod, z } from "@ws-kit/zod";
 
 // =======================
 // Message Schemas
@@ -89,94 +89,17 @@ const rooms = new Map<string, Set<string>>();
 // Router Setup
 // =======================
 
-const router = createRouter<WebSocketData>().plugin(withZod());
+const router = createRouter<WebSocketData>()
+  .plugin(withZod())
+  .plugin(withPubSub({ adapter: memoryPubSub() }));
 
 // =======================
 // Middleware
 // =======================
 
-// Authentication middleware - validates user exists before handling message
-router.use((ctx, next) => {
-  const clientId = ctx.clientId;
-  const user = users.get(clientId);
-
-  // User must exist to process messages
-  if (!user) {
-    ctx.send(ErrorMessage, {
-      message: "Not authenticated. Please reconnect.",
-    });
-    return; // Skip handler
-  }
-
-  // Continue to next middleware or handler
-  return next();
-});
-
-// =======================
-// Lifecycle Hooks
-// =======================
-
-router.onOpen(async (ctx) => {
-  const clientId = ctx.data?.clientId || crypto.randomUUID();
-
-  // Create user record
-  users.set(clientId, {
-    clientId,
-    name: `User-${clientId.slice(0, 8)}`,
-    rooms: new Set(),
-  });
-
-  console.log(`[${clientId}] Connected (${users.size} users online)`);
-
-  // Send welcome message
-  ctx.send(WelcomeMessage, {
-    clientId,
-    timestamp: Date.now(),
-  });
-});
-
-router.onClose(async (ctx) => {
-  const clientId = ctx.data?.clientId || "";
-  const user = users.get(clientId);
-
-  if (user) {
-    // Notify all rooms this user was in
-    const roomsArray = Array.from(user.rooms);
-    for (const room of roomsArray) {
-      const roomUsers = rooms.get(room);
-      if (roomUsers) {
-        roomUsers.delete(clientId);
-
-        // Broadcast user left message
-        await router.publish(`room:${room}`, UserLeftMessage, {
-          user: user.name,
-          room,
-        });
-
-        // Broadcast updated user list
-        await router.publish(`room:${room}`, RoomUsersMessage, {
-          room,
-          users: Array.from(roomUsers),
-          count: roomUsers.size,
-        });
-
-        // Clean up empty room
-        if (roomUsers.size === 0) {
-          rooms.delete(room);
-        }
-      }
-    }
-
-    // Remove user
-    users.delete(clientId);
-  }
-
-  console.log(`[${clientId}] Disconnected (${users.size} users online)`);
-});
-
-router.onError((error: WsKitError) => {
-  console.error("Error:", error.message);
-  return true; // Indicate error was handled
+router.onError((error) => {
+  const err = error instanceof Error ? error : new Error(String(error));
+  console.error("Error:", err.message);
 });
 
 // =======================
@@ -185,10 +108,22 @@ router.onError((error: WsKitError) => {
 
 router.on(JoinRoomMessage, async (ctx) => {
   const clientId = ctx.clientId;
-  const user = users.get(clientId);
   const { room } = ctx.payload;
 
-  if (!user) return;
+  let user = users.get(clientId);
+  if (!user) {
+    user = {
+      clientId,
+      name: `User-${clientId.slice(0, 8)}`,
+      rooms: new Set(),
+    };
+    users.set(clientId, user);
+
+    ctx.send(WelcomeMessage, {
+      clientId,
+      timestamp: Date.now(),
+    });
+  }
 
   // Subscribe to room
   await ctx.topics.subscribe(`room:${room}`);
@@ -249,7 +184,7 @@ router.on(SendMessageMessage, async (ctx) => {
 });
 
 router.on(LeaveRoomMessage, async (ctx) => {
-  const { clientId } = ctx.data;
+  const { clientId } = ctx;
   const user = users.get(clientId);
 
   if (!user || user.rooms.size === 0) {
@@ -289,6 +224,40 @@ router.on(LeaveRoomMessage, async (ctx) => {
 
     console.log(`[${clientId}] Left room: ${room}`);
   }
+});
+
+router.observe({
+  onConnectionClose: (clientId) => {
+    const user = users.get(clientId);
+    if (!user) return;
+
+    // Notify all rooms this user was in
+    const roomsArray = Array.from(user.rooms);
+    for (const room of roomsArray) {
+      const roomUsers = rooms.get(room);
+      if (roomUsers) {
+        roomUsers.delete(clientId);
+
+        void router.publish(`room:${room}`, UserLeftMessage, {
+          user: user.name,
+          room,
+        });
+
+        void router.publish(`room:${room}`, RoomUsersMessage, {
+          room,
+          users: Array.from(roomUsers),
+          count: roomUsers.size,
+        });
+
+        if (roomUsers.size === 0) {
+          rooms.delete(room);
+        }
+      }
+    }
+
+    users.delete(clientId);
+    console.log(`[${clientId}] Disconnected (${users.size} users online)`);
+  },
 });
 
 // =======================

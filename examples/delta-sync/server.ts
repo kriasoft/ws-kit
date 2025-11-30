@@ -9,7 +9,7 @@
  */
 
 import { serve } from "@ws-kit/bun";
-import type { ConnectionData, ServerWebSocket } from "@ws-kit/core";
+import type { RouterWithExtensions, ServerWebSocket } from "@ws-kit/core";
 import { createRouter, message, withZod } from "@ws-kit/zod";
 import { RingBuffer } from "./ring-buffer";
 import {
@@ -36,6 +36,11 @@ interface ClientState {
   ws: ServerWebSocket; // WebSocket connection for sending messages
 }
 
+type AppData = Record<string, unknown> & {
+  clientId: string;
+  participantId?: string;
+};
+
 class DeltaSyncServer {
   private state: ServerState = {
     rev: 0,
@@ -47,12 +52,16 @@ class DeltaSyncServer {
 
   // Track connected clients and their sync state
   private clients = new Map<string, ClientState>();
+  private connectionIndex = new Map<string, string>();
 
   /**
    * Initialize router with message handlers
    */
-  createRouter() {
-    const router = createRouter<ConnectionData>().plugin(withZod());
+  createRouter(): {
+    router: RouterWithExtensions<AppData, object>;
+    cleanup: () => void;
+  } {
+    const router = createRouter<AppData>().plugin(withZod());
 
     router.on(JoinMessage, async (ctx) => {
       const { participantId, name } = ctx.payload;
@@ -77,6 +86,7 @@ class DeltaSyncServer {
         lastHeartbeat: Date.now(),
         ws: ctx.ws,
       });
+      this.connectionIndex.set(ctx.clientId, participantId);
 
       // Add to state and emit operation
       this.addParticipant(participant);
@@ -95,10 +105,7 @@ class DeltaSyncServer {
       const participantId = ctx.data?.participantId as string;
 
       if (!participantId) {
-        ctx.send(ErrorMessage, {
-          code: "UNAUTHENTICATED",
-          message: "No participant ID",
-        });
+        ctx.error("UNAUTHENTICATED", "No participant ID");
         return;
       }
 
@@ -122,6 +129,7 @@ class DeltaSyncServer {
 
       // Remove from state
       this.removeParticipant(participantId);
+      this.connectionIndex.delete(ctx.clientId);
 
       // Notify others
       this.broadcastDelta();
@@ -138,21 +146,15 @@ class DeltaSyncServer {
       }
     });
 
-    // Setup connection lifecycle
-    router.onOpen((ctx) => {
-      console.log(`[OPEN] ${ctx.data?.clientId}`);
-      // Will join when client sends JOIN message
-    });
+    router.observe({
+      onConnectionClose: (clientId) => {
+        const participantId = this.connectionIndex.get(clientId);
+        if (!participantId) return;
 
-    router.onClose((ctx) => {
-      // Clean up on disconnect
-      const participantId = ctx.data?.participantId as string;
-      if (participantId) {
         console.log(`[CLOSE] ${participantId}`);
         this.clients.delete(participantId);
-        // Note: We keep participant in state (they're just "away")
-        // Could also remove them here if desired
-      }
+        this.connectionIndex.delete(clientId);
+      },
     });
 
     // Setup heartbeat with stale connection cleanup
@@ -342,7 +344,7 @@ if (import.meta.main) {
   // Serve with Bun
   serve(router, {
     port: parseInt(process.env.PORT || "3000"),
-    authenticate(): AppData {
+    authenticate(): { clientId: string } {
       return { clientId: crypto.randomUUID() };
     },
   }).catch(console.error);

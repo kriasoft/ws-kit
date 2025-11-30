@@ -8,8 +8,8 @@
  */
 
 import type { ConnectionData } from "../context/base-context";
+import type { Plugin } from "../core/router";
 import { definePlugin } from "../plugin/define";
-import type { Plugin, Router } from "../core/router";
 
 /**
  * Create a mock plugin for testing.
@@ -73,5 +73,9 @@ export function mockPlugin<
   TContext extends ConnectionData = ConnectionData,
   TPluginApi extends object = {},
 >(mockExtensions: TPluginApi): Plugin<TContext, TPluginApi> {
-  return definePlugin<TContext, TPluginApi>((_router) => mockExtensions);
+  return definePlugin<TContext, TPluginApi>((router) => {
+    // Preserve router argument for future expansion while keeping typing accurate
+    void router;
+    return mockExtensions;
+  });
 }

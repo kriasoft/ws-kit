@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { serve } from "@ws-kit/bun";
-import { createRouter, message, z } from "@ws-kit/zod";
+import { createRouter, message, withZod, z } from "@ws-kit/zod";
 
 /**
  * Example of enhanced validation with Zod v4's string validators
@@ -19,11 +19,11 @@ const AuthenticateMessage = message("AUTHENTICATE", {
     .optional(), // Semver pattern
 });
 
-interface ConnectionData {
+interface ConnectionData extends Record<string, unknown> {
   clientId: string;
 }
 
-const router = createRouter<ConnectionData>();
+const router = createRouter<ConnectionData>().plugin(withZod());
 
 // Example middleware for additional validation
 router.use((ctx, next) => {

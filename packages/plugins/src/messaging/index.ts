@@ -44,6 +44,7 @@ interface EnhancedContext extends MinimalContext<any> {
  * Provides context methods for fire-and-forget unicast messaging.
  * These methods work validator-agnostic (validation is optional).
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- TContext flows through type system for plugin composition
 interface WithMessagingAPI<TContext extends ConnectionData = ConnectionData> {
   /**
    * Marker for capability-gating in Router type system.
@@ -140,7 +141,7 @@ export function withMessaging<
           };
           try {
             ctx.ws.send(JSON.stringify(message));
-          } catch (err) {
+          } catch {
             // Connection may have closed; error is caught by adapter wrapper
             // No-op here (fire-and-forget)
           }

@@ -25,7 +25,7 @@ router.use((ctx, next) => {
       lastServerSeq: 0,
     });
   }
-  next();
+  return next();
 });
 
 router.on(StateUpdateMessage, (ctx) => {

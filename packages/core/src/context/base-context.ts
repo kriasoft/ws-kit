@@ -13,9 +13,8 @@
  * RPC handlers add: reply(payload), progress(payload)
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { ServerWebSocket } from "../ws/platform-adapter";
 import type { ExtErrorCode } from "../error";
+import type { ServerWebSocket } from "../ws/platform-adapter";
 import type { ErrorOptions } from "./error-handling";
 
 /**

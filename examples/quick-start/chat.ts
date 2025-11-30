@@ -16,8 +16,9 @@
  * See: ADR-023 (Schema-Driven Type Inference), docs/patterns/composition.md
  */
 
-import type { WebSocketData } from "@ws-kit/core";
-import { createRouter, withZod } from "@ws-kit/zod";
+import type { RouterWithExtensions, WebSocketData } from "@ws-kit/core";
+import { memoryPubSub } from "@ws-kit/memory";
+import { createRouter, withPubSub, withZod } from "@ws-kit/zod";
 import {
   JoinRoom,
   NewMessage,
@@ -48,8 +49,13 @@ export type ChatData = WebSocketData & { roomId?: string; clientId: string };
  *   .merge(createPresenceRouter<AppData>());
  * ```
  */
-export function createChatRouter<TContext extends ChatData = ChatData>() {
-  const router = createRouter<TContext>().plugin(withZod());
+export function createChatRouter<
+  TContext extends ChatData = ChatData,
+>(): RouterWithExtensions<TContext, object> {
+  const router = createRouter<TContext>()
+    .plugin(withZod())
+    .plugin(withPubSub({ adapter: memoryPubSub() }));
+  const connectionRooms = new Map<string, string>();
 
   router
     // Handler 1: User joins a room
@@ -58,7 +64,8 @@ export function createChatRouter<TContext extends ChatData = ChatData>() {
       const clientId = c.clientId;
 
       // Store roomId in connection data for use in onClose handler
-      c.assignData({ roomId });
+      c.assignData({ roomId } as Partial<TContext>);
+      connectionRooms.set(clientId, roomId);
 
       console.log(`Client ${clientId} joined room: ${roomId}`);
 
@@ -91,26 +98,23 @@ export function createChatRouter<TContext extends ChatData = ChatData>() {
         text,
         timestamp: Date.now(),
       });
-    })
-
-    // Lifecycle hook: User disconnected
-    .onClose((c) => {
-      const clientId = c.clientId;
-      const roomId = c.data?.roomId as string | undefined;
-
-      console.log(`Connection closed: ${clientId}`);
-
-      // Notify room that user left
-      if (roomId && clientId) {
-        // Use router.publish() for lifecycle hooks (not available on context)
-        void router.publish(`room:${roomId}`, UserLeft, {
-          roomId,
-          userId: clientId,
-        });
-
-        console.log(`User ${clientId} left room: ${roomId}`);
-      }
     });
+
+  router.observe({
+    onConnectionClose: (clientId) => {
+      const roomId = connectionRooms.get(clientId);
+      if (!roomId) return;
+
+      void router.publish(`room:${roomId}`, UserLeft, {
+        roomId,
+        userId: clientId,
+      });
+
+      connectionRooms.delete(clientId);
+
+      console.log(`User ${clientId} left room: ${roomId}`);
+    },
+  });
 
   return router;
 }

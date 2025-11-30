@@ -5,7 +5,7 @@
  * @ws-kit/pubsub middleware — policy enforcement for pub/sub operations
  */
 
-import type { ConnectionData, Middleware, MinimalContext } from "@ws-kit/core";
+import type { ConnectionData, Middleware } from "@ws-kit/core";
 import type { PubSubPolicyHooks, Topics } from "./types";
 
 /**

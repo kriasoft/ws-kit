@@ -8,11 +8,7 @@
 
 import type { ConnectionData } from "../context/base-context";
 import type { RouterImpl } from "../internal";
-import type {
-  AdapterWebSocket,
-  PlatformAdapter,
-  ServerWebSocket,
-} from "../ws/platform-adapter";
+import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
 import { TestWebSocket, type ConnectionState } from "./test-websocket";
 import type { OutgoingFrame } from "./types";
 
@@ -96,7 +92,7 @@ export class InMemoryPlatformAdapter<
         const text = typeof data === "string" ? data : this.decode(data);
         const frame = JSON.parse(text) as OutgoingFrame;
         this.globalMessages.push(frame);
-      } catch (err) {
+      } catch {
         // Parsing errors are logged by TestWebSocket
       }
     }

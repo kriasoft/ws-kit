@@ -15,7 +15,7 @@ import type { Router } from "../core/router";
 import type { Capabilities, Plugin } from "./types";
 
 export class PluginHost<TContext extends ConnectionData = ConnectionData> {
-  private readonly applied = new WeakSet<Function>();
+  private readonly applied = new WeakSet<Plugin<TContext, any>>();
   private capabilities: Capabilities = {};
 
   constructor(private readonly router: Router<TContext, any>) {}

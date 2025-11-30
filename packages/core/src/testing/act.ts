@@ -143,7 +143,10 @@ export const act = {
 
         // Yield any new progress frames
         while (lastIndex < progressFrames.length) {
-          yield progressFrames[lastIndex]!;
+          const frame = progressFrames[lastIndex];
+          if (frame !== undefined) {
+            yield frame;
+          }
           lastIndex++;
         }
       }

@@ -415,15 +415,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
               });
             }
           },
-          has: (topic: string): boolean => {
-            // Check if THIS client is subscribed to the topic
-            // The adapter is responsible for tracking per-client subscriptions
-            // For now, we rely on the adapter implementation
-            // A more complete impl would maintain a per-connection set
-            // This is a placeholder that requires adapter support
-            // TODO: Implement per-connection subscription tracking via adapter
-            return false;
-          },
+          // TODO: Implement per-connection subscription tracking via adapter
+          has: (): boolean => false,
         };
       },
       { priority: -10 }, // Run before validation plugins (priority 0)

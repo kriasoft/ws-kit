@@ -102,19 +102,14 @@ export function memoryPubSub(): MemoryPubSubAdapter {
 
     async subscribe(clientId: string, topic: string): Promise<void> {
       // Get or create subscriber set for this topic
-      if (!topics.has(topic)) {
-        topics.set(topic, new Set());
-      }
-      const subscribers = topics.get(topic)!;
-
-      // Add to topic subscribers (idempotent)
+      const subscribers = topics.get(topic) ?? new Set<string>();
       subscribers.add(clientId);
+      topics.set(topic, subscribers);
 
       // Track client's subscriptions for cleanup
-      if (!clientTopics.has(clientId)) {
-        clientTopics.set(clientId, new Set());
-      }
-      clientTopics.get(clientId)!.add(topic);
+      const clientSubs = clientTopics.get(clientId) ?? new Set<string>();
+      clientSubs.add(topic);
+      clientTopics.set(clientId, clientSubs);
     },
 
     async unsubscribe(clientId: string, topic: string): Promise<void> {
@@ -192,10 +187,9 @@ export function memoryPubSub(): MemoryPubSubAdapter {
       // Add to topics not in currentTopics
       for (const topic of newTopicsSet) {
         if (!currentTopics.has(topic)) {
-          if (!topics.has(topic)) {
-            topics.set(topic, new Set());
-          }
-          topics.get(topic)!.add(clientId);
+          const subs = topics.get(topic) ?? new Set<string>();
+          subs.add(clientId);
+          topics.set(topic, subs);
           added++;
         }
       }
