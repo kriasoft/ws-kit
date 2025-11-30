@@ -5,13 +5,12 @@ import type { ConnectionData, Middleware, MinimalContext } from "@ws-kit/core";
 import type { RateLimiter } from "./types";
 import { keyPerUserPerType } from "./keys";
 
-// Type aliases for clarity
-type WebSocketData = ConnectionData;
-
 /**
  * Options for rate limit middleware
  */
-export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
+export interface RateLimitOptions<
+  TContext extends ConnectionData = ConnectionData,
+> {
   /**
    * Rate limiter adapter instance (memory, redis, or durable objects)
    */
@@ -30,7 +29,7 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    *   return `rl:${tenant}:${user}:${ctx.type}`;
    * }
    */
-  key?: (ctx: MinimalContext<TData>) => string;
+  key?: (ctx: MinimalContext<TContext>) => string;
 
   /**
    * Cost function to calculate token cost for this request.
@@ -50,7 +49,7 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
    *   return 1;
    * }
    */
-  cost?: (ctx: MinimalContext<TData>) => number;
+  cost?: (ctx: MinimalContext<TContext>) => number;
 }
 
 /**
@@ -78,12 +77,12 @@ export interface RateLimitOptions<TData extends WebSocketData = WebSocketData> {
  *
  * router.use(limiter);
  */
-export function rateLimit<TData extends WebSocketData = WebSocketData>(
-  options: RateLimitOptions<TData>,
-): Middleware<TData> {
+export function rateLimit<TContext extends ConnectionData = ConnectionData>(
+  options: RateLimitOptions<TContext>,
+): Middleware<TContext> {
   const { limiter, key = keyPerUserPerType, cost: costFn } = options;
 
-  return async (ctx: MinimalContext<TData>, next: () => Promise<void>) => {
+  return async (ctx: MinimalContext<TContext>, next: () => Promise<void>) => {
     const cost = costFn?.(ctx) ?? 1;
 
     if (!Number.isInteger(cost) || cost < 0) {

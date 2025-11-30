@@ -41,9 +41,8 @@ export { rateLimit } from "@ws-kit/rate-limit";
 export type { RateLimitOptions } from "@ws-kit/rate-limit";
 
 export {
-  keyPerUserOrIpPerType,
+  keyPerUser,
   keyPerUserPerType,
-  perUserKey,
   type RateLimitContext,
 } from "@ws-kit/rate-limit";
 
