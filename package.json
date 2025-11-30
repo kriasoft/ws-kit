@@ -49,9 +49,11 @@
   },
   "scripts": {
     "prepare": "husky",
+    "clean": "bun tsc -b --clean",
     "build": "bun tsc -b",
     "rebuild": "bun tsc -b --clean && bun tsc -b",
-    "clean": "bun tsc -b --clean",
+    "prepublishOnly": "bun run scripts/prepublish.ts",
+    "release": "bun run scripts/prepublish.ts && bun changeset publish",
     "test": "bun test",
     "test:unit": "bun test packages/",
     "test:e2e": "bun test tests/integration tests/e2e",

@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/pubsub",
-  "version": "0.0.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Pub/Sub plugin for WS-Kit with in-memory adapter",
   "sideEffects": false,
