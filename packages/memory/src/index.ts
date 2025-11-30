@@ -14,7 +14,7 @@
 
 import type { PubSubAdapter } from "@ws-kit/core/pubsub";
 
-export { memoryPubSub } from "./pubsub.js";
+export { memoryPubSub, type MemoryPubSubAdapter } from "./pubsub.js";
 export { memoryRateLimiter } from "./limiter.js";
 export type { Clock, MemoryRateLimiterOptions } from "./limiter.js";
 export type { PubSubAdapter };

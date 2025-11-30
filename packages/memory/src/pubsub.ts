@@ -9,6 +9,18 @@ import type {
 } from "@ws-kit/core/pubsub";
 
 /**
+ * Memory adapter with all optional methods implemented.
+ */
+export interface MemoryPubSubAdapter extends PubSubAdapter {
+  hasTopic(topic: string): Promise<boolean>;
+  listTopics(): Promise<readonly string[]>;
+  replace(
+    clientId: string,
+    newTopics: Iterable<string>,
+  ): Promise<{ added: number; removed: number; total: number }>;
+}
+
+/**
  * In-memory pub/sub adapter: subscription index + local fan-out.
  *
  * Unified adapter for single-instance deployments or local testing.
@@ -33,7 +45,7 @@ import type {
  * });
  * ```
  */
-export function memoryPubSub(): PubSubAdapter {
+export function memoryPubSub(): MemoryPubSubAdapter {
   // Topic -> Set of client IDs subscribed to that topic
   const topics = new Map<string, Set<string>>();
 
