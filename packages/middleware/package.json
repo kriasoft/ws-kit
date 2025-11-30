@@ -1,7 +1,7 @@
 {
   "name": "@ws-kit/middleware",
-  "version": "5.0.0",
-  "description": "Cross-runtime middleware for WS-Kit: rate limiting, deduplication, and observability hooks",
+  "version": "0.7.0",
+  "description": "Auth, logging, metrics, telemetry middleware for WS-Kit routers (with rate-limit re-exports)",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -20,16 +20,16 @@
   "keywords": [
     "websocket",
     "middleware",
+    "authentication",
+    "authorization",
+    "logging",
+    "metrics",
+    "telemetry",
+    "observability",
     "rate-limiting",
     "rate-limiter",
-    "token-bucket",
-    "deduplication",
-    "idempotency",
-    "observability",
     "type-safe",
-    "typescript",
-    "distributed",
-    "adapter-based"
+    "typescript"
   ],
   "exports": {
     ".": {
@@ -43,11 +43,11 @@
   "files": [
     "dist"
   ],
-  "peerDependencies": {
-    "@ws-kit/core": "workspace:^"
-  },
   "dependencies": {
     "@ws-kit/rate-limit": "workspace:^"
+  },
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:^"
   },
   "devDependencies": {
     "@types/bun": "^1.3.3"
@@ -56,6 +56,6 @@
     "node": ">=22"
   },
   "publishConfig": {
-    "directory": "dist"
+    "access": "public"
   }
 }

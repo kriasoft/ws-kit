@@ -1,43 +1,61 @@
 {
   "name": "@ws-kit/core",
-  "version": "0.0.1",
-  "type": "module",
+  "version": "0.7.0",
   "description": "Tiny, type-safe WebSocket router",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Konstantin Tarkus",
+  "homepage": "https://kriasoft.com/ws-kit/",
+  "bugs": "https://github.com/kriasoft/ws-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriasoft/ws-kit.git",
+    "directory": "packages/core"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/koistya"
+  },
+  "keywords": [
+    "websocket",
+    "router",
+    "type-safe",
+    "rpc",
+    "pub-sub"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
-      "import": "./dist/index.js"
+      "default": "./dist/index.js"
     },
     "./plugin": {
       "types": "./dist/plugin/index.d.ts",
       "bun": "./src/plugin/index.ts",
-      "import": "./dist/plugin/index.js"
+      "default": "./dist/plugin/index.js"
     },
     "./pubsub": {
       "types": "./dist/capabilities/pubsub/index.d.ts",
       "bun": "./src/capabilities/pubsub/index.ts",
-      "import": "./dist/capabilities/pubsub/index.js"
+      "default": "./dist/capabilities/pubsub/index.js"
     },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "bun": "./src/testing/index.ts",
-      "import": "./dist/testing/index.js"
+      "default": "./dist/testing/index.js"
     },
     "./internal": {
       "types": "./dist/internal.d.ts",
       "bun": "./src/internal.ts",
-      "import": "./dist/internal.js"
+      "default": "./dist/internal.js"
     }
   },
-  "scripts": {
-    "build": "tsc",
-    "test": "bun test",
-    "typecheck": "tsc --build tsconfig.check.json"
-  },
-  "dependencies": {},
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "devDependencies": {
     "@types/bun": "^1.3.3",
     "@ws-kit/bun": "workspace:^",
@@ -47,12 +65,15 @@
     "typescript": "^5.0.0",
     "zod": "^4.1.13"
   },
-  "keywords": [
-    "websocket",
-    "router",
-    "type-safe",
-    "rpc",
-    "pub-sub"
-  ],
-  "license": "MIT"
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "typecheck": "tsc --build tsconfig.check.json"
+  }
 }
