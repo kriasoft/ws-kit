@@ -90,7 +90,7 @@ const router = createRouter()
   .plugin(withZod())
   .plugin(
     withRateLimit({
-      adapter: redisRateLimiter(redis),
+      limiter: redisRateLimiter(redis),
       capacity: 1000,
       tokensPerSecond: 50,
       key: (ctx) => `user:${ctx.data.userId}`,
@@ -129,7 +129,7 @@ const router = createRouter()
   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
   .plugin(
     withRateLimit({
-      adapter: redisRateLimiter(redis),
+      limiter: redisRateLimiter(redis),
       capacity: 1000,
       tokensPerSecond: 50,
       key: (ctx) => ctx.clientId,

@@ -349,7 +349,7 @@ interface ContextWithPubSub {
 
 ```typescript
 interface RateLimitConfig {
-  adapter?: RateLimiterAdapter; // Defaults to memoryRateLimiter()
+  limiter?: RateLimiterAdapter; // Defaults to memoryRateLimiter()
   capacity: number; // Token bucket size (default: 100)
   tokensPerSecond: number; // Refill rate (default: 10)
   key?: (ctx: MinimalContext) => string; // Custom key function
@@ -370,7 +370,7 @@ import { redisRateLimiter } from "@ws-kit/redis";
 
 const router = createRouter().plugin(
   withRateLimit({
-    adapter: redisRateLimiter(redis),
+    limiter: redisRateLimiter(redis),
     capacity: 1000,
     tokensPerSecond: 50,
     key: (ctx) => `user:${ctx.data.userId}`, // Per-user limit
@@ -487,7 +487,7 @@ import { memoryRateLimiter } from "@ws-kit/memory";
 
 const router = createRouter().plugin(
   withRateLimit({
-    adapter: memoryRateLimiter(),
+    limiter: memoryRateLimiter(),
     capacity: 100,
     tokensPerSecond: 10,
   }),
@@ -513,7 +513,7 @@ const router = createRouter()
   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
   .plugin(
     withRateLimit({
-      adapter: redisRateLimiter(redis),
+      limiter: redisRateLimiter(redis),
       capacity: 1000,
       tokensPerSecond: 50,
     }),
@@ -533,7 +533,7 @@ export default {
       .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
       .plugin(
         withRateLimit({
-          adapter: cloudflareRateLimiter(env.RATE_LIMITER),
+          limiter: cloudflareRateLimiter(env.RATE_LIMITER),
           capacity: 1000,
           tokensPerSecond: 50,
         }),
