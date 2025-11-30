@@ -9,6 +9,18 @@ import type {
 } from "@ws-kit/core/pubsub";
 
 /**
+ * Result of a bulk topic replacement operation.
+ */
+export interface ReplaceResult {
+  /** Number of new subscriptions added */
+  added: number;
+  /** Number of existing subscriptions removed */
+  removed: number;
+  /** Total subscriptions after replacement */
+  total: number;
+}
+
+/**
  * Memory adapter with all optional methods implemented.
  */
 export interface MemoryPubSubAdapter extends PubSubAdapter {
@@ -17,7 +29,8 @@ export interface MemoryPubSubAdapter extends PubSubAdapter {
   replace(
     clientId: string,
     newTopics: Iterable<string>,
-  ): Promise<{ added: number; removed: number; total: number }>;
+  ): Promise<ReplaceResult>;
+  dispose(): void;
 }
 
 /**
@@ -142,7 +155,7 @@ export function memoryPubSub(): MemoryPubSubAdapter {
     async replace(
       clientId: string,
       newTopics: Iterable<string>,
-    ): Promise<{ added: number; removed: number; total: number }> {
+    ): Promise<ReplaceResult> {
       // Get current subscriptions
       const currentTopics = clientTopics.get(clientId) ?? new Set<string>();
       const newTopicsSet = new Set(newTopics);
@@ -195,6 +208,11 @@ export function memoryPubSub(): MemoryPubSubAdapter {
         removed,
         total: newTopicsSet.size,
       };
+    },
+
+    dispose() {
+      topics.clear();
+      clientTopics.clear();
     },
   };
 }
