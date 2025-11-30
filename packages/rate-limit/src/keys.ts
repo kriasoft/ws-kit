@@ -3,6 +3,7 @@
 
 import type { ConnectionData, MinimalContext } from "@ws-kit/core";
 
+/** Context available to key functions. Alias for MinimalContext with rate-limit semantics. */
 export type IngressContext<TContext extends ConnectionData = ConnectionData> =
   MinimalContext<TContext>;
 
@@ -32,12 +33,11 @@ export interface RateLimitContext extends Record<string, unknown> {
  * **Key format**: `rl:${tenant}:${user}:${type}`
  *
  * **Warning**: Falls back to `"anon"` when `userId` is missing — all unauthenticated
- * connections share one bucket. For anonymous traffic, implement a custom key
- * function using IP address, session tokens, or other stable identifiers.
+ * connections share one bucket, so one bad actor can exhaust quota for everyone.
+ * For public endpoints, use a custom key with `ctx.clientId`, IP, or session token.
  *
- * **Note**: This is an example key function assuming `tenantId` and `userId` fields.
- * If your app uses different field names (e.g., `organizationId`, `accountId`),
- * create your own key function:
+ * **Note**: Example key function assuming `tenantId` and `userId` fields.
+ * Create your own if your app uses different field names:
  *
  * @example
  * // For apps that use organizationId instead of tenantId:
@@ -73,11 +73,11 @@ export function keyPerUserPerType<
  * **Key format**: `rl:${tenant}:${user}`
  *
  * **Warning**: Falls back to `"anon"` when `userId` is missing — all unauthenticated
- * connections share one bucket. For anonymous traffic, implement a custom key
- * function using IP address, session tokens, or other stable identifiers.
+ * connections share one bucket, so one bad actor can exhaust quota for everyone.
+ * For public endpoints, use a custom key with `ctx.clientId`, IP, or session token.
  *
- * **Note**: This is an example key function assuming `tenantId` and `userId` fields.
- * Create your own key function if your app uses different field names.
+ * **Note**: Example key function assuming `tenantId` and `userId` fields.
+ * Create your own if your app uses different field names.
  */
 export function keyPerUser<
   TContext extends ConnectionData & RateLimitContext = ConnectionData &
