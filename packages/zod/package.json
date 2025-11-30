@@ -65,7 +65,7 @@
     "node": ">=22"
   },
   "publishConfig": {
-    "directory": "dist"
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --build tsconfig.check.json"

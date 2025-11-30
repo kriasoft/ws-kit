@@ -57,6 +57,6 @@
     "node": ">=22"
   },
   "publishConfig": {
-    "directory": "dist"
+    "access": "public"
   }
 }
