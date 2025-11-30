@@ -33,6 +33,10 @@ export interface RateLimitContext extends Record<string, unknown> {
  *
  * **Key format**: `rl:${tenant}:${user}:${type}`
  *
+ * **Warning**: Falls back to `"anon"` when `userId` is missing — all unauthenticated
+ * connections share one bucket. For anonymous traffic, implement a custom key
+ * function using IP address, session tokens, or other stable identifiers.
+ *
  * **Note**: This is an example key function assuming `tenantId` and `userId` fields.
  * If your app uses different field names (e.g., `organizationId`, `accountId`),
  * create your own key function:
@@ -70,6 +74,10 @@ export function keyPerUserPerType<
  *
  * **Key format**: `rl:${tenant}:${user}`
  *
+ * **Warning**: Falls back to `"anon"` when `userId` is missing — all unauthenticated
+ * connections share one bucket. For anonymous traffic, implement a custom key
+ * function using IP address, session tokens, or other stable identifiers.
+ *
  * **Note**: This is an example key function assuming `tenantId` and `userId` fields.
  * Create your own key function if your app uses different field names.
  */
@@ -80,42 +88,4 @@ export function perUserKey<
   const tenant = ctx.data.tenantId ?? "public";
   const user = ctx.data.userId ?? "anon";
   return `rl:${tenant}:${user}`;
-}
-
-/**
- * Key function for per-user-per-type with intended IP fallback (future router integration).
- *
- * **⚠️ CURRENT LIMITATION**: This middleware runs at step 6 (post-validation).
- * IP is not available, so this function **always falls back to "anon"** for unauthenticated users.
- * All anonymous traffic shares the same "anon" bucket, which is safe but defeats the IP-based isolation
- * that this function is designed to provide.
- *
- * **Why**: The proposal describes rate limiting at step 3 (pre-validation) where IP is available.
- * That requires router-level integration, not middleware. Until then, this function provides
- * per-user fairness but no IP-based protection for unauthenticated traffic.
- *
- * **What this actually does today**:
- * - Creates one rate limit bucket per (tenant, user, type) for authenticated users ✅
- * - Shares a single "anon" bucket for all unauthenticated users (not per-IP) ⚠️
- *
- * **When to use**: If you primarily authenticate users. For apps with significant unauthenticated traffic,
- * consider authentication or a custom key function that limits based on other identifiers (connection ID, session).
- *
- * **Key format**: `rl:${tenant}:${userId|anon}:${type}` (IP fallback not available at middleware layer)
- *
- * **Note**: This is an example key function assuming `tenantId` and `userId` fields.
- * Create your own key function if your app uses different field names.
- *
- * @future When rate limiting moves to the router at step 3, this function will receive ctx.ip and
- * can provide true IP-based fallback: `rl:${tenant}:${userId|ip|anon}:${type}`
- */
-export function keyPerUserOrIpPerType<
-  TData extends WebSocketData & RateLimitContext = WebSocketData &
-    RateLimitContext,
->(ctx: IngressContext<TData>): string {
-  const tenant = ctx.data.tenantId ?? "public";
-  // NOTE: IP is not available at middleware layer (post-validation)
-  // This falls back to "anon", so all unauthenticated traffic shares one bucket
-  const identifier = ctx.data.userId ?? "anon";
-  return `rl:${tenant}:${identifier}:${ctx.type}`;
 }

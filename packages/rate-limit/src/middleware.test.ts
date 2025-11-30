@@ -15,17 +15,46 @@ interface TestData extends Record<string, unknown> {
   tenantId?: string;
 }
 
+interface ErrorRecord {
+  code: string;
+  message: string | undefined;
+  details: Record<string, unknown> | undefined;
+  options: Record<string, unknown> | undefined;
+}
+
 /**
- * Test rate limit middleware directly by calling it with mock contexts.
- *
- * The middleware function has the signature:
- *   (ctx: EventContext<TData, unknown>, next: () => Promise<void>) => Promise<void>
- *
- * We test by:
- * 1. Creating a mock context with required properties
- * 2. Calling the middleware with a mock next() function
- * 3. Verifying it calls next() when rate limit allows, or throws when exceeded
+ * Create a mock context for testing rate limit middleware.
+ * Tracks error() calls and provides sensible defaults.
  */
+function createMockContext(
+  overrides: Partial<{
+    type: string;
+    clientId: string;
+    data: TestData;
+  }> = {},
+) {
+  const errors: ErrorRecord[] = [];
+
+  return {
+    ctx: {
+      type: overrides.type ?? "TEST",
+      clientId: overrides.clientId ?? "client-1",
+      data: overrides.data ?? { userId: "user-1", tenantId: "tenant-1" },
+      ws: { readyState: "OPEN", send: () => {}, close: () => {} },
+      assignData: () => {},
+      extensions: new Map(),
+      error: (
+        code: string,
+        message?: string,
+        details?: Record<string, unknown>,
+        options?: Record<string, unknown>,
+      ) => {
+        errors.push({ code, message, details, options });
+      },
+    } as any,
+    errors,
+  };
+}
 
 describe("Rate Limit Middleware", () => {
   describe("Basic functionality", () => {
@@ -36,306 +65,197 @@ describe("Rate Limit Middleware", () => {
         cost: () => 1,
       });
 
+      const { ctx, errors } = createMockContext();
       let nextCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {
-          throw new Error(
-            "INVALID_ARGUMENT: Rate limit cost must be a positive integer",
-          );
-        },
-      } as any;
-
-      const mockNext = async () => {
+      await limiter(ctx, async () => {
         nextCalled = true;
-      };
-
-      // Call middleware
-      await limiter(mockCtx, mockNext);
+      });
 
       expect(nextCalled).toBe(true);
+      expect(errors).toHaveLength(0);
     });
 
-    it("should block requests exceeding rate limit from reaching handler", async () => {
+    it("should block requests exceeding rate limit", async () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 2, tokensPerSecond: 1 }),
         key: keyPerUserPerType,
         cost: () => 1,
       });
 
-      let nextCalled = false;
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
+      const { ctx, errors } = createMockContext();
+      let nextCount = 0;
 
-      const mockNext = async () => {
-        nextCalled = true;
+      const next = async () => {
+        nextCount++;
       };
 
       // First 2 requests should succeed
-      await limiter(mockCtx, mockNext);
-      nextCalled = false;
-      await limiter(mockCtx, mockNext);
+      await limiter(ctx, next);
+      await limiter(ctx, next);
+      expect(nextCount).toBe(2);
+      expect(errors).toHaveLength(0);
 
-      // Third request should be blocked (throws error)
-      nextCalled = false;
-      try {
-        await limiter(mockCtx, mockNext);
-        expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(nextCalled).toBe(false);
-        expect(err.message).toContain("Rate limit");
-      }
+      // Third request should be blocked
+      await limiter(ctx, next);
+      expect(nextCount).toBe(2); // Handler not called
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("RESOURCE_EXHAUSTED");
+      expect(errors[0]!.message).toBe("Rate limit exceeded");
+      expect(errors[0]!.options?.retryAfterMs).toBeGreaterThan(0);
     });
 
     it("should reject non-integer costs", async () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
         key: keyPerUserPerType,
-        cost: () => 0.5, // Invalid: non-integer
+        cost: () => 0.5,
       });
 
+      const { ctx, errors } = createMockContext();
       let nextCalled = false;
-      let errorCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {
-          errorCalled = true;
-        },
-      } as any;
-
-      const mockNext = async () => {
+      await limiter(ctx, async () => {
         nextCalled = true;
-      };
-
-      // Call middleware
-      await limiter(mockCtx, mockNext);
+      });
 
       expect(nextCalled).toBe(false);
-      expect(errorCalled).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("INVALID_ARGUMENT");
     });
 
-    it("should reject zero or negative costs", async () => {
+    it("should reject negative costs", async () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
         key: keyPerUserPerType,
-        cost: () => 0, // Invalid: zero
+        cost: () => -1,
       });
 
+      const { ctx, errors } = createMockContext();
       let nextCalled = false;
-      let errorCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {
-          errorCalled = true;
-        },
-      } as any;
-
-      const mockNext = async () => {
+      await limiter(ctx, async () => {
         nextCalled = true;
-      };
-
-      // Call middleware
-      await limiter(mockCtx, mockNext);
+      });
 
       expect(nextCalled).toBe(false);
-      expect(errorCalled).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("INVALID_ARGUMENT");
+    });
+
+    it("should bypass rate limiting when cost is zero", async () => {
+      const limiter = rateLimit({
+        limiter: memoryRateLimiter({ capacity: 1, tokensPerSecond: 0.001 }),
+        key: keyPerUserPerType,
+        cost: (ctx) => (ctx.type === "HEARTBEAT" ? 0 : 1),
+      });
+
+      const { ctx: hbCtx, errors: hbErrors } = createMockContext({
+        type: "HEARTBEAT",
+      });
+      const { ctx: msgCtx, errors: msgErrors } = createMockContext({
+        type: "MESSAGE",
+      });
+
+      let nextCount = 0;
+      const next = async () => {
+        nextCount++;
+      };
+
+      // First MESSAGE consumes the only token
+      await limiter(msgCtx, next);
+      expect(nextCount).toBe(1);
+
+      // Second MESSAGE should be blocked (bucket exhausted)
+      await limiter(msgCtx, next);
+      expect(nextCount).toBe(1);
+      expect(msgErrors).toHaveLength(1);
+      expect(msgErrors[0]!.code).toBe("RESOURCE_EXHAUSTED");
+
+      // HEARTBEAT should bypass (cost=0), even with exhausted bucket
+      await limiter(hbCtx, next);
+      await limiter(hbCtx, next);
+      await limiter(hbCtx, next);
+      expect(nextCount).toBe(4);
+      expect(hbErrors).toHaveLength(0);
     });
   });
 
-  describe("Multiple limiters", () => {
-    it("should support independent limiters with different policies", async () => {
-      const cheapLimiter = rateLimit({
-        limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
-        key: keyPerUserPerType,
-        cost: () => 1,
-      });
-
-      const expensiveLimiter = rateLimit({
+  describe("Cost > Capacity handling", () => {
+    it("should send FAILED_PRECONDITION when cost exceeds capacity", async () => {
+      const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 5, tokensPerSecond: 1 }),
         key: keyPerUserPerType,
-        cost: () => 1,
+        cost: () => 10,
       });
 
-      let nextCalled = 0;
+      const { ctx, errors } = createMockContext();
+      let nextCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
+      await limiter(ctx, async () => {
+        nextCalled = true;
+      });
 
-      const mockNext = async () => {
-        nextCalled++;
-      };
-
-      // First 5 requests should succeed through both limiters
-      for (let i = 0; i < 5; i++) {
-        await cheapLimiter(mockCtx, mockNext);
-        await expensiveLimiter(mockCtx, mockNext);
-      }
-
-      // 6th request should be blocked by expensive limiter
-      nextCalled = 0;
-      try {
-        await cheapLimiter(mockCtx, mockNext);
-        await expensiveLimiter(mockCtx, mockNext);
-        expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(nextCalled).toBe(1); // Only cheapLimiter called next()
-        expect(err.message).toContain("Rate limit");
-      }
+      expect(nextCalled).toBe(false);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("FAILED_PRECONDITION");
+      expect(errors[0]!.message).toBe("Operation cost exceeds capacity");
+      expect(errors[0]!.details).toEqual({ cost: 10, capacity: 5 });
     });
   });
 
   describe("Key functions", () => {
-    it("should use keyPerUserPerType for per-user per-type isolation", async () => {
+    it("should use keyPerUserPerType as default", async () => {
       const limiter = rateLimit({
-        limiter: memoryRateLimiter({ capacity: 1, tokensPerSecond: 1 }),
-        key: keyPerUserPerType,
-        cost: () => 1,
+        limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
+        // No key specified - should use keyPerUserPerType
       });
 
-      let nextCalled = 0;
+      const { ctx, errors } = createMockContext();
+      let nextCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
+      await limiter(ctx, async () => {
+        nextCalled = true;
+      });
 
-      const mockNext = async () => {
-        nextCalled++;
-      };
-
-      // First request succeeds
-      await limiter(mockCtx, mockNext);
-      expect(nextCalled).toBe(1);
-
-      // Second request blocked
-      try {
-        await limiter(mockCtx, mockNext);
-        expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(nextCalled).toBe(1);
-      }
+      expect(nextCalled).toBe(true);
+      expect(errors).toHaveLength(0);
     });
 
     it("should use perUserKey for lighter per-user isolation", async () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
         key: perUserKey,
-        cost: () => 1,
       });
 
+      const { ctx, errors } = createMockContext();
       let nextCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockNext = async () => {
+      await limiter(ctx, async () => {
         nextCalled = true;
-      };
-
-      await limiter(mockCtx, mockNext);
-      expect(nextCalled).toBe(true);
-    });
-
-    it("should use keyPerUserOrIpPerType as default key", async () => {
-      const limiter = rateLimit({
-        limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
-        // No key specified - should use keyPerUserOrIpPerType
-        cost: () => 1,
       });
 
-      let nextCalled = false;
-
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockNext = async () => {
-        nextCalled = true;
-      };
-
-      await limiter(mockCtx, mockNext);
       expect(nextCalled).toBe(true);
+      expect(errors).toHaveLength(0);
     });
 
     it("should support custom key functions", async () => {
-      const customKey = (ctx: IngressContext<TestData>) => {
-        return `custom:${ctx.type}`;
-      };
+      const customKey = (ctx: IngressContext<TestData>) => `custom:${ctx.type}`;
 
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),
         key: customKey,
-        cost: () => 1,
       });
 
+      const { ctx, errors } = createMockContext();
       let nextCalled = false;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockNext = async () => {
+      await limiter(ctx, async () => {
         nextCalled = true;
-      };
+      });
 
-      await limiter(mockCtx, mockNext);
       expect(nextCalled).toBe(true);
+      expect(errors).toHaveLength(0);
     });
   });
 
@@ -344,37 +264,25 @@ describe("Rate Limit Middleware", () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 2, tokensPerSecond: 1 }),
         key: keyPerUserPerType,
-        // No cost specified - should default to 1
       });
 
-      let nextCalled = 0;
+      const { ctx, errors } = createMockContext();
+      let nextCount = 0;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockNext = async () => {
-        nextCalled++;
+      const next = async () => {
+        nextCount++;
       };
 
       // Should allow 2 requests with default cost of 1
-      await limiter(mockCtx, mockNext);
-      await limiter(mockCtx, mockNext);
-      expect(nextCalled).toBe(2);
+      await limiter(ctx, next);
+      await limiter(ctx, next);
+      expect(nextCount).toBe(2);
 
       // Third request should be blocked
-      try {
-        await limiter(mockCtx, mockNext);
-        expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(nextCalled).toBe(2);
-      }
+      await limiter(ctx, next);
+      expect(nextCount).toBe(2);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("RESOURCE_EXHAUSTED");
     });
 
     it("should support weighted costs", async () => {
@@ -386,66 +294,29 @@ describe("Rate Limit Middleware", () => {
         cost: () => messageWeight,
       });
 
-      let nextCalled = 0;
+      const { ctx, errors } = createMockContext();
+      let nextCount = 0;
 
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockNext = async () => {
-        nextCalled++;
+      const next = async () => {
+        nextCount++;
       };
 
       // Send light message (cost 1)
       messageWeight = 1;
-      await limiter(mockCtx, mockNext);
+      await limiter(ctx, next);
 
       // Send heavy message (cost 5)
       messageWeight = 5;
-      await limiter(mockCtx, mockNext);
+      await limiter(ctx, next);
 
-      expect(nextCalled).toBe(2);
-    });
-  });
+      expect(nextCount).toBe(2);
+      expect(errors).toHaveLength(0);
 
-  describe("Cost > Capacity handling", () => {
-    it("should prevent handler execution when cost exceeds capacity", async () => {
-      const limiter = rateLimit({
-        limiter: memoryRateLimiter({ capacity: 5, tokensPerSecond: 1 }),
-        key: keyPerUserPerType,
-        cost: () => 10, // Cost > capacity
-      });
-
-      let nextCalled = false;
-
-      const mockCtx = {
-        type: "TEST",
-        clientId: "client-1",
-        data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockNext = async () => {
-        nextCalled = true;
-      };
-
-      // Handler should not be called
-      try {
-        await limiter(mockCtx, mockNext);
-        expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(nextCalled).toBe(false);
-        expect(err.message).toContain("Operation cost exceeds");
-      }
+      // Next heavy message should be blocked (remaining: 4, cost: 5)
+      await limiter(ctx, next);
+      expect(nextCount).toBe(2);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("RESOURCE_EXHAUSTED");
     });
   });
 
@@ -454,46 +325,70 @@ describe("Rate Limit Middleware", () => {
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 2, tokensPerSecond: 1 }),
         key: keyPerUserPerType,
-        cost: () => 1,
       });
 
-      let nextCalled = 0;
-
-      const mockCtx1 = {
-        type: "TEST",
-        clientId: "client-1",
+      const { ctx: ctx1, errors: errors1 } = createMockContext({
         data: { userId: "user-1", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
-
-      const mockCtx2 = {
-        type: "TEST",
-        clientId: "client-2",
+      });
+      const { ctx: ctx2, errors: errors2 } = createMockContext({
         data: { userId: "user-2", tenantId: "tenant-1" },
-        ws: { readyState: "OPEN", send: () => {}, close: () => {} },
-        assignData: () => {},
-        extensions: new Map(),
-        error: () => {},
-      } as any;
+      });
 
-      const mockNext = async () => {
-        nextCalled++;
+      let nextCount = 0;
+      const next = async () => {
+        nextCount++;
       };
 
       // User 1: 2 successful requests
-      await limiter(mockCtx1, mockNext);
-      await limiter(mockCtx1, mockNext);
-      expect(nextCalled).toBe(2);
+      await limiter(ctx1, next);
+      await limiter(ctx1, next);
+      expect(nextCount).toBe(2);
 
       // User 2: Should also get 2 successful requests (independent bucket)
-      await limiter(mockCtx2, mockNext);
-      await limiter(mockCtx2, mockNext);
-      expect(nextCalled).toBe(4);
+      await limiter(ctx2, next);
+      await limiter(ctx2, next);
+      expect(nextCount).toBe(4);
 
-      // Both users used 2 requests each = 4 total
+      expect(errors1).toHaveLength(0);
+      expect(errors2).toHaveLength(0);
+    });
+  });
+
+  describe("Multiple limiters", () => {
+    it("should support independent limiters with different policies", async () => {
+      const cheapLimiter = rateLimit({
+        limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 50 }),
+        key: keyPerUserPerType,
+      });
+
+      const expensiveLimiter = rateLimit({
+        limiter: memoryRateLimiter({ capacity: 5, tokensPerSecond: 1 }),
+        key: keyPerUserPerType,
+      });
+
+      const { ctx, errors } = createMockContext();
+      let nextCount = 0;
+
+      const next = async () => {
+        nextCount++;
+      };
+
+      // First 5 requests should succeed through both limiters
+      for (let i = 0; i < 5; i++) {
+        await cheapLimiter(ctx, next);
+        await expensiveLimiter(ctx, next);
+      }
+      expect(nextCount).toBe(10);
+      expect(errors).toHaveLength(0);
+
+      // 6th expensive request should be blocked
+      await cheapLimiter(ctx, next);
+      expect(nextCount).toBe(11);
+      await expensiveLimiter(ctx, next);
+      expect(nextCount).toBe(11); // Expensive didn't call next
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.code).toBe("RESOURCE_EXHAUSTED");
     });
   });
 });
