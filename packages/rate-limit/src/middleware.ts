@@ -6,7 +6,7 @@ import type { RateLimiter } from "./types";
 import { keyPerUserPerType } from "./keys";
 
 /**
- * Options for rate limit middleware
+ * Rate limit middleware options.
  */
 export interface RateLimitOptions<
   TContext extends ConnectionData = ConnectionData,
@@ -62,20 +62,20 @@ export interface RateLimitOptions<
  * **Note**: This middleware runs post-validation. For transport-level protection,
  * use platform-specific rate limiting (e.g., Cloudflare rate limiting rules).
  *
- * @param options - Rate limit configuration
+ * @param options - Rate limit options
  * @returns Middleware function
  *
  * @example
  * import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
  * import { memoryRateLimiter } from "@ws-kit/memory";
  *
- * const limiter = rateLimit({
+ * const middleware = rateLimit({
  *   limiter: memoryRateLimiter({ capacity: 200, tokensPerSecond: 100 }),
  *   key: keyPerUserPerType,
  *   cost: (ctx) => 1,
  * });
  *
- * router.use(limiter);
+ * router.use(middleware);
  */
 export function rateLimit<TContext extends ConnectionData = ConnectionData>(
   options: RateLimitOptions<TContext>,

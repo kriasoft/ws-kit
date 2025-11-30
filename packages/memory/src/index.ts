@@ -14,9 +14,9 @@
 
 import type { PubSubAdapter } from "@ws-kit/core/pubsub";
 import type {
-  Policy,
   RateLimitDecision,
   RateLimiter,
+  RateLimitPolicy,
 } from "@ws-kit/rate-limit";
 
 export { memoryRateLimiter } from "./limiter.js";
@@ -26,4 +26,4 @@ export {
   type MemoryPubSubAdapter,
   type ReplaceResult,
 } from "./pubsub.js";
-export type { Policy, PubSubAdapter, RateLimitDecision, RateLimiter };
+export type { PubSubAdapter, RateLimitDecision, RateLimiter, RateLimitPolicy };

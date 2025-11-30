@@ -21,7 +21,7 @@ See [ADR-031](../adr/031-plugin-adapter-architecture.md) for design rationale an
 **Feature Plugins** (import from feature packages):
 
 - `withPubSub()` — Topic-based pub/sub (canonical: `@ws-kit/pubsub`)
-- `withRateLimit()` — Rate limiting (canonical: `@ws-kit/rate-limit`)
+- `rateLimit()` — Rate limiting middleware (canonical: `@ws-kit/rate-limit`)
 - Future: `withTelemetry()`, `withCompression()`, `withCaching()` (each has own package)
 
 **Validator Plugins** (choose one validator, import from its package):
@@ -339,41 +339,41 @@ interface ContextWithPubSub {
 
 ---
 
-### `withRateLimit(config?)`
+### `rateLimit(config)`
 
-**Location**: `@ws-kit/rate-limit` (canonical; also re-exported from `@ws-kit/zod`/`@ws-kit/valibot` for convenience)
+**Location**: `@ws-kit/rate-limit` (canonical)
 
-**Purpose**: Enable rate-limiting of messages per connection, per user, or per type.
+**Purpose**: Rate-limiting middleware for messages per connection, per user, or per type.
+
+**Note**: Rate limiting is middleware (`.use()`), not a plugin (`.plugin()`). It doesn't add context methods; it gates handler execution.
 
 **Configuration**:
 
 ```typescript
-interface RateLimitConfig {
-  limiter?: RateLimiterAdapter; // Defaults to memoryRateLimiter()
-  capacity: number; // Token bucket size (default: 100)
-  tokensPerSecond: number; // Refill rate (default: 10)
-  key?: (ctx: MinimalContext) => string; // Custom key function
+interface RateLimitOptions {
+  limiter: RateLimiter; // Required: memoryRateLimiter(), redisRateLimiter(), etc.
+  key?: (ctx: MinimalContext) => string; // Custom key function (default: keyPerUserPerType)
+  cost?: (ctx: MinimalContext) => number; // Token cost per message (default: 1)
 }
 ```
 
 **Effects**:
 
 - Registers global middleware that checks rate limits before handlers
-- Blocks over-limit messages with error
+- Blocks over-limit messages with `RESOURCE_EXHAUSTED` error
 - Works with any backend via adapters (memory, Redis, Cloudflare)
 
 **Example**:
 
 ```typescript
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 
-const router = createRouter().plugin(
-  withRateLimit({
-    limiter: redisRateLimiter(redis),
-    capacity: 1000,
-    tokensPerSecond: 50,
-    key: (ctx) => `user:${ctx.data.userId}`, // Per-user limit
+const router = createRouter().use(
+  rateLimit({
+    limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
+    key: keyPerUserPerType, // Per-user-per-type isolation
+    cost: (ctx) => (ctx.type === "Compute" ? 10 : 1),
   }),
 );
 ```
@@ -381,14 +381,10 @@ const router = createRouter().plugin(
 **Built-in Key Functions**:
 
 ```typescript
-// Per-connection (default)
-key: (ctx) => ctx.clientId;
+import { keyPerUser, keyPerUserPerType } from "@ws-kit/rate-limit";
 
-// Per-user
-key: (ctx) => `user:${ctx.data.userId}`;
-
-// Per-user-per-type
-key: (ctx) => `user:${ctx.data.userId}:${ctx.type}`;
+// keyPerUserPerType (default) — tenant:user:type
+// keyPerUser — tenant:user (lighter footprint)
 ```
 
 **Type Effects**:
@@ -445,27 +441,32 @@ export interface PublishResult {
 }
 ```
 
-#### `RateLimiterAdapter`
+#### `RateLimiter`
 
 ```typescript
-export interface RateLimiterAdapter {
+export interface RateLimiter {
   /**
-   * Attempt to consume tokens from the bucket.
-   * Returns whether consumption succeeded (tokens available).
+   * Atomically consume tokens from a rate limit bucket.
+   * @param key - Rate limit key (e.g., "user:123:SendMessage")
+   * @param cost - Number of tokens to consume
    */
-  consume(
-    key: string,
-    tokens: number,
-  ): Promise<{
-    ok: boolean;
-    retryAfterMs?: number; // When tokens will be available
-  }>;
+  consume(key: string, cost: number): Promise<RateLimitDecision>;
 
   /**
-   * Reset the bucket (clear all tokens).
+   * Get the policy configuration for this rate limiter.
+   * Required for accurate error reporting in middleware.
    */
-  reset(key: string): Promise<void>;
+  getPolicy(): RateLimitPolicy;
+
+  /**
+   * Optional cleanup on app shutdown.
+   */
+  dispose?(): void | Promise<void>;
 }
+
+export type RateLimitDecision =
+  | { allowed: true; remaining: number }
+  | { allowed: false; remaining: number; retryAfterMs: number | null };
 ```
 
 ### Memory Adapters (Zero-Config Defaults)
@@ -483,13 +484,12 @@ const router = createRouter().plugin(withPubSub({ adapter: memoryPubSub() }));
 **`memoryRateLimiter()`**:
 
 ```typescript
+import { rateLimit } from "@ws-kit/rate-limit";
 import { memoryRateLimiter } from "@ws-kit/memory";
 
-const router = createRouter().plugin(
-  withRateLimit({
-    limiter: memoryRateLimiter(),
-    capacity: 100,
-    tokensPerSecond: 10,
+const router = createRouter().use(
+  rateLimit({
+    limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
   }),
 );
 ```
@@ -505,17 +505,16 @@ Distributed pub/sub and rate-limiting via Redis.
 ```typescript
 import { createClient } from "redis";
 import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
+import { rateLimit } from "@ws-kit/rate-limit";
 
 const redis = createClient();
 await redis.connect();
 
 const router = createRouter()
   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
-  .plugin(
-    withRateLimit({
-      limiter: redisRateLimiter(redis),
-      capacity: 1000,
-      tokensPerSecond: 50,
+  .use(
+    rateLimit({
+      limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
     }),
   );
 ```
@@ -525,17 +524,19 @@ const router = createRouter()
 Cloudflare Workers adapters using Durable Objects and native rate limiting.
 
 ```typescript
-import { cloudflarePubSub, cloudflareRateLimiter } from "@ws-kit/cloudflare";
+import { cloudflarePubSub, durableObjectRateLimiter } from "@ws-kit/cloudflare";
+import { rateLimit } from "@ws-kit/rate-limit";
 
 export default {
   fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const router = createRouter()
       .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
-      .plugin(
-        withRateLimit({
-          limiter: cloudflareRateLimiter(env.RATE_LIMITER),
-          capacity: 1000,
-          tokensPerSecond: 50,
+      .use(
+        rateLimit({
+          limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
+            capacity: 1000,
+            tokensPerSecond: 50,
+          }),
         }),
       );
 
@@ -775,17 +776,18 @@ const router = createRouter().plugin(withValidation()).plugin(withRpc());
 4. **Configure rate limits per use case**
 
    ```typescript
+   import { rateLimit } from "@ws-kit/rate-limit";
+   import { memoryRateLimiter } from "@ws-kit/memory";
+
    // Strict (API key)
-   .plugin(withRateLimit({
-     capacity: 100,
-     tokensPerSecond: 5,
+   .use(rateLimit({
+     limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 5 }),
      key: (ctx) => ctx.data.apiKey,
    }))
 
    // Relaxed (authenticated user)
-   .plugin(withRateLimit({
-     capacity: 1000,
-     tokensPerSecond: 50,
+   .use(rateLimit({
+     limiter: memoryRateLimiter({ capacity: 1000, tokensPerSecond: 50 }),
      key: (ctx) => `user:${ctx.data.userId}`,
    }))
    ```
@@ -814,12 +816,17 @@ Always use canonical sources per [ADR-032](../adr/032-canonical-imports-design.m
 ```typescript
 import { createRouter, withZod } from "@ws-kit/zod"; // or @ws-kit/valibot
 import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit } from "@ws-kit/rate-limit";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const router = createRouter()
   .plugin(withZod())
   .plugin(withPubSub())
-  .plugin(withRateLimit());
+  .use(
+    rateLimit({
+      limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
+    }),
+  );
 ```
 
 **Explicit** (canonical sources, same imports):
@@ -828,14 +835,19 @@ const router = createRouter()
 import { createRouter, withZod } from "@ws-kit/zod";
 import { withMessaging, withRpc } from "@ws-kit/plugins";
 import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit } from "@ws-kit/rate-limit";
+import { memoryRateLimiter } from "@ws-kit/memory";
 
 const router = createRouter()
   .plugin(withZod())
   .plugin(withMessaging())
   .plugin(withRpc())
   .plugin(withPubSub())
-  .plugin(withRateLimit());
+  .use(
+    rateLimit({
+      limiter: memoryRateLimiter({ capacity: 100, tokensPerSecond: 10 }),
+    }),
+  );
 ```
 
 **Note**: Importing from non-canonical sources (e.g., `withPubSub` from `@ws-kit/plugins` when it's actually in `@ws-kit/pubsub`) will fail. Always use the canonical source for each feature.

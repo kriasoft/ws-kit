@@ -375,12 +375,12 @@ ctx.onCancel?.(() => {
 
 See [ADR-015: Unified RPC API](../adr/015-unified-rpc-api-design.md) for design rationale.
 
-### Pre-Validation Context (IngressContext)
+### Pre-Validation Context (MinimalContext)
 
-Middleware running **before schema validation** (e.g., rate limiting) receive `IngressContext`, which excludes unvalidated payload. See [ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md) for the adapter pattern.
+Middleware running **before schema validation** (e.g., rate limiting) receive `MinimalContext`, which excludes unvalidated payload. See [ADR-021: Adapter-First Architecture](../adr/021-adapter-first-architecture.md) for the adapter pattern.
 
 ```typescript
-type IngressContext<Data = unknown> = {
+type MinimalContext<Data = unknown> = {
   type: string; // Message type (extracted, trusted)
   id: string; // Connection ID (UUID v7)
   ip: string; // Client IP address

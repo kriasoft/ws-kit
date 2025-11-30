@@ -26,12 +26,7 @@ export { rateLimit } from "./middleware";
 export type { RateLimitOptions } from "./middleware";
 
 // Types
-export type { Policy, RateLimitDecision, RateLimiter } from "./types";
+export type { RateLimitDecision, RateLimiter, RateLimitPolicy } from "./types";
 
 // Key functions
-export {
-  type IngressContext,
-  keyPerUser,
-  keyPerUserPerType,
-  type RateLimitContext,
-} from "./keys";
+export { keyPerUser, keyPerUserPerType, type RateLimitIdentity } from "./keys";

@@ -3,17 +3,13 @@
 
 import type { ConnectionData, MinimalContext } from "@ws-kit/core";
 
-/** Context available to key functions. Alias for MinimalContext with rate-limit semantics. */
-export type IngressContext<TContext extends ConnectionData = ConnectionData> =
-  MinimalContext<TContext>;
-
 /**
- * Common rate limiting context fields (suggested app data structure).
+ * Common identity fields for rate limit key construction.
  *
  * Most apps will have some variant of these fields. Use this as a guide when
- * defining your app's WebSocket data type or writing custom key functions.
+ * defining your app's connection data type or writing custom key functions.
  */
-export interface RateLimitContext extends Record<string, unknown> {
+export interface RateLimitIdentity extends Record<string, unknown> {
   tenantId?: string;
   organizationId?: string;
   userId?: string;
@@ -41,7 +37,7 @@ export interface RateLimitContext extends Record<string, unknown> {
  *
  * @example
  * // For apps that use organizationId instead of tenantId:
- * function customKey(ctx: IngressContext<AppData>): string {
+ * function customKey(ctx: MinimalContext<AppData>): string {
  *   const org = ctx.data.organizationId ?? "public";
  *   const user = ctx.data.userId ?? "anon";
  *   return `rl:${org}:${user}:${ctx.type}`;
@@ -50,9 +46,9 @@ export interface RateLimitContext extends Record<string, unknown> {
  * router.use(rateLimit({ limiter, key: customKey }));
  */
 export function keyPerUserPerType<
-  TContext extends ConnectionData & RateLimitContext = ConnectionData &
-    RateLimitContext,
->(ctx: IngressContext<TContext>): string {
+  TContext extends ConnectionData & RateLimitIdentity = ConnectionData &
+    RateLimitIdentity,
+>(ctx: MinimalContext<TContext>): string {
   const tenant = ctx.data.tenantId ?? "public";
   const user = ctx.data.userId ?? "anon";
   return `rl:${tenant}:${user}:${ctx.type}`;
@@ -80,9 +76,9 @@ export function keyPerUserPerType<
  * Create your own if your app uses different field names.
  */
 export function keyPerUser<
-  TContext extends ConnectionData & RateLimitContext = ConnectionData &
-    RateLimitContext,
->(ctx: IngressContext<TContext>): string {
+  TContext extends ConnectionData & RateLimitIdentity = ConnectionData &
+    RateLimitIdentity,
+>(ctx: MinimalContext<TContext>): string {
   const tenant = ctx.data.tenantId ?? "public";
   const user = ctx.data.userId ?? "anon";
   return `rl:${tenant}:${user}`;

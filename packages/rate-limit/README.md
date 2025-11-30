@@ -43,7 +43,7 @@ const router = createRouter().use(
 ## Policy shape
 
 ```typescript
-interface Policy {
+interface RateLimitPolicy {
   capacity: number; // max tokens
   tokensPerSecond: number; // refill rate
   prefix?: string; // optional key namespace

@@ -6,19 +6,19 @@ Quick lookup for where to import each plugin, adapter, and utility from. See [AD
 
 ## TL;DR: Import Sources
 
-| Feature                  | Canonical Source                   | Notes                                                                       |
-| ------------------------ | ---------------------------------- | --------------------------------------------------------------------------- |
-| **Validators + Helpers** | `@ws-kit/zod` or `@ws-kit/valibot` | Choose ONE; both export `z/v`, `message`, `createRouter`, `withZod/Valibot` |
-| **Core Plugins**         | `@ws-kit/plugins`                  | `withMessaging()`, `withRpc()`                                              |
-| **Pub/Sub Plugin**       | `@ws-kit/pubsub`                   | `withPubSub()`, `usePubSub()`                                               |
-| **Rate-Limit Plugin**    | `@ws-kit/rate-limit`               | `withRateLimit()`, `useRateLimit()`                                         |
-| **Middleware**           | `@ws-kit/middleware` (future)      | `useAuth()`, `useLogging()`                                                 |
-| **Memory Adapters**      | `@ws-kit/memory`                   | `memoryPubSub()`, `memoryRateLimiter()`                                     |
-| **Redis Adapters**       | `@ws-kit/redis`                    | `redisPubSub()`, `redisRateLimiter()`                                       |
-| **Cloudflare Adapters**  | `@ws-kit/cloudflare`               | `cloudflarePubSub()`, `cloudflareRateLimiter()`                             |
-| **Bun Platform**         | `@ws-kit/bun`                      | `serve()`                                                                   |
-| **Client (Typed)**       | `@ws-kit/client/zod` or `/valibot` | Full type inference                                                         |
-| **Client (Generic)**     | `@ws-kit/client`                   | For custom validators                                                       |
+| Feature                   | Canonical Source                   | Notes                                                                       |
+| ------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| **Validators + Helpers**  | `@ws-kit/zod` or `@ws-kit/valibot` | Choose ONE; both export `z/v`, `message`, `createRouter`, `withZod/Valibot` |
+| **Core Plugins**          | `@ws-kit/plugins`                  | `withMessaging()`, `withRpc()`                                              |
+| **Pub/Sub Plugin**        | `@ws-kit/pubsub`                   | `withPubSub()`, `usePubSub()`                                               |
+| **Rate-Limit Middleware** | `@ws-kit/rate-limit`               | `rateLimit()`, `keyPerUser()`, `keyPerUserPerType()`                        |
+| **Middleware**            | `@ws-kit/middleware` (future)      | `useAuth()`, `useLogging()`                                                 |
+| **Memory Adapters**       | `@ws-kit/memory`                   | `memoryPubSub()`, `memoryRateLimiter()`                                     |
+| **Redis Adapters**        | `@ws-kit/redis`                    | `redisPubSub()`, `redisRateLimiter()`                                       |
+| **Cloudflare Adapters**   | `@ws-kit/cloudflare`               | `cloudflarePubSub()`, `cloudflareRateLimiter()`                             |
+| **Bun Platform**          | `@ws-kit/bun`                      | `serve()`                                                                   |
+| **Client (Typed)**        | `@ws-kit/client/zod` or `/valibot` | Full type inference                                                         |
+| **Client (Generic)**      | `@ws-kit/client`                   | For custom validators                                                       |
 
 ---
 
@@ -78,7 +78,7 @@ serve(router, { port: 3000 });
 
 ```typescript
 import { z, message, createRouter, withZod } from "@ws-kit/zod";
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
 import { redisRateLimiter } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 import { createClient } from "redis";
@@ -88,12 +88,10 @@ await redis.connect();
 
 const router = createRouter()
   .plugin(withZod())
-  .plugin(
-    withRateLimit({
-      limiter: redisRateLimiter(redis),
-      capacity: 1000,
-      tokensPerSecond: 50,
-      key: (ctx) => `user:${ctx.data.userId}`,
+  .use(
+    rateLimit({
+      limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
+      key: keyPerUserPerType,
     }),
   );
 
@@ -106,9 +104,8 @@ serve(router, { port: 3000 });
 import { z, message, createRouter, withZod } from "@ws-kit/zod";
 import { withMessaging, withRpc } from "@ws-kit/plugins";
 import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimit } from "@ws-kit/rate-limit";
-import { redisPubSub } from "@ws-kit/redis";
-import { redisRateLimiter } from "@ws-kit/redis";
+import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit";
+import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 import { serve } from "@ws-kit/bun";
 import { createClient } from "redis";
 
@@ -127,12 +124,10 @@ const router = createRouter()
   .plugin(withMessaging())
   .plugin(withRpc())
   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
-  .plugin(
-    withRateLimit({
-      limiter: redisRateLimiter(redis),
-      capacity: 1000,
-      tokensPerSecond: 50,
-      key: (ctx) => ctx.clientId,
+  .use(
+    rateLimit({
+      limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
+      key: keyPerUserPerType,
     }),
   );
 
@@ -180,8 +175,8 @@ console.log(response); // Typed as PongMessage
 // Canonical sources, re-exported for convenience:
 export { createRouter } from "@ws-kit/core";
 export { withMessaging, withRpc } from "@ws-kit/plugins";
-export { withPubSub, usePubSub } from "@ws-kit/pubsub";
-export { withRateLimit, useRateLimit } from "@ws-kit/rate-limit";
+export { withPubSub } from "@ws-kit/pubsub";
+export { rateLimit, keyPerUser, keyPerUserPerType } from "@ws-kit/rate-limit";
 export { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory";
 export { z, message, withZod } from "./internal"; // Validator-specific
 ```

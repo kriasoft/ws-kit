@@ -562,7 +562,7 @@ export interface RateLimiter {
    * Get the policy configuration for this rate limiter.
    * Required by all adapters for accurate error reporting.
    */
-  getPolicy(): Policy;
+  getPolicy(): RateLimitPolicy;
 
   /**
    * Optional cleanup on app shutdown
@@ -666,7 +666,7 @@ const decision = await limiter.consume("user:123", 1);
 All rate limiter adapters must:
 
 1. **Validate policy at factory creation time** — Throw immediately if `capacity < 1` or `tokensPerSecond <= 0`
-2. **Expose policy via `getPolicy()`** — Return the policy object; **required** for accurate error reporting in middleware
+2. **Expose policy via `getPolicy()`** — Return the `RateLimitPolicy` object; **required** for accurate error reporting in middleware
 3. **Implement atomic `consume()`** — No token double-spend, even under concurrency
 4. **Return consistent structures** — `{ allowed, remaining, retryAfterMs }` always present (or undefined)
 5. **Handle non-monotonic clocks** — Clamp negative elapsed time to 0 (NTP adjustments)
@@ -833,26 +833,30 @@ const router = createRouter().plugin(
 **Interface** (`@ws-kit/rate-limit`):
 
 ```typescript
-export interface RateLimiterAdapter {
+export interface RateLimiter {
   /**
    * Atomically attempt to consume tokens from a rate limit bucket.
    * @param key - Rate limit key (e.g., "user:123:SendMessage")
-   * @param tokens - Number of tokens to consume
+   * @param cost - Number of tokens to consume
    * @returns Decision: allowed + remaining, or denied + retryAfterMs
    */
-  consume(
-    key: string,
-    tokens: number,
-  ): Promise<{
-    ok: boolean;
-    retryAfterMs?: number; // When tokens will be available
-  }>;
+  consume(key: string, cost: number): Promise<RateLimitDecision>;
 
   /**
-   * Reset the bucket (clear all tokens).
+   * Get the policy configuration for this rate limiter.
+   * Required for accurate error reporting in middleware.
    */
-  reset(key: string): Promise<void>;
+  getPolicy(): RateLimitPolicy;
+
+  /**
+   * Optional cleanup on app shutdown.
+   */
+  dispose?(): void | Promise<void>;
 }
+
+export type RateLimitDecision =
+  | { allowed: true; remaining: number }
+  | { allowed: false; remaining: number; retryAfterMs: number | null };
 ```
 
 **Example: Swapping Adapters**

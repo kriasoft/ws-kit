@@ -1,13 +1,9 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import type { MinimalContext } from "@ws-kit/core";
 import { memoryRateLimiter } from "@ws-kit/memory";
-import {
-  keyPerUser,
-  keyPerUserPerType,
-  rateLimit,
-  type IngressContext,
-} from "@ws-kit/rate-limit";
+import { keyPerUser, keyPerUserPerType, rateLimit } from "@ws-kit/rate-limit";
 import { describe, expect, it } from "bun:test";
 
 interface TestData extends Record<string, unknown> {
@@ -240,7 +236,7 @@ describe("Rate Limit Middleware", () => {
     });
 
     it("should support custom key functions", async () => {
-      const customKey = (ctx: IngressContext<TestData>) => `custom:${ctx.type}`;
+      const customKey = (ctx: MinimalContext<TestData>) => `custom:${ctx.type}`;
 
       const limiter = rateLimit({
         limiter: memoryRateLimiter({ capacity: 10, tokensPerSecond: 1 }),

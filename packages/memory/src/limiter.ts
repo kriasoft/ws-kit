@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import type {
-  Policy,
   RateLimitDecision,
   RateLimiter,
+  RateLimitPolicy,
 } from "@ws-kit/rate-limit";
 
 /**
@@ -125,7 +125,7 @@ export interface MemoryRateLimiterOptions {
  * ```
  */
 export function memoryRateLimiter(
-  policy: Policy,
+  policy: RateLimitPolicy,
   opts?: MemoryRateLimiterOptions,
 ): RateLimiter {
   // Validate policy at factory creation time
@@ -143,11 +143,11 @@ export function memoryRateLimiter(
 
   // Create an immutable snapshot of the policy for getPolicy()
   // Prevents caller mutations from affecting reported capacity
-  const policySnapshot: Policy = Object.freeze({
+  const policySnapshot: RateLimitPolicy = Object.freeze({
     capacity,
     tokensPerSecond,
     ...(prefix !== undefined && { prefix }),
-  }) as Policy;
+  }) as RateLimitPolicy;
 
   /**
    * Get or create a mutex for the given key.

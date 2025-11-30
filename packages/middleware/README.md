@@ -118,8 +118,8 @@ Creates rate limit middleware for the router.
 ```typescript
 type RateLimitOptions = {
   limiter: RateLimiter;
-  key?: (ctx: IngressContext) => string;
-  cost?: (ctx: IngressContext) => number;
+  key?: (ctx: MinimalContext) => string;
+  cost?: (ctx: MinimalContext) => number;
 };
 ```
 
@@ -163,7 +163,7 @@ The cost function determines how many tokens each message consumes.
 
 - Must return a **positive integer** (validated at runtime)
 - Must be deterministic (same message always costs same)
-- Receives only `IngressContext` (payload not validated yet)
+- Receives only `MinimalContext` (payload not validated yet)
 
 **Examples:**
 
