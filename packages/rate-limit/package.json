@@ -39,6 +39,9 @@
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "@ws-kit/core": "workspace:^"
+  },
   "devDependencies": {
     "@types/bun": "^1.3.3",
     "@ws-kit/core": "workspace:^",

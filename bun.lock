@@ -170,6 +170,9 @@
         "@ws-kit/memory": "workspace:^",
         "@ws-kit/zod": "workspace:^",
       },
+      "peerDependencies": {
+        "@ws-kit/core": "workspace:^",
+      },
     },
     "packages/redis": {
       "name": "@ws-kit/redis",
