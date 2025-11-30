@@ -103,7 +103,6 @@ describe("getShardedDoId", () => {
           capturedName = name;
           return `id-${name}`;
         },
-        get: () => ({}),
       },
     };
 
@@ -121,7 +120,6 @@ describe("getShardedDoId", () => {
           capturedName = name;
           return `id-${name}`;
         },
-        get: () => ({}),
       },
     };
 
@@ -134,7 +132,6 @@ describe("getShardedDoId", () => {
     const mockEnv = {
       ROUTER: {
         idFromName: (name: string) => `id-${name}`,
-        get: () => ({}),
       },
     };
 
@@ -197,7 +194,6 @@ describe("getShardedStub", () => {
     const stub1 = getShardedStub(mockEnv, "room:general", 10);
     const stub2 = getShardedStub(mockEnv, "room:general", 10);
 
-    expect(stub1.id).toBe(stub2.id);
     expect(stub1).toBe(stub2);
   });
 

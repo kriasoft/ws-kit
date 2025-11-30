@@ -4,7 +4,7 @@
 import type { ConnectionData, MinimalContext } from "@ws-kit/core";
 
 // Type aliases for clarity
-type IngressContext<T extends ConnectionData = ConnectionData> =
+export type IngressContext<T extends ConnectionData = ConnectionData> =
   MinimalContext<T>;
 type WebSocketData = ConnectionData;
 

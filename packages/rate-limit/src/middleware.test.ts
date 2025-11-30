@@ -10,7 +10,7 @@ import {
 } from "@ws-kit/rate-limit";
 import { describe, expect, it } from "bun:test";
 
-interface TestData {
+interface TestData extends Record<string, unknown> {
   userId?: string;
   tenantId?: string;
 }

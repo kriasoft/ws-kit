@@ -9,6 +9,31 @@ import type {
 } from "@ws-kit/core/pubsub";
 
 /**
+ * Result of a bulk topic replacement operation.
+ */
+export interface ReplaceResult {
+  /** Number of new subscriptions added */
+  added: number;
+  /** Number of existing subscriptions removed */
+  removed: number;
+  /** Total subscriptions after replacement */
+  total: number;
+}
+
+/**
+ * Memory adapter with all optional methods implemented.
+ */
+export interface MemoryPubSubAdapter extends PubSubAdapter {
+  hasTopic(topic: string): Promise<boolean>;
+  listTopics(): Promise<readonly string[]>;
+  replace(
+    clientId: string,
+    newTopics: Iterable<string>,
+  ): Promise<ReplaceResult>;
+  dispose(): void;
+}
+
+/**
  * In-memory pub/sub adapter: subscription index + local fan-out.
  *
  * Unified adapter for single-instance deployments or local testing.
@@ -33,7 +58,7 @@ import type {
  * });
  * ```
  */
-export function memoryPubSub(): PubSubAdapter {
+export function memoryPubSub(): MemoryPubSubAdapter {
   // Topic -> Set of client IDs subscribed to that topic
   const topics = new Map<string, Set<string>>();
 
@@ -130,7 +155,7 @@ export function memoryPubSub(): PubSubAdapter {
     async replace(
       clientId: string,
       newTopics: Iterable<string>,
-    ): Promise<{ added: number; removed: number; total: number }> {
+    ): Promise<ReplaceResult> {
       // Get current subscriptions
       const currentTopics = clientTopics.get(clientId) ?? new Set<string>();
       const newTopicsSet = new Set(newTopics);
@@ -183,6 +208,11 @@ export function memoryPubSub(): PubSubAdapter {
         removed,
         total: newTopicsSet.size,
       };
+    },
+
+    dispose() {
+      topics.clear();
+      clientTopics.clear();
     },
   };
 }

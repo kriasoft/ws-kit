@@ -17,5 +17,5 @@
     "noUnusedParameters": false
   },
   "include": ["src/**/*.test.ts", "test/**/*.ts"],
-  "references": [{ "path": "." }]
+  "references": [{ "path": "." }, { "path": "../memory" }]
 }

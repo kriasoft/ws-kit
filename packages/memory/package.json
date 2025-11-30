@@ -42,13 +42,11 @@
   ],
   "peerDependencies": {
     "@ws-kit/core": "workspace:^",
-    "@ws-kit/plugins": "workspace:^",
     "@ws-kit/rate-limit": "workspace:^"
   },
   "devDependencies": {
     "@types/bun": "^1.3.3",
     "@ws-kit/core": "workspace:^",
-    "@ws-kit/plugins": "workspace:^",
     "@ws-kit/rate-limit": "workspace:^"
   },
   "engines": {
