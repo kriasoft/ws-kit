@@ -1,4 +1,4 @@
-# @ws-kit/middleware
+# @ws-kit/plugins
 
 ## 0.8.0
 
@@ -13,5 +13,4 @@
 ### Patch Changes
 
 - Updated dependencies [[`2fcdfbc`](https://github.com/kriasoft/ws-kit/commit/2fcdfbc8ef23d6f2d3e0cd097cc80f0bbdec18ea)]:
-  - @ws-kit/rate-limit@0.8.0
   - @ws-kit/core@0.8.0

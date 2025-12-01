@@ -1,4 +1,4 @@
-# @ws-kit/middleware
+# @ws-kit/memory
 
 ## 0.8.0
 
