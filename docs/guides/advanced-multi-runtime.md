@@ -48,8 +48,17 @@ describe("Router under Bun", () => {
     const { wsClient } = await import("@ws-kit/client/zod");
     const client = wsClient(`ws://localhost:${port}`);
 
-    const reply = await client.send(PingMessage, { text: "hello" });
-    expect(reply.reply).toBe("Got: hello");
+    // Listen for response before sending
+    const responsePromise = new Promise((resolve) => {
+      client.on(PongMessage, (msg) => resolve(msg.payload));
+    });
+
+    // Fire-and-forget send (returns boolean)
+    client.send(PingMessage, { text: "hello" });
+
+    // Wait for the response
+    const response = await responsePromise;
+    expect(response.reply).toBe("Got: hello");
 
     await client.close();
     controller.abort();
@@ -78,10 +87,9 @@ describe("Platform compatibility", () => {
 
       beforeAll(async () => {
         const router = createRouter();
+        // Use RPC pattern with proper schema binding
         router.rpc(QueryMessage, (ctx) => {
-          ctx.reply(ResponseMessage, {
-            result: `Processed: ${ctx.payload.id}`,
-          });
+          ctx.reply({ result: `Processed: ${ctx.payload.id}` });
         });
 
         if (platform === "bun") {
@@ -107,7 +115,7 @@ describe("Platform compatibility", () => {
 
       it("handles RPC queries", async () => {
         const result = await client.request(QueryMessage, { id: "123" });
-        expect(result.result).toBe("Processed: 123");
+        expect(result.payload.result).toBe("Processed: 123");
       });
     });
   }

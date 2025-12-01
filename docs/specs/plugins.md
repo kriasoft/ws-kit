@@ -63,7 +63,7 @@ const router = createRouter()
 - `withMessaging()` depends on `withValidation()` (type-level only)
 - `withRpc()` depends on `withValidation()` and `withMessaging()`
 - `withPubSub()` depends on `withMessaging()`
-- `withRateLimit()` has no dependencies (can apply anywhere)
+- `rateLimit()` middleware has no dependencies (can apply anywhere)
 
 ### Capability Gating (No Runtime Overwrites)
 
@@ -314,8 +314,8 @@ import { redisPubSub } from "@ws-kit/redis";
 .plugin(withPubSub({ adapter: redisPubSub(redis) }))
 
 // Cloudflare Workers (Durable Objects)
-import { cloudflarePubSub } from "@ws-kit/cloudflare";
-.plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
+import { DurablePubSub } from "@ws-kit/cloudflare";
+.plugin(withPubSub({ adapter: new DurablePubSub(state) }))
 ```
 
 **Type Effects**:
@@ -524,25 +524,18 @@ const router = createRouter()
 Cloudflare Workers adapters using Durable Objects and native rate limiting.
 
 ```typescript
-import { cloudflarePubSub, durableObjectRateLimiter } from "@ws-kit/cloudflare";
-import { rateLimit } from "@ws-kit/rate-limit";
+import { DurablePubSub, createDurableObjectHandler } from "@ws-kit/cloudflare";
 
-export default {
-  fetch(req: Request, env: Env, ctx: ExecutionContext) {
-    const router = createRouter()
-      .plugin(withPubSub({ adapter: cloudflarePubSub(env.DURABLE_OBJECTS) }))
-      .use(
-        rateLimit({
-          limiter: durableObjectRateLimiter(env.RATE_LIMITER, {
-            capacity: 1000,
-            tokensPerSecond: 50,
-          }),
-        }),
-      );
+// In your Durable Object class:
+export class WebSocketDO {
+  private pubsub: DurablePubSub;
 
-    return router.handle(req, ctx);
-  },
-};
+  constructor(state: DurableObjectState, env: Env) {
+    this.pubsub = new DurablePubSub(state);
+    const router = createRouter().plugin(withPubSub({ adapter: this.pubsub }));
+    // ... setup handler
+  }
+}
 ```
 
 ### Custom Adapters

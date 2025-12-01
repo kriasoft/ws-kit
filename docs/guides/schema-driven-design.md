@@ -16,9 +16,9 @@ Handlers infer payload types **purely from the schema parameter**, not router st
 
 Features are exported as sub-routers and merged at the application level, not passed through helper functions.
 
-### **D — Narrowers (Optional)**
+### **D — Convention-Based Enforcement (Optional)**
 
-Lightweight helpers like `asZodRouter()` provide validator-family enforcement for advanced use cases.
+Validator family consistency is enforced through import conventions, not runtime helpers.
 
 ---
 
@@ -176,40 +176,35 @@ appRouter.merge(createChatRouter<AppData>()); // ✅ Features via composition
 
 ---
 
-## Part D: Narrowers (Optional Pro Feature)
+## Part D: Convention-Based Enforcement (Optional)
 
-### What They Are
+### What It Is
 
-Lightweight helpers to assert router validator family when needed:
+Validator family consistency is enforced through import conventions — not runtime helpers. By standardizing which validator package your team imports from, you guarantee consistency without extra code.
+
+### The Pattern
 
 ```typescript
-import { asZodRouter } from "@ws-kit/zod";
+// 📝 Team convention: All features in this service use Zod
+// src/features/*/router.ts imports from @ws-kit/zod only
+import { createRouter, message, z } from "@ws-kit/zod"; // ← Single import source
 
-function advancedSetup(router: Router<AppData>) {
-  // Optional: assert Zod family for family-specific features
-  const zodRouter = asZodRouter(router);
-
-  // Now handler has full inference + Zod-specific power
-  zodRouter.on(JoinRoom, (c) => {
-    const roomId: string = c.payload.roomId;
-    // Optional: access Zod-specific helpers if any
-  });
-}
+// This ensures family consistency through code review, not runtime checks
 ```
 
-### When to Use Narrowers
+### When to Enforce Conventions
 
 - **Multi-validator teams** that want family enforcement per-module
-- **Custom validators** requiring family-specific extensions
-- **Strict consistency** in large applications
+- **Large applications** with multiple contributors
+- **Strict consistency** requirements
 
-### When NOT to Use Narrowers
+### When NOT to Enforce
 
 - **Most applications** — Not needed, schema inference is sufficient
 - **Simple projects** — Adds ceremony without benefit
-- **Single-validator codebases** — Enforcement isn't necessary
+- **Single-validator codebases** — Already consistent by default
 
-**Recommendation**: Skip narrowers unless you have a specific use case (multi-validator or custom adapters).
+**Recommendation**: Use import conventions and code review rather than runtime checks.
 
 ---
 
@@ -235,30 +230,33 @@ The A + G + D approach provides the following compile-time and runtime guarantee
 
 ### When You Need Stricter Guarantees
 
-Use **narrower helpers** (Pillar D) for validator-family enforcement:
-
-```typescript
-import { asZodRouter } from "@ws-kit/zod";
-
-export function setupFeature(router: Router<AppData>) {
-  // Optionally assert router uses Zod validator
-  const zodRouter = asZodRouter(router, { validate: true });
-  // Throws at runtime if router uses Valibot instead of Zod
-
-  zodRouter.on(JoinRoom, (c) => {
-    // Full inference + Zod family guaranteed
-  });
-}
-```
-
-Or enforce family per-module through convention (recommended for most teams):
+Enforce validator family per-module through import conventions:
 
 ```typescript
 // 📝 Team convention: All features in this service use Zod
 // src/features/*/router.ts imports from @ws-kit/zod only
-import { createRouter } from "@ws-kit/zod"; // ← Single import source
+import { createRouter, message, z } from "@ws-kit/zod"; // ← Single import source
 
-// This ensures family consistency without extra code
+// This ensures family consistency through code review, not runtime checks
+```
+
+For TypeScript-level enforcement, use branded types or module boundaries:
+
+```typescript
+// types/router.ts — Define your app's router type
+import type { Router } from "@ws-kit/core";
+
+export type AppRouter = Router<AppData>;
+
+// features/chat/router.ts — Use the branded type
+import type { AppRouter } from "../../types/router";
+import { createRouter } from "@ws-kit/zod";
+
+export function createChatRouter(): AppRouter {
+  return createRouter<AppData>().on(JoinRoom, (c) => {
+    // Full inference, and type system ensures AppData consistency
+  });
+}
 ```
 
 ---

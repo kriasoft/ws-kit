@@ -12,12 +12,21 @@ Backpressure strategies (drop-oldest, drop-new, queue) with server retry hints.
 2. For drop policies: on queue overflow, emit `RESOURCE_EXHAUSTED` error with `retryAfterMs` hint
 3. Never drop messages silently (drop policies must emit error); queue policy accumulates without bound
 4. Track queue depth per client (for monitoring)
+5. Send `DATA_ACK` on successful message receipt (contains message `id` for correlation)
 
 ## Client MUST
 
 1. On receiving `RESOURCE_EXHAUSTED`, back off by at least `retryAfterMs`
 2. Do not queue messages if policy is "drop-new"
 3. For policy "queue", monitor `queueDepth` from server signals to gauge backlog
+
+## Message Types
+
+| Message              | Direction       | Purpose                                                      |
+| -------------------- | --------------- | ------------------------------------------------------------ |
+| `SEND_DATA`          | Client → Server | Client sends data payload                                    |
+| `DATA_ACK`           | Server → Client | Server acknowledges successful receipt (includes message id) |
+| `RESOURCE_EXHAUSTED` | Server → Client | Queue overflow error with retry hint                         |
 
 ## Failure Modes
 

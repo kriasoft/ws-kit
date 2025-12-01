@@ -105,19 +105,19 @@ See [docs/adr/README.md](../adr/README.md) for the complete decision index.
 
 **Quick Reference by Category:**
 
-| Category                | Canonical Source                   | Example                                                                        |
-| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------ |
-| **Validator + Helpers** | `@ws-kit/zod` or `@ws-kit/valibot` | `import { z, message, createRouter, withZod } from "@ws-kit/zod"`              |
-| **Core Plugins**        | `@ws-kit/plugins`                  | `import { withMessaging, withRpc } from "@ws-kit/plugins"`                     |
-| **Pub/Sub Plugin**      | `@ws-kit/pubsub`                   | `import { withPubSub, usePubSub } from "@ws-kit/pubsub"`                       |
-| **Rate-Limit Plugin**   | `@ws-kit/rate-limit`               | `import { withRateLimit, useRateLimit } from "@ws-kit/rate-limit"`             |
-| **Middleware (Future)** | `@ws-kit/middleware`               | `import { useAuth, useLogging } from "@ws-kit/middleware"`                     |
-| **Memory Adapters**     | `@ws-kit/memory`                   | `import { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory"`             |
-| **Redis Adapters**      | `@ws-kit/redis`                    | `import { redisPubSub, redisRateLimiter } from "@ws-kit/redis"`                |
-| **Cloudflare Adapters** | `@ws-kit/cloudflare`               | `import { cloudflarePubSub, cloudflareRateLimiter } from "@ws-kit/cloudflare"` |
-| **Platform (Bun)**      | `@ws-kit/bun`                      | `import { serve } from "@ws-kit/bun"`                                          |
-| **Client (Typed)**      | `@ws-kit/client/zod` or `/valibot` | `import { wsClient } from "@ws-kit/client/zod"`                                |
-| **Client (Generic)**    | `@ws-kit/client`                   | `import { wsClient } from "@ws-kit/client"`                                    |
+| Category                  | Canonical Source                   | Example                                                                          |
+| ------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| **Validator + Helpers**   | `@ws-kit/zod` or `@ws-kit/valibot` | `import { z, message, createRouter, withZod } from "@ws-kit/zod"`                |
+| **Core Plugins**          | `@ws-kit/plugins`                  | `import { withMessaging, withRpc } from "@ws-kit/plugins"`                       |
+| **Pub/Sub Plugin**        | `@ws-kit/pubsub`                   | `import { withPubSub, usePubSub } from "@ws-kit/pubsub"`                         |
+| **Rate-Limit Middleware** | `@ws-kit/rate-limit`               | `import { rateLimit, keyPerUserPerType } from "@ws-kit/rate-limit"`              |
+| **Middleware (Future)**   | `@ws-kit/middleware`               | `import { useAuth, useLogging } from "@ws-kit/middleware"`                       |
+| **Memory Adapters**       | `@ws-kit/memory`                   | `import { memoryPubSub, memoryRateLimiter } from "@ws-kit/memory"`               |
+| **Redis Adapters**        | `@ws-kit/redis`                    | `import { redisPubSub, redisRateLimiter } from "@ws-kit/redis"`                  |
+| **Cloudflare Adapters**   | `@ws-kit/cloudflare`               | `import { DurablePubSub, createDurableObjectHandler } from "@ws-kit/cloudflare"` |
+| **Platform (Bun)**        | `@ws-kit/bun`                      | `import { serve } from "@ws-kit/bun"`                                            |
+| **Client (Typed)**        | `@ws-kit/client/zod` or `/valibot` | `import { wsClient } from "@ws-kit/client/zod"`                                  |
+| **Client (Generic)**      | `@ws-kit/client`                   | `import { wsClient } from "@ws-kit/client"`                                      |
 
 ### Convenience Re-exports
 
