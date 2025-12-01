@@ -1,5 +1,23 @@
 # @ws-kit/middleware
 
+## 0.8.1
+
+### Patch Changes
+
+- [#84](https://github.com/kriasoft/ws-kit/pull/84) [`29068aa`](https://github.com/kriasoft/ws-kit/commit/29068aa8d6cb99c64645b6eab6e02feef38989a7) Thanks [@koistya](https://github.com/koistya)! - fix: add explicit .js extensions for Node.js ESM compatibility
+
+  Packages now work correctly with Node.js native ESM (`node script.mjs`).
+  Previously, imports failed with `ERR_MODULE_NOT_FOUND` because TypeScript's
+  `bundler` module resolution doesn't add file extensions to compiled output.
+
+  **Changes**:
+  - Switch to `moduleResolution: "NodeNext"` for compile-time enforcement
+  - Add `.js` extensions to all relative imports in source files
+
+- Updated dependencies [[`29068aa`](https://github.com/kriasoft/ws-kit/commit/29068aa8d6cb99c64645b6eab6e02feef38989a7)]:
+  - @ws-kit/rate-limit@0.8.1
+  - @ws-kit/core@0.8.1
+
 ## 0.8.0
 
 ### Minor Changes
