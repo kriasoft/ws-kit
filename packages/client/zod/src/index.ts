@@ -9,13 +9,13 @@
  */
 
 import type { MessageSchema as ZodMessageSchema } from "@ws-kit/zod";
-import { createClient as createGenericClient } from "../../src/index.js";
+import { createClient as createGenericClient } from "@ws-kit/client";
 import type {
   AnyInboundMessage,
   ClientOptions,
   ClientState,
   WebSocketClient,
-} from "../../src/types.js";
+} from "@ws-kit/client";
 
 // Re-export base types and error classes
 export type {
@@ -24,8 +24,7 @@ export type {
   InferPayload,
   MessageSchema as ZodMessageSchema,
 } from "@ws-kit/zod";
-export * from "../../src/errors.js";
-export * from "../../src/types.js";
+export * from "@ws-kit/client";
 
 import type { z as zodNs, ZodObject, ZodRawShape, ZodType } from "zod";
 
