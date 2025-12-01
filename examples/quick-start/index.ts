@@ -15,7 +15,7 @@
 import { serve } from "@ws-kit/bun";
 import type { ConnectionData } from "@ws-kit/core";
 import { createRouter, withZod } from "@ws-kit/zod";
-import { createChatRouter } from "./chat";
+import { createChatRouter } from "./chat.js";
 
 type AppConnectionData = ConnectionData & { roomId?: string; clientId: string };
 

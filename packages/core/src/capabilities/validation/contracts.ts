@@ -5,7 +5,7 @@
  * Core never creates validators; they are injected by plugins.
  */
 
-import type { MessageDescriptor } from "../../protocol/message-descriptor";
+import type { MessageDescriptor } from "../../protocol/message-descriptor.js";
 
 /**
  * Validator: parses + validates message payloads against schemas.

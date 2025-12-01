@@ -35,10 +35,10 @@
  */
 
 // Plugin
-export { withPubSub } from "./plugin";
+export { withPubSub } from "./plugin.js";
 
 // Middleware
-export { usePubSub, type UsePubSubOptions } from "./middleware";
+export { usePubSub, type UsePubSubOptions } from "./middleware.js";
 
 // Types
 export type {
@@ -52,9 +52,9 @@ export type {
   Topics,
   VerifyResult,
   WithPubSubOptions,
-} from "./types";
+} from "./types.js";
 
-export type { WithPubSubCapability } from "./types";
+export type { WithPubSubCapability } from "./types.js";
 
-export { isSubscribed } from "./core/topics";
-export type { TopicValidator } from "./core/topics";
+export { isSubscribed } from "./core/topics.js";
+export type { TopicValidator } from "./core/topics.js";

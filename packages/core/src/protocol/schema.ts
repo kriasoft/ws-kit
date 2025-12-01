@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { MessageDescriptor } from "./message-descriptor";
+import type { MessageDescriptor } from "./message-descriptor.js";
 
 /**
  * Symbol for branding schemas at the type level.

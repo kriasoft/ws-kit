@@ -19,13 +19,13 @@ export type {
   PublishOptions,
   PublishResult,
   StopFn,
-} from "./adapter";
+} from "./adapter.js";
 
 export {
   PUBLISH_ERROR_RETRYABLE,
   ensurePublishSuccess,
   isPublishSuccess,
   wasDeliveredLocally,
-} from "./adapter";
+} from "./adapter.js";
 
-export { isPublishError } from "../../core/types";
+export { isPublishError } from "../../core/types.js";

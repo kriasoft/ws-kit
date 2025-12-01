@@ -30,10 +30,10 @@
  * ```
  */
 
-export { definePlugin } from "./define";
-export type { Plugin } from "../core/router";
-export type { Router } from "../core/router";
+export { definePlugin } from "./define.js";
+export type { Plugin } from "../core/router.js";
+export type { Router } from "../core/router.js";
 export type {
   RouterCapabilityAPIs,
   RouterWithCapabilities,
-} from "./capabilities";
+} from "./capabilities.js";

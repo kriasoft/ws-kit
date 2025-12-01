@@ -17,28 +17,34 @@
  * Capability-gated: rpc(), publish(), subscribe() exist only when plugins add them.
  */
 
-import type { ConnectionData, MinimalContext } from "../context/base-context";
-import { createCoreErrorEnhancer } from "../context/error-handling";
-import type { EventContext } from "../context/event-context";
-import type { PubSubContext } from "../context/pubsub-context";
-import type { RpcContext } from "../context/rpc-context";
-import { dispatchMessage } from "../engine/dispatch";
-import { LifecycleManager } from "../engine/lifecycle";
-import { LimitsManager } from "../engine/limits-manager";
-import type { ContextEnhancer } from "../internal";
-import { PluginHost } from "../plugin/manager";
-import type { Plugin } from "../plugin/types";
+import type {
+  ConnectionData,
+  MinimalContext,
+} from "../context/base-context.js";
+import { createCoreErrorEnhancer } from "../context/error-handling.js";
+import type { EventContext } from "../context/event-context.js";
+import type { PubSubContext } from "../context/pubsub-context.js";
+import type { RpcContext } from "../context/rpc-context.js";
+import { dispatchMessage } from "../engine/dispatch.js";
+import { LifecycleManager } from "../engine/lifecycle.js";
+import { LimitsManager } from "../engine/limits-manager.js";
+import type { ContextEnhancer } from "../internal.js";
+import { PluginHost } from "../plugin/manager.js";
+import type { Plugin } from "../plugin/types.js";
 import type {
   AnySchema,
   InferPayload,
   InferResponse,
   InferType,
   MessageDescriptor,
-} from "../protocol/schema";
-import { getKind } from "../schema/metadata";
-import type { AdapterWebSocket, ServerWebSocket } from "../ws/platform-adapter";
-import { RouteTable } from "./route-table";
-import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols";
+} from "../protocol/schema.js";
+import { getKind } from "../schema/metadata.js";
+import type {
+  AdapterWebSocket,
+  ServerWebSocket,
+} from "../ws/platform-adapter.js";
+import { RouteTable } from "./route-table.js";
+import { ROUTE_TABLE, ROUTER_IMPL } from "./symbols.js";
 import type {
   CreateRouterOptions,
   EventHandler,
@@ -50,7 +56,7 @@ import type {
   PublishResult,
   RouteEntry,
   RouterObserver,
-} from "./types";
+} from "./types.js";
 
 export type {
   Plugin,

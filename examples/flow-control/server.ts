@@ -7,7 +7,7 @@ import {
   DataAckMessage,
   ResourceExhaustedMessage,
   SendDataMessage,
-} from "./schema";
+} from "./schema.js";
 
 const QUEUE_CAPACITY = 10;
 const POLICY = "drop-oldest" as const; // or "drop-new", "queue"

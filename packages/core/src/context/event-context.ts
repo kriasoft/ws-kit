@@ -9,8 +9,8 @@
  * - send(schema, payload): broadcast to clients
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { ConnectionData, MinimalContext } from "./base-context";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import type { ConnectionData, MinimalContext } from "./base-context.js";
 
 export interface SendOptions {
   /**

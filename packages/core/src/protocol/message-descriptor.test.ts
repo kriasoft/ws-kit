@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
-import { DESCRIPTOR } from "../schema/metadata";
-import { assertMessageDescriptor } from "./message-descriptor";
+import { DESCRIPTOR } from "../schema/metadata.js";
+import { assertMessageDescriptor } from "./message-descriptor.js";
 
 /**
  * Helper to create a test descriptor with DESCRIPTOR symbol set.

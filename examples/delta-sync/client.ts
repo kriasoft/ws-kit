@@ -10,7 +10,7 @@
  * - Server reconciliation
  */
 
-import type { Operation, Participant, Revision } from "./schema";
+import type { Operation, Participant, Revision } from "./schema.js";
 
 // ============================================================================
 // Client State Management

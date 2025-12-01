@@ -5,12 +5,12 @@
  * Types for test harness: TestRouter, TestConnection, and frame records.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { RouterCore } from "../core/router";
-import type { PublishOptions, PublishResult } from "../core/types";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { AnySchema, InferPayload } from "../protocol/schema";
-import type { Clock } from "./fake-clock";
+import type { ConnectionData } from "../context/base-context.js";
+import type { RouterCore } from "../core/router.js";
+import type { PublishOptions, PublishResult } from "../core/types.js";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import type { AnySchema, InferPayload } from "../protocol/schema.js";
+import type { Clock } from "./fake-clock.js";
 
 /**
  * Outgoing frame: message sent from server to client via ctx.send() or publish.

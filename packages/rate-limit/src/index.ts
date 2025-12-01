@@ -22,11 +22,19 @@
  */
 
 // Middleware
-export { rateLimit } from "./middleware";
-export type { RateLimitOptions } from "./middleware";
+export { rateLimit } from "./middleware.js";
+export type { RateLimitOptions } from "./middleware.js";
 
 // Types
-export type { RateLimitDecision, RateLimiter, RateLimitPolicy } from "./types";
+export type {
+  RateLimitDecision,
+  RateLimiter,
+  RateLimitPolicy,
+} from "./types.js";
 
 // Key functions
-export { keyPerUser, keyPerUserPerType, type RateLimitIdentity } from "./keys";
+export {
+  keyPerUser,
+  keyPerUserPerType,
+  type RateLimitIdentity,
+} from "./keys.js";

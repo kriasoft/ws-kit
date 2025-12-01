@@ -6,9 +6,9 @@
  * Captures all messages sent and tracks connection state.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { AdapterWebSocket } from "../ws/platform-adapter";
-import type { OutgoingFrame } from "./types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { AdapterWebSocket } from "../ws/platform-adapter.js";
+import type { OutgoingFrame } from "./types.js";
 
 /**
  * In-memory AdapterWebSocket that records all sent messages.

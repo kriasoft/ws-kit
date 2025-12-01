@@ -6,18 +6,21 @@
  * Full message processing from raw frame to handler execution.
  */
 
-import type { ConnectionData, MinimalContext } from "../context/base-context";
-import { ROUTE_TABLE } from "../core/symbols";
-import type { EventHandler, Middleware } from "../core/types";
-import type { RouterImpl, WsKitInternalState } from "../internal";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { isMessageDescriptor } from "../schema/guards";
-import { getKind } from "../schema/metadata";
-import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved";
-import { safeJsonParse } from "../utils/json";
-import type { ServerWebSocket } from "../ws/platform-adapter";
-import { composePipeline } from "./middleware";
-import type { MessageEnvelope } from "./types";
+import type {
+  ConnectionData,
+  MinimalContext,
+} from "../context/base-context.js";
+import { ROUTE_TABLE } from "../core/symbols.js";
+import type { EventHandler, Middleware } from "../core/types.js";
+import type { RouterImpl, WsKitInternalState } from "../internal.js";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import { isMessageDescriptor } from "../schema/guards.js";
+import { getKind } from "../schema/metadata.js";
+import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved.js";
+import { safeJsonParse } from "../utils/json.js";
+import type { ServerWebSocket } from "../ws/platform-adapter.js";
+import { composePipeline } from "./middleware.js";
+import type { MessageEnvelope } from "./types.js";
 
 export interface DispatchOptions<
   TContext extends ConnectionData = ConnectionData,

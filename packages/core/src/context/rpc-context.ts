@@ -10,7 +10,7 @@
  * - progress(payload): non-terminal update
  */
 
-import type { ConnectionData, MinimalContext } from "./base-context";
+import type { ConnectionData, MinimalContext } from "./base-context.js";
 
 export interface ReplyOptions {
   /**

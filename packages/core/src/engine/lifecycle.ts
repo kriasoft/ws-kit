@@ -8,8 +8,11 @@
  * Activity tracking enables heartbeat and connection monitoring.
  */
 
-import type { ConnectionData, MinimalContext } from "../context/base-context";
-import type { ServerWebSocket } from "../ws/platform-adapter";
+import type {
+  ConnectionData,
+  MinimalContext,
+} from "../context/base-context.js";
+import type { ServerWebSocket } from "../ws/platform-adapter.js";
 
 export type ErrorHandler<TContext extends ConnectionData = ConnectionData> = (
   err: unknown,

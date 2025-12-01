@@ -18,73 +18,76 @@
  */
 
 // Router factory and types
-export { createRouter } from "./core/createRouter";
-export { getRouteIndex } from "./core/router";
+export { createRouter } from "./core/createRouter.js";
+export { getRouteIndex } from "./core/router.js";
 export type {
   ReadonlyRouteIndex,
   RouteBuilder,
   Router,
   RouterCore,
   RouterWithExtensions,
-} from "./core/router";
-export type { CreateRouterOptions } from "./core/types";
+} from "./core/router.js";
+export type { CreateRouterOptions } from "./core/types.js";
 
 // Router observer API (testing and monitoring)
-export type { PublishRecord, RouterObserver } from "./core/types";
+export type { PublishRecord, RouterObserver } from "./core/types.js";
 
 // Schema runtime shape
-export type { MessageDescriptor } from "./protocol/message-descriptor";
+export type { MessageDescriptor } from "./protocol/message-descriptor.js";
 export {
   isEventDescriptor,
   isMessageDescriptor,
   isRpcDescriptor,
-} from "./schema/guards";
+} from "./schema/guards.js";
 
 // Minimal context (always present)
-export { getContextExtension, isMinimalContext } from "./context/base-context";
+export {
+  getContextExtension,
+  isMinimalContext,
+} from "./context/base-context.js";
 export type {
   ConnectionData,
   MinimalContext,
   WebSocketData,
-} from "./context/base-context";
+} from "./context/base-context.js";
 
 // Middleware types
-export type { EventHandler, Middleware } from "./core/types";
+export type { EventHandler, Middleware } from "./core/types.js";
 
 // Plugin system
-export type { Plugin } from "./plugin/types";
+export type { Plugin } from "./plugin/types.js";
 
 // Error handling (canonical: new unified implementation in ./error.ts)
-export { ERROR_CODE_META, isStandardErrorCode, WsKitError } from "./error";
+export { ERROR_CODE_META, isStandardErrorCode, WsKitError } from "./error.js";
 export type {
   ErrorCode,
   ErrorCodeMetadata,
   ErrorMessage,
   ErrorPayload,
   ExtErrorCode,
-} from "./error";
+} from "./error.js";
 
 // Capability contracts (core only; validators add validation, adapters add transport)
 export type {
   PublishEnvelope,
   PubSubAdapter,
-} from "./capabilities/pubsub/adapter";
+} from "./capabilities/pubsub/adapter.js";
 // Router-level Pub/Sub API (user-facing)
 export type {
   Observer,
   TelemetryHooks,
-} from "./capabilities/telemetry/contracts";
+} from "./capabilities/telemetry/contracts.js";
 export type {
   ValidationContext,
   ValidatorAdapter,
-} from "./capabilities/validation/contracts";
+} from "./capabilities/validation/contracts.js";
 export type {
   PublishCapability,
   PublishError,
   PublishOptions,
   PublishResult,
-} from "./core/router";
-export { isPublishError } from "./core/types";
+} from "./core/router.js";
+export { isPublishError } from "./core/types.js";
 
 // Schema branding/inference (used by validator adapters)
 export type {
@@ -97,14 +100,14 @@ export type {
   InferType,
   MessageSchema,
   RpcSchema,
-} from "./protocol/schema";
+} from "./protocol/schema.js";
 
 // Platform adapter contract
 export type {
   AdapterWebSocket,
   PlatformAdapter,
   ServerWebSocket,
-} from "./ws/platform-adapter";
+} from "./ws/platform-adapter.js";
 
 // Useful type utilities (capability-gated context types)
 export type {
@@ -114,17 +117,17 @@ export type {
   ReplyOptions,
   RpcContext,
   SendOptions,
-} from "./context/types";
+} from "./context/types.js";
 
 // Pub/Sub utilities
 export {
   createAdvancedThrottledPublish,
   createThrottledPublish,
-} from "./utils/throttle";
-export type { ThrottledBroadcastConfig } from "./utils/throttle";
+} from "./utils/throttle.js";
+export type { ThrottledBroadcastConfig } from "./utils/throttle.js";
 
 // Test harness (opt-in)
-export * as test from "./testing";
+export * as test from "./testing/index.js";
 
 // Normalization utility (for testing validator integration)
-export { normalizeInboundMessage } from "./internal/normalize";
+export { normalizeInboundMessage } from "./internal/normalize.js";

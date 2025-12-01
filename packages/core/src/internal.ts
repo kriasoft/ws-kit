@@ -21,12 +21,12 @@
  * Never import from `core/router.ts` directly for plugin access.
  */
 
-import type { ConnectionData, MinimalContext } from "./context/base-context";
-import type { Router } from "./core/router";
-import { ROUTER_IMPL } from "./core/symbols";
+import type { ConnectionData, MinimalContext } from "./context/base-context.js";
+import type { Router } from "./core/router.js";
+import { ROUTER_IMPL } from "./core/symbols.js";
 
-export type { RouterImpl } from "./core/router";
-export { ROUTER_IMPL } from "./core/symbols";
+export type { RouterImpl } from "./core/router.js";
+export { ROUTER_IMPL } from "./core/symbols.js";
 
 // Schema metadata infrastructure (shared by all validator adapters)
 export {
@@ -38,8 +38,8 @@ export {
   SCHEMA_OPTS,
   setSchemaOpts,
   typeOf,
-} from "./schema/metadata";
-export type { DescriptorValue, SchemaOpts } from "./schema/metadata";
+} from "./schema/metadata.js";
+export type { DescriptorValue, SchemaOpts } from "./schema/metadata.js";
 
 /**
  * Function signature for context enhancers.

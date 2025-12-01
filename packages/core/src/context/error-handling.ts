@@ -9,16 +9,16 @@
  * Infers retry hints from ERROR_CODE_META; routes all errors through router.onError() asynchronously.
  */
 
-import type { LifecycleManager } from "../engine/lifecycle";
+import type { LifecycleManager } from "../engine/lifecycle.js";
 import {
   ERROR_CODE_META,
   isStandardErrorCode,
   WsKitError,
   type ErrorCode,
   type ExtErrorCode,
-} from "../error";
-import type { WsKitInternalState } from "../internal";
-import type { ConnectionData, MinimalContext } from "./base-context";
+} from "../error.js";
+import type { WsKitInternalState } from "../internal.js";
+import type { ConnectionData, MinimalContext } from "./base-context.js";
 
 /**
  * Options for ctx.error() calls.

@@ -61,13 +61,16 @@
  */
 
 // Messaging plugin
-export { withMessaging } from "./messaging/index";
-export type { SendOptions, WithMessagingCapability } from "./messaging/types";
+export { withMessaging } from "./messaging/index.js";
+export type {
+  SendOptions,
+  WithMessagingCapability,
+} from "./messaging/types.js";
 
 // RPC plugin
-export { withRpc } from "./rpc/index";
+export { withRpc } from "./rpc/index.js";
 export type {
   ProgressOptions,
   ReplyOptions,
   WithRpcCapability,
-} from "./rpc/types";
+} from "./rpc/types.js";

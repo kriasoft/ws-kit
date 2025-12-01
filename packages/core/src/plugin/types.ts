@@ -17,8 +17,8 @@
  * @see definePlugin() for type-safe plugin creation
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { Router, RouterWithExtensions } from "../core/router";
+import type { ConnectionData } from "../context/base-context.js";
+import type { Router, RouterWithExtensions } from "../core/router.js";
 
 /**
  * Runtime capabilities record: tracks which plugins have been applied.

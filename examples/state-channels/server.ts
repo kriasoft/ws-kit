@@ -8,7 +8,7 @@ import {
   SequenceGapMessage,
   StateSyncMessage,
   StateUpdateMessage,
-} from "./schema";
+} from "./schema.js";
 
 const router = createRouter().plugin(withZod());
 let serverSeq = 0;

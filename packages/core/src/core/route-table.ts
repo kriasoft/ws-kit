@@ -6,11 +6,11 @@
  * Implements conflict resolution for merge() and mount().
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { assertMessageDescriptor } from "../protocol/message-descriptor";
-import { DESCRIPTOR, getDescriptor, getKind } from "../schema/metadata";
-import type { RouteEntry } from "./types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import { assertMessageDescriptor } from "../protocol/message-descriptor.js";
+import { DESCRIPTOR, getDescriptor, getKind } from "../schema/metadata.js";
+import type { RouteEntry } from "./types.js";
 
 export interface RouteTableOptions {
   onConflict?: "error" | "skip" | "replace";

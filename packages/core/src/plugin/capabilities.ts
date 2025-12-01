@@ -38,8 +38,8 @@
  * ```
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { ValidationAPI, PubSubAPI } from "../core/router";
+import type { ConnectionData } from "../context/base-context.js";
+import type { ValidationAPI, PubSubAPI } from "../core/router.js";
 
 /**
  * Registry mapping capability names to their APIs.
@@ -139,7 +139,7 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 export type RouterWithCapabilities<
   TContext extends ConnectionData,
   TCapabilities extends readonly (keyof RouterCapabilityAPIs<TContext>)[],
-> = import("../core/router").Router<
+> = import("../core/router.js").Router<
   TContext,
   UnionToIntersection<
     {

@@ -9,10 +9,10 @@
  * No magic here—validation and dispatch happen normally.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { getKind } from "../schema/metadata";
-import type { TestConnection } from "./types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import { getKind } from "../schema/metadata.js";
+import type { TestConnection } from "./types.js";
 
 /**
  * Act helpers for cleaner test code.

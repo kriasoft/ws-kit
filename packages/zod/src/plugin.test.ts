@@ -14,7 +14,7 @@
 import { getKind } from "@ws-kit/core/internal";
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { createRouter, message, rpc, withZod } from "./index";
+import { createRouter, message, rpc, withZod } from "./index.js";
 
 describe("withZod() Plugin", () => {
   it("should add rpc method after plugin", () => {

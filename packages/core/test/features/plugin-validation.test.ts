@@ -14,12 +14,12 @@
 
 import { createDescriptor, createRpcDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
+import { createRouter } from "../../src/core/createRouter.js";
 import type {
   MessageDescriptor,
   Router,
   RouterWithExtensions,
-} from "../../src/index";
+} from "../../src/index.js";
 
 describe("Validation Plugin - Capability Gating", () => {
   it("guards rpc() before validation plugin", () => {

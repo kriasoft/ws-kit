@@ -7,7 +7,7 @@ import {
   SequenceGapMessage,
   StateSyncMessage,
   StateUpdateMessage,
-} from "./schema";
+} from "./schema.js";
 
 const client = wsClient({ url: "ws://localhost:3000" });
 

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import type { ConnectionData, Middleware, MinimalContext } from "@ws-kit/core";
-import type { RateLimiter } from "./types";
-import { keyPerUserPerType } from "./keys";
+import type { RateLimiter } from "./types.js";
+import { keyPerUserPerType } from "./keys.js";
 
 /**
  * Rate limit middleware options.

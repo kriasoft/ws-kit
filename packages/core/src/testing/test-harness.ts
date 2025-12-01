@@ -6,24 +6,24 @@
  * Provides a clean, ergonomic testing API for WS-Kit routers.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { Router } from "../core/router";
+import type { ConnectionData } from "../context/base-context.js";
+import type { Router } from "../core/router.js";
 import type {
   PublishOptions,
   PublishResult,
   RouterObserver,
-} from "../core/types";
-import type { RouterImpl } from "../internal";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { FakeClock, type Clock } from "./fake-clock";
-import { InMemoryPlatformAdapter } from "./test-adapter";
+} from "../core/types.js";
+import type { RouterImpl } from "../internal.js";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import { FakeClock, type Clock } from "./fake-clock.js";
+import { InMemoryPlatformAdapter } from "./test-adapter.js";
 import type {
   OutgoingFrame,
   PublishRecord,
   TestCapture,
   TestConnection,
   TestRouter,
-} from "./types";
+} from "./types.js";
 
 /**
  * Test harness options.
