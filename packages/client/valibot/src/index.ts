@@ -9,13 +9,13 @@
  */
 
 import type { MessageSchema as ValibotMessageSchema } from "@ws-kit/valibot";
-import { createClient as createGenericClient } from "../../src/index.js";
+import { createClient as createGenericClient } from "@ws-kit/client";
 import type {
   AnyInboundMessage,
   ClientOptions,
   ClientState,
   WebSocketClient,
-} from "../../src/types.js";
+} from "@ws-kit/client";
 
 // Re-export base types and error classes
 export type {
@@ -24,8 +24,7 @@ export type {
   InferPayload,
   MessageSchema as ValibotMessageSchema,
 } from "@ws-kit/valibot";
-export * from "../../src/errors.js";
-export * from "../../src/types.js";
+export * from "@ws-kit/client";
 
 import type { GenericSchema, InferOutput } from "valibot";
 
