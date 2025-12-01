@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/pubsub",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Pub/Sub policy middleware for WS-Kit (topic normalization, authorization) plus shared pub/sub primitives",
   "type": "module",
   "sideEffects": false,
