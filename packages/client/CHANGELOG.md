@@ -1,5 +1,13 @@
 # @ws-kit/client
 
+## 0.8.2
+
+### Patch Changes
+
+- [#89](https://github.com/kriasoft/ws-kit/pull/89) [`f5b1d17`](https://github.com/kriasoft/ws-kit/commit/f5b1d17c0fe39deadd1edab0c0d515a997d014b3) Thanks [@koistya](https://github.com/koistya)! - Fix broken imports in `@ws-kit/client/zod` and `@ws-kit/client/valibot` subpath exports
+
+  The compiled dist files incorrectly referenced `../../src/` paths which don't exist in published packages. Now uses proper package imports (`@ws-kit/client`) that resolve correctly at runtime.
+
 ## 0.8.1
 
 ### Patch Changes
