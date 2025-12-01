@@ -12,12 +12,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
+import { createRouter } from "../../src/core/createRouter.js";
 import type {
   RouterCapabilityAPIs,
   RouterWithCapabilities,
-} from "../../src/plugin/capabilities";
-import { definePlugin } from "../../src/plugin/define";
+} from "../../src/plugin/capabilities.js";
+import { definePlugin } from "../../src/plugin/define.js";
 
 // ============================================================================
 // Test Setup

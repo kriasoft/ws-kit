@@ -16,9 +16,9 @@
  * Run with: `bun run tsc --noEmit` to verify types.
  */
 
-import { createRouter } from "../../src/core/createRouter";
-import type { Router, RouterWithExtensions } from "../../src/core/router";
-import type { Plugin } from "../../src/plugin/types";
+import { createRouter } from "../../src/core/createRouter.js";
+import type { Router, RouterWithExtensions } from "../../src/core/router.js";
+import type { Plugin } from "../../src/plugin/types.js";
 
 // Mock plugins for type testing
 const mockValidationPlugin: Plugin<any, { validation: true }> = <

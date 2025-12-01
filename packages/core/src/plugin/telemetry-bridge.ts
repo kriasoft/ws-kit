@@ -4,7 +4,7 @@
  * No separate onTelemetry() entry point; all wiring is internal.
  */
 
-import type { Observer } from "../capabilities/telemetry/contracts";
+import type { Observer } from "../capabilities/telemetry/contracts.js";
 
 export class TelemetryBridge {
   private observers: Observer[] = [];

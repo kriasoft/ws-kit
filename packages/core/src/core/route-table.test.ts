@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { DESCRIPTOR } from "../schema/metadata";
-import { RouteTable } from "./route-table";
-import type { RouteEntry } from "./types";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import { DESCRIPTOR } from "../schema/metadata.js";
+import { RouteTable } from "./route-table.js";
+import type { RouteEntry } from "./types.js";
 
 // Test connection data type
 type TestContext = Record<string, unknown>;

@@ -5,16 +5,16 @@ import { describe, expect, it } from "bun:test";
 
 describe("State Channels Conformance", () => {
   it("schema version is valid", async () => {
-    const contract = await import("./contract.json");
+    const { default: contract } = await import("./contract.json");
     expect(contract.schemaVersion).toBe("1.0.0");
   });
 
   it("fixtures have matching schema versions", async () => {
-    const contract = await import("./contract.json");
+    const { default: contract } = await import("./contract.json");
     const fixtures = await Promise.all([
-      import("./fixtures/001-initialization.json"),
-      import("./fixtures/002-gap-detected.json"),
-      import("./fixtures/003-duplicate-reject.json"),
+      import("./fixtures/001-initialization.json").then((m) => m.default),
+      import("./fixtures/002-gap-detected.json").then((m) => m.default),
+      import("./fixtures/003-duplicate-reject.json").then((m) => m.default),
     ]);
 
     for (const fixture of fixtures) {
@@ -35,9 +35,9 @@ describe("State Channels Conformance", () => {
 
   it("fixtures have required structure", async () => {
     const fixtures = await Promise.all([
-      import("./fixtures/001-initialization.json"),
-      import("./fixtures/002-gap-detected.json"),
-      import("./fixtures/003-duplicate-reject.json"),
+      import("./fixtures/001-initialization.json").then((m) => m.default),
+      import("./fixtures/002-gap-detected.json").then((m) => m.default),
+      import("./fixtures/003-duplicate-reject.json").then((m) => m.default),
     ]);
 
     for (const fixture of fixtures) {

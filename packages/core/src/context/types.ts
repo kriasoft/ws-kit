@@ -5,13 +5,17 @@
  * Re-export context types for public API.
  */
 
-export { getContextExtension, isMinimalContext } from "./base-context";
+export { getContextExtension, isMinimalContext } from "./base-context.js";
 export type {
   ConnectionData,
   MinimalContext,
   WebSocketData,
-} from "./base-context";
-export type { EventContext, SendOptions } from "./event-context";
-export type { ErrorOptions } from "./error-handling";
-export type { PubSubContext } from "./pubsub-context";
-export type { ProgressOptions, ReplyOptions, RpcContext } from "./rpc-context";
+} from "./base-context.js";
+export type { EventContext, SendOptions } from "./event-context.js";
+export type { ErrorOptions } from "./error-handling.js";
+export type { PubSubContext } from "./pubsub-context.js";
+export type {
+  ProgressOptions,
+  ReplyOptions,
+  RpcContext,
+} from "./rpc-context.js";

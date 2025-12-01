@@ -9,7 +9,7 @@
  * - No new API surface (transparent behavior)
  */
 
-import type { ServerWebSocket } from "../ws/platform-adapter";
+import type { ServerWebSocket } from "../ws/platform-adapter.js";
 
 export interface HeartbeatConfig {
   intervalMs?: number; // Default: 30_000

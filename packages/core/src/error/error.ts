@@ -8,8 +8,8 @@
  * - Never mutates
  */
 
-import type { ErrorCode, WsKitErrorData } from "./codes";
-import { getErrorMetadata } from "./codes";
+import type { ErrorCode, WsKitErrorData } from "./codes.js";
+import { getErrorMetadata } from "./codes.js";
 
 export class WsKitError<E extends ErrorCode = ErrorCode> extends Error {
   readonly code: E;

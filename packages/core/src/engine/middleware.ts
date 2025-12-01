@@ -8,8 +8,11 @@
  * next() is async; exceptions bubble to onError.
  */
 
-import type { ConnectionData, MinimalContext } from "../context/base-context";
-import type { Middleware } from "../core/types";
+import type {
+  ConnectionData,
+  MinimalContext,
+} from "../context/base-context.js";
+import type { Middleware } from "../core/types.js";
 
 /**
  * Compose multiple middleware into a single pipeline.

@@ -24,7 +24,7 @@ import {
   isPublishSuccess,
   wasDeliveredLocally,
 } from "@ws-kit/core/pubsub";
-import type { VerifyMode, VerifyResult } from "./core/topics";
+import type { VerifyMode, VerifyResult } from "./core/topics.js";
 
 /**
  * Re-export core types and utilities for convenience.

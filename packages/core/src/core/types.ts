@@ -6,8 +6,11 @@
  * These types exist at the base level (no validation plugin dependency).
  */
 
-import type { ConnectionData, MinimalContext } from "../context/base-context";
-import type { MessageDescriptor } from "../protocol/message-descriptor";
+import type {
+  ConnectionData,
+  MinimalContext,
+} from "../context/base-context.js";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
 
 /**
  * Middleware is the same for global and per-route:

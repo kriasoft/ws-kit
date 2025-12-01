@@ -3,8 +3,8 @@
  * Used by dispatch to ensure all errors are normalized.
  */
 
-import { WsKitError } from "./error";
-import type { ErrorCode } from "./codes";
+import { WsKitError } from "./error.js";
+import type { ErrorCode } from "./codes.js";
 
 export function translateError(
   err: unknown,

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
-import type { PublishOptions, PublishResult } from "../../core/types";
+import type { PublishOptions, PublishResult } from "../../core/types.js";
 
 /**
  * Pub/Sub adapter contract (core-level).
@@ -118,7 +118,7 @@ export type {
   PublishError,
   PublishOptions,
   PublishResult,
-} from "../../core/types";
+} from "../../core/types.js";
 
 /**
  * For adapter implementations that need to store intermediate state or map

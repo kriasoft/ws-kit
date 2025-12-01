@@ -64,15 +64,15 @@
  */
 
 // Core exports
-export { createTestRouter, wrapTestRouter } from "./test-harness";
-export type { CreateTestRouterOptions } from "./test-harness";
+export { createTestRouter, wrapTestRouter } from "./test-harness.js";
+export type { CreateTestRouterOptions } from "./test-harness.js";
 
 // Clock exports
-export { FakeClock, SystemClock } from "./fake-clock";
-export type { Clock } from "./fake-clock";
+export { FakeClock, SystemClock } from "./fake-clock.js";
+export type { Clock } from "./fake-clock.js";
 
 // Plugin testing utilities
-export { mockPlugin } from "./plugin";
+export { mockPlugin } from "./plugin.js";
 
 // Type exports
 export type {
@@ -82,23 +82,23 @@ export type {
   TestCapture,
   TestConnection,
   TestRouter,
-} from "./types";
+} from "./types.js";
 
 // Act helpers (optional convenience)
-export { act } from "./act";
+export { act } from "./act.js";
 
 // Test schema helpers
-export { createDescriptor, createRpcDescriptor } from "./test-schemas";
+export { createDescriptor, createRpcDescriptor } from "./test-schemas.js";
 
 // Internal exports (for advanced use)
-export { InMemoryPlatformAdapter } from "./test-adapter";
-export { TestWebSocket, type ConnectionState } from "./test-websocket";
+export { InMemoryPlatformAdapter } from "./test-adapter.js";
+export { TestWebSocket, type ConnectionState } from "./test-websocket.js";
 
 // Namespace re-export for convenience
-import * as actModule from "./act";
-import * as fakeClock from "./fake-clock";
-import * as pluginModule from "./plugin";
-import * as testHarness from "./test-harness";
+import * as actModule from "./act.js";
+import * as fakeClock from "./fake-clock.js";
+import * as pluginModule from "./plugin.js";
+import * as testHarness from "./test-harness.js";
 
 export const testing = {
   createTestRouter: testHarness.createTestRouter,

@@ -25,7 +25,7 @@ import {
   SendMessage,
   UserJoined,
   UserLeft,
-} from "./schema";
+} from "./schema.js";
 
 // Type annotation for connection data (extends WebSocketData)
 export type ChatData = WebSocketData & { roomId?: string; clientId: string };

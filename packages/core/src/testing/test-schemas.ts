@@ -7,7 +7,7 @@
  */
 
 import type { MessageDescriptor } from "@ws-kit/core";
-import { DESCRIPTOR } from "../schema/metadata";
+import { DESCRIPTOR } from "../schema/metadata.js";
 
 /**
  * Create a test descriptor with DESCRIPTOR symbol properly set.

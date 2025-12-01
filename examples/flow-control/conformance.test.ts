@@ -5,17 +5,17 @@ import { describe, expect, it } from "bun:test";
 
 describe("Flow Control Conformance", () => {
   it("schema version is valid", async () => {
-    const contract = await import("./contract.json");
+    const { default: contract } = await import("./contract.json");
     expect(contract.schemaVersion).toBe("1.0.0");
   });
 
   it("fixtures have matching schema versions", async () => {
-    const contract = await import("./contract.json");
+    const { default: contract } = await import("./contract.json");
     const fixtures = await Promise.all([
-      import("./fixtures/001-drop-oldest.json"),
-      import("./fixtures/002-drop-new.json"),
-      import("./fixtures/003-queue-unlimited.json"),
-      import("./fixtures/004-retry-hints.json"),
+      import("./fixtures/001-drop-oldest.json").then((m) => m.default),
+      import("./fixtures/002-drop-new.json").then((m) => m.default),
+      import("./fixtures/003-queue-unlimited.json").then((m) => m.default),
+      import("./fixtures/004-retry-hints.json").then((m) => m.default),
     ]);
 
     for (const fixture of fixtures) {
@@ -37,10 +37,10 @@ describe("Flow Control Conformance", () => {
 
   it("fixtures have required structure", async () => {
     const fixtures = await Promise.all([
-      import("./fixtures/001-drop-oldest.json"),
-      import("./fixtures/002-drop-new.json"),
-      import("./fixtures/003-queue-unlimited.json"),
-      import("./fixtures/004-retry-hints.json"),
+      import("./fixtures/001-drop-oldest.json").then((m) => m.default),
+      import("./fixtures/002-drop-new.json").then((m) => m.default),
+      import("./fixtures/003-queue-unlimited.json").then((m) => m.default),
+      import("./fixtures/004-retry-hints.json").then((m) => m.default),
     ]);
 
     for (const fixture of fixtures) {

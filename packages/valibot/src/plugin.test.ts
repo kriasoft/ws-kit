@@ -14,7 +14,7 @@
 import { getKind } from "@ws-kit/core/internal";
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { createRouter, message, rpc, withValibot } from "./index";
+import { createRouter, message, rpc, withValibot } from "./index.js";
 
 describe("withValibot() Plugin", () => {
   it("should add rpc method after plugin", () => {

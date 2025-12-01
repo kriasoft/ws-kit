@@ -54,20 +54,20 @@ export type {
 
 // === Authentication & Authorization ===
 
-export { useAuth } from "./auth";
-export type { UseAuthOptions } from "./auth";
+export { useAuth } from "./auth.js";
+export type { UseAuthOptions } from "./auth.js";
 
 // === Request/Response Logging ===
 
-export { useLogging } from "./logging";
-export type { UseLoggingOptions } from "./logging";
+export { useLogging } from "./logging.js";
+export type { UseLoggingOptions } from "./logging.js";
 
 // === Metrics Collection ===
 
-export { useMetrics } from "./metrics";
-export type { UseMetricsOptions } from "./metrics";
+export { useMetrics } from "./metrics.js";
+export type { UseMetricsOptions } from "./metrics.js";
 
 // === OpenTelemetry Integration ===
 
-export { useTelemetry } from "./telemetry";
-export type { UseTelemetryOptions } from "./telemetry";
+export { useTelemetry } from "./telemetry.js";
+export type { UseTelemetryOptions } from "./telemetry.js";

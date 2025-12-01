@@ -3,8 +3,8 @@
 
 import { createDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/index";
-import { test } from "../../src/testing";
+import { createRouter } from "../../src/index.js";
+import { test } from "../../src/testing/index.js";
 
 describe("limits", () => {
   describe("maxPayloadBytes", () => {

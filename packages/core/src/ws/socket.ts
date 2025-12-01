@@ -3,7 +3,7 @@
  * Handles backpressure hints and error recovery.
  */
 
-import type { ServerWebSocket } from "./platform-adapter";
+import type { ServerWebSocket } from "./platform-adapter.js";
 
 export class Socket {
   constructor(private ws: ServerWebSocket) {}

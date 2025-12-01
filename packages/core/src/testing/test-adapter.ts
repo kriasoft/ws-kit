@@ -6,11 +6,14 @@
  * Manages in-memory WebSocket connections and coordinates with the router.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { RouterImpl } from "../internal";
-import type { PlatformAdapter, ServerWebSocket } from "../ws/platform-adapter";
-import { TestWebSocket, type ConnectionState } from "./test-websocket";
-import type { OutgoingFrame } from "./types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { RouterImpl } from "../internal.js";
+import type {
+  PlatformAdapter,
+  ServerWebSocket,
+} from "../ws/platform-adapter.js";
+import { TestWebSocket, type ConnectionState } from "./test-websocket.js";
+import type { OutgoingFrame } from "./types.js";
 
 /**
  * In-memory platform adapter that manages in-memory WebSocket connections.

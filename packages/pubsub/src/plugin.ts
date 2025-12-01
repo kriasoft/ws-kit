@@ -23,7 +23,7 @@ import type {
 import { getRouterPluginAPI, ROUTER_IMPL } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
 import type { PublishEnvelope } from "@ws-kit/core/pubsub";
-import type { PubSubObserver, WithPubSubOptions } from "./types";
+import type { PubSubObserver, WithPubSubOptions } from "./types.js";
 
 /**
  * Pub/Sub plugin factory.

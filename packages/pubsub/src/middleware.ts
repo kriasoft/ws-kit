@@ -6,7 +6,7 @@
  */
 
 import type { ConnectionData, Middleware } from "@ws-kit/core";
-import type { PubSubPolicyHooks, Topics } from "./types";
+import type { PubSubPolicyHooks, Topics } from "./types.js";
 
 /**
  * Options for usePubSub middleware.

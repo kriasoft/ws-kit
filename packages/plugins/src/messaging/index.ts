@@ -27,7 +27,7 @@ import type {
 } from "@ws-kit/core";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
-import type { SendOptions } from "./types";
+import type { SendOptions } from "./types.js";
 
 /**
  * Internal context shape used during execution.
@@ -240,4 +240,4 @@ export function withMessaging<
   });
 }
 
-export type { SendOptions, WithMessagingCapability } from "./types";
+export type { SendOptions, WithMessagingCapability } from "./types.js";

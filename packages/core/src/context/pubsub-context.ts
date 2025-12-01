@@ -8,8 +8,8 @@
  * Provides broadcast and subscription management APIs.
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import type { PublishOptions, PublishResult } from "../core/types";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import type { PublishOptions, PublishResult } from "../core/types.js";
 
 export interface PubSubContext {
   /**

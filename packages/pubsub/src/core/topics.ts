@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import type { ServerWebSocket } from "@ws-kit/core";
-import type { Topics } from "../types";
-import { DEFAULT_TOPIC_MAX_LENGTH, DEFAULT_TOPIC_PATTERN } from "./constants";
-import { AbortError, PubSubError } from "./error";
+import type { Topics } from "../types.js";
+import {
+  DEFAULT_TOPIC_MAX_LENGTH,
+  DEFAULT_TOPIC_PATTERN,
+} from "./constants.js";
+import { AbortError, PubSubError } from "./error.js";
 
 // ============================================================================
 // Helper Utilities for Confirmation and Timeout Handling

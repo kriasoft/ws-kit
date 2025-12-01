@@ -7,9 +7,9 @@
  * Provides helpers for unit-testing routers with mocked or stubbed plugins.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { Plugin } from "../core/router";
-import { definePlugin } from "../plugin/define";
+import type { ConnectionData } from "../context/base-context.js";
+import type { Plugin } from "../core/router.js";
+import { definePlugin } from "../plugin/define.js";
 
 /**
  * Create a mock plugin for testing.

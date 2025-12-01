@@ -32,32 +32,32 @@ export type {
   TopicMutateOptions,
   Topics,
   WithPubSubOptions,
-} from "./types";
+} from "./types.js";
 
 // Composition utilities for adapter authors
-export { combineBrokers, withBroker } from "./compose";
-export type { BrokerStartMode } from "./compose";
+export { combineBrokers, withBroker } from "./compose.js";
+export type { BrokerStartMode } from "./compose.js";
 
 // Core pub/sub primitives (internal implementation details)
 export {
   createTopics,
   createTopicValidator,
   OptimisticTopics,
-} from "./core/topics";
+} from "./core/topics.js";
 // Backward compatibility alias (deprecated, use OptimisticTopics instead)
-export type { TopicValidator } from "./core/topics";
+export type { TopicValidator } from "./core/topics.js";
 
-export { AbortError, PubSubError } from "./core/error";
-export type { PubSubAclDetails, PubSubErrorCode } from "./core/error";
+export { AbortError, PubSubError } from "./core/error.js";
+export type { PubSubAclDetails, PubSubErrorCode } from "./core/error.js";
 
 export {
   DEFAULT_TOPIC_MAX_LENGTH,
   DEFAULT_TOPIC_PATTERN,
-} from "./core/constants";
+} from "./core/constants.js";
 
 // Test utilities
-export { TestPubSub } from "./test-utils";
-export type { PublishRecord } from "./test-utils";
+export { TestPubSub } from "./test-utils.js";
+export type { PublishRecord } from "./test-utils.js";
 
 /**
  * Symbol for accessing internal adapter state in tests.

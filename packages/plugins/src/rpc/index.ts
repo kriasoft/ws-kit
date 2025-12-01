@@ -23,7 +23,7 @@ import type { ConnectionData, MinimalContext } from "@ws-kit/core";
 import type { WsKitInternalState } from "@ws-kit/core/internal";
 import { getRouterPluginAPI } from "@ws-kit/core/internal";
 import { definePlugin } from "@ws-kit/core/plugin";
-import type { ProgressOptions, ReplyOptions } from "./types";
+import type { ProgressOptions, ReplyOptions } from "./types.js";
 
 /**
  * Internal context shape used during RPC execution.
@@ -400,4 +400,8 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
   });
 }
 
-export type { ProgressOptions, ReplyOptions, WithRpcCapability } from "./types";
+export type {
+  ProgressOptions,
+  ReplyOptions,
+  WithRpcCapability,
+} from "./types.js";

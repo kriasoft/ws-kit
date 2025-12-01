@@ -5,8 +5,8 @@
  * Note: kind is read from DESCRIPTOR symbol via getKind(), not from obj.kind directly.
  */
 
-import type { MessageDescriptor } from "../protocol/message-descriptor";
-import { getKind } from "./metadata";
+import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import { getKind } from "./metadata.js";
 
 export function isMessageDescriptor(obj: unknown): obj is MessageDescriptor {
   const kind = getKind(obj);

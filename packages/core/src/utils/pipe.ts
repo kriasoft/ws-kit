@@ -6,8 +6,8 @@
  * Order: global (in reg order) → per-route (in reg order) → handler.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { Middleware } from "../core/types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { Middleware } from "../core/types.js";
 
 export function pipeMiddleware<
   TContext extends ConnectionData = ConnectionData,

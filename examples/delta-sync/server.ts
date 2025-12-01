@@ -11,14 +11,14 @@
 import { serve } from "@ws-kit/bun";
 import type { RouterWithExtensions, ServerWebSocket } from "@ws-kit/core";
 import { createRouter, message, withZod } from "@ws-kit/zod";
-import { RingBuffer } from "./ring-buffer";
+import { RingBuffer } from "./ring-buffer.js";
 import {
   JoinMessage,
   LeaveMessage,
   UpdateMessage,
   type Operation,
   type Participant,
-} from "./schema";
+} from "./schema.js";
 
 // ============================================================================
 // Server State Management

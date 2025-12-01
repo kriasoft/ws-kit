@@ -28,9 +28,9 @@
  * ```
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { Router, RouterWithExtensions } from "../core/router";
-import type { Plugin } from "./types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { Router, RouterWithExtensions } from "../core/router.js";
+import type { Plugin } from "./types.js";
 
 /**
  * Define a plugin with compile-time API validation.

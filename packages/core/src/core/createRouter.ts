@@ -11,10 +11,10 @@
  * No capability options here; validators/pubsub/telemetry are plugins.
  */
 
-import type { ConnectionData } from "../context/base-context";
-import type { Router } from "./router";
-import { RouterImpl } from "./router";
-import type { CreateRouterOptions } from "./types";
+import type { ConnectionData } from "../context/base-context.js";
+import type { Router } from "./router.js";
+import { RouterImpl } from "./router.js";
+import type { CreateRouterOptions } from "./types.js";
 
 /**
  * Create a new router instance.

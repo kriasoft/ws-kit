@@ -3,9 +3,9 @@
 
 import { createDescriptor } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
-import type { MessageDescriptor } from "../../src/protocol/message-descriptor";
-import type { ServerWebSocket } from "../../src/ws/platform-adapter";
+import { createRouter } from "../../src/core/createRouter.js";
+import type { MessageDescriptor } from "../../src/protocol/message-descriptor.js";
+import type { ServerWebSocket } from "../../src/ws/platform-adapter.js";
 
 /**
  * Mock WebSocket for testing.

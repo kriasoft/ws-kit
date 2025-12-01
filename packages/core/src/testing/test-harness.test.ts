@@ -4,7 +4,7 @@
 import { createRouter } from "@ws-kit/core";
 import { test } from "@ws-kit/core/testing";
 import { describe, expect, it } from "bun:test";
-import { createDescriptor } from "./test-schemas";
+import { createDescriptor } from "./test-schemas.js";
 
 describe("Test Router - Basic", () => {
   describe("Connection management", () => {

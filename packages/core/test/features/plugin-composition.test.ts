@@ -13,9 +13,9 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
-import { definePlugin } from "../../src/plugin/define";
-import type { Router } from "../../src/core/router";
+import { createRouter } from "../../src/core/createRouter.js";
+import { definePlugin } from "../../src/plugin/define.js";
+import type { Router } from "../../src/core/router.js";
 
 // ============================================================================
 // Test Utilities

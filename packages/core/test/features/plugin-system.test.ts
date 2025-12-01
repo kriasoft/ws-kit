@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src/core/createRouter";
-import { RouterImpl } from "../../src/core/router";
+import { createRouter } from "../../src/core/createRouter.js";
+import { RouterImpl } from "../../src/core/router.js";
 
 describe("Plugin System", () => {
   it("should apply a plugin and return the router", () => {

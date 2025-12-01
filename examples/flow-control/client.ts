@@ -6,7 +6,7 @@ import {
   DataAckMessage,
   ResourceExhaustedMessage,
   SendDataMessage,
-} from "./schema";
+} from "./schema.js";
 
 const client = wsClient({ url: "ws://localhost:3000" });
 

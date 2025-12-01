@@ -13,8 +13,8 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { createRouter } from "../../src";
-import { test } from "../../src/testing";
+import { createRouter } from "../../src/index.js";
+import { test } from "../../src/testing/index.js";
 
 describe("Router Observer API", () => {
   describe("Basic observation", () => {

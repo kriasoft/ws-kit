@@ -13,9 +13,9 @@
  * RPC handlers add: reply(payload), progress(payload)
  */
 
-import type { ExtErrorCode } from "../error";
-import type { ServerWebSocket } from "../ws/platform-adapter";
-import type { ErrorOptions } from "./error-handling";
+import type { ExtErrorCode } from "../error.js";
+import type { ServerWebSocket } from "../ws/platform-adapter.js";
+import type { ErrorOptions } from "./error-handling.js";
 
 /**
  * Per-connection data structure.
