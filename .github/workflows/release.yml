@@ -6,6 +6,8 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+permissions: {}
+
 jobs:
   # Ensure CI passes before releasing
   ci:

@@ -47,25 +47,16 @@
   "files": [
     "dist"
   ],
-  "peerDependencies": {
+  "dependencies": {
     "@ws-kit/core": "workspace:^",
     "@ws-kit/plugins": "workspace:^",
-    "@ws-kit/pubsub": "workspace:^",
-    "zod": ">=4.1.13"
+    "@ws-kit/pubsub": "workspace:^"
   },
-  "peerDependenciesMeta": {
-    "@ws-kit/plugins": {
-      "optional": true
-    },
-    "@ws-kit/pubsub": {
-      "optional": true
-    }
+  "peerDependencies": {
+    "zod": ">=4.1.13"
   },
   "devDependencies": {
     "@types/bun": "^1.3.3",
-    "@ws-kit/core": "workspace:^",
-    "@ws-kit/plugins": "workspace:^",
-    "@ws-kit/pubsub": "workspace:^",
     "zod": "^4.1.13"
   },
   "engines": {

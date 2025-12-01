@@ -57,7 +57,7 @@
     },
     "packages/bun": {
       "name": "@ws-kit/bun",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/core": "workspace:^",
@@ -72,7 +72,7 @@
     },
     "packages/client": {
       "name": "@ws-kit/client",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/valibot": "workspace:^",
@@ -95,7 +95,7 @@
     },
     "packages/cloudflare": {
       "name": "@ws-kit/cloudflare",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "dependencies": {
         "uuid": "^13.0.0",
       },
@@ -110,7 +110,7 @@
     },
     "packages/core": {
       "name": "@ws-kit/core",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/bun": "workspace:^",
@@ -123,7 +123,7 @@
     },
     "packages/memory": {
       "name": "@ws-kit/memory",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/core": "workspace:^",
@@ -136,7 +136,7 @@
     },
     "packages/middleware": {
       "name": "@ws-kit/middleware",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "dependencies": {
         "@ws-kit/rate-limit": "workspace:^",
       },
@@ -149,7 +149,7 @@
     },
     "packages/plugins": {
       "name": "@ws-kit/plugins",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/core": "workspace:^",
@@ -160,7 +160,7 @@
     },
     "packages/pubsub": {
       "name": "@ws-kit/pubsub",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/core": "workspace:^",
@@ -173,7 +173,7 @@
     },
     "packages/rate-limit": {
       "name": "@ws-kit/rate-limit",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "devDependencies": {
         "@types/bun": "^1.3.3",
         "@ws-kit/core": "workspace:^",
@@ -186,7 +186,7 @@
     },
     "packages/redis": {
       "name": "@ws-kit/redis",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "dependencies": {
         "@ws-kit/memory": "workspace:^",
       },
@@ -202,45 +202,35 @@
     },
     "packages/valibot": {
       "name": "@ws-kit/valibot",
-      "version": "0.7.0",
-      "devDependencies": {
-        "@types/bun": "^1.3.3",
+      "version": "0.8.1",
+      "dependencies": {
         "@ws-kit/core": "workspace:^",
         "@ws-kit/plugins": "workspace:^",
         "@ws-kit/pubsub": "workspace:^",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.3",
         "valibot": "^1.2.0",
       },
       "peerDependencies": {
-        "@ws-kit/core": "workspace:^",
-        "@ws-kit/plugins": "workspace:^",
-        "@ws-kit/pubsub": "workspace:^",
         "valibot": ">=1.2.0",
       },
-      "optionalPeers": [
-        "@ws-kit/plugins",
-        "@ws-kit/pubsub",
-      ],
     },
     "packages/zod": {
       "name": "@ws-kit/zod",
-      "version": "0.7.0",
-      "devDependencies": {
-        "@types/bun": "^1.3.3",
+      "version": "0.8.1",
+      "dependencies": {
         "@ws-kit/core": "workspace:^",
         "@ws-kit/plugins": "workspace:^",
         "@ws-kit/pubsub": "workspace:^",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.3",
         "zod": "^4.1.13",
       },
       "peerDependencies": {
-        "@ws-kit/core": "workspace:^",
-        "@ws-kit/plugins": "workspace:^",
-        "@ws-kit/pubsub": "workspace:^",
         "zod": ">=4.1.13",
       },
-      "optionalPeers": [
-        "@ws-kit/plugins",
-        "@ws-kit/pubsub",
-      ],
     },
   },
   "packages": {
