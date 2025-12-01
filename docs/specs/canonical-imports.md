@@ -15,7 +15,7 @@ Quick lookup for where to import each plugin, adapter, and utility from. See [AD
 | **Middleware**            | `@ws-kit/middleware` (future)      | `useAuth()`, `useLogging()`                                                 |
 | **Memory Adapters**       | `@ws-kit/memory`                   | `memoryPubSub()`, `memoryRateLimiter()`                                     |
 | **Redis Adapters**        | `@ws-kit/redis`                    | `redisPubSub()`, `redisRateLimiter()`                                       |
-| **Cloudflare Adapters**   | `@ws-kit/cloudflare`               | `cloudflarePubSub()`, `cloudflareRateLimiter()`                             |
+| **Cloudflare Adapters**   | `@ws-kit/cloudflare`               | `DurablePubSub`, `createDurableObjectHandler()`                             |
 | **Bun Platform**          | `@ws-kit/bun`                      | `serve()`                                                                   |
 | **Client (Typed)**        | `@ws-kit/client/zod` or `/valibot` | Full type inference                                                         |
 | **Client (Generic)**      | `@ws-kit/client`                   | For custom validators                                                       |
@@ -203,7 +203,7 @@ These are **only** available from canonical sources:
 import { useAuth } from "@ws-kit/middleware"; // ✓
 import { usePubSub } from "@ws-kit/pubsub"; // ✓
 import { redisPubSub } from "@ws-kit/redis"; // ✓
-import { cloudflarePubSub } from "@ws-kit/cloudflare"; // ✓
+import { DurablePubSub } from "@ws-kit/cloudflare"; // ✓
 
 // These DON'T work (not re-exported from validators):
 // import { useAuth } from "@ws-kit/zod";           // ✗
@@ -240,7 +240,7 @@ As new plugins are added, each gets its own package:
 ```typescript
 // Current
 import { withPubSub } from "@ws-kit/pubsub";
-import { withRateLimit } from "@ws-kit/rate-limit";
+import { rateLimit } from "@ws-kit/rate-limit";
 
 // Future
 import { withTelemetry } from "@ws-kit/telemetry";

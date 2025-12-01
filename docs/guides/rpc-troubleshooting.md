@@ -193,42 +193,44 @@ await client.request(Query, { id }); // ✗ Second request reuses same ID
 - Duplicate requests create duplicate side effects
 - Need reliable deduplication across network retries
 
-**Solution:** Use middleware for idempotency
+**Solution:** Implement idempotency in the handler or via a dedicated middleware
 
 ```typescript
-import { stableStringify } from "@ws-kit/core";
 import crypto from "node:crypto";
 
-// Generate consistent key for RPC
-function generateIdempotencyKey(ctx: RpcContext<any>): string {
+// Generate consistent key for deduplication
+function generateIdempotencyKey(
+  userId: string,
+  type: string,
+  payload: unknown,
+): string {
   const hash = crypto
     .createHash("sha256")
-    .update(stableStringify(ctx.payload))
+    .update(JSON.stringify(payload))
     .digest("hex");
 
-  return `${ctx.data?.userId}:${ctx.type}:${hash}`;
+  return `${userId}:${type}:${hash}`;
 }
 
-// Middleware pattern for idempotency
-router.use(async (ctx, next) => {
-  if (!ctx.isRpc) return next(); // Skip non-RPC
+// Handler-level idempotency
+router.rpc(CreateOrder, async (ctx) => {
+  const idempotencyKey = generateIdempotencyKey(
+    ctx.data.userId,
+    ctx.type,
+    ctx.payload,
+  );
 
-  const idempotencyKey = generateIdempotencyKey(ctx);
   const cached = await dedupeStore.get(idempotencyKey);
-
   if (cached) {
-    // Return cached response
-    ctx.reply(ctx.message, cached);
+    ctx.reply(cached);
     return;
   }
 
-  // Process normally
-  await next();
+  const result = await createOrder(ctx.payload);
 
-  // Cache the result (if successful)
-  if (ctx.replied) {
-    await dedupeStore.set(idempotencyKey, ctx.replyPayload);
-  }
+  // Cache for deduplication
+  await dedupeStore.set(idempotencyKey, result);
+  ctx.reply(result);
 });
 ```
 
@@ -316,9 +318,7 @@ const client = createClient(wsUrl, {
 
 ```typescript
 router.use((ctx, next) => {
-  if (ctx.isRpc) {
-    console.log(`RPC ${ctx.type} from ${ctx.data?.userId}`);
-  }
+  console.log(`Message ${ctx.type} from ${ctx.data?.userId}`);
   return next();
 });
 ```

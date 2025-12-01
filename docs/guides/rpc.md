@@ -72,7 +72,7 @@ The difference from `on()`:
 
 ### Progress Updates
 
-Before sending a terminal reply, send progress updates to keep the client informed:
+Before sending a terminal reply, send progress updates to keep the client informed. Progress updates use the same schema shape as the response:
 
 ```typescript
 const LongOperation = rpc("LONG_OP", { query: z.string() }, "LONG_OP_RESULT", {
@@ -82,22 +82,22 @@ const LongOperation = rpc("LONG_OP", { query: z.string() }, "LONG_OP_RESULT", {
 
 router.rpc(LongOperation, async (ctx) => {
   const start = Date.now();
-
-  // Progress: not the final response, client can subscribe to updates
-  ctx.progress?.({ stage: "loading", progress: 0 });
-
   const results = [];
+
   for (let i = 0; i < 1000; i++) {
     results.push(await processItem(i));
 
     if (i % 100 === 0) {
-      ctx.progress?.({ stage: "processing", progress: (i / 1000) * 100 });
+      // Progress uses same schema shape as response
+      ctx.progress({
+        results: results.slice(),
+        duration: Date.now() - start,
+      });
     }
   }
 
   // Terminal reply: ends the request
-  const duration = Date.now() - start;
-  ctx.reply(LongOperation.response, { results, duration });
+  ctx.reply({ results, duration: Date.now() - start });
 });
 ```
 
@@ -269,30 +269,28 @@ try {
 
 ### Server-Side Progress (Stream Pattern)
 
-The server can send progress updates before the terminal reply. On the client, these are received as separate messages:
+The server can send progress updates before the terminal reply. Progress updates are correlated with the original request and use the same schema shape as the response:
 
 ```typescript
-// Define a message schema for progress updates
-const SearchProgress = message("SEARCH_PROGRESS", {
-  stage: z.enum(["loading", "processing", "finalizing"]),
-  progress: z.number().min(0).max(100),
-});
-
-// Client listens for progress updates
-client.on(SearchProgress, (msg) => {
-  console.log(`Progress: ${msg.payload.stage} ${msg.payload.progress}%`);
-});
-
-// Then waits for the RPC response
+// Client receives progress updates via onProgress callback
 try {
-  const result = await client.request(LongOperation, { query: "search term" });
+  const result = await client.request(
+    LongOperation,
+    { query: "search term" },
+    {
+      onProgress: (update) => {
+        // Progress payload matches response schema shape
+        console.log(`Processed ${update.payload.results.length} items`);
+      },
+    },
+  );
   console.log("Results:", result.payload.results);
 } catch (err) {
   console.error("Failed:", err);
 }
 ```
 
-Note: `client.request()` returns a Promise directly. To receive streaming updates, register a handler with `client.on()` for the progress message type and await the RPC response separately.
+Note: Progress updates share the same correlation ID as the request, so they are automatically matched to the correct `onProgress` callback.
 
 ### Timeouts and Cancellation
 

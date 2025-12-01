@@ -306,22 +306,33 @@ This type narrowing happens **at compile-time**, catching mistakes before runtim
 
 ## Dev-Mode Warnings
 
-If you accidentally register an RPC schema with `router.on()`:
+If you use `ctx.send()` in an event handler where `router.rpc()` would be more appropriate:
 
 ```typescript
-// ❌ RPC schema but event handler
-const GetUser = message("GET_USER", {
-  payload: { id: z.string() },
-  response: { user: UserSchema },  // ← Has response field!
-});
+// ❌ Using event handler for request/response pattern
+const GetUser = message("GET_USER", { id: z.string() });
+const UserResponse = message("USER_RESPONSE", { user: UserSchema });
 
 router.on(GetUser, (ctx) => {
-  // Dev warning: "Message 'GET_USER' has a response field but is registered with router.on(). Use router.rpc() for request/response patterns."
-  ctx.reply?.({ ... });
+  const user = findUser(ctx.payload.id);
+  // This works, but loses RPC guarantees (correlation, one-shot, deadline)
+  ctx.send(UserResponse, { user });
 });
 ```
 
-The dev-mode warning reminds you to use `router.rpc()` for request/response patterns.
+If you need request/response semantics, use `rpc()` instead:
+
+```typescript
+// ✅ RPC for request/response pattern
+const GetUser = rpc("GET_USER", { id: z.string() }, "USER_RESPONSE", {
+  user: UserSchema,
+});
+
+router.rpc(GetUser, (ctx) => {
+  const user = findUser(ctx.payload.id);
+  ctx.reply({ user }); // One-shot, correlated, with deadline
+});
+```
 
 ---
 
