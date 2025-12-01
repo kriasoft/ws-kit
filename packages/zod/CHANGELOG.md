@@ -1,5 +1,13 @@
 # @ws-kit/zod
 
+## 0.8.2
+
+### Patch Changes
+
+- [#86](https://github.com/kriasoft/ws-kit/pull/86) [`440c361`](https://github.com/kriasoft/ws-kit/commit/440c361093b2f35ee627ae8f1495140dfe06bf20) Thanks [@koistya](https://github.com/koistya)! - Fix runtime error when installing @ws-kit/zod without @ws-kit/plugins
+
+  The zod and valibot packages re-export from @ws-kit/core, @ws-kit/plugins, and @ws-kit/pubsub, but these were incorrectly marked as optional peer dependencies. Now they are proper dependencies that get installed automatically.
+
 ## 0.8.1
 
 ### Patch Changes
