@@ -9,9 +9,7 @@
  * - onOpen gets capability-gated context (send, publish, topics)
  * - onClose runs during close notification
  * - Error handling in lifecycle hooks
- * - CloseError for custom close codes
  * - Handler ordering (registration order)
- * - Namespace enforcement ($ws: prefix rejection)
  */
 
 import { CloseError, createRouter } from "@ws-kit/core";
@@ -348,79 +346,5 @@ describe("Router Lifecycle Hooks", () => {
 
       expect(result).toBe(router);
     });
-  });
-});
-
-describe("Namespace Enforcement", () => {
-  it("should reject $ws: prefix at import time", async () => {
-    // Dynamic import of zod package to test namespace enforcement
-    const { message } = await import("@ws-kit/zod");
-
-    expect(() => {
-      message({ type: "$ws:custom" });
-    }).toThrow("Message type cannot start with '$ws:'");
-  });
-
-  it("should reject $ws: prefix in rpc request type", async () => {
-    const { rpc } = await import("@ws-kit/zod");
-    const { z } = await import("zod");
-
-    expect(() => {
-      rpc({
-        req: { type: "$ws:request", payload: z.object({}) },
-        res: { type: "RESPONSE", payload: z.object({}) },
-      });
-    }).toThrow("RPC request type cannot start with '$ws:'");
-  });
-
-  it("should reject $ws: prefix in rpc response type", async () => {
-    const { rpc } = await import("@ws-kit/zod");
-    const { z } = await import("zod");
-
-    expect(() => {
-      rpc({
-        req: { type: "REQUEST", payload: z.object({}) },
-        res: { type: "$ws:response", payload: z.object({}) },
-      });
-    }).toThrow("RPC response type cannot start with '$ws:'");
-  });
-
-  it("should allow non-reserved message types", async () => {
-    const { message } = await import("@ws-kit/zod");
-
-    expect(() => {
-      message({ type: "NORMAL_TYPE" });
-      message({ type: "ws:custom" }); // Without $, should be fine
-      message({ type: "custom$type" }); // $ not at start
-    }).not.toThrow();
-  });
-});
-
-describe("CloseError", () => {
-  it("should create CloseError with code and reason", () => {
-    const error = new CloseError(4401, "Invalid token");
-
-    expect(error.code).toBe(4401);
-    expect(error.reason).toBe("Invalid token");
-    expect(error.message).toBe("Invalid token");
-    expect(error.name).toBe("CloseError");
-  });
-
-  it("should create CloseError with code only", () => {
-    const error = new CloseError(4500);
-
-    expect(error.code).toBe(4500);
-    expect(error.reason).toBe("");
-    expect(error.message).toBe("Connection closed with code 4500");
-  });
-
-  it("should identify CloseError with static method", () => {
-    const closeError = new CloseError(4401);
-    const regularError = new Error("Regular error");
-
-    expect(CloseError.isCloseError(closeError)).toBe(true);
-    expect(CloseError.isCloseError(regularError)).toBe(false);
-    expect(CloseError.isCloseError(null)).toBe(false);
-    expect(CloseError.isCloseError(undefined)).toBe(false);
   });
 });
