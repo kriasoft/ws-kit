@@ -657,15 +657,34 @@ router
 
 ```typescript
 router.onOpen(async (ctx) => {
-  // ctx: { ws, send, topics: { subscribe, unsubscribe }, data, clientId }
+  // ctx: { clientId, data, connectedAt, ws, assignData }
+  // With validation plugin: + send()
+  // With pubsub plugin: + publish(), topics.subscribe(), topics.unsubscribe()
   console.log("Client connected:", ctx.clientId);
+  await ctx.topics.subscribe(`user:${ctx.data.userId}`);
 });
 
 router.onClose(async (ctx) => {
-  // ctx: { ws, code, reason, send, topics: { subscribe, unsubscribe }, data, clientId }
+  // ctx: { clientId, data, code, reason, ws }
+  // With pubsub plugin: + publish(), topics.list(), topics.has()
+  // (no send - socket is closing; topics are read-only)
   console.log("Client disconnected:", ctx.clientId, ctx.code, ctx.reason);
 });
 ```
+
+**CloseError**: Throw in `onOpen` to close with a custom code:
+
+```typescript
+import { CloseError } from "@ws-kit/core";
+
+router.onOpen((ctx) => {
+  if (!isValidToken(ctx.data.token)) {
+    throw new CloseError(4401, "Invalid token");
+  }
+});
+```
+
+CloseError is not routed to `onError` handlers—it's a control flow mechanism for deliberate connection rejection.
 
 ### WebSocket Upgrade
 

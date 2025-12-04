@@ -58,7 +58,12 @@ export type { EventHandler, Middleware } from "./core/types.js";
 export type { Plugin } from "./plugin/types.js";
 
 // Error handling (canonical: new unified implementation in ./error.ts)
-export { ERROR_CODE_META, isStandardErrorCode, WsKitError } from "./error.js";
+export {
+  CloseError,
+  ERROR_CODE_META,
+  isStandardErrorCode,
+  WsKitError,
+} from "./error.js";
 export type {
   ErrorCode,
   ErrorCodeMetadata,
@@ -118,6 +123,20 @@ export type {
   RpcContext,
   SendOptions,
 } from "./context/types.js";
+
+// Lifecycle context types (for router.onOpen/onClose handlers)
+export type {
+  BaseCloseContext,
+  BaseOpenContext,
+  CloseContext,
+  CloseHandler,
+  LifecycleErrorContext,
+  OpenContext,
+  OpenHandler,
+} from "./context/lifecycle-context.js";
+
+// Reserved/system types
+export { SYSTEM_LIFECYCLE } from "./schema/reserved.js";
 
 // Pub/Sub utilities
 export {

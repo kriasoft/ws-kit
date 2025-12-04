@@ -1,0 +1,426 @@
+// SPDX-FileCopyrightText: 2025-present Kriasoft
+// SPDX-License-Identifier: MIT
+
+/**
+ * Tests for router-level lifecycle hooks (onOpen/onClose).
+ *
+ * Coverage:
+ * - onOpen runs after data is populated
+ * - onOpen gets capability-gated context (send, publish, topics)
+ * - onClose runs during close notification
+ * - Error handling in lifecycle hooks
+ * - CloseError for custom close codes
+ * - Handler ordering (registration order)
+ * - Namespace enforcement ($ws: prefix rejection)
+ */
+
+import { CloseError, createRouter } from "@ws-kit/core";
+import { test as testUtils } from "@ws-kit/core/testing";
+import { describe, expect, it } from "bun:test";
+
+describe("Router Lifecycle Hooks", () => {
+  describe("router.onOpen()", () => {
+    it("should run onOpen handler when connection is opened", async () => {
+      let openCalled = false;
+      let receivedClientId: string | undefined;
+
+      const router = createRouter();
+      router.onOpen((ctx) => {
+        openCalled = true;
+        receivedClientId = ctx.clientId;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+
+      expect(openCalled).toBe(true);
+      expect(receivedClientId).toBeDefined();
+      expect(typeof receivedClientId).toBe("string");
+
+      await conn.close();
+      await tr.close();
+    });
+
+    it("should have populated ctx.data from authenticate", async () => {
+      type AppData = Record<string, unknown> & {
+        userId: string;
+        role: string;
+      };
+
+      let receivedData: AppData | undefined;
+
+      const router = createRouter<AppData>();
+      router.onOpen((ctx) => {
+        receivedData = ctx.data;
+      });
+
+      const tr = testUtils.createTestRouter({
+        create: () => router,
+      });
+      const conn = await tr.connect({
+        data: { userId: "user_123", role: "admin" },
+      });
+
+      expect(receivedData).toEqual({ userId: "user_123", role: "admin" });
+
+      await conn.close();
+      await tr.close();
+    });
+
+    it("should have connectedAt timestamp", async () => {
+      let connectedAt: number | undefined;
+
+      const router = createRouter();
+      router.onOpen((ctx) => {
+        connectedAt = ctx.connectedAt;
+      });
+
+      const before = Date.now();
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+      const after = Date.now();
+
+      expect(connectedAt).toBeDefined();
+      expect(connectedAt).toBeGreaterThanOrEqual(before);
+      expect(connectedAt).toBeLessThanOrEqual(after);
+
+      await conn.close();
+      await tr.close();
+    });
+
+    it("should allow ctx.assignData to update connection data", async () => {
+      type AppData = Record<string, unknown> & {
+        userId?: string;
+        upgraded?: boolean;
+      };
+
+      let dataAfterAssign: AppData | undefined;
+
+      const router = createRouter<AppData>();
+      router.onOpen((ctx) => {
+        ctx.assignData({ upgraded: true });
+        dataAfterAssign = ctx.data;
+      });
+
+      const tr = testUtils.createTestRouter({
+        create: () => router,
+      });
+      const conn = await tr.connect({ data: { userId: "user_123" } });
+
+      expect(dataAfterAssign).toEqual({ userId: "user_123", upgraded: true });
+
+      await conn.close();
+      await tr.close();
+    });
+
+    it("should run multiple onOpen handlers in registration order", async () => {
+      const calls: string[] = [];
+
+      const router = createRouter();
+      router.onOpen(() => {
+        calls.push("first");
+      });
+      router.onOpen(() => {
+        calls.push("second");
+      });
+      router.onOpen(() => {
+        calls.push("third");
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+
+      expect(calls).toEqual(["first", "second", "third"]);
+
+      await conn.close();
+      await tr.close();
+    });
+
+    it("should support async onOpen handlers", async () => {
+      const calls: string[] = [];
+
+      const router = createRouter();
+      router.onOpen(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        calls.push("async");
+      });
+      router.onOpen(() => {
+        calls.push("sync");
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+
+      // async handler should complete before next handler runs
+      expect(calls).toEqual(["async", "sync"]);
+
+      await conn.close();
+      await tr.close();
+    });
+  });
+
+  describe("router.onClose()", () => {
+    it("should run onClose handler when connection is closed", async () => {
+      let openClientId: string | undefined;
+      let closeClientId: string | undefined;
+      let closeCalled = false;
+
+      const router = createRouter();
+      router.onOpen((ctx) => {
+        openClientId = ctx.clientId;
+      });
+      router.onClose((ctx) => {
+        closeCalled = true;
+        closeClientId = ctx.clientId;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+      await conn.close();
+
+      expect(closeCalled).toBe(true);
+      expect(openClientId).toBeDefined();
+      expect(closeClientId).toBe(openClientId);
+
+      await tr.close();
+    });
+
+    it("should have close code and reason in context", async () => {
+      let receivedCode: number | undefined;
+      let receivedReason: string | undefined;
+
+      const router = createRouter();
+      router.onClose((ctx) => {
+        receivedCode = ctx.code;
+        receivedReason = ctx.reason;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+      await conn.close(1000, "Normal closure");
+
+      expect(receivedCode).toBe(1000);
+      expect(receivedReason).toBe("Normal closure");
+
+      await tr.close();
+    });
+
+    it("should run multiple onClose handlers in registration order", async () => {
+      const calls: string[] = [];
+
+      const router = createRouter();
+      router.onClose(() => {
+        calls.push("first");
+      });
+      router.onClose(() => {
+        calls.push("second");
+      });
+      router.onClose(() => {
+        calls.push("third");
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+      await conn.close();
+
+      expect(calls).toEqual(["first", "second", "third"]);
+
+      await tr.close();
+    });
+  });
+
+  describe("Error Handling", () => {
+    it("should route lifecycle errors to onError handler", async () => {
+      const errors: { err: unknown; type: string }[] = [];
+
+      const router = createRouter();
+      router.onOpen(() => {
+        throw new Error("onOpen error");
+      });
+      router.onError((err, ctx) => {
+        if (ctx && "type" in ctx && typeof ctx.type === "string") {
+          errors.push({ err, type: ctx.type });
+        }
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+
+      try {
+        await tr.connect();
+      } catch {
+        // Connection may fail due to error in onOpen
+      }
+
+      expect(errors.length).toBeGreaterThan(0);
+      const firstError = errors[0]!;
+      expect((firstError.err as Error).message).toBe("onOpen error");
+      expect(firstError.type).toBe("$ws:open");
+
+      await tr.close();
+    });
+
+    it("should handle error thrown in onOpen handler", async () => {
+      let errorCaught = false;
+
+      const router = createRouter();
+      router.onOpen(() => {
+        throw new Error("Fatal error");
+      });
+      router.onError(() => {
+        errorCaught = true;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+
+      try {
+        await tr.connect();
+      } catch {
+        // Expected - connection may fail due to error
+      }
+
+      // The error should have been routed to onError
+      expect(errorCaught).toBe(true);
+
+      await tr.close();
+    });
+
+    it("should not route CloseError to onError (it is control flow)", async () => {
+      // CloseError is a control flow mechanism to close connections with
+      // custom codes - it is NOT an error that should be logged/reported
+      let errorHandlerCalled = false;
+
+      const router = createRouter();
+      router.onOpen(() => {
+        throw new CloseError(4401, "Invalid token");
+      });
+      router.onError(() => {
+        errorHandlerCalled = true;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+
+      try {
+        await tr.connect();
+      } catch {
+        // Expected - connection closed due to CloseError
+      }
+
+      // CloseError should NOT trigger onError - it's intentional control flow
+      expect(errorHandlerCalled).toBe(false);
+
+      await tr.close();
+    });
+
+    it("should continue running onClose handlers even if one throws", async () => {
+      const calls: string[] = [];
+
+      const router = createRouter();
+      router.onClose(() => {
+        calls.push("first");
+        throw new Error("First handler error");
+      });
+      router.onClose(() => {
+        calls.push("second");
+      });
+      router.onClose(() => {
+        calls.push("third");
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+      await conn.close();
+
+      // All handlers should run despite first one throwing
+      expect(calls).toEqual(["first", "second", "third"]);
+
+      await tr.close();
+    });
+  });
+
+  describe("Fluent Chaining", () => {
+    it("should return router instance for chaining", () => {
+      const router = createRouter();
+
+      const result = router
+        .onOpen(() => {})
+        .onClose(() => {})
+        .onError(() => {});
+
+      expect(result).toBe(router);
+    });
+  });
+});
+
+describe("Namespace Enforcement", () => {
+  it("should reject $ws: prefix at import time", async () => {
+    // Dynamic import of zod package to test namespace enforcement
+    const { message } = await import("@ws-kit/zod");
+
+    expect(() => {
+      message({ type: "$ws:custom" });
+    }).toThrow("Message type cannot start with '$ws:'");
+  });
+
+  it("should reject $ws: prefix in rpc request type", async () => {
+    const { rpc } = await import("@ws-kit/zod");
+    const { z } = await import("zod");
+
+    expect(() => {
+      rpc({
+        req: { type: "$ws:request", payload: z.object({}) },
+        res: { type: "RESPONSE", payload: z.object({}) },
+      });
+    }).toThrow("RPC request type cannot start with '$ws:'");
+  });
+
+  it("should reject $ws: prefix in rpc response type", async () => {
+    const { rpc } = await import("@ws-kit/zod");
+    const { z } = await import("zod");
+
+    expect(() => {
+      rpc({
+        req: { type: "REQUEST", payload: z.object({}) },
+        res: { type: "$ws:response", payload: z.object({}) },
+      });
+    }).toThrow("RPC response type cannot start with '$ws:'");
+  });
+
+  it("should allow non-reserved message types", async () => {
+    const { message } = await import("@ws-kit/zod");
+
+    expect(() => {
+      message({ type: "NORMAL_TYPE" });
+      message({ type: "ws:custom" }); // Without $, should be fine
+      message({ type: "custom$type" }); // $ not at start
+    }).not.toThrow();
+  });
+});
+
+describe("CloseError", () => {
+  it("should create CloseError with code and reason", () => {
+    const error = new CloseError(4401, "Invalid token");
+
+    expect(error.code).toBe(4401);
+    expect(error.reason).toBe("Invalid token");
+    expect(error.message).toBe("Invalid token");
+    expect(error.name).toBe("CloseError");
+  });
+
+  it("should create CloseError with code only", () => {
+    const error = new CloseError(4500);
+
+    expect(error.code).toBe(4500);
+    expect(error.reason).toBe("");
+    expect(error.message).toBe("Connection closed with code 4500");
+  });
+
+  it("should identify CloseError with static method", () => {
+    const closeError = new CloseError(4401);
+    const regularError = new Error("Regular error");
+
+    expect(CloseError.isCloseError(closeError)).toBe(true);
+    expect(CloseError.isCloseError(regularError)).toBe(false);
+    expect(CloseError.isCloseError(null)).toBe(false);
+    expect(CloseError.isCloseError(undefined)).toBe(false);
+  });
+});
