@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/middleware",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Auth, logging, metrics, telemetry middleware for WS-Kit routers (with rate-limit re-exports)",
   "type": "module",
   "sideEffects": false,

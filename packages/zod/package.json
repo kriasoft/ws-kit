@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/zod",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Zod validator adapter for WS-Kit with runtime schema validation and full TypeScript inference",
   "type": "module",
   "sideEffects": false,

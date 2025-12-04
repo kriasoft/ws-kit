@@ -1,5 +1,32 @@
 # @ws-kit/rate-limit
 
+## 0.9.0
+
+### Minor Changes
+
+- [#94](https://github.com/kriasoft/ws-kit/pull/94) [`6eb7608`](https://github.com/kriasoft/ws-kit/commit/6eb7608acec57ccfcaf98c20b825320cfb290011) Thanks [@koistya](https://github.com/koistya)! - Add router-level lifecycle hooks (`onOpen`/`onClose`) with capability-gated context.
+
+  ```ts
+  router.onOpen(async (ctx) => {
+    ctx.send(WelcomeMessage, { greeting: "Hello!" });
+    await ctx.topics.subscribe(`user:${ctx.data.userId}`);
+  });
+
+  router.onClose((ctx) => {
+    ctx.publish("presence", UserLeftMessage, { id: ctx.data.userId });
+  });
+  ```
+
+  - **`router.onOpen(ctx)`** — runs after auth, before message dispatch
+  - **`router.onClose(ctx)`** — runs during close notification
+  - **Capability-gated context** — `send()` with validation plugin, `publish()`/`topics` with pubsub plugin
+  - **`CloseError`** — throw from `onOpen` to reject connection with custom close code
+
+### Patch Changes
+
+- Updated dependencies [[`6eb7608`](https://github.com/kriasoft/ws-kit/commit/6eb7608acec57ccfcaf98c20b825320cfb290011)]:
+  - @ws-kit/core@0.9.0
+
 ## 0.8.1
 
 ### Patch Changes
