@@ -202,43 +202,45 @@ export function createBunHandler<
       async open(
         bunWs: import("bun").ServerWebSocket<BunConnectionData<TContext>>,
       ): Promise<void> {
+        const wsData = bunWs.data;
+
+        // Sanity check: clientId must be set by fetch/upgradeConnection.
+        // Type cast needed because ConnectionData is Record<string, unknown>
+        const clientId = wsData?.clientId as string | undefined;
+        if (!clientId) {
+          console.error("[ws] WebSocket missing clientId in data, closing");
+          bunWs.close(1008, "Missing client ID");
+          return;
+        }
+        let routerError: Error | undefined;
+
         try {
-          // Sanity check: clientId must be set by fetch/upgradeConnection.
-          // Rationale: Guards against misconfigured server or missing data flow.
-          if (!bunWs.data?.clientId) {
-            console.error("[ws] WebSocket missing clientId in data, closing");
-            bunWs.close(1008, "Missing client ID");
-            return;
-          }
-
           // Per ADR-033 (opaque transport): Set initialData so router can merge into ctx.data.
-          // Rationale: Router uses initialData to populate ctx.data during handleOpen.
-          // This is the canonical connection data flow.
           const ws = bunWs as unknown as AdapterWebSocket;
-          ws.initialData = bunWs.data;
+          ws.initialData = wsData;
 
-          // Call core router's handler using call() to preserve 'this' binding.
-          // Rationale: Supports routers with instance methods (not just arrow functions).
+          // Call core router's handler.
           await coreRouter.websocket.open(ws);
-
-          // Per ADR-035: Call onOpen hook after successful open (sync, for side effects).
-          // Rationale: Separate from error hook — success and error are distinct flows.
-          // Note: Pass both ws and data per BunOpenCloseContext; types now match runtime.
-          try {
-            options?.onOpen?.({ ws: bunWs, data: bunWs.data });
-          } catch (error) {
-            console.error("[ws] Error in onOpen hook:", error);
-          }
         } catch (error) {
-          // Per ADR-035: Call onError hook with 'open' phase context.
-          // Rationale: Sync-only hook for logging. Don't suppress error.
           console.error("[ws] Error in open handler:", error);
-          const errorObj =
+          routerError =
             error instanceof Error ? error : new Error(String(error));
-          options?.onError?.(errorObj, {
+        }
+
+        // Per proposal 093: Adapter hooks ALWAYS fire for observability,
+        // even if router lifecycle throws. This ensures connection tracking.
+        try {
+          options?.onOpen?.({ ws: bunWs, data: wsData });
+        } catch (error) {
+          console.error("[ws] Error in onOpen hook:", error);
+        }
+
+        // If router threw, call onError and close connection
+        if (routerError) {
+          options?.onError?.(routerError, {
             type: "open",
-            clientId: bunWs.data?.clientId,
-            data: bunWs.data,
+            clientId,
+            data: wsData,
           } as BunErrorEvent);
           try {
             bunWs.close(1011, "Internal server error");
@@ -293,29 +295,30 @@ export function createBunHandler<
         code: number,
         reason?: string,
       ): Promise<void> {
+        let routerError: Error | undefined;
+
         try {
           const ws = bunWs as unknown as ServerWebSocket;
 
           // Per ADR-035: Call coreRouter.websocket.close for cleanup.
-          // Rationale: Router handles unsubscription, connection cleanup, etc.
-          // Code and reason let router log close reason for debugging.
           await coreRouter.websocket.close(ws, code, reason);
-
-          // Call onClose hook after router cleanup (not in catch block).
-          // Rationale: Distinguish success (onClose) from error (onError).
-          // Note: Pass both ws and data per BunOpenCloseContext; types now match runtime.
-          try {
-            options?.onClose?.({ ws: bunWs, data: bunWs.data });
-          } catch (error) {
-            console.error("[ws] Error in onClose hook:", error);
-          }
         } catch (error) {
-          // Per ADR-035: Log and notify onError on close handler failure.
-          // Rationale: Close failures (cleanup errors) are worth observing.
           console.error("[ws] Error in close handler:", error);
-          const errorObj =
+          routerError =
             error instanceof Error ? error : new Error(String(error));
-          options?.onError?.(errorObj, {
+        }
+
+        // Per proposal 093: Adapter hooks ALWAYS fire for observability,
+        // even if router lifecycle throws. This ensures connection tracking.
+        try {
+          options?.onClose?.({ ws: bunWs, data: bunWs.data });
+        } catch (error) {
+          console.error("[ws] Error in onClose hook:", error);
+        }
+
+        // If router threw, also call onError for error tracking
+        if (routerError) {
+          options?.onError?.(routerError, {
             type: "close",
             clientId: bunWs.data?.clientId,
             data: bunWs.data,

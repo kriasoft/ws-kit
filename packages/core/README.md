@@ -60,6 +60,8 @@ router.route(schema).use(mw).on(handler); // Per-route middleware + handler
 router.merge(other, { onConflict: "error" }); // Combine routers
 router.mount("prefix.", other); // Prefix types for namespacing
 router.plugin(withZod()); // Add capabilities
+router.onOpen((ctx) => {}); // Connection opened (after auth)
+router.onClose((ctx) => {}); // Connection closed
 router.onError((err, ctx) => {}); // Universal error sink
 ```
 

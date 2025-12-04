@@ -16,7 +16,7 @@ import type { RouterImpl, WsKitInternalState } from "../internal.js";
 import type { MessageDescriptor } from "../protocol/message-descriptor.js";
 import { isMessageDescriptor } from "../schema/guards.js";
 import { getKind } from "../schema/metadata.js";
-import { SYSTEM_MESSAGES, isReservedType } from "../schema/reserved.js";
+import { SYSTEM_MESSAGES, isReserved } from "../schema/reserved.js";
 import { safeJsonParse } from "../utils/json.js";
 import type { ServerWebSocket } from "../ws/platform-adapter.js";
 import { composePipeline } from "./middleware.js";
@@ -128,7 +128,7 @@ export async function dispatchMessage<TContext extends ConnectionData>(
   }
 
   // 3) Reserved types are blocked from user handlers
-  if (isReservedType(envelope.type)) {
+  if (isReserved(envelope.type)) {
     const err = new Error(
       `Reserved type cannot be handled by user code: "${envelope.type}"`,
     );

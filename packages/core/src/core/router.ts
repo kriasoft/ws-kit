@@ -23,11 +23,19 @@ import type {
 } from "../context/base-context.js";
 import { createCoreErrorEnhancer } from "../context/error-handling.js";
 import type { EventContext } from "../context/event-context.js";
+import type {
+  BaseCloseContext,
+  BaseOpenContext,
+  CloseContext,
+  LifecycleErrorContext,
+  OpenContext,
+} from "../context/lifecycle-context.js";
 import type { PubSubContext } from "../context/pubsub-context.js";
 import type { RpcContext } from "../context/rpc-context.js";
 import { dispatchMessage } from "../engine/dispatch.js";
 import { LifecycleManager } from "../engine/lifecycle.js";
 import { LimitsManager } from "../engine/limits-manager.js";
+import { CloseError } from "../error.js";
 import type { ContextEnhancer } from "../internal.js";
 import { PluginHost } from "../plugin/manager.js";
 import type { Plugin } from "../plugin/types.js";
@@ -39,6 +47,7 @@ import type {
   MessageDescriptor,
 } from "../protocol/schema.js";
 import { getKind } from "../schema/metadata.js";
+import { SYSTEM_LIFECYCLE } from "../schema/reserved.js";
 import type {
   AdapterWebSocket,
   ServerWebSocket,
@@ -100,8 +109,63 @@ export interface RouterCore<TContext extends ConnectionData = ConnectionData> {
     this: Router<TContext, E>,
     plugin: P,
   ): RouterWithExtensions<TContext, E & InferPluginAPI<P>>;
+
+  /**
+   * Register a handler for connection open events.
+   *
+   * Handlers run after authentication and before message dispatch begins.
+   * Use this for welcome messages, initial subscriptions, and connection setup.
+   *
+   * Context is capability-gated:
+   * - Base: clientId, data, connectedAt, ws, assignData
+   * - With validation plugin: adds send()
+   * - With pubsub plugin: adds publish(), topics
+   *
+   * Handlers run in registration order. Errors close the connection
+   * with code 1011 (internal error) unless CloseError is thrown.
+   *
+   * @example
+   * ```ts
+   * router.onOpen(async (ctx) => {
+   *   ctx.send(WelcomeMessage, { greeting: "Hello" });
+   *   await ctx.topics.subscribe(`user:${ctx.data.userId}`);
+   * });
+   * ```
+   */
+  onOpen(
+    handler: (ctx: BaseOpenContext<TContext>) => void | Promise<void>,
+  ): this;
+
+  /**
+   * Register a handler for connection close events.
+   *
+   * Handlers run during close notification (socket is CLOSING or CLOSED).
+   * Use this for cleanup, "user left" broadcasts, and metrics.
+   *
+   * Context is capability-gated:
+   * - Base: clientId, data, code, reason, ws
+   * - No send() (socket is closing)
+   * - With pubsub plugin: adds publish(), topics (read-only)
+   *
+   * Handlers run in registration order. Errors are logged but don't
+   * affect the close operation (connection is already terminating).
+   *
+   * @example
+   * ```ts
+   * router.onClose((ctx) => {
+   *   ctx.publish("presence", UserLeftMessage, { userId: ctx.data.userId });
+   * });
+   * ```
+   */
+  onClose(
+    handler: (ctx: BaseCloseContext<TContext>) => void | Promise<void>,
+  ): this;
+
   onError(
-    fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
+    fn: (
+      err: unknown,
+      ctx: MinimalContext<TContext> | LifecycleErrorContext<TContext> | null,
+    ) => void,
   ): this;
 
   /**
@@ -176,7 +240,7 @@ export interface Router<
   TExtensions extends object = {},
 > extends Omit<
   RouterCore<TContext>,
-  "plugin" | "use" | "on" | "onError" | "merge" | "mount"
+  "plugin" | "use" | "on" | "onError" | "onOpen" | "onClose" | "merge" | "mount"
 > {
   /**
    * Register global middleware. Preserves extension types through fluent chaining.
@@ -195,7 +259,28 @@ export interface Router<
    * Register an error handler. Preserves extension types through fluent chaining.
    */
   onError(
-    fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
+    fn: (
+      err: unknown,
+      ctx: MinimalContext<TContext> | LifecycleErrorContext<TContext> | null,
+    ) => void,
+  ): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Register a handler for connection open events.
+   * Context is capability-gated based on installed plugins.
+   * Preserves extension types through fluent chaining.
+   */
+  onOpen(
+    handler: (ctx: OpenContext<TContext, TExtensions>) => void | Promise<void>,
+  ): RouterWithExtensions<TContext, TExtensions>;
+
+  /**
+   * Register a handler for connection close events.
+   * Context is capability-gated based on installed plugins (no send).
+   * Preserves extension types through fluent chaining.
+   */
+  onClose(
+    handler: (ctx: CloseContext<TContext, TExtensions>) => void | Promise<void>,
   ): RouterWithExtensions<TContext, TExtensions>;
 
   /**
@@ -736,9 +821,26 @@ export class RouterImpl<
   }
 
   onError(
-    fn: (err: unknown, ctx: MinimalContext<TContext> | null) => void,
+    fn: (
+      err: unknown,
+      ctx: MinimalContext<TContext> | LifecycleErrorContext<TContext> | null,
+    ) => void,
   ): this {
     this.lifecycle.onError(fn);
+    return this;
+  }
+
+  onOpen(
+    handler: (ctx: BaseOpenContext<TContext>) => void | Promise<void>,
+  ): this {
+    this.lifecycle.onRouterOpen(handler);
+    return this;
+  }
+
+  onClose(
+    handler: (ctx: BaseCloseContext<TContext>) => void | Promise<void>,
+  ): this {
+    this.lifecycle.onRouterClose(handler);
     return this;
   }
 
@@ -1013,9 +1115,20 @@ export class RouterImpl<
 
   /**
    * Handle connection open.
-   * Marks connection as active, notifies open handlers, and starts heartbeat.
+   * Marks connection as active, runs lifecycle handlers, and notifies observers.
    * Called by adapters on WebSocket upgrade.
    * Idempotent; safe to call multiple times.
+   *
+   * Lifecycle flow:
+   * 1. Merge initial data from adapter (auth context)
+   * 2. Run internal handlers (plugins for infrastructure setup)
+   * 3. Build full context for router-level handlers
+   * 4. Run router-level handlers (user code) with capability-gated context
+   * 5. Notify observers
+   *
+   * Errors in router-level handlers:
+   * - CloseError: Close connection with specified code/reason
+   * - Other errors: Close with 1011 (internal error), notify onError handlers
    *
    * @param ws - WebSocket connection
    */
@@ -1024,21 +1137,124 @@ export class RouterImpl<
     this.lifecycle.markActivity(ws, now);
 
     // Merge initial context data provided by the adapter (e.g., from headers, auth).
-    // This runs before lifecycle.handleOpen, so onOpen handlers and plugins see seeded data.
-    // Cast to AdapterWebSocket to access adapter-only initialData field.
+    // This runs before handlers, so onOpen handlers and plugins see seeded data.
     const adapterWs = ws as AdapterWebSocket;
     if (adapterWs.initialData) {
       const ctx = this.getOrInitData(ws);
       Object.assign(ctx, adapterWs.initialData);
     }
 
-    // Notify plugins (e.g., pubsub for client tracking)
-    await this.lifecycle.handleOpen(ws);
+    // 1. Run internal handlers (plugins for infrastructure setup)
+    await this.lifecycle.handleInternalOpen(ws);
 
-    // Notify observers
+    // 2. Get client ID and data for context building
     const clientId = this.getOrCreateClientId(ws);
     const data = this.getOrInitData(ws);
+
+    // 3. Get router-level handlers
+    const routerHandlers = this.lifecycle.getRouterOpenHandlers();
+
+    if (routerHandlers.length > 0) {
+      // Build lifecycle context with capability-gated methods
+      const openCtx = await this.createOpenContext(clientId, ws, data, now);
+
+      // 4. Run router-level handlers sequentially
+      for (const handler of routerHandlers) {
+        try {
+          await Promise.resolve(handler(openCtx));
+        } catch (err) {
+          // Handle CloseError: close with custom code
+          if (CloseError.isCloseError(err)) {
+            try {
+              ws.close(err.code, err.reason);
+            } catch {
+              // Socket may already be closing
+            }
+            return;
+          }
+
+          // Other errors: notify error handlers, close with 1011
+          const errorCtx: LifecycleErrorContext<TContext> = {
+            type: SYSTEM_LIFECYCLE.OPEN as "$ws:open",
+            clientId,
+            data,
+          };
+          await this.lifecycle.handleError(err, errorCtx);
+          this.notifyError(err, { clientId, type: SYSTEM_LIFECYCLE.OPEN });
+
+          try {
+            ws.close(1011, "Internal error");
+          } catch {
+            // Socket may already be closing
+          }
+          return;
+        }
+      }
+    }
+
+    // 5. Notify observers
     this.notifyObservers("onConnectionOpen", clientId, data);
+  }
+
+  /**
+   * Create capability-gated context for onOpen handlers.
+   * @internal
+   */
+  private async createOpenContext(
+    clientId: string,
+    ws: ServerWebSocket,
+    data: TContext,
+    connectedAt: number,
+  ): Promise<BaseOpenContext<TContext>> {
+    // Build base context
+    const ctx: BaseOpenContext<TContext> = {
+      clientId,
+      ws,
+      data,
+      connectedAt,
+      assignData: (partial: Partial<TContext>) => {
+        Object.assign(data, partial);
+      },
+    };
+
+    // Run context enhancers to add capability-gated methods (send, publish, topics)
+    // Create a minimal context wrapper for enhancers
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentional no-op
+    const noop = () => {};
+    const enhancerCtx = {
+      clientId,
+      ws,
+      type: SYSTEM_LIFECYCLE.OPEN,
+      data,
+      extensions: new Map<string, unknown>(),
+      assignData: ctx.assignData,
+      payload: undefined,
+      meta: {},
+      error: noop,
+    };
+
+    for (const enhance of this.getSortedEnhancers()) {
+      try {
+        await enhance(enhancerCtx);
+      } catch (err) {
+        // Log but continue - enhancer errors shouldn't break lifecycle
+        console.error("Error in context enhancer during onOpen:", err);
+      }
+    }
+
+    // Copy capability-gated methods from enhanced context
+    const enhanced = enhancerCtx as any;
+    if (enhanced.send) {
+      (ctx as any).send = enhanced.send;
+    }
+    if (enhanced.publish) {
+      (ctx as any).publish = enhanced.publish;
+    }
+    if (enhanced.topics) {
+      (ctx as any).topics = enhanced.topics;
+    }
+
+    return ctx;
   }
 
   /**
@@ -1061,9 +1277,17 @@ export class RouterImpl<
 
   /**
    * Handle connection close.
-   * Cleans up per-connection data, notifies lifecycle handlers, and triggers plugin cleanup.
+   * Runs lifecycle handlers, cleans up per-connection data, and notifies observers.
    * Called by adapters on WebSocket close/error.
    * Idempotent; safe to call multiple times.
+   *
+   * Lifecycle flow:
+   * 1. Run router-level handlers (user code) with capability-gated context
+   * 2. Run internal handlers (plugins for cleanup)
+   * 3. Clean up connection data
+   * 4. Notify observers
+   *
+   * Errors in handlers are logged but don't affect close (connection is terminating).
    *
    * @param ws - WebSocket connection
    * @param code - WebSocket close code (optional, e.g., 1000 for normal close)
@@ -1074,21 +1298,48 @@ export class RouterImpl<
     code?: number,
     reason?: string,
   ): Promise<void> {
-    // Capture clientId before cleaning up
+    // Capture clientId and data before cleanup
     const clientId = this.getClientId(ws);
+    const data = clientId ? this.connData.get(ws) : undefined;
 
-    // Notify lifecycle handlers FIRST (plugins, heartbeat monitor, etc.)
+    // 1. Run router-level handlers FIRST (user code for "user left" broadcasts, etc.)
+    const routerHandlers = this.lifecycle.getRouterCloseHandlers();
+
+    if (routerHandlers.length > 0 && clientId && data) {
+      // Build close context with capability-gated methods
+      const closeCtx = await this.createCloseContext(
+        clientId,
+        ws,
+        data,
+        code,
+        reason,
+      );
+
+      for (const handler of routerHandlers) {
+        try {
+          await Promise.resolve(handler(closeCtx));
+        } catch (err) {
+          // Log errors but don't stop close flow
+          const errorCtx: LifecycleErrorContext<TContext> = {
+            type: SYSTEM_LIFECYCLE.CLOSE as "$ws:close",
+            clientId,
+            data,
+          };
+          await this.lifecycle.handleError(err, errorCtx);
+          this.notifyError(err, { clientId, type: SYSTEM_LIFECYCLE.CLOSE });
+        }
+      }
+    }
+
+    // 2. Run internal handlers (plugins for cleanup)
     // so they can access clientId via getClientId(ws) for cleanup tasks
-    // (pub/sub subscriptions, timers, etc.)
-    await this.lifecycle.handleClose(ws, code, reason);
+    await this.lifecycle.handleInternalClose(ws, code, reason);
 
-    // Clean up per-connection data and client ID AFTER lifecycle handlers.
-    // While WeakMap entries auto-clean when ws is GC'd, explicit deletion
-    // ensures timely resource release.
+    // 3. Clean up per-connection data and client ID AFTER lifecycle handlers.
     this.connData.delete(ws);
     this.wsToClientId.delete(ws);
 
-    // Notify observers
+    // 4. Notify observers
     if (clientId) {
       const closeInfo: { code?: number; reason?: string } = {};
       if (code !== undefined) {
@@ -1099,5 +1350,69 @@ export class RouterImpl<
       }
       this.notifyObservers("onConnectionClose", clientId, closeInfo);
     }
+  }
+
+  /**
+   * Create capability-gated context for onClose handlers.
+   * Note: No send() method since socket is CLOSING/CLOSED.
+   * Topics are read-only (list, has only) since cleanup is automatic.
+   * @internal
+   */
+  private async createCloseContext(
+    clientId: string,
+    ws: ServerWebSocket,
+    data: TContext,
+    code?: number,
+    reason?: string,
+  ): Promise<BaseCloseContext<TContext>> {
+    // Build base context (no assignData since connection is closing)
+    // Only include code/reason if they are defined (exactOptionalPropertyTypes)
+    const ctx: BaseCloseContext<TContext> = {
+      clientId,
+      ws,
+      data,
+      ...(code !== undefined && { code }),
+      ...(reason !== undefined && { reason }),
+    };
+
+    // Run context enhancers to add capability-gated methods (publish, topics read-only)
+    const enhancerCtx = {
+      clientId,
+      ws,
+      type: SYSTEM_LIFECYCLE.CLOSE,
+      data,
+      extensions: new Map<string, unknown>(),
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- no-op for close context
+      assignData: () => {},
+      payload: undefined,
+      meta: {},
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- not used in lifecycle
+      error: () => {},
+    };
+
+    for (const enhance of this.getSortedEnhancers()) {
+      try {
+        await enhance(enhancerCtx);
+      } catch (err) {
+        // Log but continue
+        console.error("Error in context enhancer during onClose:", err);
+      }
+    }
+
+    // Copy capability-gated methods from enhanced context
+    // Note: No send() - socket is closing
+    const enhanced = enhancerCtx as any;
+    if (enhanced.publish) {
+      (ctx as any).publish = enhanced.publish;
+    }
+    if (enhanced.topics) {
+      // For close context, topics is read-only (list, has only)
+      (ctx as any).topics = {
+        list: enhanced.topics.list,
+        has: enhanced.topics.has,
+      };
+    }
+
+    return ctx;
   }
 }

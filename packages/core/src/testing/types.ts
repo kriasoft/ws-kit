@@ -90,9 +90,9 @@ export interface TestConnection<
   assignData(patch: Partial<TContext>): void;
 
   /**
-   * Close this connection.
+   * Close this connection with optional close code and reason.
    */
-  close(): Promise<void>;
+  close(code?: number, reason?: string): Promise<void>;
 }
 
 /**

@@ -135,6 +135,7 @@ For detailed pattern documentation, see the specs:
 - **Authentication** — [docs/specs/router.md#authentication](./docs/specs/router.md)
 - **Request-Response (RPC)** — [docs/specs/router.md#rpc](./docs/specs/router.md)
 - **Broadcasting & Pub/Sub** — [docs/specs/pubsub.md](./docs/specs/pubsub.md)
+- **Lifecycle Hooks** — [docs/specs/router.md#lifecycle-hooks](./docs/specs/router.md)
 - **Client-Side** — [docs/specs/client.md](./docs/specs/client.md)
 - **Error Handling** — [docs/specs/error-handling.md](./docs/specs/error-handling.md)
 - **Connection Data** — [docs/specs/router.md#connection-data](./docs/specs/router.md)

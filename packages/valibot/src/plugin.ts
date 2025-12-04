@@ -192,6 +192,13 @@ export function withValibot<TContext extends ConnectionData = ConnectionData>(
     // This runs BEFORE core messaging/RPC enhancers (lower priority)
     // so that ctx.payload is available for the messaging methods to use
     router.use(async (ctx: MinimalContext<any>, next: () => Promise<void>) => {
+      // Skip validation for system lifecycle events ($ws:open, $ws:close)
+      // These are handled by router.onOpen/onClose and don't need payload validation
+      if (typeof ctx.type === "string" && ctx.type.startsWith("$ws:")) {
+        await next();
+        return;
+      }
+
       // Capture lifecycle for use in error handlers
       const lifecycle = api.getLifecycle();
 

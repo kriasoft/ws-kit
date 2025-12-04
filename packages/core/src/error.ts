@@ -699,3 +699,65 @@ export class WsKitError<C extends string = ExtErrorCode> extends Error {
 export function isStandardErrorCode(value: string): value is ErrorCode {
   return value in ERROR_CODE_META;
 }
+
+/**
+ * CloseError: Control signal to close a connection with a custom code.
+ *
+ * Throw from router.onOpen() handlers only. This is not a recoverable error —
+ * it's a deliberate close signal. The connection will be closed with the
+ * specified WebSocket close code and reason. Useful for authentication
+ * failures or conditions that should prevent the connection from proceeding.
+ *
+ * Standard WebSocket close codes:
+ * - 1000: Normal closure
+ * - 1001: Going away
+ * - 1002: Protocol error
+ * - 1003: Unsupported data
+ * - 1008: Policy violation
+ * - 1011: Internal error (default for unhandled errors)
+ * - 4000-4999: Application-specific codes (use for custom auth failures, etc.)
+ *
+ * @example
+ * ```ts
+ * import { CloseError } from "@ws-kit/core";
+ *
+ * router.onOpen(async (ctx) => {
+ *   const user = await validateToken(ctx.data.token);
+ *   if (!user) {
+ *     // Close with custom code and reason
+ *     throw new CloseError(4401, "Invalid token");
+ *   }
+ *   ctx.assignData({ user });
+ * });
+ * ```
+ */
+export class CloseError extends Error {
+  /**
+   * WebSocket close code (1000-4999).
+   * Application-specific codes should use 4000-4999 range.
+   */
+  readonly code: number;
+
+  /**
+   * Human-readable close reason (max 123 bytes per WebSocket spec).
+   */
+  readonly reason: string;
+
+  constructor(code: number, reason?: string) {
+    super(reason ?? `Connection closed with code ${code}`);
+    this.name = "CloseError";
+    this.code = code;
+    this.reason = reason ?? "";
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, CloseError);
+    }
+  }
+
+  /**
+   * Type guard to check if a value is a CloseError.
+   */
+  static isCloseError(value: unknown): value is CloseError {
+    return value instanceof CloseError;
+  }
+}

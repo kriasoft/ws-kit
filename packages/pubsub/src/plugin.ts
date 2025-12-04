@@ -356,13 +356,14 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
     };
 
     /**
-     * Hook lifecycle events to track connected clients.
-     * Plugins hook into router lifecycle for setup/cleanup.
+     * Hook internal lifecycle events to track connected clients.
+     * Plugins use onInternalOpen/onInternalClose for infrastructure setup/cleanup.
+     * These run before router-level handlers (user code) have access to ctx.topics.
      */
     const lifecycle = (router as any).getInternalLifecycle?.();
     if (lifecycle) {
-      lifecycle.onOpen(onClientOpen);
-      lifecycle.onClose(onClientClose);
+      lifecycle.onInternalOpen(onClientOpen);
+      lifecycle.onInternalClose(onClientClose);
     }
 
     /**

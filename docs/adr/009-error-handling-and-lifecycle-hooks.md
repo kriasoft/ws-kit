@@ -1,6 +1,6 @@
 # ADR-009: Error Handling Helpers and Lifecycle Hooks
 
-**Status**: Accepted
+**Status**: ✅ Implemented
 **Date**: 2025-10-29
 **Related**: ADR-005 (builder pattern), ADR-008 (middleware), ADR-006 (serve)
 

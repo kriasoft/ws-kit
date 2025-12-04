@@ -384,10 +384,10 @@ class TestConnectionImpl<
     Object.assign(this.state.data, patch);
   }
 
-  async close(): Promise<void> {
+  async close(code?: number, reason?: string): Promise<void> {
     // Route through websocket bridge to ensure cleanup hooks fire.
     // This invokes router.websocket.close(), which notifies lifecycle
     // handlers and plugins about connection termination.
-    await this.routerImpl.websocket.close(this.ws);
+    await this.routerImpl.websocket.close(this.ws, code, reason);
   }
 }

@@ -206,6 +206,14 @@ export function message<
     metaDef = specOrType.meta;
     options = specOrType.options;
   }
+
+  // Validate that type doesn't use reserved $ws: prefix (system lifecycle events only)
+  if (type.startsWith("$ws:")) {
+    throw new Error(
+      `Message type cannot start with '$ws:' (reserved for system events): "${type}"`,
+    );
+  }
+
   // Validate that meta doesn't contain reserved keys
   if (metaDef) {
     const reservedKeysInMeta = Object.keys(metaDef).filter((key) =>
@@ -487,6 +495,19 @@ export function rpc<
     resPayload = spec.res.payload;
     reqOptions = spec.req.options;
     resOptions = spec.res.options;
+  }
+
+  // Validate that types don't use reserved $ws: prefix (system lifecycle events only)
+  // Note: message() also validates this, but we check here for clearer error messages
+  if (reqType.startsWith("$ws:")) {
+    throw new Error(
+      `RPC request type cannot start with '$ws:' (reserved for system events): "${reqType}"`,
+    );
+  }
+  if (resType.startsWith("$ws:")) {
+    throw new Error(
+      `RPC response type cannot start with '$ws:' (reserved for system events): "${resType}"`,
+    );
   }
 
   // Build request schema using message() with per-request options
