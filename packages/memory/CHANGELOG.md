@@ -1,6 +1,6 @@
 # @ws-kit/memory
 
-## 1.0.0
+## 0.9.0
 
 ### Minor Changes
 
@@ -26,7 +26,7 @@
 
 - Updated dependencies [[`6eb7608`](https://github.com/kriasoft/ws-kit/commit/6eb7608acec57ccfcaf98c20b825320cfb290011)]:
   - @ws-kit/core@0.9.0
-  - @ws-kit/rate-limit@1.0.0
+  - @ws-kit/rate-limit@1.9.0
 
 ## 0.8.0
 

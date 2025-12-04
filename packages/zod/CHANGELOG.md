@@ -25,9 +25,9 @@
 ### Patch Changes
 
 - Updated dependencies [[`6eb7608`](https://github.com/kriasoft/ws-kit/commit/6eb7608acec57ccfcaf98c20b825320cfb290011)]:
-  - @ws-kit/pubsub@1.0.0
+  - @ws-kit/pubsub@1.9.0
   - @ws-kit/core@0.9.0
-  - @ws-kit/plugins@1.0.0
+  - @ws-kit/plugins@1.9.0
 
 ## 0.8.2
 
