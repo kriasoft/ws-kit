@@ -31,14 +31,14 @@ export const SYSTEM_LIFECYCLE = {
 /**
  * Check if a type is reserved (system/internal use only).
  */
-export function isReservedType(type: string): boolean {
+export function isReserved(type: string): boolean {
   return RESERVED_PREFIXES.some((p) => type.startsWith(p));
 }
 
 /**
- * Check if a type is a lifecycle event type ($ws:open, $ws:close).
- * Lifecycle types bypass validation but are handled by router lifecycle hooks.
+ * Check if a type is a lifecycle event ($ws:open, $ws:close).
+ * Lifecycle events bypass validation but are handled by router lifecycle hooks.
  */
-export function isLifecycleType(type: string): boolean {
+export function isLifecycle(type: string): boolean {
   return type === SYSTEM_LIFECYCLE.OPEN || type === SYSTEM_LIFECYCLE.CLOSE;
 }

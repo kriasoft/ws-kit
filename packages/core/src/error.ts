@@ -701,12 +701,12 @@ export function isStandardErrorCode(value: string): value is ErrorCode {
 }
 
 /**
- * CloseError: Thrown from onOpen handlers to close connection with a custom code.
+ * CloseError: Control signal to close a connection with a custom code.
  *
- * When thrown in a router.onOpen() handler, the connection will be closed
- * with the specified WebSocket close code and reason. This is useful for
- * authentication failures or other conditions that should prevent the
- * connection from proceeding.
+ * Throw from router.onOpen() handlers only. This is not a recoverable error —
+ * it's a deliberate close signal. The connection will be closed with the
+ * specified WebSocket close code and reason. Useful for authentication
+ * failures or conditions that should prevent the connection from proceeding.
  *
  * Standard WebSocket close codes:
  * - 1000: Normal closure
