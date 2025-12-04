@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/plugins",
-  "version": "0.8.1",
+  "version": "1.0.0",
   "description": "Core plugins for WS-Kit routers (messaging, RPC, pub/sub)",
   "type": "module",
   "sideEffects": false,

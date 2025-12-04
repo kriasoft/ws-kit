@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/memory",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "In-memory rate limiter and pub/sub adapter for WS-Kit",
   "type": "module",
   "sideEffects": false,

@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/client",
-  "version": "0.8.2",
+  "version": "1.0.0",
   "description": "Universal WebSocket client for WS-Kit with type-safe message validation for browser and Node.js",
   "type": "module",
   "sideEffects": false,
