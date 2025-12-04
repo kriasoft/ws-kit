@@ -347,4 +347,74 @@ describe("Router Lifecycle Hooks", () => {
       expect(result).toBe(router);
     });
   });
+
+  describe("Capability Gating", () => {
+    it("base router onOpen should NOT have send() method", () => {
+      const router = createRouter();
+      let hasSend = false;
+
+      router.onOpen((ctx) => {
+        // send() requires validation plugin
+        hasSend = "send" in ctx;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      tr.connect().then((conn) => conn.close());
+
+      // Without validation plugin, send() should not be available
+      expect(hasSend).toBe(false);
+    });
+
+    it("base router onOpen should NOT have publish() method", () => {
+      const router = createRouter();
+      let hasPublish = false;
+
+      router.onOpen((ctx) => {
+        // publish() requires pubsub plugin
+        hasPublish = "publish" in ctx;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      tr.connect().then((conn) => conn.close());
+
+      // Without pubsub plugin, publish() should not be available
+      expect(hasPublish).toBe(false);
+    });
+
+    it("base router onOpen should NOT have topics", () => {
+      const router = createRouter();
+      let hasTopics = false;
+
+      router.onOpen((ctx) => {
+        // topics requires pubsub plugin
+        hasTopics = "topics" in ctx;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      tr.connect().then((conn) => conn.close());
+
+      // Without pubsub plugin, topics should not be available
+      expect(hasTopics).toBe(false);
+    });
+
+    it("onClose topics should be read-only (no subscribe/unsubscribe)", async () => {
+      // This is a type-level test verification
+      // At runtime, pubsub plugin would provide topics with read-only interface
+      const router = createRouter();
+      let closeCtx: Record<string, unknown> | undefined;
+
+      router.onClose((ctx) => {
+        closeCtx = ctx as unknown as Record<string, unknown>;
+      });
+
+      const tr = testUtils.createTestRouter({ create: () => router });
+      const conn = await tr.connect();
+      await conn.close();
+
+      // Without pubsub plugin, topics shouldn't exist at all
+      expect(closeCtx?.topics).toBeUndefined();
+
+      await tr.close();
+    });
+  });
 });

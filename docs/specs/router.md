@@ -657,20 +657,33 @@ router
 
 ```typescript
 router.onOpen(async (ctx) => {
-  // ctx: { clientId, data, connectedAt, ws, assignData }
+  // ctx: { clientId, data, connectedAt, ws, assignData() }
   // With validation plugin: + send()
-  // With pubsub plugin: + publish(), topics.subscribe(), topics.unsubscribe()
+  // With pubsub plugin: + publish(), topics.subscribe/unsubscribe/list/has()
   console.log("Client connected:", ctx.clientId);
   await ctx.topics.subscribe(`user:${ctx.data.userId}`);
 });
 
 router.onClose(async (ctx) => {
-  // ctx: { clientId, data, code, reason, ws }
-  // With pubsub plugin: + publish(), topics.list(), topics.has()
-  // (no send - socket is closing; topics are read-only)
-  console.log("Client disconnected:", ctx.clientId, ctx.code, ctx.reason);
+  // ctx: { clientId, data, code?, reason?, ws }
+  // With pubsub plugin: + publish(), topics.list/has() (read-only)
+  // No send() - socket is closing; no subscribe/unsubscribe - topics are read-only
+  const sessionDuration = Date.now() - ctx.data.connectedAt;
+  console.log("Client disconnected after", sessionDuration, "ms");
 });
 ```
+
+**Context properties**:
+
+| Property       | onOpen | onClose | Description                                 |
+| -------------- | ------ | ------- | ------------------------------------------- |
+| `clientId`     | ✓      | ✓       | UUID v7 connection identifier               |
+| `data`         | ✓      | ✓       | Typed connection data from `authenticate()` |
+| `connectedAt`  | ✓      | —       | Connection timestamp (ms since epoch)       |
+| `code`         | —      | ✓       | WebSocket close code (optional)             |
+| `reason`       | —      | ✓       | WebSocket close reason (optional)           |
+| `ws`           | ✓      | ✓       | Raw WebSocket instance                      |
+| `assignData()` | ✓      | —       | Update connection data (partial merge)      |
 
 **CloseError**: Throw in `onOpen` to close with a custom code:
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "bun:test";
-import { CloseError } from "./error.ts";
+import { CloseError } from "./error.js";
 
 describe("CloseError", () => {
   it("should create CloseError with code and reason", () => {
