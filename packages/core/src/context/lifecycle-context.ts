@@ -15,8 +15,15 @@
 
 import type { PublishOptions, PublishResult } from "../core/types.js";
 import type { MessageDescriptor } from "../protocol/message-descriptor.js";
+import type { SYSTEM_LIFECYCLE } from "../schema/reserved.js";
 import type { ServerWebSocket } from "../ws/platform-adapter.js";
 import type { ConnectionData } from "./base-context.js";
+
+/**
+ * WebSocket interface for close handlers.
+ * Omits send() since the socket is CLOSING or CLOSED.
+ */
+export type ClosingWebSocket = Omit<ServerWebSocket, "send">;
 
 /**
  * Base context for onOpen handlers (always present).
@@ -58,8 +65,8 @@ export interface BaseCloseContext<
   /** Close reason string. */
   readonly reason?: string;
 
-  /** Underlying WebSocket (socket is CLOSING or CLOSED). */
-  readonly ws: ServerWebSocket;
+  /** Underlying WebSocket (socket is CLOSING or CLOSED, send() unavailable). */
+  readonly ws: ClosingWebSocket;
 }
 
 /**
@@ -123,7 +130,7 @@ export interface LifecycleErrorContext<
   TContext extends ConnectionData = ConnectionData,
 > {
   /** Event type ($ws:open or $ws:close). */
-  readonly type: "$ws:open" | "$ws:close";
+  readonly type: typeof SYSTEM_LIFECYCLE.OPEN | typeof SYSTEM_LIFECYCLE.CLOSE;
   /** Client identifier. */
   readonly clientId: string;
   /** Connection data. */

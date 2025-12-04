@@ -155,6 +155,8 @@ export class LifecycleManager<
       try {
         await Promise.resolve(handler(ws));
       } catch (e) {
+        // Route to onError handlers (null context = internal/infrastructure error)
+        await this.handleError(e, null);
         console.error("Error in internal onOpen handler:", e);
       }
     }
@@ -169,16 +171,18 @@ export class LifecycleManager<
     code?: number,
     reason?: string,
   ): Promise<void> {
-    // Clean up activity map for consistency
-    this.activityMap.delete(ws);
-
     for (const handler of this.internalCloseHandlers) {
       try {
         await Promise.resolve(handler(ws, code, reason));
       } catch (e) {
+        // Route to onError handlers (null context = internal/infrastructure error)
+        await this.handleError(e, null);
         console.error("Error in internal onClose handler:", e);
       }
     }
+
+    // Clean up activity map after handlers (so they can read lastActivity)
+    this.activityMap.delete(ws);
   }
 
   /**
@@ -191,9 +195,9 @@ export class LifecycleManager<
 
   /**
    * Get last activity timestamp for a connection.
-   * Returns 0 if no activity recorded yet.
+   * Returns undefined if no activity recorded or connection closed.
    */
-  lastActivity(ws: ServerWebSocket): number {
-    return this.activityMap.get(ws) ?? 0;
+  lastActivity(ws: ServerWebSocket): number | undefined {
+    return this.activityMap.get(ws);
   }
 }
