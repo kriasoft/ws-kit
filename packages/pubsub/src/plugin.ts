@@ -374,8 +374,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
     const api = getRouterPluginAPI(router);
     api.addContextEnhancer(
       (ctx: any) => {
-        // Attach publish() method for broadcasting to topic subscribers
-        ctx.publish = async (
+        // Create publish function for broadcasting to topic subscribers
+        const ctxPublish = async (
           topic: string,
           schema: MessageDescriptor,
           payload: any,
@@ -385,8 +385,19 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
           return await publish(topic, schema, payload, opts, ctx.clientId);
         };
 
-        // Also store in extensions for validator plugin access
-        ctx.extensions.set("pubsub", { publish: ctx.publish });
+        // Store in extensions for validator plugin access
+        const pubsubExt = { publish: ctxPublish };
+        ctx.extensions.set("pubsub", pubsubExt);
+
+        // Expose as delegate that calls through to extension.
+        // This allows validation plugins to wrap pubsubExt.publish without
+        // overwriting ctx.publish, avoiding "enhancer overwrote" warnings.
+        ctx.publish = (
+          topic: string,
+          schema: MessageDescriptor,
+          payload: any,
+          opts?: PublishOptions,
+        ) => pubsubExt.publish(topic, schema, payload, opts);
 
         // Attach topics helper for subscription management
         // Topics are scoped to this connection via ctx.clientId

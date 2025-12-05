@@ -420,7 +420,10 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           return progressPayload;
         };
 
-        // Get the messaging extension from core plugin
+        // Wrap extension methods with validation.
+        // Core plugins expose delegates on ctx that call through to extensions,
+        // so wrapping the extension method is sufficient - no ctx assignment needed.
+        // This avoids "enhancer overwrote ctx properties" warnings.
         const messagingExt = ctx.extensions.get("messaging") as any;
         const rpcExt = ctx.extensions.get("rpc") as any;
         const pubsubExt = ctx.extensions.get("pubsub") as any;
@@ -428,17 +431,15 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         if (messagingExt?.send) {
           // Wrap send() with outbound validation
           const coreSend = messagingExt.send;
-          (enhCtx as any).send = async (
+          messagingExt.send = async (
             schema: AnySchema | MessageDescriptor,
             payload: any,
             opts?: SendOptions,
           ): Promise<any> => {
-            // Validate outgoing payload if enabled
             const validatedPayload = await validateOutgoingPayload(
               schema,
               payload,
             );
-            // Delegate to core send with validated payload
             return coreSend(schema, validatedPayload, opts);
           };
         }
@@ -446,7 +447,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         if (rpcExt?.reply) {
           // Wrap reply() with outbound validation
           const coreReply = rpcExt.reply;
-          (enhCtx as any).reply = async (
+          rpcExt.reply = async (
             payload: any,
             opts?: ReplyOptions,
           ): Promise<any> => {
@@ -457,7 +458,6 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
               const shouldValidate = opts?.validate ?? eff.validateOutgoing;
 
               if (shouldValidate) {
-                // Validate response payload
                 const validatedPayload = await validateOutgoingPayload(
                   wskit.response,
                   payload,
@@ -472,7 +472,7 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
         if (rpcExt?.progress) {
           // Wrap progress() with outbound validation
           const coreProgress = rpcExt.progress;
-          (enhCtx as any).progress = async (
+          rpcExt.progress = async (
             payload: any,
             opts?: ProgressOptions,
           ): Promise<any> => {
@@ -483,7 +483,6 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
               const shouldValidate = opts?.validate ?? eff.validateOutgoing;
 
               if (shouldValidate) {
-                // Validate progress payload
                 const validatedPayload = await validateProgressPayload(
                   wskit.response,
                   payload,
@@ -495,10 +494,10 @@ export function withZod<TContext extends ConnectionData = ConnectionData>(
           };
         }
 
-        const corePublish = pubsubExt?.publish ?? (enhCtx as any).publish;
-        if (corePublish) {
+        if (pubsubExt?.publish) {
           // Wrap publish() with outbound validation
-          (enhCtx as any).publish = async (
+          const corePublish = pubsubExt.publish;
+          pubsubExt.publish = async (
             topic: string,
             schema: AnySchema | MessageDescriptor,
             payload: any,
