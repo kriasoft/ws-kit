@@ -33,9 +33,9 @@
 ### Patch Changes
 
 - Updated dependencies [[`f118801`](https://github.com/kriasoft/ws-kit/commit/f11880133c7897d0dd2f4ee5c73d70720cd0ea6c)]:
-  - @ws-kit/plugins@1.0.0
+  - @ws-kit/plugins@0.10.0
   - @ws-kit/core@0.10.0
-  - @ws-kit/pubsub@1.0.0
+  - @ws-kit/pubsub@0.10.0
 
 ## 0.9.0
 
