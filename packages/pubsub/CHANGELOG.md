@@ -1,5 +1,21 @@
 # @ws-kit/pubsub
 
+## 0.10.1
+
+### Patch Changes
+
+- [#98](https://github.com/kriasoft/ws-kit/pull/98) [`90f8438`](https://github.com/kriasoft/ws-kit/commit/90f8438ebbe1a584c9cac74f4204b06db64b1117) Thanks [@koistya](https://github.com/koistya)! - fix: eliminate "Enhancer overwrote ctx properties" warning
+
+  Core plugins now use delegate pattern for context methods. `ctx.send`, `ctx.reply`, `ctx.progress`, and `ctx.publish` are thin delegates that call through to extension methods. Validation plugins wrap the extensions directly instead of overwriting context properties.
+
+  This eliminates the false-positive warning when using `withZod()` or `withValibot()`:
+
+  ```
+  [ws-kit] Enhancer overwrote ctx properties: send, reply, progress.
+  ```
+
+  No API changes - this is an internal architectural improvement.
+
 ## 0.10.0
 
 ### Minor Changes
