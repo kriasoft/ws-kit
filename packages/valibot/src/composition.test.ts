@@ -263,17 +263,16 @@ describe("Valibot router composition with merge", () => {
       const PayloadSchema = message("WITH_PAYLOAD", {
         data: v.pipe(v.string()),
       });
-      const NoPayloadSchema = message("NO_PAYLOAD");
 
       const router = makeRouter();
       router.on(PayloadSchema, (ctx) => {
         const ReplySchema = message("REPLY", { status: v.pipe(v.string()) });
 
-        // Should require payload
+        // Should require payload matching schema
         ctx.send(ReplySchema, { status: "ok" });
 
-        // Should handle no-payload schemas
-        ctx.send(NoPayloadSchema, undefined);
+        // Payload type is inferred from schema
+        expectTypeOf(ctx.payload).toEqualTypeOf<{ data: string }>();
       });
 
       const mainRouter = makeRouter();
