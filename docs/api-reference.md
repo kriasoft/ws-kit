@@ -797,14 +797,40 @@ interface RpcMessageContext<TSchema, TData> {
 Send a validated message to the current client.
 
 ```typescript
-send(schema: MessageSchemaType, payload: unknown, options?: SendOptions): void;
+// Fire-and-forget (sync)
+send<T>(schema: Schema<T>, payload: T, opts?: SendOptionsSync): void;
+
+// Backpressure-aware (async)
+send<T>(schema: Schema<T>, payload: T, opts: SendOptionsAsync): Promise<boolean>;
+```
+
+**Options:**
+
+```typescript
+interface SendOptionsBase {
+  signal?: AbortSignal;
+  meta?: Record<string, any>;
+  inheritCorrelationId?: boolean;
+}
+
+interface SendOptionsSync extends SendOptionsBase {
+  waitFor?: undefined;
+}
+
+interface SendOptionsAsync extends SendOptionsBase {
+  waitFor: "drain" | "ack";
+}
+
+type SendOptions = SendOptionsSync | SendOptionsAsync;
 ```
 
 **Parameters:**
 
 - `schema` - Message schema
 - `payload` - Message payload (validated against schema)
-- `options` - Optional metadata (timestamp auto-added, can include correlationId)
+- `options` - Optional configuration
+  - Without `waitFor`: returns `void` (fire-and-forget, sync)
+  - With `waitFor`: returns `Promise<boolean>` (backpressure-aware, async)
 
 **Auto-injected metadata:**
 
@@ -814,8 +840,21 @@ send(schema: MessageSchemaType, payload: unknown, options?: SendOptions): void;
 **Example:**
 
 ```typescript
+// Fire-and-forget
 router.on(PingMessage, (ctx) => {
   ctx.send(PongMessage, { reply: "pong" });
+});
+
+// Backpressure-aware
+router.on(StreamMessage, async (ctx) => {
+  const sent = await ctx.send(
+    DataMessage,
+    { chunk: data },
+    { waitFor: "drain" },
+  );
+  if (!sent) {
+    // Handle backpressure
+  }
 });
 ```
 

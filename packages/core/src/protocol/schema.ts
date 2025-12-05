@@ -50,61 +50,54 @@ export type AnySchema = MessageSchema | RpcSchema;
 /**
  * Extract payload type from a branded schema.
  */
-export type InferPayload<S extends { readonly [SchemaTag]?: any }> = S extends {
-  readonly [SchemaTag]: infer B;
-}
+export type InferPayload<S> = S extends { readonly [SchemaTag]: infer B }
   ? B extends { readonly payload: infer P }
     ? P
-    : never
-  : never;
+    : unknown
+  : unknown;
 
 /**
  * Extract response type from a branded RPC schema.
  */
-export type InferResponse<S extends { readonly [SchemaTag]?: any }> =
-  S extends {
-    readonly [SchemaTag]: infer B;
-  }
-    ? B extends { readonly response: infer P }
-      ? P
-      : never
-    : never;
+export type InferResponse<S> = S extends { readonly [SchemaTag]: infer B }
+  ? B extends { readonly response: infer P }
+    ? P
+    : unknown
+  : unknown;
 
 /**
  * Extract message type literal from a branded schema.
  */
-export type InferType<S extends { readonly [SchemaTag]?: any }> = S extends {
-  readonly [SchemaTag]: infer B;
-}
+export type InferType<S> = S extends { readonly [SchemaTag]: infer B }
   ? B extends { readonly type: infer T }
     ? T
-    : never
-  : never;
+    : unknown
+  : unknown;
 
 /**
  * Extract extended meta fields from a branded schema.
  */
-export type InferMeta<S extends { readonly [SchemaTag]?: any }> = S extends {
-  readonly [SchemaTag]: infer B;
-}
+export type InferMeta<S> = S extends { readonly [SchemaTag]: infer B }
   ? B extends { readonly meta: infer M }
     ? M
-    : never
-  : never;
+    : unknown
+  : unknown;
 
 /**
  * Infer full message type from a branded schema (convenience alias).
  */
-export type InferMessage<S extends { readonly [SchemaTag]?: any }> = S extends {
-  readonly [SchemaTag]: infer B;
-}
+export type InferMessage<S> = S extends { readonly [SchemaTag]: infer B }
   ? B extends {
       readonly type: infer T;
       readonly payload: infer P;
       readonly meta: infer M;
     }
-    ? { type: T; meta: M; payload: P extends never ? never : P }
-    : never
-  : never;
+    ? {
+        type: T;
+        meta: M;
+        payload: P extends never ? never : P;
+      }
+    : unknown
+  : unknown;
 
 export type { MessageDescriptor };
