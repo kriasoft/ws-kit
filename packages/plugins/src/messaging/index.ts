@@ -227,8 +227,14 @@ export function withMessaging<
         const messagingExt = { send };
         ctx.extensions.set("messaging", messagingExt);
 
-        // Also expose directly on context for backwards compatibility
-        (enhCtx as any).send = send;
+        // Expose as delegate that calls through to extension.
+        // This allows validation plugins to wrap messagingExt.send without
+        // overwriting ctx.send, avoiding "enhancer overwrote" warnings.
+        (enhCtx as any).send = (
+          schema: any,
+          payload: any,
+          opts?: SendOptions,
+        ) => messagingExt.send(schema, payload, opts);
       },
       { priority: 0 },
     );

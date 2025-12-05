@@ -386,9 +386,13 @@ export function withRpc<TContext extends ConnectionData = ConnectionData>() {
         const rpcExt = { reply, progress };
         ctx.extensions.set("rpc", rpcExt);
 
-        // Also expose directly on context for backwards compatibility
-        (enhCtx as any).reply = reply;
-        (enhCtx as any).progress = progress;
+        // Expose as delegates that call through to extension.
+        // This allows validation plugins to wrap rpcExt.reply/progress without
+        // overwriting ctx properties, avoiding "enhancer overwrote" warnings.
+        (enhCtx as any).reply = (payload: any, opts?: ReplyOptions) =>
+          rpcExt.reply(payload, opts);
+        (enhCtx as any).progress = (update: any, opts?: ProgressOptions) =>
+          rpcExt.progress(update, opts);
       },
       { priority: 0 },
     );
