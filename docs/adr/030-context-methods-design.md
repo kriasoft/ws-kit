@@ -49,25 +49,29 @@ Existing designs create friction:
 
 ### Method Specifications
 
-#### `ctx.send(schema, payload, opts?)` → `void | Promise<boolean>`
+#### `ctx.send(schema, payload, opts?)` → Overloaded: `void` or `Promise<boolean>`
 
 **Purpose**: Send a one-way message to the current connection (unicast, 1-to-1).
 
 **Signature**:
 
 ```typescript
-send<T>(
-  schema: Schema<T>,
-  payload: T,
-  opts?: SendOptions,
-): void | Promise<boolean>;
+send<T>(schema: Schema<T>, payload: T): void;
+send<T>(schema: Schema<T>, payload: T, opts: SendOptionsAsync): Promise<boolean>;
+send<T>(schema: Schema<T>, payload: T, opts: SendOptionsSync): void;
 
-interface SendOptions {
+interface SendOptionsSync {
   signal?: AbortSignal;
-  waitFor?: 'drain' | 'ack';  // Makes return type Promise<boolean>
   meta?: Record<string, any>;
+  inheritCorrelationId?: boolean;
+}
+
+interface SendOptionsAsync extends SendOptionsSync {
+  waitFor: 'drain' | 'ack';  // Makes return type Promise<boolean>
 }
 ```
+
+**Return Type Design**: The method uses separate `SendOptionsSync` and `SendOptionsAsync` interfaces to enable TypeScript to infer the correct return type at compile time. When `waitFor` is present (async variant), the return type is `Promise<boolean>`. When `waitFor` is absent (sync variant), the return type is `void`. This overload pattern avoids the unsafe `void | Promise<boolean>` union that would require runtime checks, aligning with the sync-first design philosophy.
 
 **Behavior**:
 
@@ -591,9 +595,9 @@ This aligns with the pub/sub spec (docs/specs/pubsub.md): state-changing mutatio
 - **Silent backpressure**: If developer ignores `waitFor`, high-throughput handlers may lose messages; mitigate with monitoring and docs
 - **Distributed race conditions**: Pub/sub can have partial delivery or ordering issues; mitigate with adapter guarantees and `partitionKey`
 
-### Event Correlation Helper: `{preserveCorrelation: true}` Option
+### Event Correlation Helper: `{inheritCorrelationId: true}` Option
 
-**Rationale**: Event handlers sometimes need to respond with acknowledgments for correlated messages (e.g., optional acks for tracing/observability). The RPC design (ADR-015) auto-preserves `correlationId` in `.reply()` and `.progress()` via `baseMeta()`, but event handlers (`.send()`) lack this convenience. The `{preserveCorrelation: true}` option on `SendOptions` fills this gap without introducing RPC semantics.
+**Rationale**: Event handlers sometimes need to respond with acknowledgments for correlated messages (e.g., optional acks for tracing/observability). The RPC design (ADR-015) auto-preserves `correlationId` in `.reply()` and `.progress()` via `baseMeta()`, but event handlers (`.send()`) lack this convenience. The `{inheritCorrelationId: true}` option on `SendOptions` fills this gap without introducing RPC semantics.
 
 **Design**: Lightweight opt-in flag that auto-copies `ctx.meta.correlationId` to outgoing meta if present. Graceful no-op if no correlation ID (silent, not an error). Fully composable with other options (`meta`, `waitFor`, `signal`).
 

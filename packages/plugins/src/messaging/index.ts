@@ -169,7 +169,7 @@ export function withMessaging<
          * With {waitFor} option, returns Promise<boolean>.
          *
          * Signal: If aborted before enqueue, gracefully skips sending.
-         * preserveCorrelation: Auto-copy correlationId from inbound meta if present.
+         * inheritCorrelationId: Auto-copy correlationId from inbound meta if present.
          */
         const send = (
           schema: any | MessageDescriptor,
@@ -187,11 +187,11 @@ export function withMessaging<
             setImmediate(() => {
               const messageType = getMessageType(schema);
 
-              // Build meta: start with sanitized user meta, then preserve correlation
+              // Build meta: start with sanitized user meta, then inherit correlation
               const outMeta: Record<string, unknown> = sanitizeMeta(opts?.meta);
 
-              // Auto-preserve correlation ID if requested and present in inbound
-              if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
+              // Auto-inherit correlation ID if requested and present in inbound
+              if (opts?.inheritCorrelationId && enhCtx.meta?.correlationId) {
                 outMeta.correlationId = enhCtx.meta.correlationId;
               }
 
@@ -206,11 +206,11 @@ export function withMessaging<
             setImmediate(() => {
               const messageType = getMessageType(schema);
 
-              // Build meta: start with sanitized user meta, then preserve correlation
+              // Build meta: start with sanitized user meta, then inherit correlation
               const outMeta: Record<string, unknown> = sanitizeMeta(opts?.meta);
 
-              // Auto-preserve correlation ID if requested and present in inbound
-              if (opts?.preserveCorrelation && enhCtx.meta?.correlationId) {
+              // Auto-inherit correlation ID if requested and present in inbound
+              if (opts?.inheritCorrelationId && enhCtx.meta?.correlationId) {
                 outMeta.correlationId = enhCtx.meta.correlationId;
               }
 

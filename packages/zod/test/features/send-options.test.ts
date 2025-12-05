@@ -8,7 +8,7 @@
  * - {waitFor} option returns Promise<boolean>
  * - {signal} option cancels send gracefully
  * - {meta} option merges custom metadata
- * - {preserveCorrelation} auto-copies correlationId
+ * - {inheritCorrelationId} auto-copies correlationId
  *
  * Spec: docs/specs/context-methods.md#ctx-send
  *       ADR-030#ctx-send-schema-payload-opts
@@ -168,7 +168,7 @@ describe("ctx.send() - options support", () => {
     });
   });
 
-  describe("{preserveCorrelation} option", () => {
+  describe("{inheritCorrelationId} option", () => {
     it("auto-copies correlationId from inbound meta", async () => {
       const MyMsg = message("MY_MSG", { text: z.string() });
       const AckMsg = message("ACK", { success: z.boolean() });
@@ -179,12 +179,12 @@ describe("ctx.send() - options support", () => {
         const hasCorrelationId = ctx.meta?.correlationId !== undefined;
 
         if (hasCorrelationId) {
-          // preserveCorrelation should copy it to outgoing message
+          // inheritCorrelationId should copy it to outgoing message
           await ctx.send(
             AckMsg,
             { success: true },
             {
-              preserveCorrelation: true,
+              inheritCorrelationId: true,
             },
           );
         }
@@ -193,19 +193,19 @@ describe("ctx.send() - options support", () => {
       expect(router.on).toBeDefined();
     });
 
-    it("no-op if preserveCorrelation true but no inbound correlationId", async () => {
+    it("no-op if inheritCorrelationId true but no inbound correlationId", async () => {
       const MyMsg = message("MY_MSG", { text: z.string() });
       const AckMsg = message("ACK", { success: z.boolean() });
       const router = createRouter().plugin(withZod());
 
       router.on(MyMsg, async (ctx: any) => {
-        // No inbound correlationId, but preserveCorrelation=true
+        // No inbound correlationId, but inheritCorrelationId=true
         // Should gracefully not fail
         await ctx.send(
           AckMsg,
           { success: true },
           {
-            preserveCorrelation: true,
+            inheritCorrelationId: true,
           },
         );
       });
@@ -213,18 +213,18 @@ describe("ctx.send() - options support", () => {
       expect(router.on).toBeDefined();
     });
 
-    it("preserveCorrelation works with custom meta", async () => {
+    it("inheritCorrelationId works with custom meta", async () => {
       const MyMsg = message("MY_MSG", { text: z.string() });
       const AckMsg = message("ACK", { success: z.boolean() });
       const router = createRouter().plugin(withZod());
 
       router.on(MyMsg, async (ctx: any) => {
-        // Combine preserveCorrelation with other meta
+        // Combine inheritCorrelationId with other meta
         await ctx.send(
           AckMsg,
           { success: true },
           {
-            preserveCorrelation: true,
+            inheritCorrelationId: true,
             meta: {
               custom: "value",
               timestamp: Date.now(),
@@ -314,7 +314,7 @@ describe("ctx.send() - options support", () => {
             waitFor: "drain",
             signal: controller.signal,
             meta: { traceId: "123" },
-            preserveCorrelation: true,
+            inheritCorrelationId: true,
           },
         );
 
@@ -324,7 +324,7 @@ describe("ctx.send() - options support", () => {
       expect(router.on).toBeDefined();
     });
 
-    it("preserveCorrelation can be false explicitly", async () => {
+    it("inheritCorrelationId can be false explicitly", async () => {
       const MyMsg = message("MY_MSG", { text: z.string() });
       const AckMsg = message("ACK", { success: z.boolean() });
       const router = createRouter().plugin(withZod());
@@ -335,7 +335,7 @@ describe("ctx.send() - options support", () => {
           AckMsg,
           { success: true },
           {
-            preserveCorrelation: false,
+            inheritCorrelationId: false,
             meta: { custom: "value" },
           },
         );
@@ -386,13 +386,13 @@ describe("ctx.send() - options support", () => {
       const router = createRouter().plugin(withZod());
 
       router.on(UserActionMsg, async (ctx: any) => {
-        // Server acknowledges with auto-preserved correlation
+        // Server acknowledges with auto-inherited correlation
         if (ctx.meta?.correlationId) {
           await ctx.send(
             AckMsg,
             { success: true },
             {
-              preserveCorrelation: true,
+              inheritCorrelationId: true,
             },
           );
         }

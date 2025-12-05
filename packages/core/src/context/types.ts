@@ -11,8 +11,14 @@ export type {
   MinimalContext,
   WebSocketData,
 } from "./base-context.js";
-export type { EventContext, SendOptions } from "./event-context.js";
 export type { ErrorOptions } from "./error-handling.js";
+export type {
+  EventContext,
+  SendOptions,
+  SendOptionsAsync,
+  SendOptionsBase,
+  SendOptionsSync,
+} from "./event-context.js";
 export type { PubSubContext } from "./pubsub-context.js";
 export type {
   ProgressOptions,

@@ -122,6 +122,9 @@ export type {
   ReplyOptions,
   RpcContext,
   SendOptions,
+  SendOptionsAsync,
+  SendOptionsBase,
+  SendOptionsSync,
 } from "./context/types.js";
 
 // Lifecycle context types (for router.onOpen/onClose handlers)

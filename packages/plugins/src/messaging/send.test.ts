@@ -7,7 +7,7 @@
  * Validates fire-and-forget paths:
  * - send() sends message to WebSocket
  * - send() with {meta} merges metadata
- * - send() with {preserveCorrelation} copies correlationId
+ * - send() with {inheritCorrelationId} copies correlationId
  * - send() with {signal} cancels gracefully
  * - send() with {waitFor} returns Promise
  *
@@ -142,14 +142,14 @@ describe("withMessaging() - ctx.send() integration", () => {
     });
   });
 
-  describe("{preserveCorrelation} option", () => {
+  describe("{inheritCorrelationId} option", () => {
     it("copies correlationId from inbound meta", async () => {
       const tr = test.createTestRouter({
         create: () => createRouter().plugin(withMessaging()),
       });
 
       tr.on(PING, (ctx: any) => {
-        ctx.send(PONG, { reply: "ok" }, { preserveCorrelation: true });
+        ctx.send(PONG, { reply: "ok" }, { inheritCorrelationId: true });
       });
 
       const conn = await tr.connect();
@@ -169,7 +169,7 @@ describe("withMessaging() - ctx.send() integration", () => {
       });
 
       tr.on(PING, (ctx: any) => {
-        ctx.send(PONG, { reply: "ok" }, { preserveCorrelation: true });
+        ctx.send(PONG, { reply: "ok" }, { inheritCorrelationId: true });
       });
 
       const conn = await tr.connect();
@@ -194,7 +194,7 @@ describe("withMessaging() - ctx.send() integration", () => {
           PONG,
           { reply: "ok" },
           {
-            preserveCorrelation: true,
+            inheritCorrelationId: true,
             meta: { customField: "value" },
           },
         );
@@ -318,7 +318,7 @@ describe("withMessaging() - ctx.send() integration", () => {
       expect(pong).toBeDefined();
     });
 
-    it("with {waitFor} + {preserveCorrelation} preserves correlationId", async () => {
+    it("with {waitFor} + {inheritCorrelationId} preserves correlationId", async () => {
       const tr = test.createTestRouter({
         create: () => createRouter().plugin(withMessaging()),
       });
@@ -327,7 +327,7 @@ describe("withMessaging() - ctx.send() integration", () => {
         await ctx.send(
           PONG,
           { reply: "ok" },
-          { waitFor: "drain", preserveCorrelation: true },
+          { waitFor: "drain", inheritCorrelationId: true },
         );
       });
 

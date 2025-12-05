@@ -84,18 +84,24 @@ Sends a one-way message to the current connection.
 #### Signature
 
 ```typescript
-send<T>(
-  schema: Schema<T>,
-  payload: T,
-  opts?: SendOptions,
-): void | Promise<boolean>;
+send<T>(schema: Schema<T>, payload: T, opts?: SendOptionsSync): void;
+send<T>(schema: Schema<T>, payload: T, opts: SendOptionsAsync): Promise<boolean>;
 
-interface SendOptions {
-  signal?: AbortSignal;           // Cancel before send
-  waitFor?: 'drain' | 'ack';     // Make async; wait for buffer/ack
-  meta?: Record<string, any>;    // Custom metadata
-  preserveCorrelation?: boolean; // Auto-copy correlationId from request if present (default: false)
+interface SendOptionsBase {
+  signal?: AbortSignal;             // Cancel before send
+  meta?: Record<string, any>;       // Custom metadata
+  inheritCorrelationId?: boolean;   // Auto-copy correlationId from request if present (default: false)
 }
+
+interface SendOptionsSync extends SendOptionsBase {
+  waitFor?: undefined;
+}
+
+interface SendOptionsAsync extends SendOptionsBase {
+  waitFor: 'drain' | 'ack';         // Make async; wait for buffer/ack
+}
+
+type SendOptions = SendOptionsSync | SendOptionsAsync;
 ```
 
 #### Parameters
@@ -112,7 +118,7 @@ interface SendOptions {
   - `signal`: Cancel the send (if not yet enqueued)
   - `waitFor`: Make the method async; wait for buffer drain or server ack
   - `meta`: Attach custom metadata (tracing, correlation IDs)
-  - `preserveCorrelation`: Auto-copy `correlationId` from inbound `ctx.meta` to outgoing message if present (default: false)
+  - `inheritCorrelationId`: Auto-copy `correlationId` from inbound `ctx.meta` to outgoing message if present (default: false)
 
 #### Returns
 
@@ -215,7 +221,7 @@ router.on(UserAction, async (ctx) => {
 
   // Client optionally requested an ack via correlationId
   if (ctx.meta.correlationId) {
-    ctx.send(AckMsg, { success: true }, { preserveCorrelation: true });
+    ctx.send(AckMsg, { success: true }, { inheritCorrelationId: true });
     // ✅ correlationId auto-copied to outgoing meta
   }
 });
@@ -1283,18 +1289,24 @@ All method signatures in one place, copy-paste ready:
 
 ```typescript
 // Fire-and-forget unicast
-interface SendOptions {
+interface SendOptionsBase {
   signal?: AbortSignal;
-  waitFor?: 'drain' | 'ack';
   meta?: Record<string, any>;
-  preserveCorrelation?: boolean;  // Auto-copy correlationId from request if present
+  inheritCorrelationId?: boolean;  // Auto-copy correlationId from request if present
 }
 
-send<T>(
-  schema: Schema<T>,
-  payload: T,
-  opts?: SendOptions,
-): void | Promise<boolean>;
+interface SendOptionsSync extends SendOptionsBase {
+  waitFor?: undefined;
+}
+
+interface SendOptionsAsync extends SendOptionsBase {
+  waitFor: 'drain' | 'ack';
+}
+
+type SendOptions = SendOptionsSync | SendOptionsAsync;
+
+send<T>(schema: Schema<T>, payload: T, opts?: SendOptionsSync): void;
+send<T>(schema: Schema<T>, payload: T, opts: SendOptionsAsync): Promise<boolean>;
 
 // ---
 

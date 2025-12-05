@@ -26,7 +26,7 @@ Current `withZod()` plugin violates separation of concerns:
    - Single plugin: `withValidation()` — inbound validation only
 
 2. **Composable core plugins** (`@ws-kit/core`, optionally sub-packages)
-   - `withMessaging()` — unicast `.send()`, `router.publish()`, options (waitFor, meta, preserveCorrelation, throttling)
+   - `withMessaging()` — unicast `.send()`, `router.publish()`, options (waitFor, meta, inheritCorrelationId, throttling)
    - `withRpc()` — `.reply()`, `.error()`, `.progress()`, one-shot guard, correlation tracking
    - Each ~100 LOC, one responsibility, testable in isolation
 
@@ -86,7 +86,7 @@ function sanitizeMeta(userMeta: Record<string, unknown> | undefined) {
   return sanitized;
 }
 
-// Same for preserveCorrelation, baseMeta, one-shot guards, throttling...
+// Same for inheritCorrelationId, baseMeta, one-shot guards, throttling...
 ```
 
 This is ~300 LOC of duplication across validators, making maintenance painful (bug fixes in one place, missing in the other).
@@ -97,7 +97,7 @@ These are orthogonal to validation:
 
 - **`SendOptions` / `ReplyOptions` / `ProgressOptions`** — Defined in core but logic lives in Zod plugin
 - **Meta sanitization** — Applied by Zod, but rule set should be core concern
-- **Correlation ID preservation** — `preserveCorrelation: true` implemented in plugin, not core
+- **Correlation ID preservation** — `inheritCorrelationId: true` implemented in plugin, not core
 - **Progress throttling** — Request-response pattern detail, not validation detail
 
 Makes it impossible to:
@@ -161,7 +161,7 @@ Better: Accept only `RpcSchema`, let TypeScript reject invalid schemas upfront w
 @ws-kit/core (validator-agnostic)
 ├── Router, HandlerContext, RpcContext
 ├── SendOptions, ReplyOptions, ProgressOptions
-├── Shared utilities: sanitizeMeta(), preserveCorrelationId(), throttle()
+├── Shared utilities: sanitizeMeta(), inheritCorrelationId(), throttle()
 ├── Plugins: withMessaging(), withRpc()
 └── Validator adapter interface (internal)
 
@@ -190,7 +190,7 @@ export interface SendOptions {
   signal?: AbortSignal; // Cancel before send
   waitFor?: "drain" | "ack"; // Backpressure control (async)
   meta?: Record<string, unknown>; // Custom metadata
-  preserveCorrelation?: boolean; // Auto-copy correlationId from request
+  inheritCorrelationId?: boolean; // Auto-copy correlationId from request
 }
 
 export function withMessaging(): Plugin<
@@ -215,7 +215,7 @@ export function withMessaging(): Plugin<
 
         // Sanitize and enrich meta
         let outMeta: Record<string, unknown> = sanitizeMeta(opts?.meta);
-        if (opts?.preserveCorrelation && ctx.meta?.correlationId) {
+        if (opts?.inheritCorrelationId && ctx.meta?.correlationId) {
           outMeta.correlationId = ctx.meta.correlationId;
         }
 
@@ -262,7 +262,7 @@ export function sanitizeMeta(
   return clean;
 }
 
-export function preserveCorrelationId(
+export function inheritCorrelationId(
   outMeta: Record<string, unknown>,
   inMeta: Record<string, unknown> | undefined,
 ): void {
@@ -354,7 +354,7 @@ export function withRpc(options?: { progressThrottleMs?: number }): Plugin<
         return ctx.send(
           { type: "$ws:rpc-error" }, // Reserved control type
           errorPayload,
-          { ...opts, preserveCorrelation: true },
+          { ...opts, inheritCorrelationId: true },
         );
       };
 
@@ -381,7 +381,7 @@ export function withRpc(options?: { progressThrottleMs?: number }): Plugin<
         // Send as progress message (using messaging)
         return ctx.send({ type: "$ws:rpc-progress" }, update, {
           ...opts,
-          preserveCorrelation: true,
+          inheritCorrelationId: true,
         });
       };
 
@@ -609,7 +609,7 @@ const router = createRouter<ConnectionData>()
 
 1. Add `@ws-kit/plugins/messaging.ts` with `withMessaging()`
 2. Add `@ws-kit/plugins/rpc.ts` with `withRpc()`
-3. Extract shared utilities to `@ws-kit/core/utils/` (sanitizeMeta, preserveCorrelationId, throttle, etc.)
+3. Extract shared utilities to `@ws-kit/core/utils/` (sanitizeMeta, inheritCorrelationId, throttle, etc.)
 4. Update `Router<TContext, TCaps>` type to support plugin chaining
 5. Update `HandlerContext` / `RpcContext` types to reflect capabilities
 
@@ -690,11 +690,17 @@ export interface Router<TContext extends ConnectionData, TCaps extends Capabilit
 export type HandlerContext<TContext, TCaps, S> = BaseContext<TContext, S> &
   (TCaps extends WithMessaging
     ? {
+        // Overloaded: void without waitFor, Promise<boolean> with waitFor
         send<T extends MessageSchema>(
           schema: T,
           payload: InferPayload<T>,
-          opts?: SendOptions,
-        ): void | Promise<boolean>;
+          opts?: SendOptionsSync,
+        ): void;
+        send<T extends MessageSchema>(
+          schema: T,
+          payload: InferPayload<T>,
+          opts: SendOptionsAsync,
+        ): Promise<boolean>;
       }
     : {}) &
   (TCaps extends WithRpc

@@ -234,7 +234,7 @@ export function cloudflarePubSub(env: CloudflareEnv): PubSubAdapter {
 Move from validator plugins to core (`@ws-kit/core/src/`):
 
 - `SendOptions`, `ReplyOptions`, `ProgressOptions` types
-- Meta utilities: `sanitizeMeta()`, `preserveCorrelationId()`
+- Meta utilities: `sanitizeMeta()`, `inheritCorrelationId()`
 - Throttling utilities
 - RPC guards (one-shot reply logic)
 

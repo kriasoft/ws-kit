@@ -11,13 +11,19 @@
  */
 
 import type {
+  BrandedSchema,
   CreateRouterOptions,
   ErrorCode,
   EventContext,
+  InferMeta,
+  InferPayload,
+  MessageDescriptor,
   MinimalContext,
   PlatformAdapter,
   PubSubAdapter,
   RpcContext,
+  SendOptionsAsync,
+  SendOptionsSync,
   ServerWebSocket,
   ValidatorAdapter,
   WebSocketData,
@@ -127,6 +133,48 @@ describe("EventContext<TContext, TPayload>", () => {
     expectTypeOf<Context["data"]>().toEqualTypeOf<CustomData>();
     expectTypeOf<Context["payload"]>().toEqualTypeOf<Payload>();
   });
+
+  it("should infer send payload type from branded schema", () => {
+    // Branded schema carries payload type via [SchemaTag]
+    type PongSchema = MessageDescriptor &
+      BrandedSchema<"PONG", { reply: string }, never>;
+
+    // InferPayload extracts the payload type from branded schema
+    type PayloadType = InferPayload<PongSchema>;
+
+    expectTypeOf<PayloadType>().toEqualTypeOf<{ reply: string }>();
+    expectTypeOf<PayloadType>().not.toBeAny();
+
+    // Wrong shape should not be assignable to payload type
+    type WrongShapeAssignable = { wrong: number } extends PayloadType
+      ? true
+      : false;
+    expectTypeOf<WrongShapeAssignable>().toEqualTypeOf<false>();
+  });
+
+  it("send() overloads: void without waitFor, Promise with waitFor", () => {
+    // Verify overload 1: fire-and-forget returns void
+    type SendSyncCheck =
+      EventContext["send"] extends <T extends MessageDescriptor>(
+        schema: T,
+        payload: InferPayload<T>,
+        opts?: SendOptionsSync,
+      ) => void
+        ? true
+        : false;
+    expectTypeOf<SendSyncCheck>().toEqualTypeOf<true>();
+
+    // Verify overload 2: with waitFor returns Promise<boolean>
+    type SendAsyncCheck =
+      EventContext["send"] extends <T extends MessageDescriptor>(
+        schema: T,
+        payload: InferPayload<T>,
+        opts: SendOptionsAsync,
+      ) => Promise<boolean>
+        ? true
+        : false;
+    expectTypeOf<SendAsyncCheck>().toEqualTypeOf<true>();
+  });
 });
 
 // ============================================================================
@@ -211,6 +259,39 @@ describe("WsKitError", () => {
   it("should have .code property of type ErrorCode", () => {
     type CodeOfError = WsKitError<ErrorCode>["code"];
     expectTypeOf<CodeOfError>().toEqualTypeOf<ErrorCode>();
+  });
+});
+
+// ============================================================================
+// Schema Type Inference Utilities
+// ============================================================================
+
+describe("InferMeta", () => {
+  it("should extract meta type from branded schema", () => {
+    // Branded schema with custom meta type
+    type TracedSchema = MessageDescriptor &
+      BrandedSchema<"TRACED", { data: number }, never, { traceId: string }>;
+
+    type MetaType = InferMeta<TracedSchema>;
+    expectTypeOf<MetaType>().toEqualTypeOf<{ traceId: string }>();
+    expectTypeOf<MetaType>().not.toBeAny();
+  });
+
+  it("should return unknown for schemas without meta branding", () => {
+    // Plain message descriptor without branding
+    type PlainDescriptor = MessageDescriptor;
+    type MetaType = InferMeta<PlainDescriptor>;
+    expectTypeOf<MetaType>().toEqualTypeOf<unknown>();
+  });
+
+  it("should extract default meta type from schema with default meta", () => {
+    // Schema with default (empty) meta
+    type DefaultMetaSchema = MessageDescriptor &
+      BrandedSchema<"MSG", { text: string }, never>;
+
+    type MetaType = InferMeta<DefaultMetaSchema>;
+    // Default meta is Record<string, unknown>
+    expectTypeOf<MetaType>().toEqualTypeOf<Record<string, unknown>>();
   });
 });
 
