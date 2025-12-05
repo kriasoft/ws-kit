@@ -1,6 +1,6 @@
 # @ws-kit/middleware
 
-## 1.0.0
+## 0.10.0
 
 ### Minor Changes
 
