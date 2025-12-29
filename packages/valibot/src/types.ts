@@ -12,7 +12,6 @@ import type { BrandedSchema as CoreBrandedSchema } from "@ws-kit/core";
 /**
  * Schema branded with type metadata for inference.
  * Works entirely at the type level using TypeScript utility types.
- * @internal
  */
 export type BrandedSchema<
   TType extends string = string,

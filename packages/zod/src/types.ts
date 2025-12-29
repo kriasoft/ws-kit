@@ -26,7 +26,6 @@ export declare const SchemaTag: unique symbol;
 /**
  * Schema branded with type metadata for inference.
  * Works entirely at the type level using TypeScript utility types.
- * @internal
  */
 export interface BrandedSchema<
   TType extends string = string,
