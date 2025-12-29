@@ -40,6 +40,7 @@ export type { WithZodOptions } from "./plugin.js";
 // Type inference utilities (type-level only)
 export type {
   AnySchema,
+  BrandedSchema,
   InferMessage,
   InferMeta,
   InferPayload,
