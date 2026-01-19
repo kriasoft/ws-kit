@@ -152,7 +152,7 @@ describe("Bun: BunPubSub Adapter", () => {
       topic: "test-topic",
       payload: { message: "test" },
       type: "TEST",
-      meta: {},
+      meta: { customField: "value" },
     });
 
     expect(result.ok).toBe(true);
@@ -162,11 +162,12 @@ describe("Bun: BunPubSub Adapter", () => {
     if (call) {
       const [topic, data] = call;
       expect(topic).toBe("test-topic");
+      // Empty meta is stripped from wire, custom fields are preserved
       expect(data).toBe(
         JSON.stringify({
           payload: { message: "test" },
           type: "TEST",
-          meta: {},
+          meta: { customField: "value" },
         }),
       );
     }

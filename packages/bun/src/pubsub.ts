@@ -26,6 +26,11 @@ import type { Server } from "bun";
  * For multi-process deployments (load-balanced cluster), each instance has
  * its own scope—use RedisPubSubAdapter for cross-process broadcasting.
  *
+ * **Limitations**:
+ * - excludeSelf is not supported (returns UNSUPPORTED). Bun's server.publish()
+ *   broadcasts directly with no way to intercept or filter delivery.
+ *   Use memory or Redis adapter if excludeSelf is required.
+ *
  * **Note**: For public API, use `bunPubSub()` factory function instead.
  *
  * @internal Use `bunPubSub(server)` factory for creating instances.
@@ -39,19 +44,33 @@ export class BunPubSub implements PubSubAdapter {
    * All WebSocket connections subscribed to this topic (via ws.subscribe)
    * will receive the message immediately.
    *
-   * Note: excludeSelf filtering is handled by the pubsub plugin's deliverLocally()
-   * via excludeClientId in envelope.meta. Capability is "unknown" (can't enumerate).
+   * **excludeSelf limitation**: Bun's native pub/sub broadcasts directly via
+   * server.publish() with no way to intercept delivery or enumerate subscribers.
+   * This makes excludeSelf impossible - use memory or Redis adapter if needed.
    *
    * @param envelope - Validated message with topic, payload, type, meta
-   * @param options - Publish options (excludeSelf handled by plugin layer)
+   * @param options - Publish options (excludeSelf returns UNSUPPORTED)
    */
   async publish(
     envelope: PublishEnvelope,
     options?: PublishOptions,
   ): Promise<PublishResult> {
-    // excludeSelf filtering is handled by the pubsub plugin's deliverLocally()
-    // via excludeClientId in envelope.meta. Adapter just forwards to Bun.
-    void options;
+    // Bun's server.publish() is a direct broadcast with no delivery interception.
+    // We can't enumerate subscribers or skip specific clients, so excludeSelf
+    // is architecturally impossible. Return UNSUPPORTED to be honest.
+    if (options?.excludeSelf === true) {
+      return {
+        ok: false,
+        error: "UNSUPPORTED",
+        retryable: false,
+        adapter: "BunPubSub",
+        details: {
+          feature: "excludeSelf",
+          reason:
+            "Bun native pub/sub broadcasts directly; use memory or Redis adapter",
+        },
+      };
+    }
 
     try {
       // Serialize complete envelope (type, payload, meta) as JSON
@@ -84,7 +103,17 @@ export class BunPubSub implements PubSubAdapter {
         // General case: serialize full envelope to preserve type and meta
         const message: Record<string, any> = { payload: envelope.payload };
         if (envelope.type) message.type = envelope.type;
-        if (envelope.meta) message.meta = envelope.meta;
+        // Strip internal fields from meta before wire serialization
+        if (envelope.meta && typeof envelope.meta === "object") {
+          const wireMeta = Object.fromEntries(
+            Object.entries(envelope.meta).filter(
+              ([k]) => k !== "excludeClientId",
+            ),
+          );
+          if (Object.keys(wireMeta).length > 0) {
+            message.meta = wireMeta;
+          }
+        }
         data = JSON.stringify(message);
       }
 

@@ -356,6 +356,9 @@ interface PublishOptions {
    * envelope metadata (`excludeClientId`) and filters it during local delivery.
    * This field is stripped before serialization and never appears on the wire.
    *
+   * **Adapter support**: Memory and Redis adapters support excludeSelf via plugin
+   * filtering. Bun native pub/sub returns UNSUPPORTED (direct broadcast, no filtering).
+   *
    * ```typescript
    * // In a chat handler, broadcast to room but don't echo back to sender
    * await ctx.publish("room:123", ChatMsg, { text: "Hello!" }, { excludeSelf: true });
@@ -1290,16 +1293,16 @@ if (result.ok) {
 
 **Error Remediation Guide:**
 
-| Error               | Retryable | Typical Cause                             | Remediation                                     |
-| ------------------- | --------- | ----------------------------------------- | ----------------------------------------------- |
-| `VALIDATION`        | ✗         | Payload doesn't match schema              | Fix payload; inspect `cause` field              |
-| `ACL`               | ✗         | Authorization hook denied                 | Don't retry; permission denied                  |
-| `STATE`             | ✗         | Router/adapter not ready (or closed)      | Await router ready; don't retry                 |
-| `BACKPRESSURE`      | ✓         | Adapter send queue full                   | Retry with exponential backoff + jitter         |
-| `PAYLOAD_TOO_LARGE` | ✗         | Payload exceeds adapter limit             | Reduce payload size; split into messages        |
-| `UNSUPPORTED`       | ✗         | Feature not available (e.g., excludeSelf) | Use fallback strategy; check `adapter` field    |
-| `ADAPTER_ERROR`     | ✓         | Unexpected adapter failure                | Retry with backoff; inspect `details.transient` |
-| `CONNECTION_CLOSED` | ✓         | Connection/router disposed                | Retry after reconnection                        |
+| Error               | Retryable | Typical Cause                            | Remediation                                     |
+| ------------------- | --------- | ---------------------------------------- | ----------------------------------------------- |
+| `VALIDATION`        | ✗         | Payload doesn't match schema             | Fix payload; inspect `cause` field              |
+| `ACL`               | ✗         | Authorization hook denied                | Don't retry; permission denied                  |
+| `STATE`             | ✗         | Router/adapter not ready (or closed)     | Await router ready; don't retry                 |
+| `BACKPRESSURE`      | ✓         | Adapter send queue full                  | Retry with exponential backoff + jitter         |
+| `PAYLOAD_TOO_LARGE` | ✗         | Payload exceeds adapter limit            | Reduce payload size; split into messages        |
+| `UNSUPPORTED`       | ✗         | Feature not available (adapter-specific) | Use fallback strategy; check `adapter` field    |
+| `ADAPTER_ERROR`     | ✓         | Unexpected adapter failure               | Retry with backoff; inspect `details.transient` |
+| `CONNECTION_CLOSED` | ✓         | Connection/router disposed               | Retry after reconnection                        |
 
 **Failure Examples:**
 
@@ -1338,7 +1341,8 @@ const r4 = await ctx.publish("topic", Schema, data);
 const r5 = await ctx.publish("topic", Schema, hugePayload);
 // {ok: false, error: "PAYLOAD_TOO_LARGE", retryable: false, details: { limit: 1048576 }}
 
-// excludeSelf: filters out the sender from receiving their own broadcast
+// excludeSelf: filters out the sender (memory/Redis adapters)
+// Note: Bun native pub/sub returns UNSUPPORTED (use memory adapter if needed)
 const r6 = await ctx.publish("topic", Schema, data, { excludeSelf: true });
 // {ok: true, capability: "exact", matched: 3} (sender excluded from count)
 

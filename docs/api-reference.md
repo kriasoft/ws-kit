@@ -649,7 +649,7 @@ interface PublishOptions {
 }
 ```
 
-**Note on `excludeSelf`:** When set to `true`, the sender is excluded from receiving their own broadcast. The filtering is handled by the pubsub plugin via `excludeClientId` in envelope metadata.
+**Note on `excludeSelf`:** When set to `true`, the sender is excluded from receiving their own broadcast. Supported by memory and Redis adapters (plugin filters via `excludeClientId`). Bun native pub/sub returns `UNSUPPORTED` since it broadcasts directly with no filtering capability.
 
 **Returns:** `Promise<PublishResult>` with subscriber match count and capability info
 
