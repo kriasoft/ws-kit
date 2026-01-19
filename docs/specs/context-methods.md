@@ -711,7 +711,7 @@ interface PublishOptions {
 - **`payload: T`** — Broadcast data
 
 - **`opts?: PublishOptions`** — Configuration:
-  - `excludeSelf`: Don't send to current connection (default: false)
+  - `excludeSelf`: Don't send to current connection (memory/Redis; Bun: UNSUPPORTED)
   - `partitionKey`: For distributed systems; ensures order within partition
   - `waitFor`: `'enqueued'` (fast, default) or `'settled'` (certain)
   - `signal`: Cancel before publish starts
