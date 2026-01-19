@@ -224,8 +224,35 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
      * - Catches and logs send errors without breaking the loop
      */
     const deliverLocally = async (env: PublishEnvelope) => {
-      // Exclude self: if envelope.meta.excludeClientId is set, skip that client
+      // Extract internal routing field (not for wire)
       const excludeId = (env.meta as any)?.excludeClientId;
+
+      // Build wire meta: strip internal fields like excludeClientId
+      let wireMeta: Record<string, unknown> | undefined;
+      if (env.meta && typeof env.meta === "object") {
+        const metaObj = env.meta as Record<string, unknown>;
+        const rest = Object.fromEntries(
+          Object.entries(metaObj).filter(([k]) => k !== "excludeClientId"),
+        );
+        if (Object.keys(rest).length > 0) {
+          wireMeta = rest;
+        }
+      }
+
+      // Build wire message: { type, meta?, payload? } - exclude topic and internal fields
+      let wireMessage: string;
+      try {
+        wireMessage = JSON.stringify({
+          type: env.type,
+          ...(wireMeta ? { meta: wireMeta } : {}),
+          ...(env.payload !== undefined ? { payload: env.payload } : {}),
+        });
+      } catch (error) {
+        // Serialization failed (circular refs, BigInt, etc.) - log and skip delivery
+        const lifecycle = (router as any).getInternalLifecycle?.();
+        lifecycle?.handleError(error, null);
+        return;
+      }
 
       // Iterate subscribers (async iterable respects backpressure)
       for await (const clientId of adapter.getSubscribers(env.topic)) {
@@ -237,8 +264,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
         if (!send) continue; // Client disconnected; skip
 
         try {
-          // Send the envelope frame
-          await Promise.resolve(send(env));
+          // Send the serialized message
+          await Promise.resolve(send(wireMessage));
         } catch (error) {
           // Log delivery error but continue loop
           // (client may have disconnected mid-delivery)
@@ -304,6 +331,12 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
         : undefined;
 
       const result = await adapter.publish(envelope, publishOpts);
+
+      // For local-only adapters (no broker), deliver messages directly.
+      // Distributed adapters handle delivery via broker consumer in start().
+      if (result.ok && typeof adapter.start !== "function") {
+        await deliverLocally(envelope);
+      }
 
       // Notify observers after publish (success or failure)
       if (result.ok) {

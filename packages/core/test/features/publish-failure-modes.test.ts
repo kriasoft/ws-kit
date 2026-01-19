@@ -196,7 +196,7 @@ describe("publish() failure modes", () => {
   });
 
   describe("error code semantics", () => {
-    it("handles excludeSelf gracefully (adapters may ignore)", async () => {
+    it("handles excludeSelf gracefully (pubsub plugin filters locally)", async () => {
       const router = createRouter().plugin(
         withPubSub({ adapter: memoryPubSub() }),
       );
@@ -208,11 +208,9 @@ describe("publish() failure modes", () => {
         { excludeSelf: true },
       );
 
-      // Memory adapter rejects excludeSelf (no sender context available)
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe("UNSUPPORTED");
-      }
+      // Memory adapter now accepts excludeSelf - filtering is handled
+      // by the pubsub plugin via excludeClientId in envelope metadata
+      expect(result.ok).toBe(true);
     });
   });
 

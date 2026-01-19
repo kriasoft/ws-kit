@@ -141,21 +141,21 @@ describe("memoryPubSub", () => {
       }
     });
 
-    it("rejects excludeSelf option with UNSUPPORTED error", async () => {
+    it("allows excludeSelf option (filtering handled by pubsub plugin)", async () => {
       const pubsub = memoryPubSub();
 
       await pubsub.subscribe("client-1", "room:123");
 
+      // Memory adapter accepts excludeSelf since the pubsub plugin
+      // handles filtering via excludeClientId in envelope metadata
       const result = await pubsub.publish(
         { topic: "room:123", type: "TEST", payload: {} },
         { excludeSelf: true },
       );
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe("UNSUPPORTED");
-        expect(result.retryable).toBe(false);
-        expect(result.details?.feature).toBe("excludeSelf");
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.matched).toBe(1);
       }
     });
   });

@@ -350,32 +350,15 @@ interface PublishOptions {
   partitionKey?: string;
 
   /**
-   * **Status**: Not yet implemented (all adapters return {ok: false, error: "UNSUPPORTED"}).
+   * Exclude the sender from receiving the published message.
    *
-   * **Purpose**: Exclude the sender from receiving the published message.
+   * When `true`, the pubsub plugin injects the sender's clientId into the
+   * envelope metadata (`excludeClientId`) and filters it during local delivery.
+   * This field is stripped before serialization and never appears on the wire.
    *
-   * **Portable Pattern (until supported):**
-   *
-   * Include sender identity in payload and filter on subscriber side:
    * ```typescript
-   * // Publisher
-   * await ctx.publish(topic, Msg, {
-   *   ...payload,
-   *   _senderId: ctx.clientId
-   * });
-   *
-   * // Subscriber
-   * router.on(Msg, (ctx) => {
-   *   if (ctx.payload._senderId === ctx.clientId) return; // Skip self
-   * });
-   * ```
-   *
-   * **Alternative Pattern:**
-   *
-   * Use separate per-connection topic (e.g., "room:123:others") that only subscribers (not sender) subscribe to:
-   * ```typescript
-   * // When joining room, sender subscribes to "room:123:others"
-   * // When publishing, send to both "room:123" (all) and sender can filter
+   * // In a chat handler, broadcast to room but don't echo back to sender
+   * await ctx.publish("room:123", ChatMsg, { text: "Hello!" }, { excludeSelf: true });
    * ```
    */
   excludeSelf?: boolean;
@@ -1355,9 +1338,9 @@ const r4 = await ctx.publish("topic", Schema, data);
 const r5 = await ctx.publish("topic", Schema, hugePayload);
 // {ok: false, error: "PAYLOAD_TOO_LARGE", retryable: false, details: { limit: 1048576 }}
 
-// unsupported failure (excludeSelf not yet implemented)
+// excludeSelf: filters out the sender from receiving their own broadcast
 const r6 = await ctx.publish("topic", Schema, data, { excludeSelf: true });
-// {ok: false, error: "UNSUPPORTED", retryable: false, adapter: "inmemory", details: { feature: "excludeSelf" }}
+// {ok: true, capability: "exact", matched: 3} (sender excluded from count)
 
 // adapter_error failure (unexpected)
 const r7 = await ctx.publish("topic", Schema, data);
@@ -1410,19 +1393,19 @@ if (result.ok) {
 
 ### Unified Error Codes & Remediation
 
-| Error Code             | Operation                     | Cause                                   | Retryable | Remediation                                   |
-| ---------------------- | ----------------------------- | --------------------------------------- | --------- | --------------------------------------------- |
-| `INVALID_TOPIC`        | subscribe/unsubscribe         | Format/length validation failed         | ✗         | Fix topic string format                       |
-| `ACL_SUBSCRIBE`        | subscribe                     | Authorization hook denied               | ✗         | User lacks permission                         |
-| `ACL_PUBLISH`          | publish                       | Authorization hook denied               | ✗         | User lacks permission                         |
-| `TOPIC_LIMIT_EXCEEDED` | subscribe                     | Hit maxTopicsPerConnection quota        | ✗         | Unsubscribe from other topics                 |
-| `CONNECTION_CLOSED`    | subscribe/unsubscribe/publish | Connection closed or router disposed    | ✓         | Retry after reconnection                      |
-| `VALIDATION`           | publish                       | Payload doesn't match schema            | ✗         | Fix payload; inspect `cause` field            |
-| `STATE`                | publish                       | Router/adapter not ready                | ✗         | Await router ready; check state               |
-| `BACKPRESSURE`         | publish                       | Adapter send queue full                 | ✓         | Retry with exponential backoff + jitter       |
-| `PAYLOAD_TOO_LARGE`    | publish                       | Payload exceeds adapter limit           | ✗         | Reduce payload size; split messages           |
-| `UNSUPPORTED`          | publish                       | Feature unavailable (e.g., excludeSelf) | ✗         | Use fallback strategy; check `adapter` field  |
-| `ADAPTER_ERROR`        | any                           | Unexpected adapter failure              | ✓         | Retry with backoff; check `details.transient` |
+| Error Code             | Operation                     | Cause                                  | Retryable | Remediation                                   |
+| ---------------------- | ----------------------------- | -------------------------------------- | --------- | --------------------------------------------- |
+| `INVALID_TOPIC`        | subscribe/unsubscribe         | Format/length validation failed        | ✗         | Fix topic string format                       |
+| `ACL_SUBSCRIBE`        | subscribe                     | Authorization hook denied              | ✗         | User lacks permission                         |
+| `ACL_PUBLISH`          | publish                       | Authorization hook denied              | ✗         | User lacks permission                         |
+| `TOPIC_LIMIT_EXCEEDED` | subscribe                     | Hit maxTopicsPerConnection quota       | ✗         | Unsubscribe from other topics                 |
+| `CONNECTION_CLOSED`    | subscribe/unsubscribe/publish | Connection closed or router disposed   | ✓         | Retry after reconnection                      |
+| `VALIDATION`           | publish                       | Payload doesn't match schema           | ✗         | Fix payload; inspect `cause` field            |
+| `STATE`                | publish                       | Router/adapter not ready               | ✗         | Await router ready; check state               |
+| `BACKPRESSURE`         | publish                       | Adapter send queue full                | ✓         | Retry with exponential backoff + jitter       |
+| `PAYLOAD_TOO_LARGE`    | publish                       | Payload exceeds adapter limit          | ✗         | Reduce payload size; split messages           |
+| `UNSUPPORTED`          | publish                       | Feature unavailable (adapter-specific) | ✗         | Use fallback strategy; check `adapter` field  |
+| `ADAPTER_ERROR`        | any                           | Unexpected adapter failure             | ✓         | Retry with backoff; check `details.transient` |
 
 ### Error Type Definitions
 
