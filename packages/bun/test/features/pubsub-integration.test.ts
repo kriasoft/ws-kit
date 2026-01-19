@@ -197,4 +197,37 @@ describe("Bun: BunPubSub Adapter", () => {
       expect(result.retryable).toBe(true);
     }
   });
+
+  it("should return UNSUPPORTED for excludeSelf option", async () => {
+    // Bun's server.publish() broadcasts directly with no way to intercept
+    // delivery or enumerate subscribers, making excludeSelf impossible.
+    const { bunPubSub } = await import("../../src/adapter.js");
+
+    const mockServer = {
+      publish: () => true,
+    };
+
+    const adapter = bunPubSub(mockServer as any);
+
+    const result = await adapter.publish(
+      {
+        topic: "test-topic",
+        payload: { message: "test" },
+        type: "TEST",
+      },
+      { excludeSelf: true },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("UNSUPPORTED");
+      expect(result.retryable).toBe(false);
+      expect(result.adapter).toBe("BunPubSub");
+      expect(result.details).toEqual({
+        feature: "excludeSelf",
+        reason:
+          "Bun native pub/sub broadcasts directly; use memory or Redis adapter",
+      });
+    }
+  });
 });

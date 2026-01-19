@@ -421,7 +421,7 @@ interface PublishResult {
 
 interface PublishOptions {
   signal?: AbortSignal;
-  excludeSelf?: boolean;             // Default: false
+  excludeSelf?: boolean;             // Default: false (memory/Redis; Bun: UNSUPPORTED)
   partitionKey?: string;             // For distributed consistency
   waitFor?: 'enqueued' | 'settled';  // Default: 'enqueued'
   meta?: Record<string, any>;
@@ -435,7 +435,7 @@ interface PublishOptions {
 - Returns structured result; never throws at runtime (throws upfront if plugin missing)
 - `{waitFor: 'enqueued'}` (default): returns when message enqueued by adapter; fast feedback
 - `{waitFor: 'settled'}`: returns when message delivered to all subscribers (slower, more certain)
-- `{excludeSelf: true}`: skips current connection (common in broadcast scenarios)
+- `{excludeSelf: true}`: skips current connection (memory/Redis adapters; Bun returns UNSUPPORTED)
 - `{partitionKey}`: ensures order within partition for distributed systems (e.g., Redis Streams)
 - `{signal}`: aborts if provided AbortController fires before publish starts
 

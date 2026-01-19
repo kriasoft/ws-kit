@@ -692,7 +692,7 @@ interface PublishResult {
 
 interface PublishOptions {
   signal?: AbortSignal;
-  excludeSelf?: boolean;             // Default: false
+  excludeSelf?: boolean;             // Default: false (memory/Redis; Bun: UNSUPPORTED)
   partitionKey?: string;             // For distributed consistency
   waitFor?: 'enqueued' | 'settled';  // Default: 'enqueued'
   meta?: Record<string, any>;
