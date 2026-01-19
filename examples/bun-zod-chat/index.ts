@@ -508,31 +508,32 @@ const HTML = `<!DOCTYPE html>
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
+        const p = msg.payload || {};
 
         switch (msg.type) {
           case 'SERVER:WELCOME':
-            addSystemMessage(\`Welcome! Your ID: \${msg.clientId.slice(0, 8)}\`);
-            elements.info.textContent = \`Client ID: \${msg.clientId.slice(0, 8)}\`;
+            addSystemMessage(\`Welcome! Your ID: \${p.clientId.slice(0, 8)}\`);
+            elements.info.textContent = \`Client ID: \${p.clientId.slice(0, 8)}\`;
             break;
 
           case 'ROOM:USERS':
-            addSystemMessage(\`Room '\${msg.room}' has \${msg.count} user(s)\`);
+            addSystemMessage(\`Room '\${p.room}' has \${p.count} user(s)\`);
             break;
 
           case 'USER:JOINED':
-            addSystemMessage(\`→ \${msg.user} joined the room\`);
+            addSystemMessage(\`→ \${p.user} joined the room\`);
             break;
 
           case 'USER:LEFT':
-            addSystemMessage(\`← \${msg.user} left the room\`);
+            addSystemMessage(\`← \${p.user} left the room\`);
             break;
 
           case 'MESSAGE:BROADCAST':
-            addMessage(msg.user, msg.text);
+            addMessage(p.user, p.text);
             break;
 
           case 'SERVER:ERROR':
-            addSystemMessage(\`⚠️ Error: \${msg.message}\`);
+            addSystemMessage(\`⚠️ Error: \${p.message}\`);
             break;
         }
       };
@@ -579,7 +580,7 @@ const HTML = `<!DOCTYPE html>
       currentRoom = room;
       ws.send(JSON.stringify({
         type: 'ROOM:JOIN',
-        room,
+        payload: { room },
       }));
 
       elements.messageInput.disabled = false;
@@ -593,7 +594,7 @@ const HTML = `<!DOCTYPE html>
 
       ws.send(JSON.stringify({
         type: 'MESSAGE:SEND',
-        text,
+        payload: { text },
       }));
 
       addMessage('[YOU]', text);
