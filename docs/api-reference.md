@@ -644,12 +644,12 @@ publish(
 
 ```typescript
 interface PublishOptions {
-  excludeSelf?: boolean; // Throws error if true (not yet implemented)
+  excludeSelf?: boolean; // Exclude sender from receiving their own broadcast
   partitionKey?: string; // For sharding (future use)
 }
 ```
 
-**Note on `excludeSelf`:** This option will raise an error if set to `true`. The feature is not yet implemented and requires pubsub adapter support. Use workarounds like dedicated topics per connection or checking message origin in subscriber handlers. See the `PublishOptions` type definition for details.
+**Note on `excludeSelf`:** When set to `true`, the sender is excluded from receiving their own broadcast. The filtering is handled by the pubsub plugin via `excludeClientId` in envelope metadata.
 
 **Returns:** `Promise<PublishResult>` with subscriber match count and capability info
 

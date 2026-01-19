@@ -111,12 +111,12 @@ const publish = async (channel, schema, payload, options) => {
 
 ```ts
 interface PublishOptions {
-  excludeSelf?: boolean; // Raises error if true (not yet implemented)
+  excludeSelf?: boolean; // Exclude sender from receiving their own broadcast
   partitionKey?: string; // Future: distributed sharding
 }
 ```
 
-- **excludeSelf**: Reserved and validated (raises error if set to `true`)
+- **excludeSelf**: When true, the sender is excluded from receiving their own broadcast
 - **partitionKey**: Future feature for distributed pubsub without breaking API
 - **Metadata**: Defined in message schema (third parameter to `message()`), not in options
 

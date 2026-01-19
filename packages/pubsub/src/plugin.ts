@@ -38,7 +38,7 @@ import type { PubSubObserver, WithPubSubOptions } from "./types.js";
  * - Track connected clients (onOpen/onClose hooks)
  * - Deliver messages to local subscribers (deliverLocally)
  * - Manage adapter lifecycle (init/shutdown)
- * - Fast-fail excludeSelf: true with UNSUPPORTED error
+ * - Handle excludeSelf filtering via excludeClientId in envelope metadata
  * - Notify observers of publish/subscribe operations
  *
  * **Adapter Responsibilities**:

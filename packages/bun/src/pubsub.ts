@@ -39,31 +39,19 @@ export class BunPubSub implements PubSubAdapter {
    * All WebSocket connections subscribed to this topic (via ws.subscribe)
    * will receive the message immediately.
    *
-   * Note: Bun's native pub/sub is too primitive to support excludeSelf or
-   * track subscriber counts. Both are rejected with UNSUPPORTED errors.
-   * Capability is always "unknown" (can't enumerate subscribers).
+   * Note: excludeSelf filtering is handled by the pubsub plugin's deliverLocally()
+   * via excludeClientId in envelope.meta. Capability is "unknown" (can't enumerate).
    *
    * @param envelope - Validated message with topic, payload, type, meta
-   * @param options - Publish options (partitionKey ignored, excludeSelf unsupported)
+   * @param options - Publish options (excludeSelf handled by plugin layer)
    */
   async publish(
     envelope: PublishEnvelope,
     options?: PublishOptions,
   ): Promise<PublishResult> {
-    // Bun.ServerWebSocket.publish doesn't support sender filtering.
-    // Reject explicitly to encourage explicit server-side filtering in handlers.
-    if (options?.excludeSelf === true) {
-      return {
-        ok: false,
-        error: "UNSUPPORTED",
-        retryable: false,
-        adapter: "BunPubSub",
-        details: {
-          feature: "excludeSelf",
-          reason: "Bun pub/sub has no sender context",
-        },
-      };
-    }
+    // excludeSelf filtering is handled by the pubsub plugin's deliverLocally()
+    // via excludeClientId in envelope.meta. Adapter just forwards to Bun.
+    void options;
 
     try {
       // Serialize complete envelope (type, payload, meta) as JSON

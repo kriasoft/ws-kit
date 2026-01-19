@@ -78,20 +78,9 @@ export function redisPubSub(
       envelope: PublishEnvelope,
       opts?: PublishOptions,
     ): Promise<PublishResult> {
-      // Redis pub/sub is distributed and can't track per-instance senders.
-      // Reject excludeSelf to guide users toward explicit filtering in handlers.
-      if (opts?.excludeSelf === true) {
-        return {
-          ok: false,
-          error: "UNSUPPORTED",
-          retryable: false,
-          adapter: "RedisPubSub",
-          details: {
-            feature: "excludeSelf",
-            reason: "Distributed adapter has no sender context",
-          },
-        };
-      }
+      // excludeSelf filtering is handled by the pubsub plugin's deliverLocally()
+      // via excludeClientId in envelope.meta. Adapter just forwards to broker.
+      void opts;
 
       // Publish to broker (fire-and-forget style; errors are async)
       const channel = channelFor(envelope.topic);
