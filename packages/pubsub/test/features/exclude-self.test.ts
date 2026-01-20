@@ -2,390 +2,128 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Publish excludeSelf Tests
+ * excludeSelf Option Tests
  *
- * Validates that excludeSelf option filters out the sender from receiving the published message.
- * When ctx.publish() is called with excludeSelf: true, the sender's clientId is passed through
- * to the adapter, which excludes that client during local delivery.
+ * **Behavioral tests are in local-delivery.test.ts** (excludeSelf filtering describe block)
+ * which properly invokes handlers and verifies delivery/exclusion behavior, including:
+ * - Sender exclusion when excludeSelf: true
+ * - Correct matched count with/without excludeSelf
+ *
+ * This file tests edge cases not covered there (server-side publish semantics).
  *
  * Spec: docs/specs/pubsub.md#publish-options--result
  * Related: ADR-022 (pub/sub API design), ADR-019 (publish API convenience)
  */
 
+import { createTestRouter } from "@ws-kit/core/testing";
 import { memoryPubSub } from "@ws-kit/memory";
 import { withPubSub } from "@ws-kit/pubsub";
-import { createRouter, rpc, withZod, z } from "@ws-kit/zod";
+import { createRouter, message, withZod, z } from "@ws-kit/zod";
 import { describe, expect, it } from "bun:test";
 
-describe("ctx.publish() - excludeSelf support", () => {
-  describe("excludeSelf option basic behavior", () => {
-    it("should succeed when excludeSelf: true", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
+describe("excludeSelf option", () => {
+  describe("server-side publish (no sender)", () => {
+    it("router.publish with excludeSelf:true is a no-op (no sender to exclude)", async () => {
+      const TestMsg = message("TEST_MSG", { text: z.string() });
+      const SubMsg = message("SUB", {});
+
+      const tr = createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
       });
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      let publishResult: any = null;
-
-      router.rpc(TestMsg, async (ctx) => {
-        publishResult = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          { excludeSelf: true },
-        );
-        ctx.reply({ ok: true });
+      tr.on(SubMsg, async (ctx) => {
+        await ctx.topics.subscribe("test-topic");
       });
 
-      expect(router.rpc).toBeDefined();
-      // Note: full integration testing would require invoking the handler
-    });
+      const conn = await tr.connect();
+      conn.send("SUB", {});
+      await tr.flush();
 
-    it("should succeed when excludeSelf: false", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
+      // Server-side publish with excludeSelf - should succeed because
+      // there's no sender to exclude (senderClientId is undefined)
+      const result = await tr.publish(
+        "test-topic",
+        TestMsg,
+        { text: "from server" },
+        { excludeSelf: true },
+      );
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      // Should succeed - excludeSelf is a no-op when there's no sender
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.capability).toBe("exact");
+        // matched should include all subscribers (no one excluded)
+        expect(result.matched).toBe(1);
+      }
 
-      let publishResult: any = null;
+      // Message should be delivered to subscriber (no one to exclude)
+      await tr.flush();
+      const received = conn.outgoing().filter((m) => m.type === "TEST_MSG");
+      expect(received.length).toBe(1);
+      expect(received[0]?.payload).toEqual({ text: "from server" });
 
-      router.rpc(TestMsg, async (ctx) => {
-        publishResult = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          { excludeSelf: false },
-        );
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should succeed when excludeSelf is omitted", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      let publishResult: any = null;
-
-      router.rpc(TestMsg, async (ctx) => {
-        publishResult = await ctx.publish("test-topic", TestMsg, {
-          text: "hello",
-        });
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
+      await tr.close();
     });
   });
 
-  describe("excludeSelf with other options", () => {
-    it("should work with excludeSelf and partitionKey", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
+  describe("meta sanitization", () => {
+    it("should strip user-injected excludeClientId from meta", async () => {
+      const TestMsg = message("TEST_MSG", { text: z.string() });
+      const SubMsg = message("SUB", {});
+      const PublishMsg = message("PUBLISH", {});
+
+      const tr = createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
       });
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          {
-            excludeSelf: true,
-            partitionKey: "shard-1",
-          },
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
+      tr.on(SubMsg, async (ctx) => {
+        await ctx.topics.subscribe("test-topic");
       });
 
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should work with excludeSelf and meta", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          {
-            excludeSelf: true,
-            meta: { timestamp: Date.now() },
-          },
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should work with excludeSelf and signal", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const controller = new AbortController();
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          {
-            excludeSelf: true,
-            signal: controller.signal,
-          },
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-  });
-
-  describe("excludeSelf behavior verification", () => {
-    it("envelope should contain excludeClientId when excludeSelf: true", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      let capturedMeta: any = null;
-
-      // Tap observer to capture envelope metadata
-      router.pubsub.tap({
-        onPublish: (rec) => {
-          capturedMeta = rec.meta;
-        },
-      });
-
-      router.rpc(TestMsg, async (ctx) => {
+      // Try to inject excludeClientId to exclude a specific client
+      tr.on(PublishMsg, async (ctx) => {
         await ctx.publish(
           "test-topic",
           TestMsg,
           { text: "hello" },
-          { excludeSelf: true },
+          // Attempt to inject excludeClientId - should be stripped
+          { meta: { excludeClientId: "victim-client-id", custom: "data" } },
         );
-        ctx.reply({ ok: true });
       });
 
-      expect(router.rpc).toBeDefined();
-      // Note: full integration test would capture the actual metadata
-    });
+      const sender = await tr.connect();
+      const receiver = await tr.connect();
 
-    it("envelope should NOT contain excludeClientId when excludeSelf: false", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
+      // Both subscribe
+      sender.send("SUB", {});
+      receiver.send("SUB", {});
+      await tr.flush();
 
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
+      // Sender publishes with injected excludeClientId (should be ignored)
+      sender.send("PUBLISH", {});
+      await tr.flush();
 
-      let capturedMeta: any = null;
+      // Both should receive the message - injection was stripped
+      const senderMsgs = sender.outgoing().filter((m) => m.type === "TEST_MSG");
+      const receiverMsgs = receiver
+        .outgoing()
+        .filter((m) => m.type === "TEST_MSG");
 
-      router.pubsub.tap({
-        onPublish: (rec) => {
-          capturedMeta = rec.meta;
-        },
-      });
+      expect(senderMsgs.length).toBe(1);
+      expect(receiverMsgs.length).toBe(1);
 
-      router.rpc(TestMsg, async (ctx) => {
-        await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          { excludeSelf: false },
-        );
-        ctx.reply({ ok: true });
-      });
+      // Custom meta should be preserved
+      expect(senderMsgs[0]?.meta?.custom).toBe("data");
+      // excludeClientId should NOT appear in wire message
+      expect(senderMsgs[0]?.meta?.excludeClientId).toBeUndefined();
 
-      expect(router.rpc).toBeDefined();
-    });
-  });
-
-  describe("excludeSelf edge cases", () => {
-    it("should handle excludeSelf with undefined meta gracefully", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          { excludeSelf: true },
-          // No meta provided
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should handle excludeSelf with existing meta fields", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          {
-            excludeSelf: true,
-            meta: { custom: "value", source: "handler" },
-          },
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should handle multiple excludeSelf publishes in same handler", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        // First publish with excludeSelf
-        const result1 = await ctx.publish(
-          "topic-1",
-          TestMsg,
-          { text: "first" },
-          { excludeSelf: true },
-        );
-
-        // Second publish with excludeSelf to different topic
-        const result2 = await ctx.publish(
-          "topic-2",
-          TestMsg,
-          { text: "second" },
-          { excludeSelf: true },
-        );
-
-        expect(result1 === undefined || typeof result1 === "object").toBe(true);
-        expect(result2 === undefined || typeof result2 === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-  });
-
-  describe("backward compatibility", () => {
-    it("should not break existing code without excludeSelf", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish("test-topic", TestMsg, {
-          text: "hello",
-        });
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should work with only partitionKey", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          { partitionKey: "shard-1" },
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
-    });
-
-    it("should work with only meta", async () => {
-      const TestMsg = rpc("TEST_MSG", { text: z.string() }, "RESPONSE", {
-        ok: z.boolean(),
-      });
-
-      const router = createRouter()
-        .plugin(withZod())
-        .plugin(withPubSub({ adapter: memoryPubSub() }));
-
-      router.rpc(TestMsg, async (ctx) => {
-        const result = await ctx.publish(
-          "test-topic",
-          TestMsg,
-          { text: "hello" },
-          { meta: { timestamp: Date.now() } },
-        );
-        expect(result === undefined || typeof result === "object").toBe(true);
-        ctx.reply({ ok: true });
-      });
-
-      expect(router.rpc).toBeDefined();
+      await tr.close();
     });
   });
 });

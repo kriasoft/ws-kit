@@ -213,7 +213,7 @@ export function cloudflarePubSub(env: CloudflareEnv): PubSubAdapter {
 | --------------- | -------------------------------------------------------------------- |
 | **Development** | `withPubSub()` uses memory adapter by default; works immediately     |
 | **Testing**     | No Redis needed; in-memory adapters sufficient                       |
-| **Production**  | Swap to `redisPubSub(redis)` by changing one line                    |
+| **Production**  | Swap to `redisPubSub(redis)` + `init()` (auto-creates subscriber)    |
 | **Scaling**     | Seamless move from single-server to distributed without code changes |
 
 ### For Maintainers
@@ -308,13 +308,18 @@ import { createRouter, withZod } from "@ws-kit/zod";
 import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 
+const redis = createClient({ url: REDIS_URL });
+await redis.connect();
+
 const router = createRouter()
   .plugin(withZod())
   .plugin(
     withPubSub({
-      adapter: redisPubSub(redis), // ✅ Swap adapter
+      adapter: redisPubSub(redis), // ✅ Auto-creates subscriber via duplicate()
     }),
   );
+
+await router.pubsub.init(); // Connects subscriber, awaits broker readiness
 ```
 
 ### Cloudflare Workers

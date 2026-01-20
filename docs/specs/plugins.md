@@ -80,14 +80,16 @@ const router = createRouter()
 import { createRouter, withZod } from "@ws-kit/zod"; // or @ws-kit/valibot
 import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
+import { createClient } from "redis";
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
 
 const router = createRouter()
   .plugin(withZod()) // ✅ Includes validation + messaging + RPC
-  .plugin(
-    withPubSub({
-      adapter: redisPubSub(redis),
-    }),
-  );
+  .plugin(withPubSub({ adapter: redisPubSub(redis) }));
+
+await router.pubsub.init(); // Auto-creates subscriber, awaits broker readiness
 ```
 
 **Style 2: Granular Plugins (For Advanced Composition)**
@@ -309,9 +311,10 @@ await ctx.topics.unsubscribe("chat:room-123");
 // Development (memory adapter, zero config)
 .plugin(withPubSub())  // Uses memoryPubSub() by default
 
-// Production (Redis adapter)
+// Production (Redis adapter - auto-creates subscriber)
 import { redisPubSub } from "@ws-kit/redis";
 .plugin(withPubSub({ adapter: redisPubSub(redis) }))
+// Don't forget: await router.pubsub.init()
 
 // Cloudflare Workers (Durable Objects)
 import { DurablePubSub } from "@ws-kit/cloudflare";
@@ -507,7 +510,7 @@ import { createClient } from "redis";
 import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 import { rateLimit } from "@ws-kit/rate-limit";
 
-const redis = createClient();
+const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
 const router = createRouter()
@@ -517,6 +520,8 @@ const router = createRouter()
       limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
     }),
   );
+
+await router.pubsub.init();
 ```
 
 #### `@ws-kit/cloudflare`
@@ -695,9 +700,12 @@ Choose adapters based on environment:
 
 ```typescript
 const adapter =
-  process.env.NODE_ENV === "production" ? redisPubSub(redis) : memoryPubSub();
+  process.env.NODE_ENV === "production"
+    ? redisPubSub(redis) // Auto-creates subscriber via duplicate()
+    : memoryPubSub();
 
 const router = createRouter().plugin(withPubSub({ adapter }));
+await router.pubsub.init(); // Safe to call for both adapters
 ```
 
 ### Pattern 3: Plugin Dependencies
@@ -742,27 +750,21 @@ const router = createRouter().plugin(withValidation()).plugin(withRpc());
 3. **Extract adapter initialization to functions**
 
    ```typescript
-   // ❌ Adapter logic scattered
-   function createApp() {
-     return createRouter().plugin(
-       withPubSub({
-         adapter:
-           process.env.NODE_ENV === "production"
-             ? redisPubSub(redis)
-             : memoryPubSub(),
-       }),
-     );
-   }
-
    // ✅ Clean initialization
-   function createAdapter() {
-     return process.env.NODE_ENV === "production"
-       ? redisPubSub(redis)
-       : memoryPubSub();
+   async function createAdapter() {
+     if (process.env.NODE_ENV === "production") {
+       const redis = createClient({ url: REDIS_URL });
+       await redis.connect();
+       return redisPubSub(redis); // Auto-creates subscriber
+     }
+     return memoryPubSub();
    }
 
-   function createApp() {
-     return createRouter().plugin(withPubSub({ adapter: createAdapter() }));
+   async function createApp() {
+     const adapter = await createAdapter();
+     const router = createRouter().plugin(withPubSub({ adapter }));
+     await router.pubsub.init();
+     return router;
    }
    ```
 

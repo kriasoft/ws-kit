@@ -410,8 +410,8 @@ export interface WithPubSubOptions {
    */
   delivery?: {
     /**
-     * Default value for excludeSelf option in publish calls (future).
-     * Currently excludeSelf returns UNSUPPORTED; this will be the default when implemented.
+     * Default value for excludeSelf option in publish calls.
+     * When true, the sender is excluded from receiving their own broadcast by default.
      */
     excludeSelfDefault?: boolean;
   };

@@ -1144,12 +1144,12 @@ export class RouterImpl<
       Object.assign(ctx, adapterWs.initialData);
     }
 
-    // 1. Run internal handlers (plugins for infrastructure setup)
-    await this.lifecycle.handleInternalOpen(ws);
-
-    // 2. Get client ID and data for context building
+    // 1. Assign client ID before any hooks (plugins need it during onInternalOpen)
     const clientId = this.getOrCreateClientId(ws);
     const data = this.getOrInitData(ws);
+
+    // 2. Run internal handlers (plugins for infrastructure setup)
+    await this.lifecycle.handleInternalOpen(ws);
 
     // 3. Get router-level handlers
     const routerHandlers = this.lifecycle.getRouterOpenHandlers();

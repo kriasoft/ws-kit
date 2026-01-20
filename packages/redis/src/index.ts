@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025-present Kriasoft
 // SPDX-License-Identifier: MIT
 
+import type { BrokerConsumer, PubSubAdapter } from "@ws-kit/core/pubsub";
 import type {
   RateLimitDecision,
   RateLimiter,
   RateLimitPolicy,
 } from "@ws-kit/rate-limit";
-import type { BrokerConsumer, PubSubDriver } from "@ws-kit/core/pubsub";
 
 /**
  * Redis client interface (compatible with redis, ioredis, etc.)
@@ -36,11 +36,11 @@ export interface RedisClient {
 }
 
 // Re-export pub/sub types and factories
-export { redisPubSub } from "./pubsub.js";
-export type { RedisPubSubOptions } from "./pubsub.js";
 export { redisConsumer } from "./consumer.js";
 export type { RedisConsumerOptions } from "./consumer.js";
-export type { BrokerConsumer, PubSubDriver };
+export { redisPubSub } from "./pubsub.js";
+export type { RedisPubSubOptions } from "./pubsub.js";
+export type { BrokerConsumer, PubSubAdapter };
 
 /**
  * Options for Redis rate limiter.

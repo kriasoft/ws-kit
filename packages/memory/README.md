@@ -11,7 +11,7 @@ In-memory adapters for WS-Kit. Provides a zero-dependency pub/sub registry and t
 
 ## What you get
 
-- `memoryPubSub()` — In-memory topic index (`Map<topic, Set<clientId>>`). Implements `publish`, `subscribe`, `unsubscribe`, `getSubscribers`, `listTopics`, `hasTopic`, and `replace` for bulk topic swaps. `excludeSelf` is unsupported (no sender context).
+- `memoryPubSub()` — In-memory topic index (`Map<topic, Set<clientId>>`). Implements `publish`, `subscribe`, `unsubscribe`, `getSubscribers`, `listTopics`, `hasTopic`, and `replace` for bulk topic swaps. `excludeSelf` filtering is handled by the pubsub plugin layer.
 - `memoryRateLimiter(policy, opts?)` — Token-bucket limiter with per-key mutex to prevent double spending. Supports `prefix` isolation, `getPolicy()`, `dispose()`, and optional `clock` injection for deterministic tests.
 - Types: `MemoryPubSubAdapter`, `MemoryRateLimiterOptions`, `Clock`.
 

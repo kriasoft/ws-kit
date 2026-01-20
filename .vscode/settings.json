@@ -38,6 +38,7 @@
     "liskov",
     "retryable",
     "socketio",
+    "srcpack",
     "tarkus",
     "valibot"
   ]

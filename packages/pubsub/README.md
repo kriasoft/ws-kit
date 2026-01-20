@@ -179,7 +179,7 @@ for (const topic of ctx.topics) { ... }
 interface PublishOptions {
   partitionKey?: string; // Routing hint for distributed adapters
   meta?: Record<string, unknown>; // Custom metadata
-  excludeSelf?: boolean; // Exclude sender (not yet supported)
+  excludeSelf?: boolean; // Exclude sender (memory/Redis only; Bun returns UNSUPPORTED)
 }
 ```
 

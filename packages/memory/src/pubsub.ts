@@ -71,32 +71,25 @@ export function memoryPubSub(): MemoryPubSubAdapter {
       envelope: PublishEnvelope,
       opts?: PublishOptions,
     ): Promise<PublishResult> {
-      // Memory adapter doesn't track message senders, so excludeSelf can't filter.
-      // Reject to guide users toward explicit filtering in handlers.
-      if (opts?.excludeSelf === true) {
-        return {
-          ok: false,
-          error: "UNSUPPORTED",
-          retryable: false,
-          details: {
-            feature: "excludeSelf",
-            reason: "Memory adapter has no sender context",
-          },
-        };
-      }
+      // Note: excludeSelf filtering is handled by the pubsub plugin's
+      // deliverLocally() via excludeClientId in envelope.meta.
+      // Memory adapter returns post-filter count for accurate metrics.
+      void opts; // unused - plugin handles excludeSelf
 
       const subscribers = topics.get(envelope.topic);
-      const matched = subscribers?.size ?? 0;
+      let matched = subscribers?.size ?? 0;
 
-      // Router/platform layer handles actual delivery to websockets.
-      // Adapter just returns metrics.
-      // In a real distributed adapter (Redis, Kafka), publish would
-      // broadcast to broker; router would handle inbound consumption.
+      // Account for excludeSelf in matched count (sender excluded from delivery)
+      const excludeId = (envelope.meta as Record<string, unknown>)
+        ?.excludeClientId as string | undefined;
+      if (excludeId && subscribers?.has(excludeId)) {
+        matched -= 1;
+      }
 
       return {
         ok: true,
         capability: "exact", // Memory adapter has exact subscriber count
-        matched, // 0 if no subscribers, otherwise > 0
+        matched, // Post-filter count: actual recipients
       };
     },
 

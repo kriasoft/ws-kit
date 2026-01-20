@@ -38,7 +38,7 @@ import type { PubSubObserver, WithPubSubOptions } from "./types.js";
  * - Track connected clients (onOpen/onClose hooks)
  * - Deliver messages to local subscribers (deliverLocally)
  * - Manage adapter lifecycle (init/shutdown)
- * - Fast-fail excludeSelf: true with UNSUPPORTED error
+ * - Handle excludeSelf filtering via excludeClientId in envelope metadata
  * - Notify observers of publish/subscribe operations
  *
  * **Adapter Responsibilities**:
@@ -147,6 +147,7 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
 ): ReturnType<typeof definePlugin<TContext, WithPubSubAPI>> {
   const adapter = opts.adapter;
   const observer = opts.observer;
+  const excludeSelfDefault = opts.delivery?.excludeSelfDefault ?? false;
 
   return definePlugin<TContext, WithPubSubAPI>((router) => {
     // Track active send functions by client ID for local delivery
@@ -224,8 +225,35 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
      * - Catches and logs send errors without breaking the loop
      */
     const deliverLocally = async (env: PublishEnvelope) => {
-      // Exclude self: if envelope.meta.excludeClientId is set, skip that client
+      // Extract internal routing field (not for wire)
       const excludeId = (env.meta as any)?.excludeClientId;
+
+      // Build wire meta: strip internal fields like excludeClientId
+      let wireMeta: Record<string, unknown> | undefined;
+      if (env.meta && typeof env.meta === "object") {
+        const metaObj = env.meta as Record<string, unknown>;
+        const rest = Object.fromEntries(
+          Object.entries(metaObj).filter(([k]) => k !== "excludeClientId"),
+        );
+        if (Object.keys(rest).length > 0) {
+          wireMeta = rest;
+        }
+      }
+
+      // Build wire message: { type, meta?, payload? } - exclude topic and internal fields
+      let wireMessage: string;
+      try {
+        wireMessage = JSON.stringify({
+          type: env.type,
+          ...(wireMeta ? { meta: wireMeta } : {}),
+          ...(env.payload !== undefined ? { payload: env.payload } : {}),
+        });
+      } catch (error) {
+        // Serialization failed (circular refs, BigInt, etc.) - log and skip delivery
+        const lifecycle = (router as any).getInternalLifecycle?.();
+        lifecycle?.handleError(error, null);
+        return;
+      }
 
       // Iterate subscribers (async iterable respects backpressure)
       for await (const clientId of adapter.getSubscribers(env.topic)) {
@@ -237,8 +265,8 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
         if (!send) continue; // Client disconnected; skip
 
         try {
-          // Send the envelope frame
-          await Promise.resolve(send(env));
+          // Send the serialized message
+          await Promise.resolve(send(wireMessage));
         } catch (error) {
           // Log delivery error but continue loop
           // (client may have disconnected mid-delivery)
@@ -278,32 +306,59 @@ export function withPubSub<TContext extends ConnectionData = ConnectionData>(
       opts?: PublishOptions,
       senderClientId?: string,
     ): Promise<PublishResult> => {
+      // Resolve effective excludeSelf (explicit option overrides plugin default)
+      const effectiveExcludeSelf = opts?.excludeSelf ?? excludeSelfDefault;
+
+      // Sanitize user meta: strip reserved internal field (excludeClientId)
+      // to prevent injection attacks that could cause unintended filtering
+      let userMeta: Record<string, unknown> | undefined;
+      if (opts?.meta) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { excludeClientId: _, ...rest } = opts.meta as Record<
+          string,
+          unknown
+        >;
+        userMeta = Object.keys(rest).length > 0 ? rest : undefined;
+      }
+
       // Construct envelope: the message itself
       const envelope: PublishEnvelope = {
         topic: topic,
         payload,
         type: schema.messageType, // Schema type for observability
-        ...(opts?.meta && { meta: opts.meta }), // Pass through optional metadata
+        ...(userMeta && { meta: userMeta }), // Pass through sanitized metadata
       };
 
       // If excludeSelf is true and we know the sender's clientId,
       // store it in envelope metadata for deliverLocally to use
-      if (opts?.excludeSelf === true && senderClientId) {
+      if (effectiveExcludeSelf && senderClientId) {
         envelope.meta = envelope.meta || {};
         (envelope.meta as any).excludeClientId = senderClientId;
       }
 
-      // Construct adapter options (partitionKey, excludeSelf, signal)
-      const publishOpts: PublishOptions | undefined = opts
-        ? {
-            ...(opts.partitionKey && { partitionKey: opts.partitionKey }),
-            ...(opts.excludeSelf && { excludeSelf: opts.excludeSelf }),
-            ...(opts.meta && { meta: opts.meta }),
-            ...(opts.signal && { signal: opts.signal }),
-          }
-        : undefined;
+      // Construct adapter options (partitionKey, excludeSelf, signal).
+      // Only forward excludeSelf to adapter when senderClientId exists—
+      // server-side publishes have no "self" to exclude, so it's a no-op.
+      // We need to forward excludeSelf even when opts is undefined, so adapters
+      // like Bun can properly reject when excludeSelfDefault is true.
+      const forwardExcludeSelf = effectiveExcludeSelf && senderClientId;
+      const publishOpts: PublishOptions | undefined =
+        opts || forwardExcludeSelf
+          ? {
+              ...(opts?.partitionKey && { partitionKey: opts.partitionKey }),
+              ...(forwardExcludeSelf && { excludeSelf: true }),
+              ...(userMeta && { meta: userMeta }), // Sanitized meta
+              ...(opts?.signal && { signal: opts.signal }),
+            }
+          : undefined;
 
       const result = await adapter.publish(envelope, publishOpts);
+
+      // For local-only adapters (no broker), deliver messages directly.
+      // Distributed adapters handle delivery via broker consumer in start().
+      if (result.ok && typeof adapter.start !== "function") {
+        await deliverLocally(envelope);
+      }
 
       // Notify observers after publish (success or failure)
       if (result.ok) {

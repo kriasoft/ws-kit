@@ -314,7 +314,7 @@ describe("Pub/Sub Capture in Test Harness", () => {
       expect(tr.capture.publishes()).toEqual([]);
     });
 
-    it("should handle failed publishes (excludeSelf)", async () => {
+    it("should capture publishes with excludeSelf option", async () => {
       let publishResult: any;
 
       const tr = test.createTestRouter({
@@ -326,17 +326,12 @@ describe("Pub/Sub Capture in Test Harness", () => {
               }),
             )
             .on(ChatMessage, async (ctx: any) => {
-              try {
-                publishResult = await ctx.publish(
-                  "chat",
-                  ChatMessage,
-                  { text: "msg" },
-                  { excludeSelf: true },
-                );
-              } catch (e) {
-                // excludeSelf throws per spec
-                publishResult = { ok: false, error: "UNSUPPORTED" };
-              }
+              publishResult = await ctx.publish(
+                "chat",
+                ChatMessage,
+                { text: "msg" },
+                { excludeSelf: true },
+              );
             }),
       });
 
@@ -345,9 +340,9 @@ describe("Pub/Sub Capture in Test Harness", () => {
       conn.send("CHAT_MESSAGE", { text: "trigger" });
       await tr.flush();
 
-      // Failed publishes should NOT be captured
-      expect(publishResult.ok).toBe(false);
-      expect(tr.capture.publishes()).toHaveLength(0);
+      // excludeSelf is now supported via pubsub plugin filtering
+      expect(publishResult.ok).toBe(true);
+      expect(tr.capture.publishes()).toHaveLength(1);
 
       await tr.close();
     });

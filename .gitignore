@@ -2,6 +2,7 @@
 node_modules
 
 # output
+.srcpack/
 out
 dist
 *.tgz

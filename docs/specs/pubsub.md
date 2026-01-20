@@ -350,32 +350,23 @@ interface PublishOptions {
   partitionKey?: string;
 
   /**
-   * **Status**: Not yet implemented (all adapters return {ok: false, error: "UNSUPPORTED"}).
+   * Exclude the sender from receiving the published message.
    *
-   * **Purpose**: Exclude the sender from receiving the published message.
+   * When `true`, the pubsub plugin injects the sender's clientId into the
+   * envelope metadata (`excludeClientId`) and filters it during local delivery.
+   * This field traverses broker channels (Redis pub/sub) but is stripped before
+   * WebSocket serialization to clients.
    *
-   * **Portable Pattern (until supported):**
+   * **Server-side semantics**: When called from `router.publish()` (no sender),
+   * `excludeSelf` is a no-op—there's no "self" to exclude. The message broadcasts
+   * to all subscribers normally.
    *
-   * Include sender identity in payload and filter on subscriber side:
+   * **Adapter support**: Memory and Redis adapters support excludeSelf via plugin
+   * filtering. Bun native pub/sub returns UNSUPPORTED (direct broadcast, no filtering).
+   *
    * ```typescript
-   * // Publisher
-   * await ctx.publish(topic, Msg, {
-   *   ...payload,
-   *   _senderId: ctx.clientId
-   * });
-   *
-   * // Subscriber
-   * router.on(Msg, (ctx) => {
-   *   if (ctx.payload._senderId === ctx.clientId) return; // Skip self
-   * });
-   * ```
-   *
-   * **Alternative Pattern:**
-   *
-   * Use separate per-connection topic (e.g., "room:123:others") that only subscribers (not sender) subscribe to:
-   * ```typescript
-   * // When joining room, sender subscribes to "room:123:others"
-   * // When publishing, send to both "room:123" (all) and sender can filter
+   * // In a chat handler, broadcast to room but don't echo back to sender
+   * await ctx.publish("room:123", ChatMsg, { text: "Hello!" }, { excludeSelf: true });
    * ```
    */
   excludeSelf?: boolean;
@@ -1307,16 +1298,16 @@ if (result.ok) {
 
 **Error Remediation Guide:**
 
-| Error               | Retryable | Typical Cause                             | Remediation                                     |
-| ------------------- | --------- | ----------------------------------------- | ----------------------------------------------- |
-| `VALIDATION`        | ✗         | Payload doesn't match schema              | Fix payload; inspect `cause` field              |
-| `ACL`               | ✗         | Authorization hook denied                 | Don't retry; permission denied                  |
-| `STATE`             | ✗         | Router/adapter not ready (or closed)      | Await router ready; don't retry                 |
-| `BACKPRESSURE`      | ✓         | Adapter send queue full                   | Retry with exponential backoff + jitter         |
-| `PAYLOAD_TOO_LARGE` | ✗         | Payload exceeds adapter limit             | Reduce payload size; split into messages        |
-| `UNSUPPORTED`       | ✗         | Feature not available (e.g., excludeSelf) | Use fallback strategy; check `adapter` field    |
-| `ADAPTER_ERROR`     | ✓         | Unexpected adapter failure                | Retry with backoff; inspect `details.transient` |
-| `CONNECTION_CLOSED` | ✓         | Connection/router disposed                | Retry after reconnection                        |
+| Error               | Retryable | Typical Cause                            | Remediation                                     |
+| ------------------- | --------- | ---------------------------------------- | ----------------------------------------------- |
+| `VALIDATION`        | ✗         | Payload doesn't match schema             | Fix payload; inspect `cause` field              |
+| `ACL`               | ✗         | Authorization hook denied                | Don't retry; permission denied                  |
+| `STATE`             | ✗         | Router/adapter not ready (or closed)     | Await router ready; don't retry                 |
+| `BACKPRESSURE`      | ✓         | Adapter send queue full                  | Retry with exponential backoff + jitter         |
+| `PAYLOAD_TOO_LARGE` | ✗         | Payload exceeds adapter limit            | Reduce payload size; split into messages        |
+| `UNSUPPORTED`       | ✗         | Feature not available (adapter-specific) | Use fallback strategy; check `adapter` field    |
+| `ADAPTER_ERROR`     | ✓         | Unexpected adapter failure               | Retry with backoff; inspect `details.transient` |
+| `CONNECTION_CLOSED` | ✓         | Connection/router disposed               | Retry after reconnection                        |
 
 **Failure Examples:**
 
@@ -1355,9 +1346,10 @@ const r4 = await ctx.publish("topic", Schema, data);
 const r5 = await ctx.publish("topic", Schema, hugePayload);
 // {ok: false, error: "PAYLOAD_TOO_LARGE", retryable: false, details: { limit: 1048576 }}
 
-// unsupported failure (excludeSelf not yet implemented)
+// excludeSelf: filters out the sender (memory/Redis adapters)
+// Note: Bun native pub/sub returns UNSUPPORTED (use memory adapter if needed)
 const r6 = await ctx.publish("topic", Schema, data, { excludeSelf: true });
-// {ok: false, error: "UNSUPPORTED", retryable: false, adapter: "inmemory", details: { feature: "excludeSelf" }}
+// {ok: true, capability: "exact", matched: 3} (sender excluded from count)
 
 // adapter_error failure (unexpected)
 const r7 = await ctx.publish("topic", Schema, data);
@@ -1410,19 +1402,19 @@ if (result.ok) {
 
 ### Unified Error Codes & Remediation
 
-| Error Code             | Operation                     | Cause                                   | Retryable | Remediation                                   |
-| ---------------------- | ----------------------------- | --------------------------------------- | --------- | --------------------------------------------- |
-| `INVALID_TOPIC`        | subscribe/unsubscribe         | Format/length validation failed         | ✗         | Fix topic string format                       |
-| `ACL_SUBSCRIBE`        | subscribe                     | Authorization hook denied               | ✗         | User lacks permission                         |
-| `ACL_PUBLISH`          | publish                       | Authorization hook denied               | ✗         | User lacks permission                         |
-| `TOPIC_LIMIT_EXCEEDED` | subscribe                     | Hit maxTopicsPerConnection quota        | ✗         | Unsubscribe from other topics                 |
-| `CONNECTION_CLOSED`    | subscribe/unsubscribe/publish | Connection closed or router disposed    | ✓         | Retry after reconnection                      |
-| `VALIDATION`           | publish                       | Payload doesn't match schema            | ✗         | Fix payload; inspect `cause` field            |
-| `STATE`                | publish                       | Router/adapter not ready                | ✗         | Await router ready; check state               |
-| `BACKPRESSURE`         | publish                       | Adapter send queue full                 | ✓         | Retry with exponential backoff + jitter       |
-| `PAYLOAD_TOO_LARGE`    | publish                       | Payload exceeds adapter limit           | ✗         | Reduce payload size; split messages           |
-| `UNSUPPORTED`          | publish                       | Feature unavailable (e.g., excludeSelf) | ✗         | Use fallback strategy; check `adapter` field  |
-| `ADAPTER_ERROR`        | any                           | Unexpected adapter failure              | ✓         | Retry with backoff; check `details.transient` |
+| Error Code             | Operation                     | Cause                                  | Retryable | Remediation                                   |
+| ---------------------- | ----------------------------- | -------------------------------------- | --------- | --------------------------------------------- |
+| `INVALID_TOPIC`        | subscribe/unsubscribe         | Format/length validation failed        | ✗         | Fix topic string format                       |
+| `ACL_SUBSCRIBE`        | subscribe                     | Authorization hook denied              | ✗         | User lacks permission                         |
+| `ACL_PUBLISH`          | publish                       | Authorization hook denied              | ✗         | User lacks permission                         |
+| `TOPIC_LIMIT_EXCEEDED` | subscribe                     | Hit maxTopicsPerConnection quota       | ✗         | Unsubscribe from other topics                 |
+| `CONNECTION_CLOSED`    | subscribe/unsubscribe/publish | Connection closed or router disposed   | ✓         | Retry after reconnection                      |
+| `VALIDATION`           | publish                       | Payload doesn't match schema           | ✗         | Fix payload; inspect `cause` field            |
+| `STATE`                | publish                       | Router/adapter not ready               | ✗         | Await router ready; check state               |
+| `BACKPRESSURE`         | publish                       | Adapter send queue full                | ✓         | Retry with exponential backoff + jitter       |
+| `PAYLOAD_TOO_LARGE`    | publish                       | Payload exceeds adapter limit          | ✗         | Reduce payload size; split messages           |
+| `UNSUPPORTED`          | publish                       | Feature unavailable (adapter-specific) | ✗         | Use fallback strategy; check `adapter` field  |
+| `ADAPTER_ERROR`        | any                           | Unexpected adapter failure             | ✓         | Retry with backoff; check `details.transient` |
 
 ### Error Type Definitions
 
@@ -2243,34 +2235,30 @@ Planned as `specs/pubsub-redis.md`.
 
 **See also**: [ADR-023](../adr/023-pubsub-adapter-split.md), [Migration Guide](../migration/pubsub-adapter-split.md)
 
-### 15.1 Core Responsibility Separation
+### 15.1 Unified Adapter Architecture
 
-The pub/sub system separates **two distinct concerns**:
+The pub/sub system uses a **unified adapter pattern** where distributed adapters handle both local subscriptions and broker consumption:
 
-1. **`PubSubDriver`** — Local subscription index + stats
-   - Manages per-client topic subscriptions
-   - Returns exact (memory) or best-effort (distributed) local subscriber counts
-   - Broadcasts router-materialized messages to matching subscribers
-   - **Never** consumes broker messages or calls back into router
-   - **Examples**: `memoryPubSub()`, `redisPubSub()`, `durableObjectsPubSub()`
+1. **`PubSubAdapter`** — Local subscription index + optional broker integration
+   - Manages per-client topic subscriptions (local index)
+   - Publishes messages to broker (Redis, Kafka, etc.)
+   - Optionally includes `start()` for broker consumption (distributed mode)
+   - Plugin calls `start(deliverLocally)` during `router.pubsub.init()`
+   - **Examples**: `memoryPubSub()` (local-only), `redisPubSub()` (distributed)
 
-2. **`BrokerConsumer`** — Inbound message consumption
-   - Consumes messages from external brokers (Redis SUBSCRIBE, Kafka, DO callbacks, etc.)
-   - Invokes router/platform callback with `PublishEnvelope`
-   - Returns cleanup function for lifecycle management
-   - **Never** maintains subscription state or delivers WebSocket frames
-   - **Examples**: `redisConsumer()`, `durableObjectsConsumer()`
+2. **Distributed Mode** (when `adapter.start` exists)
+   - `router.pubsub.init()` starts broker consumer
+   - Broker delivers messages to all instances
+   - Plugin handles single-delivery semantics (no double-delivery)
 
-### 15.2 Why the Split
+### 15.2 Why Unified Adapters
 
-Combining ingress into the adapter created ambiguity:
+The unified pattern provides:
 
-- Unclear which methods were local-only vs broker-facing
-- Hard to test broker consumption independently from subscription tracking
-- Difficult to compose multiple brokers into one deployment
-- Blurred line between adapter and platform concerns
-
-The split makes each layer testable, composable, and easier to understand.
+- **Zero-config distributed**: `redisPubSub(redis)` auto-creates subscriber via `duplicate()`
+- **Plugin-managed lifecycle**: `router.pubsub.init()` starts broker, `shutdown()` stops it
+- **Single-delivery guarantee**: Plugin skips local delivery when broker handles it
+- **Simpler API**: No manual wiring of consumers or callbacks
 
 ### 15.3 Memory Adapter (Unchanged)
 
@@ -2285,23 +2273,31 @@ const adapter = memoryPubSub();
 
 ### 15.4 Distributed Adapters (Redis, Cloudflare DO, Kafka)
 
-Distributed adapters provide both pieces, wired by platform:
+Distributed adapters handle both egress and ingress automatically:
 
 ```typescript
-import { redisPubSub, redisConsumer } from "@ws-kit/redis";
+import { createRouter } from "@ws-kit/core";
+import { redisPubSub } from "@ws-kit/redis";
+import { withPubSub } from "@ws-kit/pubsub";
+import { createClient } from "redis";
 
-const adapter = redisPubSub(redis); // Local index + Redis egress
-const ingress = redisConsumer(redis); // Redis inbound handler
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
 
-// Platform/router wires them together:
-ingress.start((envelope) => {
-  // Deliver to local subscribers using adapter.getLocalSubscribers()
-  const frame = encodeFrame(envelope);
-  for await (const clientId of adapter.getLocalSubscribers(envelope.topic)) {
-    sessions.get(clientId)?.send(frame);
-  }
-});
+// Auto-creates subscriber via duplicate() during init()
+const adapter = redisPubSub(redis);
+
+const router = createRouter().plugin(withPubSub({ adapter }));
+
+// Plugin manages lifecycle: init() starts broker consumer
+await router.pubsub.init();
 ```
+
+The plugin detects `adapter.start()` and:
+
+- Calls `start(deliverLocally)` during `pubsub.init()`
+- Skips local delivery on `publish()` (broker handles it)
+- Ensures single-delivery semantics
 
 ### 15.5 `PublishEnvelope` Format
 

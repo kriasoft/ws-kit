@@ -22,7 +22,7 @@ describe("publish() failure modes", () => {
       expect(r1).toBeDefined();
       expect(typeof r1 === "object").toBe(true);
 
-      // excludeSelf unsupported
+      // excludeSelf filtering (handled by plugin layer)
       const r2 = await router.publish(
         "topic",
         TestMessage,
@@ -30,7 +30,7 @@ describe("publish() failure modes", () => {
         { excludeSelf: true },
       );
       expect(r2).toBeDefined();
-      expect(typeof r2 === "object").toBe(true);
+      expect(r2.ok).toBe(true);
 
       // All results should have ok field
       expect("ok" in r1).toBe(true);
@@ -72,8 +72,8 @@ describe("publish() failure modes", () => {
         withPubSub({ adapter: memoryPubSub() }),
       );
 
-      // excludeSelf requires senderClientId, which router.publish() doesn't have
-      // So it should either be a no-op or return success
+      // excludeSelf filtering is handled by the pubsub plugin via excludeClientId
+      // in envelope metadata. router.publish() has no sender context, but still succeeds.
       const result = await router.publish(
         "topic",
         TestMessage,
@@ -81,10 +81,10 @@ describe("publish() failure modes", () => {
         { excludeSelf: true },
       );
 
-      // memoryPubSub may succeed (ignoring excludeSelf) or fail gracefully
-      expect(result.ok === true || result.ok === false).toBe(true);
+      // excludeSelf is supported - should succeed
+      expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.capability).toBeDefined();
+        expect(result.capability).toBe("exact");
       }
     });
   });
@@ -196,7 +196,7 @@ describe("publish() failure modes", () => {
   });
 
   describe("error code semantics", () => {
-    it("handles excludeSelf gracefully (adapters may ignore)", async () => {
+    it("handles excludeSelf gracefully (pubsub plugin filters locally)", async () => {
       const router = createRouter().plugin(
         withPubSub({ adapter: memoryPubSub() }),
       );
@@ -208,11 +208,9 @@ describe("publish() failure modes", () => {
         { excludeSelf: true },
       );
 
-      // Memory adapter rejects excludeSelf (no sender context available)
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe("UNSUPPORTED");
-      }
+      // Memory adapter now accepts excludeSelf - filtering is handled
+      // by the pubsub plugin via excludeClientId in envelope metadata
+      expect(result.ok).toBe(true);
     });
   });
 

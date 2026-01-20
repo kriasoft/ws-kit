@@ -56,7 +56,7 @@
     "zod": ">=4.1.13"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.3",
+    "@types/bun": "^1.3.6",
     "zod": "^4.1.13"
   },
   "engines": {

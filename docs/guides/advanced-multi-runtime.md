@@ -161,6 +161,7 @@ When testing across platforms, account for:
    ```typescript
    import { createClient } from "redis";
    import { redisPubSub } from "@ws-kit/redis";
+   import { withPubSub } from "@ws-kit/pubsub";
 
    // Bun with memory pub/sub (default)
    serve(router, { port: 3000 });
@@ -169,9 +170,11 @@ When testing across platforms, account for:
    const redis = createClient({ url: process.env.REDIS_URL });
    await redis.connect();
 
-   const router = createRouter({
-     pubsub: redisPubSub(redis),
-   });
+   const router = createRouter().plugin(
+     withPubSub({ adapter: redisPubSub(redis) }),
+   );
+
+   await router.pubsub.init(); // Auto-creates subscriber
    serve(router, { port: 3000 });
    ```
 

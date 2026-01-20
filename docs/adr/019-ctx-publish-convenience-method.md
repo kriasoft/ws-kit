@@ -111,12 +111,12 @@ const publish = async (channel, schema, payload, options) => {
 
 ```ts
 interface PublishOptions {
-  excludeSelf?: boolean; // Raises error if true (not yet implemented)
+  excludeSelf?: boolean; // Exclude sender (memory/Redis; Bun: UNSUPPORTED)
   partitionKey?: string; // Future: distributed sharding
 }
 ```
 
-- **excludeSelf**: Reserved and validated (raises error if set to `true`)
+- **excludeSelf**: When true, the sender is excluded from receiving their own broadcast (memory/Redis adapters; Bun returns UNSUPPORTED). **Server-side semantics**: When called from `router.publish()` (no sender context), `excludeSelf` is a no-op—there's no "self" to exclude.
 - **partitionKey**: Future feature for distributed pubsub without breaking API
 - **Metadata**: Defined in message schema (third parameter to `message()`), not in options
 

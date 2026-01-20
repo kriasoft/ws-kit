@@ -692,7 +692,7 @@ interface PublishResult {
 
 interface PublishOptions {
   signal?: AbortSignal;
-  excludeSelf?: boolean;             // Default: false
+  excludeSelf?: boolean;             // Default: false (memory/Redis; Bun: UNSUPPORTED)
   partitionKey?: string;             // For distributed consistency
   waitFor?: 'enqueued' | 'settled';  // Default: 'enqueued'
   meta?: Record<string, any>;
@@ -711,7 +711,7 @@ interface PublishOptions {
 - **`payload: T`** — Broadcast data
 
 - **`opts?: PublishOptions`** — Configuration:
-  - `excludeSelf`: Don't send to current connection (default: false)
+  - `excludeSelf`: Don't send to current connection (memory/Redis; Bun: UNSUPPORTED). No-op for server-side `router.publish()` (no sender to exclude).
   - `partitionKey`: For distributed systems; ensures order within partition
   - `waitFor`: `'enqueued'` (fast, default) or `'settled'` (certain)
   - `signal`: Cancel before publish starts
@@ -990,7 +990,7 @@ import { withPubSub } from "@ws-kit/pubsub";
 import { redisPubSub } from "@ws-kit/redis";
 import { createClient } from "redis";
 
-const redis = createClient();
+const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
 const router = createRouter<ConnectionData>()
@@ -999,6 +999,8 @@ const router = createRouter<ConnectionData>()
 
   // PubSub plugin (required for .publish)
   .plugin(withPubSub({ adapter: redisPubSub(redis) }));
+
+await router.pubsub.init(); // Auto-creates subscriber, awaits broker readiness
 
 // Now all methods are available
 router.on(SomeMsg, (ctx) => {
