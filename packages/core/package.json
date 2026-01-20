@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/core",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Tiny, type-safe WebSocket router",
   "type": "module",
   "sideEffects": false,

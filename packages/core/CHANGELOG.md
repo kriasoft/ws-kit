@@ -1,5 +1,13 @@
 # @ws-kit/core
 
+## 0.10.1
+
+### Patch Changes
+
+- [#108](https://github.com/kriasoft/ws-kit/pull/108) [`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e) Thanks [@koistya](https://github.com/koistya)! - Fix client ID assignment order for pub/sub plugins
+
+  Client ID is now assigned before `onInternalOpen` hooks run, ensuring pub/sub plugins can access `clientId` during connection setup.
+
 ## 0.10.0
 
 ### Minor Changes

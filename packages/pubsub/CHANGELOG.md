@@ -1,5 +1,18 @@
 # @ws-kit/pubsub
 
+## 0.10.2
+
+### Patch Changes
+
+- [#108](https://github.com/kriasoft/ws-kit/pull/108) [`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e) Thanks [@koistya](https://github.com/koistya)! - Local pub/sub delivery for non-broker adapters
+
+  Adapters without broker ingestion (like memory) now receive local message delivery via the pubsub plugin's `deliverLocally()`. Previously, messages published with the memory adapter weren't delivered to local subscribers.
+
+  The `excludeSelf` filtering is now handled at the plugin layer via `excludeClientId` in envelope metadata, simplifying adapter implementations.
+
+- Updated dependencies [[`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e)]:
+  - @ws-kit/core@0.10.1
+
 ## 0.10.1
 
 ### Patch Changes
