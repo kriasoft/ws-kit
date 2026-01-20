@@ -1,5 +1,16 @@
 # @ws-kit/bun
 
+## 0.10.1
+
+### Patch Changes
+
+- [#108](https://github.com/kriasoft/ws-kit/pull/108) [`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e) Thanks [@koistya](https://github.com/koistya)! - Throw error when excludeSelf is used with Bun's native pub/sub
+
+  Bun's native WebSocket pub/sub does not support excluding the sender from broadcasts. The adapter now throws a clear error when `excludeSelf: true` is passed, guiding users to use the memory adapter for local-only pub/sub when this feature is needed.
+
+- Updated dependencies [[`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e)]:
+  - @ws-kit/core@0.10.1
+
 ## 0.10.0
 
 ### Minor Changes

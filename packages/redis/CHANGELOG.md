@@ -1,5 +1,51 @@
 # @ws-kit/redis
 
+## 0.10.1
+
+### Patch Changes
+
+- [#108](https://github.com/kriasoft/ws-kit/pull/108) [`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e) Thanks [@koistya](https://github.com/koistya)! - Auto-create subscriber via `duplicate()` for simplified Redis setup
+
+  **New behavior**: `redisPubSub(redis)` now auto-creates a subscriber connection via `duplicate()` during `router.pubsub.init()`. This eliminates the need to manually create two connections for most users.
+
+  ```typescript
+  // Before (verbose)
+  const publisher = createClient({ url: REDIS_URL });
+  const subscriber = createClient({ url: REDIS_URL });
+  await Promise.all([publisher.connect(), subscriber.connect()]);
+  const adapter = redisPubSub(publisher, { subscriber });
+
+  // After (simple)
+  const redis = createClient({ url: REDIS_URL });
+  await redis.connect();
+  const adapter = redisPubSub(redis); // Auto-creates subscriber
+  await router.pubsub.init();
+  ```
+
+  **Additional changes**:
+  - Fail-fast validation: throws immediately if `subscriber === publisher` (same connection)
+  - `start()` is now conditional: only included when subscriber capability exists
+  - Fixed connection leak on `duplicate().connect()` or `psubscribe()` failure
+  - Fixed sync exception handling to separate decode errors from callback errors
+  - Export type changed from `PubSubDriver` to `PubSubAdapter`
+
+  **Advanced usage** (read replicas, different auth) still supported:
+
+  ```typescript
+  const pub = createClient({ url: REDIS_URL });
+  const sub = createClient({ url: REDIS_REPLICA_URL });
+  await Promise.all([pub.connect(), sub.connect()]);
+  const adapter = redisPubSub(pub, { subscriber: sub });
+  ```
+
+- [#108](https://github.com/kriasoft/ws-kit/pull/108) [`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e) Thanks [@koistya](https://github.com/koistya)! - Simplify excludeSelf handling
+
+  The `excludeSelf` filtering is now handled at the pubsub plugin layer, simplifying the Redis adapter implementation. No API changes.
+
+- Updated dependencies [[`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e), [`16e8f8d`](https://github.com/kriasoft/ws-kit/commit/16e8f8d119f3ec260e379ace3c190373b792982e)]:
+  - @ws-kit/core@0.10.1
+  - @ws-kit/memory@0.10.1
+
 ## 0.10.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@ws-kit/redis",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Redis-backed rate limiter and pub/sub adapter for WS-Kit",
   "type": "module",
   "sideEffects": false,
