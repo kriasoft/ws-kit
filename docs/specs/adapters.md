@@ -700,14 +700,17 @@ When `@ws-kit/redis` is installed, use it for cross-instance broadcasts:
 ```typescript
 import { createClient } from "redis";
 import { redisPubSub } from "@ws-kit/redis";
+import { withPubSub } from "@ws-kit/pubsub";
 
-const redis = createClient();
+const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
-const router = createRouter({
-  pubsub: redisPubSub(redis),
-});
-serve(router); // Use Redis for cross-instance broadcasting
+const router = createRouter().plugin(
+  withPubSub({ adapter: redisPubSub(redis) }),
+);
+
+await router.pubsub.init(); // Auto-creates subscriber, awaits broker readiness
+serve(router);
 ```
 
 ## Feature Adapters
@@ -729,6 +732,9 @@ const router = createRouter()
   );
 
 // In production, swap adapters:
+const redis = createClient({ url: REDIS_URL });
+await redis.connect();
+
 const productionRouter = createRouter()
   .plugin(withPubSub({ adapter: redisPubSub(redis) }))
   .use(
@@ -736,6 +742,8 @@ const productionRouter = createRouter()
       limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
     }),
   );
+
+await productionRouter.pubsub.init();
 ```
 
 ### Pub/Sub Adapters
@@ -805,6 +813,8 @@ await redis.connect();
 const router = createRouter().plugin(
   withPubSub({ adapter: redisPubSub(redis) }),
 );
+
+await router.pubsub.init(); // Auto-creates subscriber
 ```
 
 Cloudflare Workers (Durable Objects):

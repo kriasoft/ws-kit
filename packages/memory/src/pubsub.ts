@@ -73,16 +73,23 @@ export function memoryPubSub(): MemoryPubSubAdapter {
     ): Promise<PublishResult> {
       // Note: excludeSelf filtering is handled by the pubsub plugin's
       // deliverLocally() via excludeClientId in envelope.meta.
-      // Memory adapter just returns metrics; actual delivery happens at plugin layer.
+      // Memory adapter returns post-filter count for accurate metrics.
       void opts; // unused - plugin handles excludeSelf
 
       const subscribers = topics.get(envelope.topic);
-      const matched = subscribers?.size ?? 0;
+      let matched = subscribers?.size ?? 0;
+
+      // Account for excludeSelf in matched count (sender excluded from delivery)
+      const excludeId = (envelope.meta as Record<string, unknown>)
+        ?.excludeClientId as string | undefined;
+      if (excludeId && subscribers?.has(excludeId)) {
+        matched -= 1;
+      }
 
       return {
         ok: true,
         capability: "exact", // Memory adapter has exact subscriber count
-        matched, // 0 if no subscribers, otherwise > 0
+        matched, // Post-filter count: actual recipients
       };
     },
 

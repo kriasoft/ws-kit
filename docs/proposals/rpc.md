@@ -1016,20 +1016,25 @@ const router = createRouter()
 ```typescript
 import { redisPubSub, redisRateLimiter } from "@ws-kit/redis";
 
+const redis = createClient({ url: REDIS_URL });
+await redis.connect();
+
 const router = createRouter()
   .plugin(withZod())
   .plugin(
     withPubSub({
-      adapter: redisPubSub(redis), // ← Swap adapter
+      adapter: redisPubSub(redis), // Auto-creates subscriber via duplicate()
     }),
   )
   .plugin(
     withRateLimit({
-      limiter: redisRateLimiter(redis), // ← Swap adapter
+      limiter: redisRateLimiter(redis),
       capacity: 1000,
       tokensPerSecond: 50,
     }),
   );
+
+await router.pubsub.init();
 ```
 
 **Cloudflare Workers:**

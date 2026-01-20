@@ -11,7 +11,7 @@ WS-Kit's pub/sub layer is pluggable, allowing you to choose the right adapter fo
 | Single-instance server       | In-memory (default) | `@ws-kit/memory`     | Perfect for development and small deployments                                         |
 | Multi-instance load-balanced | Redis               | `@ws-kit/redis`      | Automatic cross-instance broadcasting with atomic token bucket rate limiting          |
 | Cloudflare Workers           | Durable Objects     | `@ws-kit/cloudflare` | Serverless with stateful compute; 100 connections per DO, sharding required for scale |
-| Custom backend               | Your implementation | Custom               | Implement the `PubSubDriver` interface                                                |
+| Custom backend               | Your implementation | Custom               | Implement the `PubSubAdapter` interface                                               |
 
 For detailed adapter specifications, limits, and guarantees, see [Adapter Responsibilities](/specs/adapters).
 
@@ -476,22 +476,26 @@ For multi-instance deployments, use the Redis adapter for automatic cross-instan
 
 ```typescript
 import { createClient } from "redis";
-import { z, message, createRouter } from "@ws-kit/zod";
+import { z, message, createRouter, withZod } from "@ws-kit/zod";
+import { withPubSub } from "@ws-kit/pubsub";
 import { serve } from "@ws-kit/bun";
 import { redisPubSub } from "@ws-kit/redis";
 
 type AppData = { userId?: string };
 
-// Create Redis client
 const redis = createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
 await redis.connect();
 
 // Create router with Redis adapter for cross-instance broadcasting
-const router = createRouter<AppData>({
-  pubsub: redisPubSub(redis, { channelPrefix: "myapp:prod:" }),
-});
+const router = createRouter<AppData>()
+  .plugin(withZod())
+  .plugin(
+    withPubSub({
+      adapter: redisPubSub(redis, { channelPrefix: "myapp:prod:" }),
+    }),
+  );
 
 const ChatMessage = message("CHAT", {
   userId: z.string(),
@@ -500,11 +504,14 @@ const ChatMessage = message("CHAT", {
 
 router.on(ChatMessage, async (ctx) => {
   // Broadcasts to all instances connected to Redis
-  await router.publish("chat:general", ChatMessage, {
+  await ctx.publish("chat:general", ChatMessage, {
     userId: ctx.payload.userId,
     text: ctx.payload.text,
   });
 });
+
+// Initialize broker (auto-creates subscriber via duplicate())
+await router.pubsub.init();
 
 serve(router, { port: 3000 });
 ```

@@ -43,7 +43,7 @@
     "@ws-kit/core": "workspace:^"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.3",
+    "@types/bun": "^1.3.6",
     "@ws-kit/core": "workspace:^",
     "@ws-kit/memory": "workspace:^",
     "@ws-kit/zod": "workspace:^"

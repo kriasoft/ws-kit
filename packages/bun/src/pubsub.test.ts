@@ -229,4 +229,51 @@ describe("BunPubSub", () => {
       expect(result.retryable).toBe(true);
     }
   });
+
+  describe("excludeSelf option", () => {
+    it("should return UNSUPPORTED when excludeSelf is true", async () => {
+      const pubsub = new BunPubSub(mockServer);
+
+      // Bun's server.publish() broadcasts directly with no way to filter
+      const result = await pubsub.publish(
+        { topic: "room:123", payload: "test" },
+        { excludeSelf: true },
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe("UNSUPPORTED");
+        expect(result.retryable).toBe(false);
+        expect(result.adapter).toBe("BunPubSub");
+        expect(result.details?.feature).toBe("excludeSelf");
+      }
+
+      // Should NOT have called server.publish
+      expect(mockServer.publishCalls).toHaveLength(0);
+    });
+
+    it("should succeed when excludeSelf is false", async () => {
+      const pubsub = new BunPubSub(mockServer);
+
+      const result = await pubsub.publish(
+        { topic: "room:123", payload: "test" },
+        { excludeSelf: false },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockServer.publishCalls).toHaveLength(1);
+    });
+
+    it("should succeed when excludeSelf is undefined", async () => {
+      const pubsub = new BunPubSub(mockServer);
+
+      const result = await pubsub.publish(
+        { topic: "room:123", payload: "test" },
+        { partitionKey: "shard-1" }, // options without excludeSelf
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockServer.publishCalls).toHaveLength(1);
+    });
+  });
 });

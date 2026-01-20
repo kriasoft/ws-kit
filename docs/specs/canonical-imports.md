@@ -71,6 +71,7 @@ const router = createRouter()
   .plugin(withZod())
   .plugin(withPubSub({ adapter: redisPubSub(redis) }));
 
+await router.pubsub.init(); // Auto-creates subscriber via duplicate()
 serve(router, { port: 3000 });
 ```
 
@@ -119,11 +120,14 @@ declare module "@ws-kit/core" {
   }
 }
 
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
 const router = createRouter()
   .plugin(withZod())
   .plugin(withMessaging())
   .plugin(withRpc())
-  .plugin(withPubSub({ adapter: redisPubSub(redis) }))
+  .plugin(withPubSub({ adapter: redisPubSub(redis) })) // Auto-creates subscriber
   .use(
     rateLimit({
       limiter: redisRateLimiter(redis, { capacity: 1000, tokensPerSecond: 50 }),
@@ -131,6 +135,7 @@ const router = createRouter()
     }),
   );
 
+await router.pubsub.init();
 serve(router, { port: 3000 });
 ```
 

@@ -242,15 +242,18 @@ describe("Local Delivery (memory adapter path)", () => {
 
       // Publish with BigInt (not JSON serializable)
       // This should NOT throw - error is handled internally
-      let threw = false;
-      try {
-        await tr.publish("test-topic", BadMsg, { value: BigInt(123) });
-      } catch {
-        threw = true;
+      const result = await tr.publish("test-topic", BadMsg, {
+        value: BigInt(123),
+      });
+
+      // Result: adapter publish succeeds, but delivery fails during serialization
+      // The adapter (memory) reports success since the envelope was valid
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.capability).toBe("exact");
       }
 
-      // Core behavior: doesn't throw, message isn't delivered
-      expect(threw).toBe(false);
+      // Message isn't delivered due to serialization failure
       expect(conn.outgoing().filter((m) => m.type === "BAD_MSG").length).toBe(
         0,
       );
@@ -281,16 +284,16 @@ describe("Local Delivery (memory adapter path)", () => {
       const circular: any = { name: "test" };
       circular.self = circular;
 
-      // Should not throw
-      let threw = false;
-      try {
-        await tr.publish("test-topic", BadMsg, circular);
-      } catch {
-        threw = true;
+      // Should not throw - error is handled internally
+      const result = await tr.publish("test-topic", BadMsg, circular);
+
+      // Result: adapter publish succeeds, but delivery fails during serialization
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.capability).toBe("exact");
       }
 
-      // Core behavior: doesn't throw, message isn't delivered
-      expect(threw).toBe(false);
+      // Message isn't delivered due to serialization failure
       expect(conn.outgoing().filter((m) => m.type === "BAD_MSG").length).toBe(
         0,
       );
@@ -364,6 +367,93 @@ describe("Local Delivery (memory adapter path)", () => {
 
       await tr.close();
     });
+
+    it("should deliver exactly once via broker (simulated distributed adapter)", async () => {
+      // Simulates a distributed adapter where:
+      // 1. publish() sends to broker
+      // 2. Broker delivers back via onRemote callback from start()
+      // 3. Message should be delivered exactly once (via broker, not on publish)
+
+      let capturedOnRemote: ((envelope: any) => void) | null = null;
+      let deliveryPromise: Promise<void> | null = null;
+      let resolveDelivery: (() => void) | null = null;
+
+      // Track subscriptions in memory (like real adapter would)
+      const subscriptions = new Map<string, Set<string>>();
+
+      const adapter: PubSubAdapter = {
+        async publish(envelope) {
+          // Simulate broker: echo back via onRemote using microtask
+          // (deterministic timing, no flaky setTimeout)
+          if (capturedOnRemote) {
+            deliveryPromise = new Promise((resolve) => {
+              resolveDelivery = resolve;
+            });
+            queueMicrotask(() => {
+              capturedOnRemote!(envelope);
+              resolveDelivery?.();
+            });
+          }
+          return { ok: true, capability: "unknown" as const };
+        },
+        async subscribe(clientId: string, topic: string) {
+          const clients = subscriptions.get(topic) ?? new Set();
+          clients.add(clientId);
+          subscriptions.set(topic, clients);
+        },
+        async unsubscribe(clientId: string, topic: string) {
+          const clients = subscriptions.get(topic);
+          if (clients) clients.delete(clientId);
+        },
+        async *getSubscribers(topic: string) {
+          const clients = subscriptions.get(topic);
+          if (clients) {
+            for (const clientId of clients) {
+              yield clientId;
+            }
+          }
+        },
+        start(onRemote) {
+          capturedOnRemote = onRemote;
+          return () => {
+            capturedOnRemote = null;
+          };
+        },
+      };
+
+      const Msg = message("TEST_MSG", { text: z.string() });
+      const SubMsg = message("SUB", {});
+
+      const tr = createTestRouter({
+        create: () =>
+          createRouter().plugin(withZod()).plugin(withPubSub({ adapter })),
+      });
+
+      tr.on(SubMsg, async (ctx) => {
+        await ctx.topics.subscribe("test-topic");
+      });
+
+      const conn = await tr.connect();
+      conn.send("SUB", {});
+      await tr.flush();
+
+      // Initialize the pubsub (starts broker consumer)
+      await (tr as any).pubsub?.init?.();
+
+      // Publish - should NOT deliver locally, only via broker
+      await tr.publish("test-topic", Msg, { text: "hello" });
+
+      // Wait for deterministic broker delivery (via microtask)
+      if (deliveryPromise) await deliveryPromise;
+      await tr.flush();
+
+      // Check delivery count: should be exactly 1
+      const received = conn.outgoing().filter((m) => m.type === "TEST_MSG");
+      expect(received.length).toBe(1);
+      expect(received[0]?.payload).toEqual({ text: "hello" });
+
+      await tr.close();
+    });
   });
 
   describe("excludeSelf filtering", () => {
@@ -413,6 +503,127 @@ describe("Local Delivery (memory adapter path)", () => {
       // Sender should NOT get their own message (excludeSelf)
       const senderChats = sender.outgoing().filter((f) => f.type === "CHAT");
       expect(senderChats.length).toBe(0);
+
+      await tr.close();
+    });
+
+    it("should return correct matched count with excludeSelf (sender excluded)", async () => {
+      const Msg = message("CHAT", { text: z.string() });
+      const SubMsg = message("JOIN", {});
+      const PublishMsg = message("PUBLISH", {});
+
+      let capturedResult: any = null;
+
+      const tr = createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+      });
+
+      tr.on(SubMsg, async (ctx) => {
+        await ctx.topics.subscribe("chat-room");
+      });
+
+      tr.on(PublishMsg, async (ctx) => {
+        // Publish with excludeSelf - sender is in subscribers
+        capturedResult = await ctx.publish(
+          "chat-room",
+          Msg,
+          { text: "hello" },
+          { excludeSelf: true },
+        );
+      });
+
+      const sender = await tr.connect();
+      const receiver1 = await tr.connect();
+      const receiver2 = await tr.connect();
+
+      // All three subscribe
+      sender.send("JOIN", {});
+      receiver1.send("JOIN", {});
+      receiver2.send("JOIN", {});
+      await tr.flush();
+
+      // Sender publishes with excludeSelf
+      sender.send("PUBLISH", {});
+      await tr.flush();
+
+      // matched should be 2 (3 subscribers minus sender)
+      expect(capturedResult).not.toBeNull();
+      expect(capturedResult.ok).toBe(true);
+      expect(capturedResult.matched).toBe(2); // Post-filter count
+
+      // Verify delivery: only 2 receivers got the message
+      const receiver1Chats = receiver1
+        .outgoing()
+        .filter((f) => f.type === "CHAT");
+      const receiver2Chats = receiver2
+        .outgoing()
+        .filter((f) => f.type === "CHAT");
+      const senderChats = sender.outgoing().filter((f) => f.type === "CHAT");
+
+      expect(receiver1Chats.length).toBe(1);
+      expect(receiver2Chats.length).toBe(1);
+      expect(senderChats.length).toBe(0);
+
+      await tr.close();
+    });
+
+    it("should return full matched count without excludeSelf", async () => {
+      const Msg = message("CHAT", { text: z.string() });
+      const SubMsg = message("JOIN", {});
+      const PublishMsg = message("PUBLISH", {});
+
+      let capturedResult: any = null;
+
+      const tr = createTestRouter({
+        create: () =>
+          createRouter()
+            .plugin(withZod())
+            .plugin(withPubSub({ adapter: memoryPubSub() })),
+      });
+
+      tr.on(SubMsg, async (ctx) => {
+        await ctx.topics.subscribe("chat-room");
+      });
+
+      tr.on(PublishMsg, async (ctx) => {
+        // Publish WITHOUT excludeSelf
+        capturedResult = await ctx.publish("chat-room", Msg, { text: "hello" });
+      });
+
+      const sender = await tr.connect();
+      const receiver1 = await tr.connect();
+      const receiver2 = await tr.connect();
+
+      // All three subscribe
+      sender.send("JOIN", {});
+      receiver1.send("JOIN", {});
+      receiver2.send("JOIN", {});
+      await tr.flush();
+
+      // Sender publishes without excludeSelf
+      sender.send("PUBLISH", {});
+      await tr.flush();
+
+      // matched should be 3 (all subscribers including sender)
+      expect(capturedResult).not.toBeNull();
+      expect(capturedResult.ok).toBe(true);
+      expect(capturedResult.matched).toBe(3); // Full count
+
+      // Verify delivery: all 3 got the message
+      const receiver1Chats = receiver1
+        .outgoing()
+        .filter((f) => f.type === "CHAT");
+      const receiver2Chats = receiver2
+        .outgoing()
+        .filter((f) => f.type === "CHAT");
+      const senderChats = sender.outgoing().filter((f) => f.type === "CHAT");
+
+      expect(receiver1Chats.length).toBe(1);
+      expect(receiver2Chats.length).toBe(1);
+      expect(senderChats.length).toBe(1);
 
       await tr.close();
     });

@@ -78,7 +78,7 @@
     }
   },
   "devDependencies": {
-    "@types/bun": "^1.3.3",
+    "@types/bun": "^1.3.6",
     "@ws-kit/valibot": "workspace:^",
     "@ws-kit/zod": "workspace:^",
     "valibot": "^1.2.0",

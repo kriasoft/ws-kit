@@ -9,12 +9,12 @@
     "start": "bun run index.ts"
   },
   "devDependencies": {
-    "@types/bun": "1.3.3"
+    "@types/bun": "1.3.6"
   },
   "dependencies": {
     "@ws-kit/bun": "workspace:*",
     "@ws-kit/core": "workspace:*",
     "@ws-kit/zod": "workspace:*",
-    "zod": "^4.1.13"
+    "zod": "^4.3.5"
   }
 }

@@ -435,7 +435,7 @@ interface PublishOptions {
 - Returns structured result; never throws at runtime (throws upfront if plugin missing)
 - `{waitFor: 'enqueued'}` (default): returns when message enqueued by adapter; fast feedback
 - `{waitFor: 'settled'}`: returns when message delivered to all subscribers (slower, more certain)
-- `{excludeSelf: true}`: skips current connection (memory/Redis adapters; Bun returns UNSUPPORTED)
+- `{excludeSelf: true}`: skips current connection (memory/Redis adapters; Bun returns UNSUPPORTED). No-op for server-side `router.publish()` (no sender to exclude).
 - `{partitionKey}`: ensures order within partition for distributed systems (e.g., Redis Streams)
 - `{signal}`: aborts if provided AbortController fires before publish starts
 

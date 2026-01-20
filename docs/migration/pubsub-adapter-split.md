@@ -17,28 +17,35 @@ const adapter = redisPubSub(redis);
 // onRemotePublished was optional method inside adapter
 ```
 
-**New Design**:
+**New Design** (recommended):
 
 ```typescript
-const adapter = redisPubSub(redis); // Pure local adapter
-const ingress = redisConsumer(redis); // Separate ingress handler
+// Simple: auto-creates subscriber via duplicate()
+const redis = createClient({ url: REDIS_URL });
+await redis.connect();
+
+const adapter = redisPubSub(redis);
+// Plugin calls adapter.start() during init, auto-connects subscriber
+```
+
+**Advanced** (explicit subscriber for read replicas, different auth):
+
+```typescript
+const pub = createClient({ url: REDIS_URL });
+const sub = createClient({ url: REDIS_REPLICA_URL });
+await Promise.all([pub.connect(), sub.connect()]);
+
+const adapter = redisPubSub(pub, { subscriber: sub });
 ```
 
 ### Why
 
-The old design blurred adapter responsibilities. Adapters are now **purely local**:
+The old design blurred adapter responsibilities. The new design provides:
 
-- Manage subscription index
-- Report local subscriber counts
-- Broadcast to local subscribers
-
-Ingress is **purely inbound**:
-
-- Consume broker messages
-- Invoke router/platform callbacks
-- Return cleanup function
-
-This separation makes testing, composition, and understanding easier.
+- **Zero-config distributed**: `redisPubSub(redis)` auto-creates subscriber via `duplicate()`
+- **Plugin-managed lifecycle**: `router.pubsub.init()` starts broker consumer
+- **Single-delivery guarantee**: Plugin skips local delivery when broker handles it
+- **Cleaner API**: No manual wiring of `deliverLocally()` callbacks
 
 ---
 
@@ -74,26 +81,28 @@ if (adapter.onRemotePublished) {
 }
 ```
 
-#### After
+#### After (Recommended)
 
 ```typescript
-import { redisPubSub, redisConsumer } from "@ws-kit/redis";
+import { createRouter } from "@ws-kit/core";
+import { redisPubSub } from "@ws-kit/redis";
+import { withPubSub } from "@ws-kit/pubsub";
 import { createClient } from "redis";
 
-const redis = createClient();
-const adapter = redisPubSub(redis);
-const ingress = redisConsumer(redis);
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
 
-// Wire ingress to router's delivery function
-const stop = ingress.start(async (envelope) => {
-  // Platform/router delivers to local subscribers
-  await deliverLocally(adapter, envelope);
-});
+// Auto-creates subscriber via duplicate() during init()
+const adapter = redisPubSub(redis);
+
+const router = createRouter().plugin(withPubSub({ adapter }));
+
+// Plugin handles lifecycle: init() starts broker, shutdown() stops it
+await router.pubsub.init();
 
 // Clean up on shutdown
-process.on("SIGTERM", () => {
-  stop();
-  adapter.close?.();
+process.on("SIGTERM", async () => {
+  await router.pubsub.shutdown();
 });
 ```
 
@@ -147,41 +156,24 @@ export class TopicDO {
 
 ## Integration with Router
 
-The router's `ctx.publish()` method should be updated to use the new adapter interface:
+The plugin now handles all delivery automatically. Users call `ctx.publish()` and the plugin:
 
-### Current Router Code
-
-```typescript
-// Old: uses internal MemoryPubSub interface
-await this.pubsub.publish(channel, payload, options);
-```
-
-### New Router Code
+1. Builds a `PublishEnvelope` with topic, type, payload, and metadata
+2. Calls `adapter.publish(envelope)` to send to the broker
+3. If adapter has `start()` (distributed mode), broker delivers to all instances
+4. If adapter is local-only, plugin delivers directly via `getSubscribers()`
 
 ```typescript
-// New: uses PubSubDriver interface
-const envelope: PublishEnvelope = {
-  topic: channel,
-  payload,
-  type: messageType,
-  meta: metadata,
-};
-
-const result = await adapter.publish(envelope, {
-  partitionKey: options?.partitionKey,
+// User code - simple and clean
+router.on(ChatMessage, async (ctx) => {
+  await ctx.publish("room:123", BroadcastMessage, {
+    text: ctx.payload.text,
+    from: ctx.data.userId,
+  });
 });
-
-if (result.ok) {
-  // Deliver locally using getLocalSubscribers
-  const frame = encodeFrame(envelope);
-  for await (const clientId of adapter.getLocalSubscribers(channel)) {
-    if (options?.excludeSelf && clientId === ctx.clientId) continue;
-    sessions.get(clientId)?.send(frame);
-  }
-} else {
-  // Handle error: retry, log, etc.
-}
 ```
+
+No manual `getLocalSubscribers()` loops or frame encoding needed.
 
 ---
 
@@ -229,38 +221,56 @@ if (isPublishSuccess(result)) {
 
 ---
 
-## Testing with Mock Ingress
+## Testing Distributed Adapters
 
-Test distributed deployments by mocking the ingress:
+Test distributed pub/sub using the test harness with a mock adapter:
 
 ```typescript
-import { describe, test } from "bun:test";
-import { redisPubSub, redisConsumer } from "@ws-kit/redis";
+import { describe, test, expect } from "bun:test";
+import { createRouter } from "@ws-kit/core";
+import { createTestRouter } from "@ws-kit/core/testing";
+import { withPubSub } from "@ws-kit/pubsub";
+import type { PubSubAdapter } from "@ws-kit/core/pubsub";
 
-describe("Redis pub/sub", () => {
-  test("delivers remote message locally", async () => {
-    const redis = createMockRedis();
-    const adapter = redisPubSub(redis);
-    const ingress = redisConsumer(redis);
+describe("Distributed pub/sub", () => {
+  test("delivers via broker (single delivery)", async () => {
+    // Simulate a distributed adapter with start() method
+    let onRemote: ((envelope: any) => void) | null = null;
+    const subscriptions = new Map<string, Set<string>>();
 
-    const delivered: PublishEnvelope[] = [];
-    ingress.start((envelope) => {
-      delivered.push(envelope);
-    });
-
-    // Simulate remote publish by invoking ingress directly
-    const envelope: PublishEnvelope = {
-      topic: "notifications",
-      payload: { message: "hello" },
+    const adapter: PubSubAdapter = {
+      async publish(envelope) {
+        // Echo back via broker (simulates Redis pub/sub round-trip)
+        if (onRemote) setTimeout(() => onRemote!(envelope), 0);
+        return { ok: true, capability: "unknown" };
+      },
+      async subscribe(clientId, topic) {
+        const clients = subscriptions.get(topic) ?? new Set();
+        clients.add(clientId);
+        subscriptions.set(topic, clients);
+      },
+      async unsubscribe(clientId, topic) {
+        subscriptions.get(topic)?.delete(clientId);
+      },
+      async *getSubscribers(topic) {
+        for (const id of subscriptions.get(topic) ?? []) yield id;
+      },
+      start(callback) {
+        onRemote = callback;
+        return () => {
+          onRemote = null;
+        };
+      },
     };
 
-    // Call ingress handler directly (simulating broker delivery)
-    const handlers = redis.subscribers.get(`ws:notifications`);
-    for (const handler of handlers || []) {
-      await handler(JSON.stringify(envelope), `ws:notifications`);
-    }
+    const tr = createTestRouter({
+      create: () => createRouter().plugin(withPubSub({ adapter })),
+    });
 
-    assert.deepEqual(delivered, [envelope]);
+    // Subscribe and publish
+    const conn = await tr.connect();
+    // ... test message delivery
+    await tr.close();
   });
 });
 ```
@@ -323,19 +333,9 @@ ingress.start(async (envelope) => {
 
 A: No. Memory adapter is unchanged—it's local-only and has no ingress.
 
-**Q: Can I use multiple brokers now?**
+**Q: Can I use multiple brokers?**
 
-A: Yes. You can start multiple ingressses and wire them to the same delivery function:
-
-```typescript
-const adapter = redisPubSub(redis);
-const redisConsumer = redisConsumer(redis);
-const kafkaIngress = kafkaIngress(kafka);
-
-// Both brokers → same local delivery
-redisConsumer.start(deliverLocally);
-kafkaIngress.start(deliverLocally);
-```
+A: For most use cases, use a single adapter (e.g., `redisPubSub(redis)`). Multi-broker scenarios are advanced and require custom adapter composition—contact the maintainers if you have this requirement.
 
 **Q: What if my adapter doesn't implement optional methods?**
 
@@ -347,22 +347,23 @@ if (adapter.listTopics) {
 }
 ```
 
-**Q: Can I mix old and new adapters?**
+**Q: How do I migrate from manual `redisConsumer` wiring?**
 
-A: During transition, yes. Create a wrapper if needed:
+A: Use the unified adapter with auto-subscriber:
 
 ```typescript
-// Adapter that supports both old onRemotePublished and new BrokerConsumer
-const adapter = {
-  ...redisPubSub(redis),
-  onRemotePublished(handler) {
-    // Delegate to new ingress
-    return ingress.start(handler);
-  },
-};
-```
+// Before (manual wiring - deprecated)
+const adapter = redisPubSub(redis);
+const ingress = redisConsumer(redis);
+ingress.start(deliverLocally);
 
-This is temporary—deprecate after full migration.
+// After (auto-subscriber - recommended)
+const redis = createClient({ url: REDIS_URL });
+await redis.connect();
+const adapter = redisPubSub(redis); // Auto-creates subscriber via duplicate()
+const router = createRouter().plugin(withPubSub({ adapter }));
+await router.pubsub.init(); // Plugin starts broker consumer
+```
 
 ---
 
